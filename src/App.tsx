@@ -1,6 +1,6 @@
 // src/App.tsx
 
-import { createHashRouter, RouterProvider, RouteObject } from 'react-router-dom';
+import { createBrowserRouter, RouterProvider, RouteObject } from 'react-router-dom';
 import ProtectedRoute from './ProtectedRoute';
 import { UserRole } from './types';
 
@@ -104,7 +104,7 @@ const routes: RouteObject[] = [
 // ---------------------------
 // App Root (No changes needed)
 // ---------------------------
-const router = createHashRouter(routes);
+const router = createBrowserRouter(routes);
 
 const App = () => <RouterProvider router={router} />;
 
