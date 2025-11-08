@@ -15,6 +15,7 @@ import ReportsPage from './pages/ReportsPage';
 import UserManagementPage from './pages/UserManagement';
 import SettingsPage from './pages/SettingsPage';
 import EmailTemplatesPage from './pages/EmailTemplatesPage';
+import SearchResultsPage from './pages/SearchResultsPage';
 import AppLayout from './components/layout/AppLayout';
 import NotFoundPage from './pages/NotFoundPage';
 
@@ -68,6 +69,10 @@ const routes: RouteObject[] = [
             <ReportsPage />
           </ProtectedRoute>
         ),
+      },
+      {
+        path: 'search',
+        element: <SearchResultsPage />,
       },
       {
         path: 'users',

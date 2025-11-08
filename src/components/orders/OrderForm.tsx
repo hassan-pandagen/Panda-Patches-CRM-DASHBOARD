@@ -512,7 +512,10 @@ const OrderForm: React.FC<OrderFormProps> = ({
               'WhatsApp',
               'Facebook',
               'TikTok',
-              'Other',
+              'Bing',
+              'Google',
+              'Instagram',
+              'Other'
             ]}
           />
           <FormInput

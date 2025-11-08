@@ -16,8 +16,13 @@ const SearchResultsPage: React.FC = () => {
   const searchOrders = async (searchTerm: string): Promise<OrderSummary[]> => {
     const { data, error } = await supabase
       .from('orders')
-      .select('orderNumber:order_number, designName:design_name, customerName:customer_name, salesAgent:sales_agent, patchesQuantity:patches_quantity, status, orderAmount:order_amount, amountRemaining:amount_remaining, createdAt:created_at, is_urgent')
-      .or(`order_number.ilike.%${searchTerm}%,customer_name.ilike.%${searchTerm}%,design_name.ilike.%${searchTerm}%`);
+      .select('orderNumber:order_number, customerName:customer_name, salesAgent:sales_agent, status, orderAmount:order_amount, createdAt:created_at, is_urgent')
+      .or(
+        `order_number.ilike.%${searchTerm}%,` +
+        `customer_name.ilike.%${searchTerm}%,` +
+        `customer_email.ilike.%${searchTerm}%,` +
+        `customer_phone.ilike.%${searchTerm}%`
+      );
   
     if (error) throw error;
   

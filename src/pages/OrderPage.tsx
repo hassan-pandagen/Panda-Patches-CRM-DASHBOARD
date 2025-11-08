@@ -454,11 +454,23 @@ const OrderPage: React.FC = () => {
                 <p><strong className="font-semibold text-slate-400">Amount Remaining:</strong> <span className="font-bold text-[#6366F1]">${order.amountRemaining.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span></p>
             </div>
            )}
-           <div className="bg-[#1A1B23] border border-[#252836] rounded-2xl p-6 space-y-2">
-            <h3 className="text-xl font-semibold tracking-wide text-slate-100 mb-4">Shipping</h3>
-            <DetailItem label="Courier" value={order.courier} />
-            <DetailItem label="Tracking Number" value={order.trackingNumber} />
-          </div>
+           <div className="bg-[#1A1B23] border border-[#252836] rounded-2xl p-6 space-y-4">
+                <h3 className="text-xl font-semibold tracking-wide text-slate-100">Shipping Details</h3>
+                
+                <div className="border border-slate-700 rounded-lg p-4 space-y-2 bg-slate-900/30">
+                  <DetailItem label="Order Number" value={`#${order.orderNumber}`} />
+                  <DetailItem label="Customer Name" value={order.customerName} />
+                  <DetailItem label="Phone Number" value={order.customerPhone} />
+                  <DetailItem label="Address" value={order.shippingAddress} />
+                  <hr className="border-slate-700 my-2" />
+                  <DetailItem label="Patch Type" value={order.patchesType} />
+                  <DetailItem label="Quantity" value={order.patchesQuantity} />
+                </div>
+                <div className="space-y-2 pt-2">
+                  <DetailItem label="Courier" value={order.courier} />
+                  <DetailItem label="Tracking Number" value={order.trackingNumber} />
+                </div>
+           </div>
         </div>
 
         {/* Right Column: Status Update & History */}
