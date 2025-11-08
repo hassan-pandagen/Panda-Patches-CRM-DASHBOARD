@@ -2,7 +2,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { getOrder, updateOrder, triggerNotificationWorkflow, deleteOrder, getOrderHistory } from '../services/orderService';
-import { Order, OrderStatus, UserRole, OrderHistoryEntry } from '../types/index'; // Corrected path
+import { useQueryClient } from '@tanstack/react-query';
+import { Order, OrderStatus, OrderHistoryEntry } from '../types/index'; // Corrected path
 import { getStatusInfo, N8N_APPROVAL_WEBHOOK_URL } from '../constants'; // Corrected path
 import Spinner from '../components/ui/Spinner';
 import { useAuth } from '../contexts/AuthContext';
@@ -92,8 +93,9 @@ const ApprovalLinkGenerator: React.FC<{ orderNumber: string }> = ({ orderNumber 
 const OrderPage: React.FC = () => {
   const { orderNumber } = useParams<{ orderNumber: string }>();
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, role } = useAuth();
   const [order, setOrder] = useState<Order | null>(null);
+  const queryClient = useQueryClient();
   const [history, setHistory] = useState<OrderHistoryEntry[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
@@ -103,6 +105,7 @@ const OrderPage: React.FC = () => {
   const [updateMessage, setUpdateMessage] = useState<{type: 'success' | 'error', text: string} | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState<boolean>(false);
+  const [isReturningCustomer, setIsReturningCustomer] = useState<boolean>(false);
 
   const fetchOrderData = useCallback(async () => {
     if (!orderNumber) return;
@@ -113,6 +116,21 @@ const OrderPage: React.FC = () => {
       if (fetchedOrder) {
         setOrder(fetchedOrder);
         setSelectedStatus(fetchedOrder.status);
+
+        // --- RETURNING CUSTOMER LOGIC ---
+        // After fetching the order, check if the customer has more than one order.
+        if (fetchedOrder.customerEmail) {
+          const { count, error: countError } = await supabase
+            .from('orders')
+            .select('id', { count: 'exact', head: true }) // `head: true` is efficient, just gets the count
+            .eq('customer_email', fetchedOrder.customerEmail);
+
+          if (countError) {
+            console.warn("Could not check for returning customer:", countError.message);
+          } else if (count && count > 1) {
+            setIsReturningCustomer(true);
+          }
+        }
 
         // --- FIX: Gracefully handle missing history table ---
         // After getting the order, try to fetch its history.
@@ -135,7 +153,7 @@ const OrderPage: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [orderNumber, setHistory]);
+  }, [orderNumber, setHistory, role]);
 
   useEffect(() => {
     fetchOrderData();
@@ -165,6 +183,7 @@ const OrderPage: React.FC = () => {
       const updatedOrder = await updateOrder(updatedOrderData);
       setOrder(updatedOrder);
       
+      queryClient.invalidateQueries({ queryKey: ['order', orderNumber] }); // Invalidate to ensure fresh data
       await triggerNotificationWorkflow(updatedOrder);
 
       setUpdateMessage({ type: 'success', text: 'Status updated and notification sent!' });
@@ -209,6 +228,7 @@ const OrderPage: React.FC = () => {
         ...order,
         amountPaid: order.orderAmount, // Set amount paid to the total
         status: OrderStatus.COMPLETED, // Set status to Completed
+        // Note: The backend trigger for order history will log this status change.
       });
       setOrder(updatedOrder); // Refresh the UI with the updated order
       setUpdateMessage({ type: 'success', text: 'Payment marked as complete!' });
@@ -259,17 +279,6 @@ const OrderPage: React.FC = () => {
         isConfirming={isDeleting}
       />
 
-      {deleteError && (
-        <div className="mb-6 flex items-center gap-3 rounded-lg border border-[#EF4444]/40 bg-[#EF4444]/10 p-3 text-red-300" role="alert">
-          <h3 className="font-bold">Delete Operation Failed</h3>
-          <p>{deleteError}</p>
-          {deleteError.includes('database permissions') && (
-              <Link to="/settings" className="mt-2 inline-block font-bold underline hover:text-red-200">
-                  Click here for a step-by-step guide to fix database permissions.
-              </Link>
-          )}
-        </div>
-      )}
       <div className="flex justify-between items-center mb-6 flex-wrap gap-4">
         <div className="flex items-center gap-4">
             <h2 className="text-3xl font-semibold tracking-wide text-slate-100 flex items-center gap-3">
@@ -288,7 +297,7 @@ const OrderPage: React.FC = () => {
             </Link>
             {/* --- PROTECTED ACTION --- */}
             {/* The delete button is now only visible to ADMIN users. */}
-            {user?.role === UserRole.ADMIN && (
+            {role === 'ADMIN' && (
                 <button 
                     onClick={() => setIsDeleteModalOpen(true)}
                     className="px-4 py-2 rounded-lg bg-[#EF4444]/10 border border-[#EF4444]/20 text-red-300 hover:bg-[#EF4444]/20 hover:border-[#EF4444]/40 transition-all duration-300"
@@ -303,7 +312,7 @@ const OrderPage: React.FC = () => {
         {/* Left Column: Order Details */}
         <div className="lg:col-span-2 space-y-6">
           {/* URGENT APPROVAL BLOCK */}
-          {(user?.role === UserRole.ADMIN || user?.role === "CEO") && order.is_urgent && !order.is_urgent_approved && (
+          {role === 'ADMIN' && order.is_urgent && !order.is_urgent_approved && ( // Only ADMIN
             <div className="bg-amber-500/10 border-l-4 border-amber-500 text-amber-200 p-4 flex items-center justify-between gap-4 rounded-r-lg">
               <div>
                 <p className="font-bold">Urgent Request Pending</p>
@@ -330,6 +339,7 @@ const OrderPage: React.FC = () => {
                           if (error) throw error;
 
                           // ✅ Update local state immediately
+                          // This optimistic update will be confirmed/overwritten by the query invalidation
                           setOrder({ ...order, is_urgent_approved: true, is_urgent: true });
 
                           // ✅ Send realtime update manually (optional but ensures bell clears fast)
@@ -338,6 +348,7 @@ const OrderPage: React.FC = () => {
                             event: 'urgent_approval',
                             payload: { orderNumber: order.orderNumber, approved: true },
                           });
+                          queryClient.invalidateQueries({ queryKey: ['order', orderNumber] }); // Invalidate to ensure fresh data
 
                           setUpdateMessage({ type: 'success', text: 'Urgent order approved!' });
                         } catch (err: any) {
@@ -364,6 +375,7 @@ const OrderPage: React.FC = () => {
 
                           if (error) throw error;
 
+                          // This optimistic update will be confirmed/overwritten by the query invalidation
                           setOrder({ ...order, is_urgent_approved: false, is_urgent: false });
 
                           supabase.channel('orders').send({
@@ -371,6 +383,7 @@ const OrderPage: React.FC = () => {
                             event: 'urgent_denied',
                             payload: { orderNumber: order.orderNumber, approved: false },
                           });
+                          queryClient.invalidateQueries({ queryKey: ['order', orderNumber] }); // Invalidate to ensure fresh data
 
                           setUpdateMessage({ type: 'success', text: 'Urgent order denied.' });
                         } catch (err: any) {
@@ -412,12 +425,17 @@ const OrderPage: React.FC = () => {
           </div>
           <div className="bg-[#1A1B23] border border-[#252836] rounded-2xl p-6 space-y-2">
             <h3 className="text-xl font-semibold tracking-wide text-slate-100 mb-2">Customer Information</h3>
-            <DetailItem label="Name" value={order.customerName} />
+            <div className="flex items-center gap-3">
+              <DetailItem label="Name" value={order.customerName} />
+              {isReturningCustomer && (
+                <span className="text-xs font-bold uppercase tracking-wider bg-green-500/20 text-green-300 border border-green-500/30 px-2 py-1 rounded-full">Returning Customer</span>
+              )}
+            </div>
             <DetailItem label="Email" value={order.customerEmail} />
             <DetailItem label="Phone" value={order.customerPhone} />
             <DetailItem label="Shipping Address" value={order.shippingAddress} />
-          </div>
-           {(user?.role === UserRole.ADMIN || user?.role === UserRole.AGENT) && (
+          </div> 
+           {(role === 'ADMIN' || role === 'AGENT' ) && (
             <div className="bg-[#1A1B23] border border-[#252836] rounded-2xl p-6 space-y-2">
                 <div className="flex justify-between items-center mb-4">
                   <h3 className="text-xl font-semibold tracking-wide text-slate-100">Financials</h3>
@@ -472,13 +490,26 @@ const OrderPage: React.FC = () => {
                       >
                           {isUpdating ? <Spinner small /> : 'Update & Send Notification'}
                       </button>
-                      {updateMessage && (
-                         <div className={`flex items-center gap-3 bg-[#252836]/50 border rounded-lg p-3 text-sm text-center ${updateMessage.type === 'success' ? 'border-green-500/40 text-green-400' : 'border-red-500/40 text-red-400'}`}>
-                             {updateMessage.text}
-                         </div>
-                      )}
                   </div>
               </div>
+
+                {/* --- NOTIFICATION TOAST --- */}
+                {/* This is the banner that shows success/error messages. It's now a "toast" notification. */}
+                {(updateMessage || deleteError) && (
+                    <div className={`fixed bottom-8 right-8 z-50 max-w-sm rounded-lg shadow-lg border ${
+                        (updateMessage?.type === 'success') ? 'bg-green-500/10 border-green-500/30 text-green-300' : 'bg-red-500/10 border-red-500/30 text-red-300'
+                    }`}>
+                        <div className="p-4">
+                            <div className="flex items-start">
+                                <div className="ml-3 w-0 flex-1 pt-0.5">
+                                    <p className="text-sm font-medium text-slate-100">
+                                        {updateMessage?.text || deleteError}
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                )}
             </div>
 
             <OrderHistory history={history} />

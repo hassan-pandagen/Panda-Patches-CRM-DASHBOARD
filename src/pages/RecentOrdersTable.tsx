@@ -1,4 +1,3 @@
-import React from 'react';
 import { Order, OrderStatus } from '../types';
 import { getStatusInfo } from '../constants';
 import { Package } from 'lucide-react';

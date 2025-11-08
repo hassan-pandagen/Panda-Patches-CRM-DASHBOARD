@@ -33,14 +33,13 @@ This isn't just a basic app; it's a full-featured business tool with a professio
 
 ---
 
-## 🚀 Getting Started
-
-This project was bootstrapped with Create React App.
+## 🚀 Getting Started with Vite
 
 ### Prerequisites
 
 *   Node.js (v16 or later)
 *   npm or yarn
+*   An active Supabase project.
 *   A Supabase project with the database schema from the Settings page applied.
 
 ### Installation & Setup
@@ -59,12 +58,13 @@ This project was bootstrapped with Create React App.
 3.  **Set up environment variables:**
     Create a `.env` file in the root of the project and add your Supabase credentials:
     ```
-    REACT_APP_SUPABASE_URL=YOUR_SUPABASE_URL
-    REACT_APP_SUPABASE_ANON_KEY=YOUR_SUPABASE_ANON_KEY
+    VITE_SUPABASE_URL=YOUR_SUPABASE_URL
+    VITE_SUPABASE_ANON_KEY=YOUR_SUPABASE_ANON_KEY
     ```
 
 ### Available Scripts
 
-*   `npm start`: Runs the app in development mode.
-*   `npm run build`: Builds the app for production.
-*   `npm test`: Runs the test suite.
+*   `npm run dev`: Runs the app in development mode with hot-reloading.
+*   `npm run build`: Builds the app for production to the `dist` folder.
+*   `npm run preview`: Locally previews the production build.
+*   `npm test`: Runs the test suite (requires test runner setup like Vitest).

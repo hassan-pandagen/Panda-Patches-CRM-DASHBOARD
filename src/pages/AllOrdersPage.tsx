@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { useQuery, keepPreviousData } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { supabase } from '../services/supabaseClient';
 import { OrderSummary } from '../types';
 import { Link, useSearchParams } from 'react-router-dom';
@@ -11,7 +11,7 @@ import { useDebounce } from '../hooks';
 
 const ORDERS_PER_PAGE = 15;
 
-const fetchOrders = async (page: number, status: string, isUrgent: boolean, searchTerm: string) => {
+const fetchOrders = async (page: number, status: string, isUrgent: boolean, searchTerm: string, paymentStatus: string | null) => {
   const from = page * ORDERS_PER_PAGE;
   const to = from + ORDERS_PER_PAGE - 1;
 
@@ -40,6 +40,10 @@ const fetchOrders = async (page: number, status: string, isUrgent: boolean, sear
     query = query.or(`order_number.ilike.%${searchTerm}%,customer_name.ilike.%${searchTerm}%,customer_email.ilike.%${searchTerm}%`);
   }
 
+  if (paymentStatus === 'pending') {
+    query = query.gt('amount_remaining', 0);
+  }
+
   const { data, error, count } = await query
     .range(from, to);
 
@@ -50,12 +54,14 @@ const fetchOrders = async (page: number, status: string, isUrgent: boolean, sear
 
 const AllOrdersPage: React.FC = () => {
   const [page, setPage] = useState(0);
-  const [statusFilter, setStatusFilter] = useState('ALL');
   const [searchParams, setSearchParams] = useSearchParams();
   const [searchTerm, setSearchTerm] = useState(searchParams.get('q') || '');
   const debouncedSearchTerm = useDebounce(searchTerm, 300);
 
+  const statusFilter = searchParams.get('status') || 'ALL';
   const isUrgentFilter = searchParams.get('filter') === 'urgent' || false;
+  const paymentStatusFilter = searchParams.get('payment_status');
+
 
   const toggleUrgentFilter = () => {
     const newParams = new URLSearchParams(searchParams);
@@ -63,10 +69,16 @@ const AllOrdersPage: React.FC = () => {
     setSearchParams(newParams);
   };
 
+  const handleStatusChange = (newStatus: string) => {
+    const newParams = new URLSearchParams(searchParams);
+    newStatus === 'ALL' ? newParams.delete('status') : newParams.set('status', newStatus);
+    setSearchParams(newParams);
+  };
+
   const { data, isLoading, error } = useQuery({
-    queryKey: ['allOrders', page, statusFilter, isUrgentFilter, debouncedSearchTerm],
-    queryFn: () => fetchOrders(page, statusFilter, isUrgentFilter, debouncedSearchTerm),
-    placeholderData: keepPreviousData,
+    queryKey: ['allOrders', page, statusFilter, isUrgentFilter, debouncedSearchTerm, paymentStatusFilter],
+    queryFn: () => fetchOrders(page, statusFilter, isUrgentFilter, debouncedSearchTerm, paymentStatusFilter),
+    placeholderData: (previousData) => previousData,
     initialData: { orders: [], count: 0 },
   });
 
@@ -78,12 +90,14 @@ const AllOrdersPage: React.FC = () => {
     <div className="space-y-6">
       <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
         {/* Left: Title with properly aligned icon */}
-        <div className="flex items-center gap-3">
-          <div className="p-2 bg-blue-500/10 rounded-lg">
-            <Package className="w-6 h-6 text-blue-400" />
+        <div>
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-blue-500/10 rounded-lg">
+              <Package className="w-6 h-6 text-blue-400" />
+            </div>
+            <h1 className="text-2xl font-bold text-white">All Orders</h1>
           </div>
           <div>
-            <h1 className="text-2xl font-bold text-white">All Orders</h1>
             <p className="text-slate-400">Browse, search, and manage all orders.</p>
           </div>
         </div>
@@ -117,7 +131,7 @@ const AllOrdersPage: React.FC = () => {
             >
               <AlertTriangle className="w-4 h-4" /> Urgent
             </button>
-            <StatusFilter selectedStatus={statusFilter} onStatusChange={setStatusFilter} />
+            <StatusFilter selectedStatus={statusFilter} onStatusChange={handleStatusChange} />
             <Link to="/new-order" className="flex items-center gap-2 px-4 py-2 bg-blue-600 rounded-lg text-white hover:bg-blue-700 text-sm font-semibold">
               <Plus className="w-4 h-4" /> New Order
             </Link>

@@ -1,125 +1,111 @@
-import React from 'react';
-import { createHashRouter, RouterProvider } from 'react-router-dom';
-import { AuthProvider, useAuth } from './contexts/AuthContext';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import ProtectedRoute from './ProtectedRoute';
+// src/App.tsx
 
-// Layouts
-import AppLayout from './components/layout/AppLayout';
+import { createHashRouter, RouterProvider, RouteObject } from 'react-router-dom';
+import ProtectedRoute from './ProtectedRoute';
+import { UserRole } from './types';
 
 // Pages
 import LoginPage from './pages/LoginPage';
 import DashboardPage from './pages/Dashboard';
-import OrderPage from './pages/OrderPage';
+import AllOrdersPage from './pages/AllOrdersPage';
 import NewOrderPage from './pages/NewOrderPage';
+import OrderPage from './pages/OrderPage';
 import EditOrderPage from './pages/EditOrderPage';
 import ReportsPage from './pages/ReportsPage';
-import SearchResultsPage from './pages/SearchResultsPage';
 import UserManagementPage from './pages/UserManagement';
 import SettingsPage from './pages/SettingsPage';
 import EmailTemplatesPage from './pages/EmailTemplatesPage';
-import UpdatePasswordPage from './pages/UpdatePasswordPage';
-import ForgotPasswordPage from './pages/ForgotPasswordPage';
-import AllOrdersPage from './pages/AllOrdersPage';
-import CEODashboard from './pages/CEODashboard';
-import { UserRole } from './types/index';
+import AppLayout from './components/layout/AppLayout';
+import NotFoundPage from './pages/NotFoundPage';
 
-// Create a client
-const queryClient = new QueryClient();
-
-const MainDashboard: React.FC = () => {
-  const { user } = useAuth();
-  if (user?.role === UserRole.ADMIN) {
-    return <CEODashboard />;
-  }
-  return <DashboardPage />;
-};
-
-const router = createHashRouter([
-  // ============================================
-  // PUBLIC ROUTES (No Sidebar/Header)
-  // ============================================
-  { 
-    path: "/login", 
-    element: <LoginPage /> 
-  },
-  { 
-    path: "/forgot-password", 
-    element: <ForgotPasswordPage /> 
-  },
-  { 
-    path: "/update-password", 
-    element: <UpdatePasswordPage /> 
-  },
-  
-  // ============================================
-  // PROTECTED ROUTES (With Sidebar/Header via AppLayout)
-  // ============================================
+// ---------------------------
+// THE FIX: Simplified Routes Configuration
+// ---------------------------
+const routes: RouteObject[] = [
   {
-    path: "/",
-    element: <AppLayout />,
+    path: '/login',
+    element: <LoginPage />,
+  },
+  {
+    path: '/',
+    // STEP 1: The AppLayout is protected ONCE here. This is the only protection it needs.
+    element: (
+      <ProtectedRoute>
+        <AppLayout />
+      </ProtectedRoute>
+    ),
+    // STEP 2: The children are now clean. They do not need their own ProtectedRoute wrapper.
+    // They are implicitly protected because they can only be reached through the parent AppLayout.
     children: [
-      { 
+      {
         index: true,
-        element: <ProtectedRoute><MainDashboard /></ProtectedRoute> 
+        element: (
+          <ProtectedRoute roles={[UserRole.ADMIN]}><DashboardPage /></ProtectedRoute>
+        ),
       },
-      { 
-        path: "orders", 
-        element: <ProtectedRoute><AllOrdersPage /></ProtectedRoute> 
+      {
+        path: 'orders',
+        element: <AllOrdersPage />,
       },
-      { 
-        path: "order/:orderNumber", 
-        element: <ProtectedRoute><OrderPage /></ProtectedRoute> 
+      {
+        path: 'order/:orderNumber',
+        element: <OrderPage />,
       },
-      { 
-        path: "order/:orderNumber/edit", 
-        element: <ProtectedRoute><EditOrderPage /></ProtectedRoute> 
+      {
+        path: 'order/:orderNumber/edit',
+        element: <EditOrderPage />,
       },
-      { 
-        path: "new-order", 
-        element: <ProtectedRoute><NewOrderPage /></ProtectedRoute> 
+      {
+        path: 'new-order',
+        element: <NewOrderPage />,
       },
-      { 
-        path: "search", 
-        element: <ProtectedRoute><SearchResultsPage /></ProtectedRoute> 
+      {
+        path: 'reports',
+        // STEP 3: We now protect the role-specific routes here.
+        // This single wrapper will check for the role and render the page.
+        element: (
+          <ProtectedRoute roles={[UserRole.ADMIN, UserRole.AGENT, UserRole.PRODUCTION]}>
+            <ReportsPage />
+          </ProtectedRoute>
+        ),
       },
-      { 
-        path: "email-templates", 
-        element: <ProtectedRoute><EmailTemplatesPage /></ProtectedRoute> 
+      {
+        path: 'users',
+        element: (
+          <ProtectedRoute roles={[UserRole.ADMIN]}>
+            <UserManagementPage />
+          </ProtectedRoute>
+        ),
       },
-      { 
-        path: "settings", 
-        element: <ProtectedRoute><SettingsPage /></ProtectedRoute> 
+      {
+        path: 'email-templates',
+        element: (
+          <ProtectedRoute roles={[UserRole.ADMIN]}>
+            <EmailTemplatesPage />
+          </ProtectedRoute>
+        ),
       },
-      // Admin-only routes
-      { 
-        path: "reports", 
-        element: <ProtectedRoute roles={[UserRole.ADMIN]}><ReportsPage /></ProtectedRoute> 
+      {
+        path: 'settings',
+        element: (
+          <ProtectedRoute roles={[UserRole.ADMIN]}>
+            <SettingsPage />
+          </ProtectedRoute>
+        ),
       },
-      { 
-        path: "ceo-dashboard", 
-        element: <ProtectedRoute roles={[UserRole.ADMIN]}><CEODashboard /></ProtectedRoute> 
-      },
-      { 
-        path: "users", 
-        element: <ProtectedRoute roles={[UserRole.ADMIN]}><UserManagementPage /></ProtectedRoute> 
+      {
+        path: '*',
+        element: <NotFoundPage />,
       },
     ],
   },
-]);
+];
 
-const App: React.FC = () => (
-  <QueryClientProvider client={queryClient}>
-    <AuthProvider>
-      <RouterProvider router={router} />
-    </AuthProvider>
-  </QueryClientProvider>
-);
+// ---------------------------
+// App Root (No changes needed)
+// ---------------------------
+const router = createHashRouter(routes);
 
-const ThemedApp: React.FC = () => (
-  <div className="bg-[#0A0A0F] text-slate-100 min-h-screen">
-    <App />
-  </div>
-);
+const App = () => <RouterProvider router={router} />;
 
-export default ThemedApp;
+export default App;

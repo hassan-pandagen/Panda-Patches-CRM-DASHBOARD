@@ -1,55 +1,36 @@
-import React from "react";
-import { Navigate, useLocation } from "react-router-dom";
-import { useAuth } from "./contexts/AuthContext";
-import Spinner from "./components/ui/Spinner";
+import React, { ReactNode } from 'react';
+import { Navigate } from 'react-router-dom';
+import { useAuth } from './contexts/AuthContext';
+import { UserRole } from './types'; // ✅ Corrected import from UserRoleType to UserRole
 
 interface ProtectedRouteProps {
-  children: React.ReactNode;
-  roles?: string[];
+  children: ReactNode;
+  roles?: UserRole[]; // Optional: restrict to certain roles (e.g., ['ADMIN'])
 }
 
-/**
- * ProtectedRoute ensures:
- * 1. Only authenticated users access private routes.
- * 2. Optional role-based access control.
- * 3. Prevents redirect loops during async user/profile loading.
- */
 const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, roles }) => {
-  const { user, session, loading } = useAuth();
-  const location = useLocation();
+  const { isAuthenticated, isLoading, role } = useAuth();
 
-  // 1️⃣ While checking authentication (session + user), show spinner
-  if (loading) {
+  // Show a simple loader or skeleton while checking auth
+  if (isLoading) {
     return (
-      <div className="flex justify-center items-center h-screen">
-        <Spinner />
+      <div className="flex items-center justify-center h-screen bg-slate-900 text-slate-200">
+        Checking permissions...
       </div>
     );
   }
 
-  // 2️⃣ If there’s no session, redirect to login
-  if (!session) {
-    return <Navigate to="/login" state={{ from: location }} replace />;
+  // Redirect to login if not authenticated
+  if (!isAuthenticated) {
+    return <Navigate to="/login" replace />;
   }
 
-  // 3️⃣ Handle role-based access
-  if (roles && roles.length > 0) {
-    // If user profile hasn’t loaded yet, wait
-    if (!user) {
-      return (
-        <div className="flex justify-center items-center h-screen">
-          <Spinner />
-        </div>
-      );
-    }
-
-    // If user is loaded but lacks permission, redirect
-    if (!roles.includes(user.role)) {
-      return <Navigate to="/" replace />;
-    }
+  // If route requires specific roles and user doesn't match → redirect home
+  if (roles && role && !roles.includes(role)) {
+    return <Navigate to="/" replace />;
   }
 
-  // ✅ All checks passed
+  // Otherwise, render the protected content
   return <>{children}</>;
 };
 

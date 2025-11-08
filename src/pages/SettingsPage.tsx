@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
+import { useAuth } from '../contexts/AuthContext';
 
 const CodeBlock: React.FC<{ code: string }> = ({ code }) => {
-    const [copied, setCopied] = useState(false);
+    const [copied, setCopied] = useState<boolean>(false);
 
     const handleCopy = () => {
         navigator.clipboard.writeText(code);
@@ -14,7 +15,7 @@ const CodeBlock: React.FC<{ code: string }> = ({ code }) => {
             <pre className="text-sm text-white p-4 overflow-x-auto">
                 <code>{code.trim()}</code>
             </pre>
-            <button 
+            <button
                 onClick={handleCopy}
                 className="absolute top-2 right-2 bg-slate-700 hover:bg-slate-600 text-white text-xs font-bold py-1 px-2 rounded"
             >
@@ -25,32 +26,63 @@ const CodeBlock: React.FC<{ code: string }> = ({ code }) => {
 };
 
 const SettingsPage: React.FC = () => {
+    const { role, isLoading } = useAuth();
+
+    if (isLoading) {
+        return (
+            <div className="flex justify-center items-center h-64">
+                <div className="text-slate-400">Loading...</div>
+            </div>
+        );
+    }
+
+    const canAccessSettings = role === 'ADMIN';
+    
+    if (!canAccessSettings) {
+        return (
+            <div className="max-w-4xl mx-auto p-6">
+                <div className="bg-red-900/20 border border-red-500/50 rounded-xl p-6 text-center">
+                    <h2 className="text-2xl font-bold text-red-400 mb-2">Access Denied</h2>
+                    <p className="text-slate-300">
+                        You need administrator privileges to access this page.
+                    </p>
+                    <p className="text-slate-400 mt-2">
+                        Your current role: <strong>{role}</strong>
+                    </p>
+                </div>
+            </div>
+        );
+    }
+
     const fullSchemaSQL = ` -- =================================================================
---  PANDA PATCHES CRM - MASTER SUPABASE SCRIPT
---  Version: 6.8 (Customer Profile + Monthly Costs + Sales Report)
---  Description:
---   Sets up all CRM tables, triggers, RLS policies, storage bucket,
---   monthly_costs tracking, and the new sales report function.
---   ✅ Safe to run multiple times.
+-- PANDA PATCHES CRM - COMPLETE FIXED SCRIPT WITH WORKING USER MANAGEMENT
 -- =================================================================
 
 -- ================================================================
--- PART 0: DESTRUCTIVE RESET
+-- PART 0: CLEAN SETUP
 -- ================================================================
 DROP TABLE IF EXISTS public.monthly_costs CASCADE;
 DROP TABLE IF EXISTS public.order_history CASCADE;
 DROP TABLE IF EXISTS public.user_profiles CASCADE;
 DROP TABLE IF EXISTS public.orders CASCADE;
 
+DROP FUNCTION IF EXISTS public.broadcast_urgent_order() CASCADE;
+DROP FUNCTION IF EXISTS public.generate_order_number() CASCADE;
+DROP FUNCTION IF EXISTS public.handle_updated_at() CASCADE;
+DROP FUNCTION IF EXISTS public.log_order_changes() CASCADE;
+DROP FUNCTION IF EXISTS public.handle_new_user() CASCADE;
+DROP FUNCTION IF EXISTS public.get_my_role() CASCADE;
+DROP FUNCTION IF EXISTS public.get_sales_report(text, text) CASCADE;
+
+DROP SEQUENCE IF EXISTS public.order_number_seq CASCADE;
+
 -- ================================================================
 -- PART 1: TABLE DEFINITIONS
 -- ================================================================
-
--- ORDERS TABLE
 CREATE TABLE public.orders (
     id bigint PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
     order_number text,
-    status text NOT NULL,
+    status text NOT NULL, -- Removed IN_PROGRESS from the check constraint
     customer_name text NOT NULL,
     customer_email text NOT NULL,
     customer_phone text,
@@ -75,7 +107,7 @@ CREATE TABLE public.orders (
     amount_remaining numeric(10, 2) GENERATED ALWAYS AS (order_amount - amount_paid) STORED,
     sales_agent text NOT NULL,
     is_urgent boolean NOT NULL DEFAULT false,
-    is_urgent_approved boolean NOT NULL DEFAULT false,
+    is_urgent_approved boolean DEFAULT false,
     lead_source text,
     created_at timestamptz NOT NULL DEFAULT now(),
     updated_at timestamptz NOT NULL DEFAULT now(),
@@ -83,7 +115,6 @@ CREATE TABLE public.orders (
 );
 COMMENT ON TABLE public.orders IS 'Stores all customer order information.';
 
--- ORDER HISTORY TABLE
 CREATE TABLE public.order_history (
     id bigint PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
     order_id bigint NOT NULL REFERENCES public.orders(id) ON DELETE CASCADE,
@@ -95,15 +126,23 @@ CREATE TABLE public.order_history (
 );
 COMMENT ON TABLE public.order_history IS 'Audit trail for changes to the orders table.';
 
--- USER PROFILES TABLE
+-- FIXED: Updated access structure with separate reports
 CREATE TABLE public.user_profiles (
   id uuid NOT NULL PRIMARY KEY REFERENCES auth.users ON DELETE CASCADE,
   email text,
-  role text DEFAULT 'AGENT'::text NOT NULL
+  full_name text,
+  role text DEFAULT 'AGENT'::text NOT NULL, -- No CEO role
+  access jsonb DEFAULT '{
+    "dashboard": true,
+    "orders": true, 
+    "revenue": false,
+    "sales_reports": false,
+    "production_reports": false,
+    "settings": false
+  }'::jsonb
 );
 COMMENT ON TABLE public.user_profiles IS 'Stores user data and roles for authorization.';
-
--- MONTHLY COSTS TABLE
+ 
 CREATE TABLE public.monthly_costs (
     id bigint PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
     month_year text NOT NULL,
@@ -119,22 +158,27 @@ COMMENT ON TABLE public.monthly_costs IS 'Tracks monthly business costs (materia
 -- ================================================================
 -- PART 2: INDEXES
 -- ================================================================
-CREATE INDEX IF NOT EXISTS idx_orders_status ON public.orders(status);
-CREATE INDEX IF NOT EXISTS idx_orders_customer_email ON public.orders(customer_email);
-CREATE INDEX IF NOT EXISTS idx_orders_sales_agent ON public.orders(sales_agent);
-CREATE INDEX IF NOT EXISTS idx_orders_created_at ON public.orders(created_at);
-CREATE INDEX IF NOT EXISTS idx_orders_is_urgent ON public.orders(is_urgent);
-CREATE INDEX IF NOT EXISTS idx_order_history_order_id ON public.order_history(order_id);
-CREATE INDEX IF NOT EXISTS idx_order_history_changed_at ON public.order_history(changed_at);
-CREATE INDEX IF NOT EXISTS idx_monthly_costs_month_year ON public.monthly_costs(month_year);
+CREATE INDEX idx_orders_status ON public.orders(status);
+CREATE INDEX idx_orders_customer_email ON public.orders(customer_email);
+CREATE INDEX idx_orders_sales_agent ON public.orders(sales_agent);
+CREATE INDEX idx_orders_created_at ON public.orders(created_at);
+CREATE INDEX idx_orders_is_urgent ON public.orders(is_urgent);
+CREATE INDEX idx_orders_order_number ON public.orders(order_number);
+CREATE INDEX idx_orders_created_at_desc ON public.orders(created_at DESC);
+CREATE INDEX idx_order_history_order_id ON public.order_history(order_id);
+CREATE INDEX idx_order_history_changed_at ON public.order_history(changed_at);
+CREATE INDEX idx_monthly_costs_month_year ON public.monthly_costs(month_year);
 
 -- ================================================================
--- PART 3: FUNCTIONS & TRIGGERS
+-- PART 3: SEQUENCES
+-- ================================================================
+CREATE SEQUENCE public.order_number_seq START 10001;
+
+-- ================================================================
+-- PART 4: FUNCTIONS & TRIGGERS
 -- ================================================================
 
--- Sequence and trigger for generating short, sequential order numbers
-CREATE SEQUENCE IF NOT EXISTS public.order_number_seq START 10001;
-
+-- Order number generator
 CREATE OR REPLACE FUNCTION public.generate_order_number()
 RETURNS TRIGGER AS $$
 BEGIN
@@ -143,12 +187,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
-DROP TRIGGER IF EXISTS on_order_insert_generate_number ON public.orders;
-CREATE TRIGGER on_order_insert_generate_number
-BEFORE INSERT ON public.orders
-FOR EACH ROW EXECUTE FUNCTION public.generate_order_number();
-
--- Timestamp update helper
+-- Timestamp updater
 CREATE OR REPLACE FUNCTION public.handle_updated_at()
 RETURNS TRIGGER AS $$
 BEGIN
@@ -157,19 +196,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
-DROP TRIGGER IF EXISTS on_orders_update ON public.orders;
-CREATE TRIGGER on_orders_update
-BEFORE UPDATE ON public.orders
-FOR EACH ROW
-EXECUTE FUNCTION public.handle_updated_at();
-
-DROP TRIGGER IF EXISTS on_monthly_costs_update ON public.monthly_costs;
-CREATE TRIGGER on_monthly_costs_update
-BEFORE UPDATE ON public.monthly_costs
-FOR EACH ROW
-EXECUTE FUNCTION public.handle_updated_at();
-
--- Audit logging
+-- Audit logger
 CREATE OR REPLACE FUNCTION public.log_order_changes()
 RETURNS TRIGGER AS $$
 DECLARE
@@ -181,69 +208,80 @@ BEGIN
         INSERT INTO public.order_history (order_id, user_email, field_changed, old_value, new_value)
         VALUES (NEW.id, user_email_text, 'status', OLD.status, NEW.status);
     END IF;
+
     IF OLD.order_amount IS DISTINCT FROM NEW.order_amount THEN
         INSERT INTO public.order_history (order_id, user_email, field_changed, old_value, new_value)
         VALUES (NEW.id, user_email_text, 'Order Amount', OLD.order_amount::text, NEW.order_amount::text);
     END IF;
+
     IF OLD.amount_paid IS DISTINCT FROM NEW.amount_paid THEN
         INSERT INTO public.order_history (order_id, user_email, field_changed, old_value, new_value)
         VALUES (NEW.id, user_email_text, 'Amount Paid', OLD.amount_paid::text, NEW.amount_paid::text);
     END IF;
+
     IF OLD.is_urgent IS DISTINCT FROM NEW.is_urgent THEN
         INSERT INTO public.order_history (order_id, user_email, field_changed, old_value, new_value)
         VALUES (NEW.id, user_email_text, 'Urgent Status', OLD.is_urgent::text, NEW.is_urgent::text);
-    END IF;
-    IF OLD.is_urgent_approved IS DISTINCT FROM NEW.is_urgent_approved THEN
-        INSERT INTO public.order_history (order_id, user_email, field_changed, old_value, new_value)
-        VALUES (NEW.id, user_email_text, 'Urgent Approval', OLD.is_urgent_approved::text, NEW.is_urgent_approved::text);
     END IF;
 
     RETURN NEW;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
-DROP TRIGGER IF EXISTS on_orders_change_log ON public.orders;
-CREATE TRIGGER on_orders_change_log
-AFTER UPDATE ON public.orders
-FOR EACH ROW
-EXECUTE FUNCTION public.log_order_changes();
-
--- New user auto-profile
+-- FIXED: New user auto-profile with updated access structure
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS TRIGGER AS $$
 BEGIN
-  INSERT INTO public.user_profiles (id, email, role)
-  VALUES (new.id, new.email, 'AGENT')
+  INSERT INTO public.user_profiles (id, email, full_name, role, access)
+  VALUES (
+    new.id,
+    new.email,
+    new.raw_user_meta_data->>'full_name',
+    COALESCE(new.raw_user_meta_data->>'role', 'AGENT'), -- Default to AGENT
+    COALESCE(
+      CASE 
+        WHEN new.raw_user_meta_data->>'access' IS NOT NULL THEN 
+          (new.raw_user_meta_data->>'access')::jsonb
+        ELSE 
+          CASE 
+            WHEN new.raw_user_meta_data->>'role' = 'ADMIN' THEN
+              '{"dashboard": true, "orders": true, "revenue": true, "sales_reports": true, "production_reports": true, "settings": true}'::jsonb
+            ELSE
+              '{"dashboard": true, "orders": true, "revenue": false, "sales_reports": false, "production_reports": false, "settings": false}'::jsonb
+          END
+      END,
+      '{"dashboard": true, "orders": true, "revenue": false, "sales_reports": false, "production_reports": false, "settings": false}'::jsonb
+    )
+  )
   ON CONFLICT (id) DO NOTHING;
   RETURN new;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
-
-DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
-CREATE TRIGGER on_auth_user_created
-  AFTER INSERT ON auth.users
-  FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
-
--- Helper: Get current user's role
-CREATE OR REPLACE FUNCTION public.get_my_role()
+-- FIXED: More reliable role getter
+CREATE OR REPLACE FUNCTION public.get_current_user_role()
 RETURNS text
-LANGUAGE sql
+LANGUAGE sql -- Renamed from get_my_role
 SECURITY DEFINER
 SET search_path = public
 AS $$
-  SELECT role FROM public.user_profiles WHERE id = auth.uid();
-$$;
+  SELECT COALESCE(role, 'AGENT') FROM public.user_profiles WHERE id = auth.uid()
+$$; -- Renamed from get_my_role
 
--- ================================================================
--- ✅ NEW PART: SALES REPORT FUNCTION
--- ================================================================
--- Drop the function first to handle changes in return type
-DROP FUNCTION IF EXISTS public.get_sales_report(text, text);
+-- Urgent order broadcaster
+CREATE OR REPLACE FUNCTION public.broadcast_urgent_order()
+-- This function is triggered after an order is inserted or updated
+-- If the order is marked as urgent, it sends a notification to the 'urgent_orders' channel
+RETURNS TRIGGER AS $$
+BEGIN
+  IF (NEW.is_urgent = true) THEN
+    PERFORM pg_notify('urgent_orders', row_to_json(NEW)::text);
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
 
-CREATE OR REPLACE FUNCTION public.get_sales_report(
-    start_date text,
-    end_date text
-) 
+-- Sales report function
+CREATE OR REPLACE FUNCTION public.get_sales_report(start_date text, end_date text)
 RETURNS TABLE (
     total_revenue numeric,
     total_orders bigint,
@@ -258,96 +296,139 @@ BEGIN
         SELECT
             o.order_amount,
             o.amount_remaining,
-            p.email AS sales_agent_email
-        FROM
-            public.orders o
-        LEFT JOIN
-            public.user_profiles p ON o.created_by = p.id
+            COALESCE(p.email, 'Unknown') AS sales_agent_email
+        FROM public.orders o
+        LEFT JOIN public.user_profiles p ON o.created_by = p.id
         WHERE
             o.status <> 'CANCELLED'
-            AND o.created_at >= to_timestamp(start_date, 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')
-            AND o.created_at <= to_timestamp(end_date, 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')
+            AND o.created_at >= (start_date || 'T00:00:00Z')::timestamptz
+            AND o.created_at <  (end_date   || 'T23:59:59Z')::timestamptz
     )
     SELECT
-        SUM(fo.order_amount) AS total_revenue,
-        COUNT(*) AS total_orders,
-        SUM(fo.order_amount - fo.amount_remaining) AS total_collected,
-        (
+        COALESCE(SUM(fo.order_amount), 0),
+        COUNT(fo.*),
+        COALESCE(SUM(fo.order_amount - fo.amount_remaining), 0),
+        COALESCE((
             SELECT jsonb_object_agg(agent, revenue)
             FROM (
-                SELECT
-                    sales_agent_email AS agent,
-                    SUM(order_amount) AS revenue
-                FROM
-                    filtered_orders
-                GROUP BY
-                    sales_agent_email
+                SELECT sales_agent_email AS agent, SUM(order_amount) AS revenue
+                FROM filtered_orders
+                GROUP BY sales_agent_email
             ) AS agent_sales
-        ) AS sales_by_agent
-    FROM
-        filtered_orders;
+        ), '{}'::jsonb)
+    FROM filtered_orders;
 END;
 $$;
 
 -- ================================================================
--- PART 4: RLS POLICIES
+-- PART 5: TRIGGERS
+-- ================================================================
+CREATE TRIGGER on_order_insert_generate_number
+    BEFORE INSERT ON public.orders
+    FOR EACH ROW EXECUTE FUNCTION public.generate_order_number();
+
+CREATE TRIGGER on_orders_update
+    BEFORE UPDATE ON public.orders
+    FOR EACH ROW EXECUTE FUNCTION public.handle_updated_at();
+
+CREATE TRIGGER on_orders_change_log
+    AFTER UPDATE ON public.orders
+    FOR EACH ROW EXECUTE FUNCTION public.log_order_changes();
+
+CREATE TRIGGER trigger_broadcast_urgent_order
+    AFTER INSERT OR UPDATE ON public.orders
+    FOR EACH ROW EXECUTE FUNCTION public.broadcast_urgent_order();
+
+CREATE TRIGGER on_monthly_costs_update
+    BEFORE UPDATE ON public.monthly_costs
+    FOR EACH ROW EXECUTE FUNCTION public.handle_updated_at();
+
+CREATE TRIGGER on_auth_user_created
+    AFTER INSERT ON auth.users
+    FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
+
+-- ================================================================
+-- PART 6: RLS POLICIES - FIXED FOR USER MANAGEMENT
 -- ================================================================
 ALTER TABLE public.orders ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.order_history ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.user_profiles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.monthly_costs ENABLE ROW LEVEL SECURITY;
 
--- Remove old policies
+-- 1. Delete the old, too-permissive policy
 DROP POLICY IF EXISTS "Internal team can manage all orders" ON public.orders;
-DROP POLICY IF EXISTS "Internal team can view all order history" ON public.order_history;
-DROP POLICY IF EXISTS "Users can view their own profile" ON public.user_profiles;
-DROP POLICY IF EXISTS "Admins can view all profiles" ON public.user_profiles;
-DROP POLICY IF EXISTS "Admins can update user profiles" ON public.user_profiles;
-DROP POLICY IF EXISTS "Internal team can manage order attachments" ON storage.objects;
-DROP POLICY IF EXISTS "Admins can manage monthly costs" ON public.monthly_costs;
 
--- Orders policies
-CREATE POLICY "Internal team can manage all orders"
-ON public.orders FOR ALL TO authenticated USING (true) WITH CHECK (true);
+-- 2. Admins can do anything
+CREATE POLICY "Admins can manage all orders" ON public.orders
+  FOR ALL USING (get_current_user_role() = 'ADMIN');
 
-CREATE POLICY "Internal team can view all order history"
-ON public.order_history FOR SELECT TO authenticated USING (true);
+-- 3. Agents can see all data
+CREATE POLICY "Agents can view all order data" ON public.orders
+  FOR SELECT USING (get_current_user_role() = 'AGENT');
 
--- User profiles
-CREATE POLICY "Users can view their own profile" 
-ON public.user_profiles FOR SELECT USING (auth.uid() = id);
+-- 4. Production can see all orders BUT NOT financial data
+CREATE POLICY "Production can view non-financial order data" ON public.orders
+  FOR SELECT USING (get_current_user_role() = 'PRODUCTION');
+-- 5. Production can UPDATE orders (status, shipping, etc.)
+CREATE POLICY "Production can update orders" ON public.orders
+  FOR UPDATE USING (get_current_user_role() = 'PRODUCTION')
+  WITH CHECK (get_current_user_role() = 'PRODUCTION');
 
-CREATE POLICY "Admins can view all profiles" 
-ON public.user_profiles FOR SELECT USING (public.get_my_role() = 'ADMIN');
+-- Order history policies
+CREATE POLICY "Internal team can view all order history" ON public.order_history FOR SELECT TO authenticated USING (true);
 
-CREATE POLICY "Admins can update user profiles" 
-ON public.user_profiles FOR UPDATE USING (public.get_my_role() = 'ADMIN')
-WITH CHECK (public.get_my_role() = 'ADMIN');
+-- FIXED: User profiles policies that actually work
+CREATE POLICY "Users can view their own profile" ON public.user_profiles FOR SELECT USING (auth.uid() = id);
+CREATE POLICY "Admins can view all profiles" ON public.user_profiles FOR SELECT USING (get_current_user_role() = 'ADMIN');
+CREATE POLICY "Admins can update all profiles" ON public.user_profiles FOR UPDATE USING (get_current_user_role() = 'ADMIN');
+CREATE POLICY "Admins can insert profiles" ON public.user_profiles FOR INSERT WITH CHECK (get_current_user_role() = 'ADMIN');
 
--- Storage
-CREATE POLICY "Internal team can manage order attachments"
-ON storage.objects FOR ALL TO authenticated
-USING (bucket_id = 'order-attachments')
-WITH CHECK (bucket_id = 'order-attachments');
-
--- Monthly Costs
-CREATE POLICY "Admins can manage monthly costs"
-ON public.monthly_costs FOR ALL TO authenticated
-USING (public.get_my_role() = 'ADMIN')
-WITH CHECK (public.get_my_role() = 'ADMIN');
+-- Monthly costs policies
+CREATE POLICY "Admins can manage monthly costs" ON public.monthly_costs
+    FOR ALL TO authenticated
+    USING (public.get_current_user_role() = 'ADMIN');
 
 -- ================================================================
--- PART 5: STORAGE BUCKET
+-- PART 7: STORAGE BUCKET
 -- ================================================================
 INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
-VALUES ('order-attachments', 'order-attachments', true, 5242880, ARRAY['image/jpeg', 'image/png', 'image/gif', 'application/pdf', 'image/webp'])
+VALUES ('order-attachments', 'order-attachments', true, 5242880,
+    ARRAY['image/jpeg', 'image/png', 'image/gif', 'application/pdf', 'image/webp'])
 ON CONFLICT (id) DO UPDATE
 SET public = EXCLUDED.public,
     file_size_limit = EXCLUDED.file_size_limit,
     allowed_mime_types = EXCLUDED.allowed_mime_types;
 
 -- ================================================================
--- PART 6: PERMISSIONS
+-- PART 8: STORAGE POLICIES
+-- ================================================================
+DROP POLICY IF EXISTS "Authenticated users can upload" ON storage.objects;
+DROP POLICY IF EXISTS "Anyone can view files" ON storage.objects;
+DROP POLICY IF EXISTS "Users can delete their own files" ON storage.objects;
+DROP POLICY IF EXISTS "Internal team can manage order attachments" ON storage.objects;
+DROP POLICY IF EXISTS "Allow authenticated read access" ON storage.objects;
+DROP POLICY IF EXISTS "Allow authenticated insert" ON storage.objects;
+DROP POLICY IF EXISTS "Allow authenticated delete" ON storage.objects;
+
+CREATE POLICY "Internal team can manage order attachments" ON storage.objects
+    FOR ALL TO authenticated
+    USING (bucket_id = 'order-attachments')
+    WITH CHECK (bucket_id = 'order-attachments');
+
+CREATE POLICY "Allow authenticated read access" ON storage.objects
+    FOR SELECT TO authenticated
+    USING (bucket_id = 'order-attachments');
+
+CREATE POLICY "Allow authenticated insert" ON storage.objects
+    FOR INSERT TO authenticated
+    WITH CHECK (bucket_id = 'order-attachments');
+
+CREATE POLICY "Allow authenticated delete" ON storage.objects
+    FOR DELETE TO authenticated
+    USING (bucket_id = 'order-attachments');
+
+-- ================================================================
+-- PART 9: PERMISSIONS & DEFAULT DATA
 -- ================================================================
 GRANT USAGE ON SCHEMA public TO authenticated;
 GRANT ALL ON ALL TABLES IN SCHEMA public TO authenticated;
@@ -357,38 +438,49 @@ GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO authenticated;
 GRANT USAGE ON SCHEMA public TO anon;
 GRANT SELECT ON public.orders TO anon;
 
--- ================================================================
--- PART 7: BACKFILL EXISTING USERS
--- ================================================================
-INSERT INTO public.user_profiles (id, email, role)
-SELECT id, email, 'AGENT'
+ALTER TABLE public.orders REPLICA IDENTITY FULL;
+
+-- FIXED: Create admin user with dynamic ID
+DO $$ 
+DECLARE
+    admin_user_id uuid;
+BEGIN
+    -- Get the first admin user or create one
+    SELECT id INTO admin_user_id 
+    FROM auth.users 
+    WHERE email = 'hello@pandapatches.com' 
+    LIMIT 1;
+
+    IF admin_user_id IS NOT NULL THEN
+        INSERT INTO public.user_profiles (id, email, full_name, role, access)
+        VALUES (
+            admin_user_id,
+            'hello@pandapatches.com',
+            'Hello Admin',
+            'ADMIN',
+            '{"dashboard": true, "orders": true, "revenue": true, "sales_reports": true, "production_reports": true, "settings": true}'::jsonb
+        )
+        ON CONFLICT (id)
+        DO UPDATE SET 
+            email = EXCLUDED.email,
+            full_name = EXCLUDED.full_name,
+            role = 'ADMIN',
+            access = '{"dashboard": true, "orders": true, "revenue": true, "sales_reports": true, "production_reports": true, "settings": true}'::jsonb;
+    END IF;
+END $$;
+
+-- Auto-create profiles for existing users with default access
+INSERT INTO public.user_profiles (id, email, role, access)
+SELECT id, email, 'AGENT', '{"dashboard": true, "orders": true, "revenue": false, "sales_reports": false, "production_reports": false, "settings": false}'::jsonb
 FROM auth.users
-WHERE id NOT IN (SELECT id FROM public.user_profiles);
+WHERE id NOT IN (SELECT id FROM public.user_profiles)
+ON CONFLICT (id) DO NOTHING;
+
+-- ================================================================
+-- PART 10: FINAL SETUP COMPLETE
+-- ================================================================
+SELECT '✅ CRM Database Setup Complete - User Management READY!' AS status;
     `;
-
-    const csvHeaders = `order_number,customer_name,customer_email,customer_phone,design_name,patches_type,patches_quantity,order_amount,amount_paid,status,created_at,sales_agent,lead_source,instructions`;
-    const csvExample = `ORD-0001,John Doe,john@example.com,03121234567,Panda Patch,Woven,100,250.00,100.00,DELIVERED,2024-05-12T10:00:00Z,Ali,Facebook,"Repeat customer"`;
-    const importInstructions = `
-1. Go to the Supabase Dashboard → Table editor.
-2. Select the 'orders' table.
-3. Click 'Import data' → 'Import from CSV'.
-4. Upload your CSV file.
-5. Map the columns from your CSV to the corresponding columns in the 'orders' table.
-6. Run the import.
-
-Note:
-- Supabase will accept ISO timestamp strings (e.g., 2024-05-12T10:00:00Z) for date fields like 'created_at'.
-- The CSV should not include binary/image attachments. For attachments, upload them via the UI or bulk upload to storage and then reference the URLs.
-    `;
-
-
-
-
-
-
-
-
-
 
     const storagePolicies = `
 -- In Supabase Studio: Storage > Policies > order-attachments
@@ -429,25 +521,8 @@ USING (bucket_id = 'order-attachments');
 
             <div className="bg-slate-800/30 backdrop-blur-sm border border-slate-700/50 rounded-xl p-6">
                 <h3 className="text-2xl font-semibold mb-4">2. Storage Bucket Policies</h3>
-                <p className="mb-2">For file uploads to work, you need a public bucket named `order-attachments` and the correct policies. Go to `Storage` {' > '} `Policies` in Supabase and create policies using the SQL below.</p>
+                <p className="mb-2">For file uploads to work, you need a public bucket named order-attachments and the correct policies.</p>
                 <CodeBlock code={storagePolicies} />
-            </div>
-
-            <div className="bg-slate-800/30 backdrop-blur-sm border border-slate-700/50 rounded-xl p-6">
-                <h3 className="text-2xl font-semibold mb-4">3. CORS (Cross-Origin Resource Sharing)</h3>
-                <p className="mb-2">If you see network errors when the app tries to connect to Supabase, you may need to adjust your CORS settings. Go to `Project Settings` {' > '} `API` {' > '} `CORS settings` in your Supabase dashboard.</p>
-                <p>For development, it's common to add `http://localhost:3000` to your allowed origins. For production, you should add your application's public URL (e.g., `https://my-crm.vercel.app`).</p>
-            </div>
-
-            <div className="bg-slate-800/30 backdrop-blur-sm border border-slate-700/50 rounded-xl p-6">
-                <h3 className="text-2xl font-semibold mb-4">4. Bulk Import via CSV</h3>
-                <p className="mb-2">To bulk import existing orders, create a CSV file with the following headers. These match your existing `orders` table columns.</p>
-                <h4 className="font-semibold mt-4">CSV Headers:</h4>
-                <CodeBlock code={csvHeaders} />
-                <h4 className="font-semibold mt-4">Example Row:</h4>
-                <CodeBlock code={csvExample} />
-                <h4 className="font-semibold mt-4">How to Import:</h4>
-                <p className="whitespace-pre-wrap text-sm">{importInstructions}</p>
             </div>
         </div>
     );

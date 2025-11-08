@@ -1,7 +1,6 @@
 export enum OrderStatus {
   NEW_ORDER = 'NEW_ORDER',
   PENDING = 'PENDING',
-  IN_PROGRESS = 'IN_PROGRESS',
   AWAITING_CUSTOMER_APPROVAL = 'AWAITING_CUSTOMER_APPROVAL',
   REVISION_REQUESTED = 'REVISION_REQUESTED',
   APPROVED = 'APPROVED',
@@ -17,15 +16,29 @@ export enum OrderStatus {
 
 export enum UserRole {
   ADMIN = 'ADMIN',
+  SALES_AGENT = 'SALES_AGENT',
   AGENT = 'AGENT',
   PRODUCTION = 'PRODUCTION',
-  CEO = 'CEO',
+  QC_AGENT = 'QC_AGENT',
+  ACCOUNTANT = 'ACCOUNTANT',
+  DISPATCH_AGENT = 'DISPATCH_AGENT'
+}
+
+export interface UserAccess {
+  dashboard: boolean;
+  orders: boolean;
+  revenue: boolean;
+  sales_reports: boolean;
+  production_reports: boolean;
+  settings: boolean;
 }
 
 export interface UserProfile {
   id: string;
   email: string;
+  full_name?: string;
   role: UserRole;
+  access?: UserAccess;
 }
 
 export interface Order {

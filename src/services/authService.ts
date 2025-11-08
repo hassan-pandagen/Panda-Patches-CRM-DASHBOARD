@@ -1,94 +1,187 @@
+// src/services/authService.ts
+import { supabaseAdmin } from './supabaseClient';
+import { AuthChangeEvent, Session, User } from '@supabase/supabase-js';
+import { UserRole } from '../types';
 
-import { supabase } from './supabaseClient';
-import { AuthChangeEvent, Session } from '@supabase/supabase-js';
-import { v4 as uuidv4 } from 'uuid';
+// ------------------- AUTH BASICS -------------------
 
-// FIX: Add and export the `signUpUser` function to allow new users to register. This was missing and caused a compile error on the sign-up page.
-export const signUpUser = (email: string, password: string) => {
+// Sign in existing user
+export const signInUser = async (email: string, password: string) => {
+  // Use the main supabase client for this public action
+  const { supabase } = await import('./supabaseClient');
+  const { data, error } = await supabase.auth.signInWithPassword({
+    email: email.trim(),
+    password,
+  });
+
+  if (error) {
+    console.error('Supabase login error:', error.message);
+    return { error };
+  }
+
+  console.log('Login successful. Session:', !!data.session);
+  return { data, error: null };
+};
+
+// Sign up self-registration (only for general users)
+export const signUpUser = async (email: string, password: string) => {
+  const { supabase } = await import('./supabaseClient');
   return supabase.auth.signUp({
-    email,
+    email: email.trim(),
     password,
   });
 };
 
-export const signInUser = (email: string, password: string) => {
-  return supabase.auth.signInWithPassword({
-    email: email,
-    password: password,
-  });
-};
-
-export const signOutUser = () => {
+// Sign out
+export const signOutUser = async () => {
+  const { supabase } = await import('./supabaseClient');
   return supabase.auth.signOut();
 };
 
+// Get active session
 export const getSession = async (): Promise<Session | null> => {
-    // getSession is now an async function in supabase-js v2
-    const { data, error } = await supabase.auth.getSession();
-    if (error) {
-        console.error("Error getting session:", error.message);
-        return null;
-    }
-    return data.session;
+  const { supabase } = await import('./supabaseClient');
+  const { data, error } = await supabase.auth.getSession();
+  if (error) {
+    console.error('Error getting session:', error.message);
+    return null;
+  }
+  return data.session;
 };
 
-export const onAuthStateChange = (callback: (event: AuthChangeEvent, session: Session | null) => void) => {
-  return supabase.auth.onAuthStateChange(callback);
+// Auth state listener
+export const onAuthStateChange = async ( // Mark the function as async
+  callback: (event: AuthChangeEvent, session: Session | null) => void | Promise<void>
+) => {
+  const { supabase } = await import('./supabaseClient');
+  return supabase.auth.onAuthStateChange(async (event, session) => await callback(event, session));
 };
 
-export const sendPasswordResetEmail = (email: string) => {
-  // The redirectTo URL must point to the page in your app where users can update their password.
-  // With HashRouter, we must include the '#' in the path.
+// ------------------- PASSWORD MANAGEMENT -------------------
+
+export const sendPasswordResetEmail = async (email: string) => {
+  const { supabase } = await import('./supabaseClient');
   const resetUrl = `${window.location.origin}/#/update-password`;
-
   return supabase.auth.resetPasswordForEmail(email, {
     redirectTo: resetUrl,
   });
 };
 
-export const updateUserPassword = (password: string) => {
-    // This function can only be called when a user is authenticated.
-    // Supabase handles this by creating a temporary session when the user clicks the reset link.
-    return supabase.auth.updateUser({ password: password });
+export const updateUserPassword = async (password: string) => {
+  const { supabase } = await import('./supabaseClient');
+  return supabase.auth.updateUser({ password });
 };
 
-/**
- * Creates a new user with a temporary password and immediately sends them a password reset link.
- * This serves as a secure, client-side-only invitation flow.
- * @param email The email of the new user to create.
- */
-export const createUserAndSendPasswordReset = async (email: string) => {
-    // 1. Create the user with a secure, random, temporary password.
-    // The user will never use this password.
-    const temporaryPassword = uuidv4();
-    const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
-        email,
-        password: temporaryPassword,
+// ------------------- ADMIN ACTIONS -------------------
+
+// Create a new user (admin only)
+export const createUserWithRole = async (
+  email: string,
+  role: UserRole,
+  access: Record<string, boolean>,
+  fullName: string
+): Promise<{ user?: User; temporaryPassword?: string; error?: string }> => {
+  if (!supabaseAdmin) {
+    return { error: 'Admin client not initialized. Missing service role key.' };
+  }
+
+  try {
+    const temporaryPassword = crypto.randomUUID();
+
+    // Create user in Supabase Auth
+    const { data, error } = await supabaseAdmin.auth.admin.createUser({
+      email,
+      password: temporaryPassword,
+      email_confirm: true,
     });
 
-    if (signUpError) {
-        // If the error is that the user already exists, we can still proceed to send them a reset link.
-        // This makes the function idempotent and user-friendly.
-        if (signUpError.message.includes('User already registered')) {
-            console.log('User already exists. Proceeding to send password reset email.');
-        } else {
-            // For any other sign-up error, we should stop and throw the error.
-            throw signUpError;
-        }
+    if (error) throw error;
+
+    const user = data?.user;
+
+    // FIX: The `handle_new_user` trigger in the database is now responsible
+    // for creating the user profile. We only need to set the metadata here
+    // which the trigger will use.
+    const { data: updatedUser, error: updateError } = await supabaseAdmin.auth.admin.updateUserById(
+      user.id,
+      { user_metadata: { role, access, full_name: fullName } }
+    );
+
+    if (updateError) throw updateError;
+
+    return { user: updatedUser.user, temporaryPassword };
+  } catch (err: any) {
+    console.error('Error creating user with role:', err);
+    return { error: err.message };
+  }
+};
+
+// Get all users (admin only)
+export const getAllUsers = async () => {
+  if (!supabaseAdmin) {
+    console.error('Admin client not initialized. Missing service role key.');
+    return { data: null, error: 'Admin client not initialized.' };
+  }
+
+  try {
+    const { data, error } = await supabaseAdmin
+      .from('user_profiles')
+      .select('*');
+
+    if (error) {
+      throw error;
     }
 
-    // This check is important because even if signUp reports an existing user,
-    // the `user` object might be null.
-    const userExists = signUpData.user || signUpError?.message.includes('User already registered');
+    return { data, error: null };
+  } catch (err: any) {
+    console.error('Error fetching all users:', err.message);
+    return { data: null, error: err.message };
+  }
+};
 
-    if (userExists) {
-        // 2. Immediately send a password reset email.
-        // This email will act as the user's setup/invitation link.
-        const { error: resetError } = await sendPasswordResetEmail(email);
-        if (resetError) {
-            throw resetError;
-        }
-    } else {
-         throw new Error("Could not create user or verify their existence.");
+// Update a user's profile (admin only)
+export const updateUserProfile = async (
+  userId: string,
+  updates: { role?: UserRole; access?: Record<string, boolean>; full_name?: string }
+) => {
+  if (!supabaseAdmin) {
+    return { error: 'Admin client not initialized.' };
+  }
+
+  try {
+    const { data, error } = await supabaseAdmin
+      .from('user_profiles')
+      .update(updates)
+      .eq('id', userId)
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    return { data, error: null };
+  } catch (err: any) {
+    console.error('Error updating user profile:', err.message);
+    return { data: null, error: err.message };
+  }
+};
+
+// Delete a user (admin only)
+export const deleteUser = async (userId: string) => {
+  if (!supabaseAdmin) {
+    return { error: 'Admin client not initialized.' };
+  }
+
+  try {
+    // This will also delete the user from user_profiles due to ON DELETE CASCADE
+    const { data, error } = await supabaseAdmin.auth.admin.deleteUser(userId);
+
+    if (error) {
+      throw error;
     }
+
+    return { data, error: null };
+  } catch (err: any) {
+    console.error('Error deleting user:', err.message);
+    return { data: null, error: err.message };
+  }
 };

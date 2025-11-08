@@ -1,80 +1,109 @@
-import React, { createContext, useState, useEffect, useContext, ReactNode, useMemo } from "react";
-import { Session, AuthChangeEvent } from "@supabase/supabase-js";
-import { onAuthStateChange, getSession } from "../services/authService";
-import { getUserProfile } from "../services/userService";
-import { UserProfile as AppUser, UserRole } from "../types";
+import React, {
+  createContext,
+  useContext,
+  useEffect,
+  useState,
+  ReactNode,
+} from 'react';
+import { supabase } from '../services/supabaseClient';
+
+import { UserRole } from '../types';
 
 interface AuthContextType {
-  user: AppUser | null;
-  session: Session | null;
-  loading: boolean;
+  user: any; // Consider defining a more specific type for user
+  role: UserRole | null;
+  isAuthenticated: boolean;
+  isLoading: boolean;
+  logout: () => Promise<void>;
 }
 
-const AuthContext = createContext<AuthContextType>({
-  user: null,
-  session: null,
-  loading: true,
-});
+const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-  const [user, setUser] = useState<AppUser | null>(null);
-  const [session, setSession] = useState<Session | null>(null);
-  const [loading, setLoading] = useState(true);
+export const AuthProvider: React.FC<{ children: ReactNode }> = ({
+  children,
+}) => {
+  const [user, setUser] = useState<any>(null);
+  const [role, setRole] = useState<UserRole | null>(null);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
 
-  const loadProfile = async (session: Session | null) => {
-    if (!session?.user) {
-      setUser(null);
-      setLoading(false);
-      return;
-    }
-
+  // ✅ Handle session and role fetching
+  const handleSession = async (session: any) => {
     try {
-      let userProfile = await getUserProfile(session.user.id);
+      if (session?.user) {
+        setUser(session.user);
+        setIsAuthenticated(true);
 
-      // Retry once if not found (handles just-created user)
-      if (!userProfile) {
-        await new Promise((r) => setTimeout(r, 800));
-        userProfile = await getUserProfile(session.user.id);
+        // Fetch role from user_profiles
+        const { data, error } = await supabase
+          .from('user_profiles')
+          .select('role')
+          .eq('id', session.user.id)
+          .single();
+
+        if (error) {
+          console.error('Error fetching role:', error.message);
+          setRole(null);
+        } else {
+          setRole((data?.role as UserRole) || null);
+        }
+      } else {
+        setUser(null);
+        setRole(null);
+        setIsAuthenticated(false);
       }
-
-      const finalUser: AppUser = {
-        ...session.user,
-        email: session.user.email ?? "",
-        role: (userProfile?.role as UserRole) || UserRole.AGENT,
-      };
-
-      setUser(finalUser);
     } catch (err) {
-      console.error("Error loading profile:", err);
-      setUser(null);
+      console.error('Session handling error:', err);
     } finally {
-      setLoading(false);
+      setIsLoading(false);
     }
   };
 
+  // ✅ Initialize auth state once
   useEffect(() => {
-    const { data: listener } = onAuthStateChange(
-      (_event: AuthChangeEvent, session: Session | null) => {
-        setSession(session);
-        loadProfile(session);
+    // Set loading to true initially. The listener will set it to false.
+    setIsLoading(true);
+    // ✅ Listen for login/logout changes
+    const { data: listener } = supabase.auth.onAuthStateChange(
+      (_event, session) => {
+        handleSession(session);
       }
     );
-    
-    // Initial check
-    getSession().then(session => loadProfile(session));
-    
+
+    // ✅ Proper cleanup (no return value)
     return () => {
-      listener?.subscription.unsubscribe();
+      if (listener?.subscription) {
+        listener.subscription.unsubscribe();
+      }
     };
   }, []);
 
-  const value = useMemo(() => ({ user, session, loading }), [user, session, loading]);
+  const logout = async () => {
+    await supabase.auth.signOut();
+    setUser(null);
+    setRole(null);
+    setIsAuthenticated(false);
+  };
 
   return (
-    <AuthContext.Provider value={value}>
+    <AuthContext.Provider
+      value={{
+        user,
+        role,
+        isAuthenticated,
+        isLoading,
+        logout,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );
 };
 
-export const useAuth = () => useContext(AuthContext);
+export const useAuth = () => {
+  const ctx = useContext(AuthContext);
+  if (!ctx) {
+    throw new Error('useAuth must be used within an AuthProvider');
+  }
+  return ctx;
+};

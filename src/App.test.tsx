@@ -1,9 +1,11 @@
-import React from 'react';
+import { describe, it, expect } from 'vitest';
 import { render, screen } from '@testing-library/react';
-import App from './App';
+import '@testing-library/jest-dom';
+import LoginPage from './pages/LoginPage';
 
-test('renders learn react link', () => {
-  render(<App />);
-  const linkElement = screen.getByText(/learn react/i);
-  expect(linkElement).toBeInTheDocument();
+describe('LoginPage', () => {
+  it('renders the login page with the correct title', () => {
+    render(<LoginPage />);
+    expect(screen.getByText('Panda Patches CRM')).toBeInTheDocument();
+  });
 });

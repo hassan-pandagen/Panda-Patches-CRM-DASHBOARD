@@ -1,0 +1,9 @@
+export { default as DashboardPage } from './Dashboard';
+export { default as LoginPage } from './LoginPage';
+export { default as OrderFormPage } from './NewOrderPage';
+export { default as OrderPage } from './OrderPage';
+export { default as ProductionPipelinePage } from './AllOrdersPage';
+export { default as ReportsPage } from './ReportsPage';
+export { default as SettingsPage } from './SettingsPage';
+export { default as UserManagementPage } from './UserManagement';
+export { default as NotFoundPage } from './NotFoundPage';
