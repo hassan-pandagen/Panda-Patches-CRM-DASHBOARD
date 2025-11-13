@@ -58,7 +58,9 @@ export interface Order {
   customerAttachmentURLs?: string[];
   mockupURLs?: string[];
   redoNotes?: string;
+  production_file_urls?: string[];
   redoAttachments?: string[];
+  shippingAttachmentURLs?: string[];
   instructions?: string;
   packing?: string;
   trackingNumber?: string;
@@ -66,6 +68,10 @@ export interface Order {
   orderAmount: number;
   amountPaid: number;
   amountRemaining: number;
+  production_cost: number;
+  shipping_cost: number;
+  marketing_cost: number;
+  profit: number;
   salesAgent: string;
   is_urgent: boolean;
   is_urgent_approved: boolean;
@@ -112,6 +118,29 @@ export interface SalesReport {
   total_orders: number;
   total_collected: number;
   sales_by_agent: { [agentEmail: string]: number };
+}
+
+export interface EmailTemplate {
+  id: number;
+  status: OrderStatus; // Corresponds to OrderStatus enum
+  template_id: string; // SendGrid Dynamic Template ID
+  subject: string; // Default subject line
+  visibility: 'INTERNAL' | 'PUBLIC';
+  created_at: string;
+  updated_at: string;
+}
+
+export interface OrderCommunication {
+  id: number;
+  order_id: number;
+  user_id: string | null; // User who initiated the communication
+  user_email: string | null; // Email of user who initiated
+  recipient_email: string;
+  subject?: string | null;
+  body?: string | null; // Stores the dynamic data sent to SendGrid as JSON string
+  template_id?: string | null;
+  visibility: 'INTERNAL' | 'PUBLIC';
+  sent_at: string;
 }
 
 export interface StatusInfo {

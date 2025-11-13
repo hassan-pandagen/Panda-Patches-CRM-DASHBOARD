@@ -40,8 +40,8 @@ const routes: RouteObject[] = [
     children: [
       {
         index: true,
-        element: (
-          <ProtectedRoute roles={[UserRole.ADMIN]}><DashboardPage /></ProtectedRoute>
+        element: ( // Restrict dashboard to ADMIN, redirect AGENT and PRODUCTION to /reports
+          <ProtectedRoute roles={[UserRole.ADMIN]} redirectPath="/reports"><DashboardPage /></ProtectedRoute>
         ),
       },
       {
@@ -58,7 +58,9 @@ const routes: RouteObject[] = [
       },
       {
         path: 'new-order',
-        element: <NewOrderPage />,
+        element: ( // Restrict new order creation to ADMIN and AGENT
+          <ProtectedRoute roles={[UserRole.ADMIN, UserRole.AGENT]}><NewOrderPage /></ProtectedRoute>
+        ),
       },
       {
         path: 'reports',

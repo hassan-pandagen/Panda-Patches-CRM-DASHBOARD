@@ -49,9 +49,25 @@ export default function Dashboard() {
     totalOrders,
     totalCollected,
     pendingAmount,
-    urgentOrders,
     inProductionOrders,
   } = useDashboardMetrics(orders);
+
+  // --- FIX: Manually calculate pending amount to exclude completed/shipped/delivered orders ---
+  const actionablePendingAmount = useMemo(() => {
+    // An order has a pending amount if it's not cancelled or refunded, and there's a balance.
+    return orders
+      .filter(order => ![OrderStatus.CANCELLED, OrderStatus.REFUNDED].includes(order.status))
+      .reduce((sum, order) => sum + order.amountRemaining, 0);
+  }, [orders]);
+
+  // --- FIX: Manually calculate urgent orders to exclude completed/shipped/delivered statuses ---
+  const urgentOrdersCount = useMemo(() => {
+    return orders.filter(
+      (order) =>
+        order.is_urgent &&
+        ![OrderStatus.COMPLETED, OrderStatus.SHIPPED, OrderStatus.DELIVERED].includes(order.status)
+    ).length;
+  }, [orders]);
 
   const revenueTrend = useMemo(() => {
     const daily = orders.reduce((acc: Record<string, number>, o: Order) => {
@@ -149,7 +165,7 @@ export default function Dashboard() {
             <StatCard
               title="Total Orders"
               value={totalOrders}
-              subtitle={`${urgentOrders} urgent`}
+              subtitle={`${urgentOrdersCount} urgent`}
               icon={<Package className="w-6 h-6" />}
               onClick={() => handleStatCardClick({ filter: 'urgent' })}
               color="info"
@@ -163,7 +179,7 @@ export default function Dashboard() {
             />
             <StatCard
               title="Pending Amount"
-              value={`$${pendingAmount.toLocaleString()}`}
+              value={`$${actionablePendingAmount.toLocaleString()}`}
               icon={<Clock className="w-6 h-6" />}
               onClick={() => handleStatCardClick({ payment_status: 'pending' })}
               color="warning"

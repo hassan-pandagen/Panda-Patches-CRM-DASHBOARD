@@ -72,6 +72,19 @@ export const updateUserPassword = async (password: string) => {
   return supabase.auth.updateUser({ password });
 };
 
+export const updateUserPasswordById = async (
+  userId: string,
+  newPassword: string
+) => {
+  if (!supabaseAdmin) {
+    throw new Error('Admin client not initialized.');
+  }
+  const { data, error } = await supabaseAdmin.auth.admin.updateUserById(userId, {
+    password: newPassword,
+  });
+  if (error) throw new Error(error.message);
+  return data;
+};
 // ------------------- ADMIN ACTIONS -------------------
 
 // Create a new user (admin only)

@@ -2,6 +2,7 @@ import React from "react";
 import { NavLink } from "react-router-dom";
 import { DashboardIcon, PlusIcon, SettingsIcon } from "../ui/Icons";
 import { useAuth } from "../../contexts/AuthContext";
+import { UserRole } from "../../types";
 
 interface NavItemProps {
   to: string;
@@ -40,8 +41,13 @@ const Navbar: React.FC = () => {
     >
       <div className="flex justify-around items-center w-full gap-6">
         {/* Common Links */}
-        <NavItem to="/" icon={<DashboardIcon />} label="Dashboard" />
-        <NavItem to="/new-order" icon={<PlusIcon />} label="New Order" />
+        {role === UserRole.PRODUCTION || role === UserRole.AGENT ? ( // Added UserRole.AGENT here
+          <NavItem to="/reports" icon={<DashboardIcon />} label="Reports" />
+        ) : (
+          <NavItem to="/" icon={<DashboardIcon />} label="Dashboard" />
+        )}
+        
+        {role !== UserRole.PRODUCTION && role !== UserRole.AGENT && <NavItem to="/new-order" icon={<PlusIcon />} label="New Order" />} {/* Added UserRole.AGENT here */}
 
         {/* Admin-only */}
         {role === "ADMIN" && (

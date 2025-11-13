@@ -14,8 +14,7 @@ import {
  */
 
 export const CRM_BASE_URL = import.meta.env.VITE_CRM_BASE_URL || 'https://mycustompatches.net';
-export const N8N_WEBHOOK_URL = import.meta.env.VITE_N8N_WEBHOOK_URL || '';
-export const N8N_APPROVAL_WEBHOOK_URL = import.meta.env.VITE_N8N_APPROVAL_WEBHOOK_URL || '';
+export const SENDGRID_API_KEY = import.meta.env.VITE_SENDGRID_API_KEY || '';
 
 // src/constants.ts
 export const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;

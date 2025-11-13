@@ -9,6 +9,36 @@ export type Json =
 export interface Database {
   public: {
     Tables: {
+      email_templates: {
+        Row: {
+          id: number
+          status: string
+          template_id: string
+          subject: string
+          visibility: string
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: number
+          status: string
+          template_id: string
+          subject: string
+          visibility?: string
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: number
+          status?: string
+          template_id?: string
+          subject?: string
+          visibility?: string
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       monthly_costs: {
         Row: {
           added_by: string | null
@@ -110,15 +140,16 @@ export interface Database {
           order_number: string
           packing: string | null
           patches_quantity: number
-          patches_type: string | null
           redo_attachments: string[] | null
           redo_notes: string | null
           revision_notes: string | null
           sales_agent: string
           shipping_address: string | null
+          shipping_attachment_urls: string[] | null
           status: string
           tracking_number: string | null
           updated_at: string
+          patches_type: string | null
           amount_remaining: number
         }
         Insert: {
@@ -144,15 +175,16 @@ export interface Database {
           order_number: string
           packing?: string | null
           patches_quantity: number
-          patches_type?: string | null
           redo_attachments?: string[] | null
           redo_notes?: string | null
           revision_notes?: string | null
           sales_agent: string
           shipping_address?: string | null
+          shipping_attachment_urls?: string[] | null
           status: string
           tracking_number?: string | null
           updated_at?: string
+          patches_type?: string | null
         }
         Update: {
           amount_paid?: number
@@ -177,12 +209,12 @@ export interface Database {
           order_number?: string
           packing?: string | null
           patches_quantity?: number
-          patches_type?: string | null
           redo_attachments?: string[] | null
           redo_notes?: string | null
           revision_notes?: string | null
           sales_agent?: string
           shipping_address?: string | null
+          shipping_attachment_urls?: string[] | null
           status?: string
           tracking_number?: string | null
           updated_at?: string

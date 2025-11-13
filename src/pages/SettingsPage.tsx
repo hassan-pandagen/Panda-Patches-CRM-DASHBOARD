@@ -89,6 +89,8 @@ CREATE TABLE public.orders (
     customer_profile_url text,
     shipping_address text,
     design_name text NOT NULL,
+    production_file_urls text[],
+    shipping_attachment_urls text[],
     design_size text,
     design_backing text,
     patches_type text,
@@ -105,6 +107,10 @@ CREATE TABLE public.orders (
     order_amount numeric(10, 2) NOT NULL DEFAULT 0.00,
     amount_paid numeric(10, 2) NOT NULL DEFAULT 0.00,
     amount_remaining numeric(10, 2) GENERATED ALWAYS AS (order_amount - amount_paid) STORED,
+    production_cost numeric(10, 2) NOT NULL DEFAULT 0.00,
+    shipping_cost numeric(10, 2) NOT NULL DEFAULT 0.00,
+    marketing_cost numeric(10, 2) NOT NULL DEFAULT 0.00,
+    profit numeric(10, 2) GENERATED ALWAYS AS (order_amount - production_cost - shipping_cost - marketing_cost) STORED,
     sales_agent text NOT NULL,
     is_urgent boolean NOT NULL DEFAULT false,
     is_urgent_approved boolean DEFAULT false,
@@ -155,6 +161,32 @@ CREATE TABLE public.monthly_costs (
 );
 COMMENT ON TABLE public.monthly_costs IS 'Tracks monthly business costs (materials, shipping, etc).';
 
+CREATE TABLE public.order_communications (
+    id bigint PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
+    order_id bigint NOT NULL REFERENCES public.orders(id) ON DELETE CASCADE,
+    user_id uuid REFERENCES auth.users(id),
+    user_email text,
+    recipient_email text NOT NULL,
+    subject text,
+    body text, -- Stores the dynamic data sent to SendGrid as JSON string
+    template_id text,
+    visibility text NOT NULL DEFAULT 'INTERNAL', -- 'INTERNAL' or 'PUBLIC'
+    sent_at timestamptz NOT NULL DEFAULT now()
+);
+COMMENT ON TABLE public.order_communications IS 'Logs all outgoing email communications for an order.';
+
+CREATE TABLE public.email_templates (
+    id bigint PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
+    status text NOT NULL UNIQUE, -- e.g., 'NEW_ORDER', 'SHIPPED'
+    template_id text NOT NULL, -- SendGrid Dynamic Template ID
+    subject text NOT NULL, -- Default subject line
+    visibility text NOT NULL DEFAULT 'PUBLIC', -- 'INTERNAL' or 'PUBLIC'
+    created_at timestamptz NOT NULL DEFAULT now(),
+    updated_at timestamptz NOT NULL DEFAULT now()
+);
+COMMENT ON TABLE public.email_templates IS 'Stores SendGrid email template configurations.';
+
+
 -- ================================================================
 -- PART 2: INDEXES
 -- ================================================================
@@ -168,6 +200,8 @@ CREATE INDEX idx_orders_created_at_desc ON public.orders(created_at DESC);
 CREATE INDEX idx_order_history_order_id ON public.order_history(order_id);
 CREATE INDEX idx_order_history_changed_at ON public.order_history(changed_at);
 CREATE INDEX idx_monthly_costs_month_year ON public.monthly_costs(month_year);
+CREATE INDEX idx_email_templates_status ON public.email_templates(status);
+CREATE INDEX idx_order_communications_order_id ON public.order_communications(order_id);
 
 -- ================================================================
 -- PART 3: SEQUENCES
@@ -247,7 +281,7 @@ BEGIN
             WHEN new.raw_user_meta_data->>'role' = 'ADMIN' THEN
               '{"dashboard": true, "orders": true, "revenue": true, "sales_reports": true, "production_reports": true, "settings": true}'::jsonb
             ELSE
-              '{"dashboard": true, "orders": true, "revenue": false, "sales_reports": false, "production_reports": false, "settings": false}'::jsonb
+              '{"dashboard": true, "orders": true, "revenue": false, "sales_reports": false, "production_reports": true, "settings": false}'::jsonb
           END
       END,
       '{"dashboard": true, "orders": true, "revenue": false, "sales_reports": false, "production_reports": false, "settings": false}'::jsonb
@@ -321,6 +355,76 @@ END;
 $$;
 
 -- ================================================================
+-- PART 4.2: NEW REDO COUNT CHECK FUNCTION
+-- ================================================================
+CREATE OR REPLACE FUNCTION public.check_redo_count()
+RETURNS TRIGGER AS $$
+DECLARE
+    redo_count integer;
+BEGIN
+    -- Only run this check if the status is what we care about
+    IF NEW.status = 'REVISION_REQUESTED' AND OLD.status <> 'REVISION_REQUESTED' THEN
+        -- Count how many times this order has been in 'REVISION_REQUESTED' status
+        -- We add 1 to account for the CURRENT update, as the history log trigger may not have run yet.
+        SELECT 1 + count(*)
+        INTO redo_count
+        FROM public.order_history
+        WHERE order_id = NEW.id
+          AND field_changed = 'status' -- Ensure we are only counting status changes
+          AND new_value = 'REVISION_REQUESTED';
+
+        -- If it's the 3rd time (or more, to be safe), send a notification
+        IF redo_count >= 3 THEN
+            PERFORM pg_notify('admin_notifications', json_build_object('order_number', NEW.order_number, 'message', 'Order ' || NEW.order_number || ' has been sent for redo ' || redo_count || ' times. Admin intervention may be required.')::text);
+        END IF;
+    END IF;
+
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- ================================================================
+-- PART 4.1: NEW PROFIT & LOSS REPORT FUNCTION
+-- ================================================================
+CREATE OR REPLACE FUNCTION public.get_profit_loss_report(start_date text, end_date text)
+RETURNS TABLE (
+    total_revenue numeric,
+    total_costs numeric,
+    net_profit numeric,
+    profit_margin numeric,
+    costs_by_category jsonb
+)
+LANGUAGE plpgsql
+AS $$
+DECLARE
+    revenue_val numeric;
+    costs_val numeric;
+BEGIN
+    -- Calculate Total Revenue from Orders
+    SELECT COALESCE(SUM(order_amount), 0)
+    INTO revenue_val
+    FROM public.orders
+    WHERE
+        status <> 'CANCELLED' AND
+        created_at >= (start_date || 'T00:00:00Z')::timestamptz AND
+        created_at <  (end_date   || 'T23:59:59Z')::timestamptz;
+
+    -- Calculate Total Costs from individual orders -- THIS IS THE NEW LOGIC
+    SELECT COALESCE(SUM(o.production_cost + o.shipping_cost + o.marketing_cost), 0)
+    INTO costs_val
+    FROM public.orders o
+    WHERE
+        o.status <> 'CANCELLED' AND
+        o.created_at >= (start_date || 'T00:00:00Z')::timestamptz AND
+        o.created_at <  (end_date   || 'T23:59:59Z')::timestamptz;
+
+    -- Return the aggregated data
+    RETURN QUERY
+    SELECT revenue_val, costs_val, (revenue_val - costs_val) AS net_profit, CASE WHEN revenue_val > 0 THEN (revenue_val - costs_val) / revenue_val * 100 ELSE 0 END AS profit_margin, (SELECT jsonb_build_object('Production', COALESCE(SUM(o.production_cost), 0), 'Shipping', COALESCE(SUM(o.shipping_cost), 0), 'Marketing', COALESCE(SUM(o.marketing_cost), 0)) FROM public.orders o WHERE o.status <> 'CANCELLED' AND o.created_at >= (start_date || 'T00:00:00Z')::timestamptz AND o.created_at < (end_date || 'T23:59:59Z')::timestamptz) AS costs_by_category;
+END;
+$$;
+
+-- ================================================================
 -- PART 5: TRIGGERS
 -- ================================================================
 CREATE TRIGGER on_order_insert_generate_number
@@ -334,6 +438,10 @@ CREATE TRIGGER on_orders_update
 CREATE TRIGGER on_orders_change_log
     AFTER UPDATE ON public.orders
     FOR EACH ROW EXECUTE FUNCTION public.log_order_changes();
+
+CREATE TRIGGER on_order_status_change_check_red_count
+    AFTER UPDATE ON public.orders
+    FOR EACH ROW EXECUTE FUNCTION public.check_redo_count();
 
 CREATE TRIGGER trigger_broadcast_urgent_order
     AFTER INSERT OR UPDATE ON public.orders
@@ -354,6 +462,8 @@ ALTER TABLE public.orders ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.order_history ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.user_profiles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.monthly_costs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.order_communications ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.email_templates ENABLE ROW LEVEL SECURITY;
 
 -- 1. Delete the old, too-permissive policy
 DROP POLICY IF EXISTS "Internal team can manage all orders" ON public.orders;
@@ -388,12 +498,35 @@ CREATE POLICY "Admins can manage monthly costs" ON public.monthly_costs
     FOR ALL TO authenticated
     USING (public.get_current_user_role() = 'ADMIN');
 
+-- Order communications policies
+CREATE POLICY "Admins and Agents can see all communications" ON public.order_communications
+    FOR SELECT USING (get_current_user_role() IN ('ADMIN', 'AGENT'));
+
+CREATE POLICY "Production can only see public communications" ON public.order_communications
+    FOR SELECT USING (get_current_user_role() = 'PRODUCTION' AND visibility = 'PUBLIC');
+
+-- Email templates policies
+CREATE POLICY "Admins can manage email templates" ON public.email_templates
+    FOR ALL TO authenticated
+    USING (get_current_user_role() = 'ADMIN');
+CREATE POLICY "All authenticated users can read email templates" ON public.email_templates
+    FOR SELECT TO authenticated
+    USING (true);
 -- ================================================================
 -- PART 7: STORAGE BUCKET
 -- ================================================================
 INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
-VALUES ('order-attachments', 'order-attachments', true, 5242880,
-    ARRAY['image/jpeg', 'image/png', 'image/gif', 'application/pdf', 'image/webp'])
+VALUES (
+    'order-attachments', 
+    'order-attachments', 
+    true, 
+    10485760, -- Increased to 10MB
+    ARRAY[
+        'image/jpeg', 'image/png', 'image/gif', 'application/pdf', 'image/webp',
+        -- NEW: Added common embroidery file MIME types
+        'application/x-dst', 'application/x-embroidery', 'application/octet-stream'
+    ]
+)
 ON CONFLICT (id) DO UPDATE
 SET public = EXCLUDED.public,
     file_size_limit = EXCLUDED.file_size_limit,
@@ -470,11 +603,31 @@ BEGIN
 END $$;
 
 -- Auto-create profiles for existing users with default access
-INSERT INTO public.user_profiles (id, email, role, access)
-SELECT id, email, 'AGENT', '{"dashboard": true, "orders": true, "revenue": false, "sales_reports": false, "production_reports": false, "settings": false}'::jsonb
-FROM auth.users
-WHERE id NOT IN (SELECT id FROM public.user_profiles)
+INSERT INTO public.user_profiles (id, email, full_name, role, access)
+SELECT u.id, u.email, u.raw_user_meta_data->>'full_name', 'AGENT', '{"dashboard": true, "orders": true, "revenue": false, "sales_reports": false, "production_reports": true, "settings": false}'::jsonb
+FROM auth.users u
+WHERE NOT EXISTS (SELECT 1 FROM public.user_profiles p WHERE p.id = u.id)
 ON CONFLICT (id) DO NOTHING;
+
+-- ================================================================
+-- PART 11: INITIAL DATA FOR EMAIL TEMPLATES
+-- ================================================================
+INSERT INTO public.email_templates (status, template_id, subject, visibility)
+VALUES
+    ('NEW_ORDER_CUSTOMER', 'd-1dd88122e761441b885299387805fff6', 'Your New Order #{{orderNumber}} with Panda Patches', 'PUBLIC'),
+    ('NEW_ORDER_PRODUCTION', 'd-844dbffc7d0a41c98caf46b681bb20a4', 'New Order for Production: #{{orderNumber}}', 'INTERNAL'),
+    ('AWAITING_CUSTOMER_APPROVAL', 'd-mockup_approval_customer_id', 'Action Required: Mockup Approval for Order #{{orderNumber}}', 'PUBLIC'),
+    ('APPROVED_CUSTOMER', 'd-approved_customer_id', 'Your Mockup for Order #{{orderNumber}} Has Been Approved!', 'PUBLIC'),
+    ('APPROVED_PRODUCTION', 'd-approved_production_id', 'Mockup Approved, Ready for Production: #{{orderNumber}}', 'INTERNAL'),
+    ('APPROVED_SALES_REP', 'd-approved_sales_rep_id', 'Action: Collect Payment for Approved Order #{{orderNumber}}', 'INTERNAL'),
+    ('IN_PRODUCTION_CUSTOMER', 'd-in_production_customer_id', 'Your Order #{{orderNumber}} is Now in Production!', 'PUBLIC'),
+    ('START_PRODUCTION_PRODUCTION', 'd-start_production_production_id', 'Begin Production for Order #{{orderNumber}}', 'INTERNAL'),
+    ('COMPLETED_SALES_REP', 'd-completed_sales_rep_id', 'Order #{{orderNumber}} is Complete and Ready for Shipping', 'INTERNAL'),
+    ('SHIPPED_CUSTOMER', 'd-shipped_customer_id', 'Your Panda Patches Order #{{orderNumber}} Has Shipped!', 'PUBLIC'),
+    ('SEND_FEEDBACK_EMAIL', 'd-feedback_customer_id', 'We''d Love Your Feedback on Order #{{orderNumber}}', 'PUBLIC')
+ON CONFLICT (status) DO UPDATE SET
+    template_id = EXCLUDED.template_id,
+    subject = EXCLUDED.subject;
 
 -- ================================================================
 -- PART 10: FINAL SETUP COMPLETE

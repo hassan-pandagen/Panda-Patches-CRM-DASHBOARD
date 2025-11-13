@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { getAllUsers, createUserWithRole, updateUserProfile, deleteUser } from '../services/authService';
+import { getAllUsers, createUserWithRole, updateUserProfile, deleteUser, updateUserPasswordById } from '../services/authService';
 import { useAuth } from '../contexts/AuthContext';
 import { UserAccess, UserRole, UserProfile } from '../types';
 import { Check, X, Plus, UserPlus, Edit, Trash2 } from 'lucide-react';
@@ -11,12 +11,22 @@ const accessPermissions: (keyof UserAccess)[] = [
   'dashboard', 'orders', 'revenue', 'sales_reports', 'production_reports', 'settings'
 ];
 
+const defaultUserAccess: Record<string, boolean> = {
+  dashboard: true,
+  orders: true,
+  revenue: false,
+  sales_reports: false,
+  production_reports: false,
+  settings: false,
+};
+
 const UserManagementPage: React.FC = () => {
   const { role } = useAuth();
   const queryClient = useQueryClient();
   const [isCreateModalOpen, setCreateModalOpen] = useState(false);
   const [isEditModalOpen, setEditModalOpen] = useState(false);
   const [isDeleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [isPasswordModalOpen, setPasswordModalOpen] = useState(false);
 
   const [selectedUser, setSelectedUser] = useState<UserProfile | null>(null);
 
@@ -24,22 +34,18 @@ const UserManagementPage: React.FC = () => {
   const [newUserEmail, setNewUserEmail] = useState('');
   const [newUserName, setNewUserName] = useState('');
   const [newUserRole, setNewUserRole] = useState<UserRole>(UserRole.AGENT);
-  const [newUserAccess, setNewUserAccess] = useState<Record<string, boolean>>({
-    dashboard: true,
-    orders: true,
-    revenue: false,
-    sales_reports: false,
-    production_reports: false,
-    settings: false,
-  });
+  const [newUserAccess, setNewUserAccess] = useState<Record<string, boolean>>(defaultUserAccess);
   const [createdUserInfo, setCreatedUserInfo] = useState<{ email: string; tempPass: string } | null>(null);
 
   // State for Edit Modal
   const [editUserName, setEditUserName] = useState('');
   const [editUserRole, setEditUserRole] = useState<UserRole>(UserRole.AGENT);
-  const [editUserAccess, setEditUserAccess] = useState<Record<string, boolean>>({
-    ...newUserAccess, // Use same default
-  });
+  const [editUserAccess, setEditUserAccess] = useState<Record<string, boolean>>(defaultUserAccess);
+
+  // State for Change Password Modal
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [passwordChangeMessage, setPasswordChangeMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
 
   // --- MUTATIONS ---
 
@@ -83,6 +89,24 @@ const UserManagementPage: React.FC = () => {
     onError: (error: Error) => console.error(error),
   });
 
+  const changePasswordMutation = useMutation({
+    mutationFn: () => {
+      if (!selectedUser || newPassword !== confirmPassword || newPassword.length < 6) {
+        throw new Error("Passwords do not match or are too short.");
+      }
+      return updateUserPasswordById(selectedUser.id, newPassword);
+    },
+    onSuccess: () => {
+      setPasswordChangeMessage({ type: 'success', text: 'Password updated successfully!' });
+      setTimeout(() => {
+        closePasswordModal();
+      }, 2000);
+    },
+    onError: (error: Error) => {
+      setPasswordChangeMessage({ type: 'error', text: `Failed to update password: ${error.message}` });
+    },
+  });
+
   // --- EVENT HANDLERS ---
 
   const handleCreateUser = (e: React.FormEvent) => {
@@ -95,6 +119,11 @@ const UserManagementPage: React.FC = () => {
     if (selectedUser) {
       editUserMutation.mutate(selectedUser.id);
     }
+  };
+
+  const handleChangePassword = (e: React.FormEvent) => {
+    e.preventDefault();
+    changePasswordMutation.mutate();
   };
 
   const handleDeleteUser = () => {
@@ -124,7 +153,9 @@ const UserManagementPage: React.FC = () => {
 
   const closeEditModal = () => {
     setEditModalOpen(false);
-    setSelectedUser(null);
+    if (!isPasswordModalOpen) {
+      setSelectedUser(null);
+    }
     editUserMutation.reset();
   };
 
@@ -138,6 +169,25 @@ const UserManagementPage: React.FC = () => {
     setSelectedUser(null);
     deleteUserMutation.reset();
   };
+
+  const openPasswordModalForUser = (user: UserProfile) => {
+    setSelectedUser(user);
+    openPasswordModal();
+  };
+
+  const openPasswordModal = () => {
+    setPasswordModalOpen(true);
+    setEditModalOpen(false); // Close edit modal when opening password modal
+  };
+
+  const closePasswordModal = () => {
+    setPasswordModalOpen(false);
+    setNewPassword('');
+    setConfirmPassword('');
+    setPasswordChangeMessage(null);
+    changePasswordMutation.reset();
+  };
+
 
   // Fetch all users using the new admin-only function
   const { data: users, isLoading, error } = useQuery({
@@ -249,6 +299,54 @@ const UserManagementPage: React.FC = () => {
         isConfirming={deleteUserMutation.isPending}
       />
 
+      {/* Change Password Modal */}
+      {isPasswordModalOpen && selectedUser && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
+          <div className="relative w-full max-w-md p-6 bg-slate-800 border border-slate-700 rounded-xl shadow-lg">
+            <div className="flex justify-between items-start mb-4">
+              <h3 className="text-xl font-semibold text-slate-100">Change Password for {selectedUser.email}</h3>
+              <button onClick={closePasswordModal} className="text-slate-400 hover:text-white">&times;</button>
+            </div>
+            <form onSubmit={handleChangePassword} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-400 mb-1">New Password</label>
+                <input
+                  type="password"
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white placeholder-slate-500 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                  required
+                  minLength={6}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-400 mb-1">Confirm New Password</label>
+                <input
+                  type="password"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white placeholder-slate-500 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                  required
+                />
+              </div>
+              {newPassword !== confirmPassword && confirmPassword && (
+                  <p className="text-sm text-red-400">Passwords do not match.</p>
+              )}
+              {passwordChangeMessage && (
+                  <p className={`text-sm ${passwordChangeMessage.type === 'success' ? 'text-green-400' : 'text-red-400'}`}>{passwordChangeMessage.text}</p>
+              )}
+              <div className="flex justify-end gap-4 pt-4">
+                <button type="button" onClick={closePasswordModal} className="px-4 py-2 rounded-lg bg-slate-700 text-slate-300 hover:bg-slate-600 transition-colors">Cancel</button>
+                <button type="submit" disabled={changePasswordMutation.isPending || newPassword !== confirmPassword || newPassword.length < 6} className="px-4 py-2 rounded-lg bg-blue-600 text-white font-medium hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2">
+                  {changePasswordMutation.isPending && <Spinner small />}
+                  Save Password
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {/* Create User Modal */}
       {isCreateModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
@@ -266,7 +364,16 @@ const UserManagementPage: React.FC = () => {
                 <p className="text-slate-300">User <strong className="text-white">{createdUserInfo.email}</strong> has been created.</p>
                 <p className="text-slate-400 text-sm">Please provide them with their temporary password:</p>
                 <div className="bg-slate-950 p-3 rounded-lg border border-slate-700">
-                  <code className="text-lg font-mono text-cyan-300">{createdUserInfo.tempPass}</code>
+                  <div className="flex items-center justify-center gap-4">
+                    <code className="text-lg font-mono text-cyan-300">{createdUserInfo.tempPass}</code>
+                    <button
+                      type="button"
+                      onClick={() => navigator.clipboard.writeText(createdUserInfo.tempPass)}
+                      className="px-3 py-1 text-xs rounded-md bg-slate-700 hover:bg-slate-600 text-slate-300 transition-colors"
+                    >
+                      Copy
+                    </button>
+                  </div>
                 </div>
                 <button onClick={closeAndResetModal} className="mt-4 px-4 py-2 rounded-lg bg-blue-600 text-white font-medium hover:bg-blue-700">
                   Done
@@ -357,28 +464,33 @@ const UserManagementPage: React.FC = () => {
             </div>
 
             <form onSubmit={handleEditUser} className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-end">
                 <div>
                   <label className="block text-sm font-medium text-slate-400 mb-1">Full Name</label>
                   <input
                     type="text"
                     value={editUserName}
                     onChange={(e) => setEditUserName(e.target.value)}
-                    className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white placeholder-slate-500 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                    className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2.5 text-white placeholder-slate-500 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
                     required
                   />
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-slate-400 mb-1">Role</label>
-                  <select
-                    value={editUserRole}
-                    onChange={(e) => setEditUserRole(e.target.value as UserRole)}
-                    className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-                  >
-                    <option value={UserRole.AGENT}>Agent</option>
-                    <option value={UserRole.PRODUCTION}>Production</option>
-                    <option value={UserRole.ADMIN}>Admin</option>
-                  </select>
+                <div className="flex items-end gap-4">
+                  <div className="flex-grow">
+                    <label className="block text-sm font-medium text-slate-400 mb-1">Role</label>
+                    <select
+                      value={editUserRole}
+                      onChange={(e) => setEditUserRole(e.target.value as UserRole)}
+                      className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2.5 text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                    >
+                      <option value={UserRole.AGENT}>Agent</option>
+                      <option value={UserRole.PRODUCTION}>Production</option>
+                      <option value={UserRole.ADMIN}>Admin</option>
+                    </select>
+                  </div>
+                  <button type="button" onClick={() => selectedUser && openPasswordModalForUser(selectedUser)} className="px-4 py-2.5 rounded-lg bg-yellow-600 text-white hover:bg-yellow-700 transition-colors text-sm font-medium whitespace-nowrap">
+                    Change Password
+                  </button>
                 </div>
               </div>
 

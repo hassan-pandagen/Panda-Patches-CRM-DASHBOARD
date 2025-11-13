@@ -6,9 +6,10 @@ import { UserRole } from './types'; // ✅ Corrected import from UserRoleType to
 interface ProtectedRouteProps {
   children: ReactNode;
   roles?: UserRole[]; // Optional: restrict to certain roles (e.g., ['ADMIN'])
+  redirectPath?: string; // New: path to redirect to if roles don't match
 }
 
-const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, roles }) => {
+const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, roles, redirectPath }) => {
   const { isAuthenticated, isLoading, role } = useAuth();
 
   // Show a simple loader or skeleton while checking auth
@@ -27,7 +28,8 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, roles }) => {
 
   // If route requires specific roles and user doesn't match → redirect home
   if (roles && role && !roles.includes(role)) {
-    return <Navigate to="/" replace />;
+    // Redirect to the specified path, or /orders for PRODUCTION, otherwise /
+    return <Navigate to={redirectPath || (role === UserRole.PRODUCTION ? '/orders' : '/')} replace />;
   }
 
   // Otherwise, render the protected content

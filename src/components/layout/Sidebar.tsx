@@ -79,13 +79,13 @@ const Sidebar: React.FC = () => {
 
   const productionLinks = [
     { 
-      to: '/', 
+      to: '/reports', 
       icon: (
         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path>
         </svg>
       ), 
-      label: 'Dashboard' 
+      label: 'Reports' 
     },
     { 
       to: '/orders', 
@@ -99,14 +99,14 @@ const Sidebar: React.FC = () => {
   ];
 
   const salesLinks = [
-    { 
-      to: '/', 
+    {
+      to: '/reports', // Changed from '/' to '/reports'
       icon: (
         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path>
         </svg>
       ), 
-      label: 'Dashboard' 
+      label: 'Reports' // Changed from 'Dashboard' to 'Reports'
     },
     { 
       to: '/orders', 
@@ -115,17 +115,9 @@ const Sidebar: React.FC = () => {
           <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
         </svg>
       ), 
-      label: 'My Orders' 
+      label: 'All Orders' // Changed from 'My Orders' to 'All Orders' for consistency
     },
-    { 
-      to: '/new-order', 
-      icon: (
-        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
-        </svg>
-      ), 
-      label: 'New Order' 
-    },
+    // Removed 'New Order' link for SALES_AGENT
   ];
 
   // Pick links by role

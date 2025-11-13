@@ -7,11 +7,12 @@ import Spinner from '../components/ui/Spinner';
 import { getStatusInfo } from '../constants';
 import StatusFilter from '../components/ui/StatusFilter';
 import { Package, Search, Plus, X, AlertTriangle } from 'lucide-react';
+import { useAuth } from '../contexts/AuthContext'; // Import useAuth
 import { useDebounce } from '../hooks';
 
 const ORDERS_PER_PAGE = 15;
 
-const fetchOrders = async (page: number, status: string, isUrgent: boolean, searchTerm: string, paymentStatus: string | null) => {
+const fetchOrders = async (page: number, status: string | string[], isUrgent: boolean, searchTerm: string, paymentStatus: string | null, leadSource: string | null, salesAgent: string | null) => {
   const from = page * ORDERS_PER_PAGE;
   const to = from + ORDERS_PER_PAGE - 1;
 
@@ -29,7 +30,11 @@ const fetchOrders = async (page: number, status: string, isUrgent: boolean, sear
     .order('created_at', { ascending: false });
 
   if (status !== 'ALL') {
-    query = query.eq('status', status);
+    if (Array.isArray(status)) {
+      query = query.in('status', status);
+    } else {
+      query = query.eq('status', status);
+    }
   }
 
   if (isUrgent) {
@@ -37,11 +42,19 @@ const fetchOrders = async (page: number, status: string, isUrgent: boolean, sear
   }
 
   if (searchTerm) {
-    query = query.or(`order_number.ilike.%${searchTerm}%,customer_name.ilike.%${searchTerm}%,customer_email.ilike.%${searchTerm}%`);
+    query = query.or(`order_number.ilike.%${searchTerm}%,customer_name.ilike.%${searchTerm}%,customer_email.ilike.%${searchTerm}%,customer_phone.ilike.%${searchTerm}%`);
   }
 
   if (paymentStatus === 'pending') {
     query = query.gt('amount_remaining', 0);
+  }
+
+  if (leadSource) {
+    query = query.eq('lead_source', leadSource);
+  }
+
+  if (salesAgent) {
+    query = query.eq('sales_agent', salesAgent);
   }
 
   const { data, error, count } = await query
@@ -58,12 +71,20 @@ const AllOrdersPage: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState(searchParams.get('q') || '');
   const debouncedSearchTerm = useDebounce(searchTerm, 300);
 
-  const statusFilter = searchParams.get('status') || 'ALL';
+  // --- FIX: Handle urgent filter to exclude completed/shipped ---
+  const { role } = useAuth(); // Get the current user's role
+  let statusFilter: string | string[] = searchParams.get('status') || 'ALL';
   const isUrgentFilter = searchParams.get('filter') === 'urgent' || false;
   const paymentStatusFilter = searchParams.get('payment_status');
+  const leadSourceFilter = searchParams.get('lead_source');
+  const salesAgentFilter = searchParams.get('sales_agent');
 
 
   const toggleUrgentFilter = () => {
+    // --- FIX: When toggling urgent, also clear any existing status filter ---
+    if (isUrgentFilter) {
+      searchParams.delete('status');
+    }
     const newParams = new URLSearchParams(searchParams);
     isUrgentFilter ? newParams.delete('filter') : newParams.set('filter', 'urgent');
     setSearchParams(newParams);
@@ -75,9 +96,26 @@ const AllOrdersPage: React.FC = () => {
     setSearchParams(newParams);
   };
 
+  // --- FIX: If filtering by urgent, exclude completed and shipped statuses ---
+  if (isUrgentFilter && statusFilter === 'ALL') {
+    statusFilter = [
+      'NEW_ORDER',
+      'PENDING',
+      'AWAITING_CUSTOMER_APPROVAL',
+      'REVISION_REQUESTED',
+      'APPROVED',
+      'IN_PRODUCTION',
+      'DELAYED',
+      'REFUNDED',
+      'CANCELLED',
+      // Note: We are intentionally excluding COMPLETED, SHIPPED, and DELIVERED
+      // because they are considered final states and not part of an "active" urgent queue.
+    ];
+  }
+
   const { data, isLoading, error } = useQuery({
-    queryKey: ['allOrders', page, statusFilter, isUrgentFilter, debouncedSearchTerm, paymentStatusFilter],
-    queryFn: () => fetchOrders(page, statusFilter, isUrgentFilter, debouncedSearchTerm, paymentStatusFilter),
+    queryKey: ['allOrders', page, statusFilter, isUrgentFilter, debouncedSearchTerm, paymentStatusFilter, leadSourceFilter, salesAgentFilter],
+    queryFn: () => fetchOrders(page, statusFilter, isUrgentFilter, debouncedSearchTerm, paymentStatusFilter, leadSourceFilter, salesAgentFilter),
     placeholderData: (previousData) => previousData,
     initialData: { orders: [], count: 0 },
   });
@@ -131,10 +169,15 @@ const AllOrdersPage: React.FC = () => {
             >
               <AlertTriangle className="w-4 h-4" /> Urgent
             </button>
-            <StatusFilter selectedStatus={statusFilter} onStatusChange={handleStatusChange} />
-            <Link to="/new-order" className="flex items-center gap-2 px-4 py-2 bg-blue-600 rounded-lg text-white hover:bg-blue-700 text-sm font-semibold">
-              <Plus className="w-4 h-4" /> New Order
-            </Link>
+            <StatusFilter
+              selectedStatus={Array.isArray(statusFilter) ? 'ALL' : statusFilter}
+              onStatusChange={handleStatusChange}
+            />
+            {role !== 'PRODUCTION' && (
+              <Link to="/new-order" className="flex items-center gap-2 px-4 py-2 bg-blue-600 rounded-lg text-white hover:bg-blue-700 text-sm font-semibold">
+                <Plus className="w-4 h-4" /> New Order
+              </Link>
+            )}
           </div>
         </div>
       </div>
@@ -157,7 +200,9 @@ const AllOrdersPage: React.FC = () => {
                   <th className="px-4 py-3">Customer</th>
                   <th className="px-4 py-3">Sales Agent</th>
                   <th className="px-4 py-3">Status</th>
-                  <th className="px-4 py-3 text-right">Amount</th>
+                  {role !== 'PRODUCTION' && ( // Hide Amount for Production role
+                    <th className="px-4 py-3 text-right">Amount</th>
+                  )}
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-700/50">
@@ -171,7 +216,7 @@ const AllOrdersPage: React.FC = () => {
                     }`}
                   >
                     <td className="px-4 py-3 font-mono text-blue-400">
-                      <Link to={`/order/${order.orderNumber}`}>{`#${order.orderNumber}`}</Link>
+                      <Link to={`/order/${order.orderNumber}`}>{order.orderNumber}</Link>
                     </td>
                     <td className="px-4 py-3 text-slate-400">{new Date(order.createdAt).toLocaleDateString()}</td>
                     <td className="px-4 py-3 font-medium text-slate-100">{order.customerName}</td>
@@ -179,7 +224,9 @@ const AllOrdersPage: React.FC = () => {
                     <td className={`px-4 py-3 font-semibold ${getStatusInfo(order.status).textColor}`}>
                       {getStatusInfo(order.status).label}
                     </td>
-                    <td className="px-4 py-3 text-right font-semibold">${order.orderAmount.toLocaleString()}</td>
+                    {role !== 'PRODUCTION' && ( // Hide Amount for Production role
+                      <td className="px-4 py-3 text-right font-semibold">${order.orderAmount.toLocaleString()}</td>
+                    )}
                   </tr>
                 ))}
               </tbody>

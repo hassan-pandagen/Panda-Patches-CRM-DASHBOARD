@@ -1,6 +1,8 @@
 // src/components/orders/OrderForm.tsx
-import React, { useState, useEffect } from 'react';
-import { Order } from '@/types';
+import React, { useState, useEffect, useMemo } from 'react';
+import ProductionFiles from './ProductionFiles';
+import OrderCommunications from '../../services/OrderCommunications';
+import { Order, UserRole } from '@/types';
 import { OrderSummary } from '@/types';
 import {
   DESIGN_BACKING_OPTIONS,
@@ -195,7 +197,15 @@ type FormState = Omit<
   | 'patchesQuantity'
   | 'orderAmount'
   | 'amountPaid'
+  | 'production_cost'
+  | 'shipping_cost'
+  | 'marketing_cost'
+  | 'profit'
 > & {
+  production_cost: string;
+  shipping_cost: string;
+  marketing_cost: string;
+  profit?: string;
   id?: number;
   patchesQuantity: string;
   orderAmount: string;
@@ -204,7 +214,7 @@ type FormState = Omit<
 
 export type SaveData = Omit<
   Order,
-  'orderNumber' | 'createdAt' | 'updatedAt' | 'status' | 'amountRemaining' | 'id'
+  'orderNumber' | 'createdAt' | 'updatedAt' | 'status' | 'amountRemaining' | 'profit' | 'id'
 > & {
   id?: number;
 };
@@ -219,7 +229,8 @@ interface OrderFormProps {
 type AttachmentField =
   | 'customerAttachmentURLs'
   | 'redoAttachments'
-  | 'mockupURLs';
+  | 'mockupURLs'
+  | 'shippingAttachmentURLs';
 
 const XIcon: React.FC = () => (
   <svg
@@ -262,12 +273,16 @@ const OrderForm: React.FC<OrderFormProps> = ({
     mockupURLs: [],
     redoNotes: '',
     redoAttachments: [],
+    shippingAttachmentURLs: [],
     instructions: '',
     packing: '',
     trackingNumber: '',
     courier: COURIER_OPTIONS[0],
-    orderAmount: '0',
-    amountPaid: '0',
+    orderAmount: '',
+    amountPaid: '',
+    production_cost: '',
+    shipping_cost: '',
+    marketing_cost: '',
     salesAgent: user?.email || '',
     created_by: user?.id || '',
     is_urgent: false,
@@ -283,6 +298,15 @@ const OrderForm: React.FC<OrderFormProps> = ({
     useState<OrderSummary[] | null>(null);
   const debouncedEmail = useDebounce(formData.customerEmail, 500);
   const debouncedPhone = useDebounce(formData.customerPhone || '', 500);
+
+  const calculatedProfit = useMemo(() => {
+    const total = parseFloat(formData.orderAmount) || 0;
+    const prodCost = parseFloat(formData.production_cost) || 0;
+    const shipCost = parseFloat(formData.shipping_cost) || 0;
+    const markCost = parseFloat(formData.marketing_cost) || 0;
+    return (total - prodCost - shipCost - markCost).toFixed(2);
+  }, [formData.orderAmount, formData.production_cost, formData.shipping_cost, formData.marketing_cost]);
+
 
   // ── Populate on edit ──
   useEffect(() => {
@@ -305,14 +329,18 @@ const OrderForm: React.FC<OrderFormProps> = ({
         mockupURLs: initialData.mockupURLs || [],
         redoNotes: initialData.redoNotes || '',
         redoAttachments: initialData.redoAttachments || [],
+        shippingAttachmentURLs: initialData.shippingAttachmentURLs || [],
         instructions: initialData.instructions || '',
         packing: initialData.packing || '',
         trackingNumber: initialData.trackingNumber || '',
         courier: initialData.courier || COURIER_OPTIONS[0],
         salesAgent: initialData.salesAgent || user?.email || '',
-        patchesQuantity: String(initialData.patchesQuantity ?? '100'),
-        orderAmount: String(initialData.orderAmount ?? '0'),
-        amountPaid: String(initialData.amountPaid ?? '0'),
+        patchesQuantity: String(initialData.patchesQuantity || ''),
+        orderAmount: String(initialData.orderAmount || ''),
+        amountPaid: String(initialData.amountPaid || ''),
+        production_cost: String(initialData.production_cost || ''),
+        shipping_cost: String(initialData.shipping_cost || ''),
+        marketing_cost: String(initialData.marketing_cost || ''),
         is_urgent: initialData.is_urgent ?? false,
         is_urgent_approved: initialData.is_urgent_approved ?? false,
         leadSource: initialData.leadSource || '',
@@ -408,6 +436,9 @@ const OrderForm: React.FC<OrderFormProps> = ({
       patchesQuantity: parseInt(formData.patchesQuantity, 10) || 0,
       orderAmount: parseFloat(formData.orderAmount) || 0,
       amountPaid: parseFloat(formData.amountPaid) || 0,
+      production_cost: parseFloat(formData.production_cost) || 0,
+      shipping_cost: parseFloat(formData.shipping_cost) || 0,
+      marketing_cost: parseFloat(formData.marketing_cost) || 0,
     };
     onSave(data);
   };
@@ -608,8 +639,38 @@ const OrderForm: React.FC<OrderFormProps> = ({
           <div className="md:col-span-2">
             <FileUploadInput field="mockupURLs" label="Mockup Designs" />
           </div>
+          {/* --- NEW: Production Files section for editing --- */}
+          {initialData?.id && ( // This line ensures the section only appears on the EDIT form
+            <div className="md:col-span-2">
+              <ProductionFiles
+                order={{
+                  ...initialData,
+                  ...formData,
+                  patchesQuantity: parseInt(formData.patchesQuantity, 10) || 0,
+                  orderAmount: parseFloat(formData.orderAmount) || 0,
+                  amountPaid: parseFloat(formData.amountPaid) || 0,
+                  production_cost: parseFloat(formData.production_cost) || 0,
+                  shipping_cost: parseFloat(formData.shipping_cost) || 0,
+                  marketing_cost: parseFloat(formData.marketing_cost) || 0,
+                } as Order}
+                onUpdate={(updatedOrder) => {
+                  // When the child component updates, merge its changes back into our form state,
+                  // specifically updating the file URLs.
+                  setFormData(prev => ({
+                    ...prev,
+                    production_file_urls: updatedOrder.production_file_urls,
+                  }));
+                }}
+              />
+            </div>
+          )}
         </div>
       </div>
+
+      {/* Communication History - only on edit */}
+      {initialData?.id && (
+        <OrderCommunications orderId={initialData.id} />
+      )}
 
       {/* Revisions & Redos */}
       <div className="border border-slate-700/60 bg-slate-900/50 rounded-xl p-6 shadow-inner shadow-black/20">
@@ -658,6 +719,9 @@ const OrderForm: React.FC<OrderFormProps> = ({
             value={formData.trackingNumber || ''}
             onChange={handleChange}
           />
+          <div className="md:col-span-2">
+            <FileUploadInput field="shippingAttachmentURLs" label="Shipping / QA Attachments" />
+          </div>
         </div>
       </div>
 
@@ -670,7 +734,7 @@ const OrderForm: React.FC<OrderFormProps> = ({
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
             <FormInput
               name="orderAmount"
-              label="Total Amount ($)"
+              label="Order Amount ($)"
               value={formData.orderAmount}
               onChange={handleChange}
               type="number"
@@ -684,7 +748,6 @@ const OrderForm: React.FC<OrderFormProps> = ({
               onChange={handleChange}
               type="number"
               step="0.01"
-              required
             />
             <FormInput
               name="amountRemaining"
@@ -706,6 +769,49 @@ const OrderForm: React.FC<OrderFormProps> = ({
           </div>
         </div>
       )}
+
+      {/* Costs & Profitability - Visible to ADMIN and AGENT */}
+      {(role === UserRole.ADMIN || role === UserRole.AGENT) && (
+        <div className="border border-slate-700/60 bg-slate-900/50 rounded-xl p-6 shadow-inner shadow-black/20">
+          <h3 className="text-xl font-semibold tracking-wide text-gray-100 mb-4">
+            Costs & Profitability
+          </h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 items-end">
+            <FormInput
+              name="production_cost"
+              label="Production Cost ($)"
+              value={formData.production_cost}
+              onChange={handleChange}
+              type="number"
+              step="0.01"
+            />
+            <FormInput
+              name="shipping_cost"
+              label="Shipping Cost ($)"
+              value={formData.shipping_cost}
+              onChange={handleChange}
+              type="number"
+              step="0.01"
+            />
+            <FormInput
+              name="marketing_cost"
+              label="Marketing Cost ($)"
+              value={formData.marketing_cost}
+              onChange={handleChange}
+              type="number"
+              step="0.01"
+            />
+            <FormInput
+              name="profit"
+              label="Profit ($)"
+              value={calculatedProfit}
+              onChange={() => {}}
+              readOnly
+            />
+          </div>
+        </div>
+      )}
+
 
       {uploadError && <p className="text-sm text-red-600">{uploadError}</p>}
 

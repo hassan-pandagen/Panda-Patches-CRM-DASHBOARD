@@ -1,14 +1,16 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { getOrder, updateOrder, triggerNotificationWorkflow, deleteOrder, getOrderHistory } from '../services/orderService';
+import { getOrder, updateOrder, triggerNotificationWorkflow, deleteOrder, getOrderHistory, getOrdersByCustomer } from '../services/orderService';
 import { useQueryClient } from '@tanstack/react-query';
-import { Order, OrderStatus, OrderHistoryEntry } from '../types/index'; // Corrected path
-import { getStatusInfo, N8N_APPROVAL_WEBHOOK_URL } from '../constants'; // Corrected path
+import { Order, OrderStatus, OrderHistoryEntry } from '../types/index';
+import { getStatusInfo } from '../constants';
 import Spinner from '../components/ui/Spinner';
 import { useAuth } from '../contexts/AuthContext';
 import OrderHistory from '../components/orders/OrderHistory';
+import ProductionFiles from '../components/orders/ProductionFiles';
 import ConfirmationModal from '../components/ui/ConfirmationModal';
+import { UserRole } from '../types'; // Import UserRole
 import { supabase } from '../services/supabaseClient';
 
 const DetailItem: React.FC<{ label: string; value?: string | number }> = ({ label, value }) => {
@@ -46,49 +48,49 @@ const AttachmentSection: React.FC<{ title: string; attachments?: string[] }> = (
     );
 };
 
-const ApprovalLinkGenerator: React.FC<{ orderNumber: string }> = ({ orderNumber }) => {
-    const [copied, setCopied] = useState<boolean>(false);
-    const baseURL = N8N_APPROVAL_WEBHOOK_URL.split('?')[0];
-    const approveUrl = `${baseURL}?action=approve&orderNumber=${orderNumber}`;
+// --- NEW COMPONENT: Modal to display customer's order history ---
+const CustomerHistoryModal: React.FC<{
+  isOpen: boolean;
+  onClose: () => void;
+  orders: Order[];
+  customerName: string; 
+  role: UserRole | null; // Add role prop here
+}> = ({ isOpen, onClose, orders, customerName, role }) => {
+  if (!isOpen) return null;
 
-    const handleCopy = (text: string) => {
-        navigator.clipboard.writeText(text).then(() => {
-            setCopied(true);
-            setTimeout(() => setCopied(false), 2000); // Reset after 2 seconds
-        });
-    };
-
-    if (N8N_APPROVAL_WEBHOOK_URL === 'YOUR_N8N_APPROVAL_WEBHOOK_URL_HERE') {
-        return (
-            <div className="bg-[#F59E0B]/10 border-l-4 border-[#F59E0B] text-yellow-200 p-4" role="alert">
-                <p className="font-bold">Configuration Needed</p>
-                <p>Please set the `N8N_APPROVAL_WEBHOOK_URL` in `constants.ts` to enable customer approval links.</p>
-            </div>
-        );
-    }
-
-    return (
-        <div className="bg-[#1A1B23] border border-[#252836] rounded-2xl p-6 space-y-4">
-            <h3 className="text-xl font-semibold tracking-wide text-slate-100 mb-2">Customer Approval Link</h3>
-            <p className="text-sm text-slate-300">
-                This is the approval link to include in your n8n email template. It can also be copied from here if you need to resend it to the customer manually.
-            </p>
-            
-            <div className="space-y-3">
-                <div>
-                    <label className="block text-slate-200 font-medium tracking-wide mb-2 text-sm">Approve Mockup Link</label>
-                    <div className="mt-1 flex rounded-md shadow-sm">
-                        <input type="text" readOnly value={approveUrl} className="flex-1 w-full bg-slate-800 border border-slate-700 rounded-l-lg px-3 py-2 text-white placeholder-slate-400 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 cursor-copy" />
-                        <button type="button" onClick={() => handleCopy(approveUrl)} className="relative -ml-px inline-flex items-center justify-center font-medium rounded-r-xl transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-[#6366F1]/40 bg-[#252836] hover:bg-slate-700 text-slate-300 border border-[#252836] px-4 py-2">
-                           <span>{copied ? 'Copied!' : 'Copy'}</span>
-                        </button>
-                    </div>
-                </div>
-            </div>
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm" onClick={onClose}>
+      <div className="relative w-full max-w-2xl p-6 bg-slate-800 border border-slate-700 rounded-xl shadow-lg" onClick={e => e.stopPropagation()}>
+        <div className="flex justify-between items-start mb-4">
+          <h3 className="text-xl font-semibold text-slate-100">Order History for {customerName}</h3>
+          <button onClick={onClose} className="text-slate-400 hover:text-white">&times;</button>
         </div>
-    );
+        <div className="max-h-[60vh] overflow-y-auto space-y-2 pr-2">
+          {orders.length === 0 ? (
+            <p className="text-slate-400">No other orders found for this customer.</p>
+          ) : (
+            orders.map(order => (
+              <Link 
+                to={`/order/${order.orderNumber}`} 
+                key={order.id}
+                onClick={onClose}
+                className="block p-3 bg-slate-900/50 rounded-lg hover:bg-slate-700/50 transition-colors"
+              >
+                <div className="flex justify-between items-center">
+                  <span className="font-semibold text-blue-400">{order.orderNumber}</span>
+                  <span className="text-sm text-slate-400">{new Date(order.createdAt).toLocaleDateString()}</span>
+                </div>
+                <div className="text-sm text-slate-300 mt-1">
+                  Status: {getStatusInfo(order.status).label} {role !== 'PRODUCTION' && `| Total: $${order.orderAmount.toLocaleString()}`}
+                </div>
+              </Link>
+            ))
+          )}
+        </div>
+      </div>
+    </div>
+  );
 };
-
 
 const OrderPage: React.FC = () => {
   const { orderNumber } = useParams<{ orderNumber: string }>();
@@ -106,6 +108,8 @@ const OrderPage: React.FC = () => {
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState<boolean>(false);
   const [isReturningCustomer, setIsReturningCustomer] = useState<boolean>(false);
+  const [isHistoryModalOpen, setIsHistoryModalOpen] = useState<boolean>(false);
+  const [customerOrderHistory, setCustomerOrderHistory] = useState<Order[]>([]);
 
   const fetchOrderData = useCallback(async () => {
     if (!orderNumber) return;
@@ -155,9 +159,10 @@ const OrderPage: React.FC = () => {
     }
   }, [orderNumber, setHistory, role]);
 
+  // --- FIX: useEffect should depend on orderNumber directly ---
   useEffect(() => {
     fetchOrderData();
-  }, [fetchOrderData]);
+  }, [orderNumber, fetchOrderData]);
 
   const handleStatusChange = async () => {
     if (!order || !selectedStatus || order.status === selectedStatus) return;
@@ -240,6 +245,20 @@ const OrderPage: React.FC = () => {
     }
   };
 
+  // --- NEW: Handler to fetch and display customer's past orders ---
+  const handleViewCustomerHistory = async () => {
+    if (!order?.customerEmail) return;
+    try {
+      // Fetch all orders by this customer's email
+      const allOrders = await getOrdersByCustomer(order.customerEmail, null);
+      // Filter out the current order to only show "previous" ones
+      setCustomerOrderHistory(allOrders.filter(o => o.id !== order.id));
+      setIsHistoryModalOpen(true);
+    } catch (error) {
+      console.error("Failed to fetch customer order history:", error);
+    }
+  };
+
   if (loading) {
     return <div className="flex justify-center items-center h-64"><Spinner /></div>;
   }
@@ -273,16 +292,24 @@ const OrderPage: React.FC = () => {
         isOpen={isDeleteModalOpen}
         onClose={() => setIsDeleteModalOpen(false)}
         onConfirm={handleConfirmDelete}
-        title="Delete Order"
-        message={`Are you sure you want to permanently delete Order #${order.orderNumber}? This action cannot be undone.`}
+        title={`Delete Order ${order.orderNumber}`}
+        message={`Are you sure you want to permanently delete Order ${order.orderNumber}? This action cannot be undone.`}
         confirmButtonText="Delete"
         isConfirming={isDeleting}
+      />
+
+      <CustomerHistoryModal
+        isOpen={isHistoryModalOpen}
+        onClose={() => setIsHistoryModalOpen(false)}
+        orders={customerOrderHistory}
+        customerName={order.customerName}
+        role={role} // Pass the role prop from OrderPage
       />
 
       <div className="flex justify-between items-center mb-6 flex-wrap gap-4">
         <div className="flex items-center gap-4">
             <h2 className="text-3xl font-semibold tracking-wide text-slate-100 flex items-center gap-3">
-              Order #{order.orderNumber}
+              Order {order.orderNumber}
               {order.is_urgent && (
                 <span className="text-xs font-bold uppercase tracking-wider bg-red-500/20 text-red-400 border border-red-500/30 px-2 py-1 rounded-full">Urgent</span>
               )}
@@ -403,7 +430,6 @@ const OrderPage: React.FC = () => {
             </div>
           )}
 
-          {order.status === OrderStatus.AWAITING_CUSTOMER_APPROVAL && <ApprovalLinkGenerator orderNumber={order.orderNumber} />}
           <div className="bg-[#1A1B23] border border-[#252836] rounded-2xl p-6 space-y-4">
             <h3 className="text-xl font-semibold tracking-wide text-slate-100 mb-2">Design & Product</h3>
             <div className="space-y-4">
@@ -413,6 +439,7 @@ const OrderPage: React.FC = () => {
                 <DetailItem label="Size" value={order.designSize} />
                 <DetailItem label="Backing" value={order.designBacking} />
                 <NotesSection title="Instructions" notes={order.instructions} />
+                <ProductionFiles order={order} onUpdate={setOrder} />
                 <AttachmentSection title="Customer Attachments" attachments={order.customerAttachmentURLs} />
                 <AttachmentSection title="Mockup Attachments" attachments={order.mockupURLs} />
             </div>
@@ -427,8 +454,11 @@ const OrderPage: React.FC = () => {
             <h3 className="text-xl font-semibold tracking-wide text-slate-100 mb-2">Customer Information</h3>
             <div className="flex items-center gap-3">
               <DetailItem label="Name" value={order.customerName} />
+              {/* --- MODIFIED: Badge is now a clickable button --- */}
               {isReturningCustomer && (
-                <span className="text-xs font-bold uppercase tracking-wider bg-green-500/20 text-green-300 border border-green-500/30 px-2 py-1 rounded-full">Returning Customer</span>
+                <button onClick={handleViewCustomerHistory} className="text-xs font-bold uppercase tracking-wider bg-green-500/20 text-green-300 border border-green-500/30 px-2 py-1 rounded-full hover:bg-green-500/40 transition-colors">
+                  Returning Customer
+                </button>
               )}
             </div>
             <DetailItem label="Email" value={order.customerEmail} />
@@ -454,21 +484,37 @@ const OrderPage: React.FC = () => {
                 <p><strong className="font-semibold text-slate-400">Amount Remaining:</strong> <span className="font-bold text-[#6366F1]">${order.amountRemaining.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span></p>
             </div>
            )}
+           {(role === 'ADMIN' || role === 'AGENT' ) && (
+            <div className="bg-[#1A1B23] border border-[#252836] rounded-2xl p-6 space-y-2">
+                <div className="flex justify-between items-center mb-4">
+                  <h3 className="text-xl font-semibold tracking-wide text-slate-100">Costs & Profitability</h3>
+                </div>
+                <DetailItem label="Production Cost" value={`$${order.production_cost.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} />
+                <DetailItem label="Shipping Cost" value={`$${order.shipping_cost.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} />
+                <DetailItem label="Marketing Cost" value={`$${order.marketing_cost.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} />
+                <hr className="border-slate-700 my-2" />
+                <p><strong className="font-semibold text-slate-400">Profit:</strong> <span className={`font-bold ${order.profit >= 0 ? 'text-green-400' : 'text-red-400'}`}>${order.profit.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span></p>
+
+            </div>
+           )}
            <div className="bg-[#1A1B23] border border-[#252836] rounded-2xl p-6 space-y-4">
                 <h3 className="text-xl font-semibold tracking-wide text-slate-100">Shipping Details</h3>
                 
                 <div className="border border-slate-700 rounded-lg p-4 space-y-2 bg-slate-900/30">
-                  <DetailItem label="Order Number" value={`#${order.orderNumber}`} />
+                  <DetailItem label="Order Number" value={order.orderNumber} />
                   <DetailItem label="Customer Name" value={order.customerName} />
                   <DetailItem label="Phone Number" value={order.customerPhone} />
                   <DetailItem label="Address" value={order.shippingAddress} />
-                  <hr className="border-slate-700 my-2" />
+                  {role !== 'PRODUCTION' && ( // Hide financial separator for Production
+                    <hr className="border-slate-700 my-2" />
+                  )}
                   <DetailItem label="Patch Type" value={order.patchesType} />
                   <DetailItem label="Quantity" value={order.patchesQuantity} />
                 </div>
                 <div className="space-y-2 pt-2">
                   <DetailItem label="Courier" value={order.courier} />
                   <DetailItem label="Tracking Number" value={order.trackingNumber} />
+                  <AttachmentSection title="Shipping / QA Attachments" attachments={order.shippingAttachmentURLs} />
                 </div>
            </div>
         </div>
