@@ -103,6 +103,7 @@ const OrderForm: React.FC<OrderFormProps> = ({ onSave, initialData, isSaving = f
 
   const patchTypes = ["Embroidered", "PVC", "Woven", "Chenille", "Leather", "Printed"];
   const shippingCarriers = ["FedEx", "DHL", "UPS", "USPS", "Other"];
+  const backingOptions = ["Iron on", "Sew on", "Sticker", "Velcro"];
   
   // Helper for file updates
   const updateFiles = (fieldName: keyof SaveData, newUrl: string) => {
@@ -167,7 +168,10 @@ const OrderForm: React.FC<OrderFormProps> = ({ onSave, initialData, isSaving = f
           </div>
           <div>
             <label className="block text-sm font-medium text-slate-300">Backing</label>
-            <input type="text" {...register('designBacking')} className="mt-1 block w-full bg-slate-800 border-slate-600 rounded-md text-white focus:ring-brand-orange focus:border-brand-orange" />
+            <select {...register('designBacking')} className="mt-1 block w-full bg-slate-800 border-slate-600 rounded-md text-white focus:ring-brand-orange focus:border-brand-orange">
+              <option value="">Select...</option>
+              {backingOptions.map(b => <option key={b} value={b}>{b}</option>)}
+            </select>
           </div>
         </div>
         <div className="mt-6">

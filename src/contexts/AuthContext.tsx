@@ -27,56 +27,70 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   useEffect(() => {
     let mounted = true;
 
+    // 1. SAFETY TIMEOUT: Force stop loading after 2 seconds if Supabase hangs
+    const safetyTimer = setTimeout(() => {
+      if (mounted && isLoading) {
+        console.warn("⚠️ Auth check timed out. Forcing app to load.");
+        setIsLoading(false);
+      }
+    }, 2000);
+
     const fetchUserProfile = async (currentUser: User) => {
-      console.log('🔍 Fetching profile for:', currentUser.email);
       try {
         const { data, error } = await supabase
           .from('user_profiles')
           .select('*')
           .eq('id', currentUser.id)
-          .single();
+          .maybeSingle(); // Use maybeSingle to avoid 406 errors on empty results
 
         if (!mounted) return;
 
-        if (error) throw error;
-
-        if (data) {
-          console.log('✅ Profile found and set.');
+        if (error) {
+          console.error('Error fetching profile:', error);
+          // If DB error, assume no profile
+          setProfile(null);
+        } else if (data) {
           setProfile(data);
+        } else {
+          // User exists in Auth but NOT in DB (Orphan). Sign them out to fix state.
+          console.warn('User found in Auth but no Profile in DB. Signing out.');
+          await supabase.auth.signOut();
+          setSession(null);
+          setUser(null);
+          setProfile(null);
         }
       } catch (error) {
-        console.error('❌ Error fetching user profile:', error);
-        setProfile(null);
+        console.error('Unexpected auth error:', error);
       } finally {
         if (mounted) setIsLoading(false);
       }
     };
 
-    console.log('🚀 AuthProvider: Starting');
-
+    // 2. INITIAL CHECK
     supabase.auth.getSession().then(({ data: { session } }) => {
-      console.log('📊 Initial session:', session ? 'Found' : 'None');
-      
       if (!mounted) return;
-
+      
       if (session?.user) {
         setSession(session);
         setUser(session.user);
         fetchUserProfile(session.user);
       } else {
-        console.log('❌ No session, stopping loading');
         setIsLoading(false);
       }
+    }).catch(err => {
+      console.error("Session check failed:", err);
+      if (mounted) setIsLoading(false);
     });
 
+    // 3. LISTEN FOR CHANGES
     const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
-      console.log('🔔 Auth changed:', _event);
       if (!mounted) return;
 
       setSession(session);
       setUser(session?.user ?? null);
 
       if (session?.user) {
+        // Only fetch profile if we don't have it yet or if user changed
         fetchUserProfile(session.user);
       } else {
         setProfile(null);
@@ -85,14 +99,16 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     });
 
     return () => {
-      console.log('🧹 Cleanup');
       mounted = false;
+      clearTimeout(safetyTimer);
       authListener.subscription.unsubscribe();
     };
   }, []);
 
   const signOut = async () => {
     await supabase.auth.signOut();
+    setSession(null);
+    setUser(null);
     setProfile(null);
     setIsLoading(false);
   };
@@ -107,8 +123,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     isAuthenticated: !!user,
     signOut,
   };
-
-  console.log('📦 Context:', { isLoading, hasUser: !!user, hasProfile: !!profile, role: profile?.role });
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };

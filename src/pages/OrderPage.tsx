@@ -15,7 +15,7 @@ import GlassCard from '../components/ui/GlassCard';
 import StatusBadge from '../components/ui/StatusBadge';
 
 // Icons
-import { Edit, Trash2, ShieldAlert, ArrowLeft, Lock, MapPin, Smartphone, Maximize, Check, XCircle, AlertTriangle } from 'lucide-react';
+import { Edit, Trash2, ShieldAlert, ArrowLeft, Lock, MapPin, Smartphone, Maximize, Check, XCircle, AlertTriangle, Copy } from 'lucide-react';
 
 // --- CONFIRMATION MODAL ---
 const ConfirmationModal: React.FC<{
@@ -175,6 +175,19 @@ const OrderPage: React.FC = () => {
                     </h1>
                 </div>
                 <div className="flex items-center gap-3">
+            
+                    {/* --- NEW: DUPLICATE BUTTON --- */}
+                    <Button 
+                      variant="secondary" 
+                      size="md"
+                      onClick={() => navigate('/new-order', { state: { duplicateOrder: order } })}
+                      className="bg-blue-500/10 text-blue-400 border-blue-500/20 hover:bg-blue-500/20 hover:border-blue-500/30"
+                    >
+                      <Copy size={16} />
+                      <span className="hidden sm:inline">Repeat Order</span>
+                    </Button>
+                    {/* ----------------------------- */}
+
                     {(isAdmin || user?.email === order.salesAgent) && (
                     <Link to={`/order/${order.orderNumber}/edit`}>
                         <Button variant="secondary" size="md"><Edit size={16} /> Edit Order</Button>
