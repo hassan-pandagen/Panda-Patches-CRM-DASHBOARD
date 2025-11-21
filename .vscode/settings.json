@@ -1,0 +1,14 @@
+// .vscode/settings.json - FINAL RECOMMENDED VERSION
+
+{
+  "deno.enable": true,
+  "deno.lint": true,
+  "deno.unstable": [],
+  "deno.importMap": "./supabase/functions/deno.jsonc",
+  "[typescript]": {
+    "editor.defaultFormatter": "denoland.vscode-deno"
+  },
+  "[javascript]": {
+    "editor.defaultFormatter": "denoland.vscode-deno"
+  }
+}

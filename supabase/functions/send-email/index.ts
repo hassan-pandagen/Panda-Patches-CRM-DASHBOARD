@@ -1,57 +1,59 @@
-/// <reference types="https://esm.sh/v135/@supabase/functions-js@2.4.1/src/edge-runtime.d.ts" />
-// supabase/functions/send-email/index.ts
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
-import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
-import { corsHeaders, getAllowedOrigin } from '../_shared/cors.ts';
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+};
 
 serve(async (req) => {
-  const allowedOrigin = getAllowedOrigin(req);
-
-  // If the origin is not allowed, return a CORS error
-  if (!allowedOrigin) {
-    return new Response('CORS error: Origin not allowed', { status: 403 });
-  }
-
-  // This is an OPTIONS request. The browser is checking if the API is available.
+  // 1. Handle CORS
   if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: { ...corsHeaders, 'Access-Control-Allow-Origin': allowedOrigin } });
+    return new Response('ok', { headers: corsHeaders });
   }
 
   try {
-    // Get the data you sent from the frontend
-    const { sendgridPayload } = await req.json()
-    
-    // Get the secret API key from your Supabase project's environment variables
-    const SENDGRID_API_KEY = Deno.env.get('SENDGRID_API_KEY')
-
+    const SENDGRID_API_KEY = Deno.env.get('SENDGRID_API_KEY');
     if (!SENDGRID_API_KEY) {
-      throw new Error('SendGrid API key not found in environment variables.')
+      throw new Error('Missing SENDGRID_API_KEY');
     }
 
-    // Make the secure API call from the backend
-    const res = await fetch('https://api.sendgrid.com/v3/mail/send', {
+    // 2. Get Data from Frontend
+    const { to, template_id, dynamic_data } = await req.json(); // Removed subject/html, added template_id
+
+    // 3. Send to SendGrid (Dynamic Template Mode)
+    const response = await fetch('https://api.sendgrid.com/v3/mail/send', {
       method: 'POST',
       headers: {
+        'Authorization': `Bearer ${SENDGRID_API_KEY}`,
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${SENDGRID_API_KEY}`,
       },
-      body: JSON.stringify(sendgridPayload),
+      body: JSON.stringify({
+        personalizations: [
+          {
+            to: [{ email: to }],
+            dynamic_template_data: dynamic_data, // This fills the {{variables}}
+          },
+        ],
+        from: { email: 'hello@pandapatches.com', name: 'Panda Patches' }, // <--- VERIFIED SENDER EMAIL
+        template_id: template_id, // <--- This tells SendGrid which design to use
+      }),
     });
 
-    if (!res.ok) {
-      const errorBody = await res.text();
-      throw new Error(`SendGrid API error: ${res.status} ${errorBody}`);
+    if (!response.ok) {
+      const errorData = await response.json();
+      console.error('SendGrid Error:', errorData);
+      throw new Error(`SendGrid API Error: ${JSON.stringify(errorData)}`);
     }
 
-    return new Response(JSON.stringify({ message: "Email sent successfully!" }), {
-      headers: { ...corsHeaders, 'Access-Control-Allow-Origin': allowedOrigin, 'Content-Type': 'application/json' },
-      status: 200,
-    })
+    return new Response(
+      JSON.stringify({ message: 'Email sent successfully' }),
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
+    );
 
-  } catch (error) {
-    return new Response(JSON.stringify({ error: error.message }), {
-      headers: { ...corsHeaders, 'Access-Control-Allow-Origin': allowedOrigin, 'Content-Type': 'application/json' },
-      status: 400,
-    })
+  } catch (error: any) {
+    return new Response(
+      JSON.stringify({ error: error.message }),
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
+    );
   }
-})
+});

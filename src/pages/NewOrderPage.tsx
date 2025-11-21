@@ -1,35 +1,49 @@
+// src/pages/NewOrderPage.tsx - FINAL REDESIGNED VERSION
+
 import React, { useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
+import { useQueryClient } from "@tanstack/react-query";
 import { createOrder } from '../services/orderService';
 import { Order } from '../types/index';
 import OrderForm from '../components/orders/OrderForm';
 import { useWarnIfUnsaved } from "../hooks";
 import UnsavedChangesModal from "../components/ui/UnsavedChangesModal";
+import { useAuth } from '../contexts/AuthContext';
 
-// This is the type of data the form will provide, which matches what createOrder expects.
-type CreateOrderData = Omit<
-  Order,
-  'id' | 'orderNumber' | 'createdAt' | 'updatedAt' | 'status' | 'amountRemaining' | 'created_by'
->; 
+type CreateOrderData = Omit<Order, 'id' | 'orderNumber' | 'createdAt' | 'updatedAt' | 'status' | 'amountRemaining' | 'created_by' | 'profit'> & { profit?: number }; 
 
 const NewOrderPage: React.FC = () => {
   const [isSaving, setIsSaving] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [isDirty, setIsDirty] = useState(false);
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const { showModal, confirmLeave, cancelLeave } = useWarnIfUnsaved(isDirty);
+  const { user } = useAuth();
 
   const handleSave = async (formData: CreateOrderData) => {
+    // --- FIX: Calculate profit before saving ---
+    const productionCost = Number(formData.productionCost) || 0;
+    const shippingCost = Number(formData.shippingCost) || 0;
+    const marketingCost = Number(formData.marketingCost) || 0;
+    const orderAmount = Number(formData.orderAmount) || 0;
+    const profit = orderAmount - (productionCost + shippingCost + marketingCost);
+
     setIsSaving(true);
     setError(null);
-    setIsDirty(false); // Mark as not dirty before saving
+    setIsDirty(false);
     try {
-      const newOrder = await createOrder(formData);
+      // Add the calculated profit to the data being sent
+      formData.profit = profit;
+      const newOrder = await createOrder(formData, user?.email || 'unknown');
+      // Invalidate queries to refetch data on other pages
+      await queryClient.invalidateQueries({ queryKey: ['allOrders'] });
+      await queryClient.invalidateQueries({ queryKey: ['allOrdersReport'] });
       navigate(`/order/${newOrder.orderNumber}`);
     } catch (err: any) {
       console.error('Failed to create order', err);
       setError(`Failed to create order: ${err.message || 'An unknown error occurred.'}`);
-      setIsDirty(true); // Set back to dirty if save fails
+      setIsDirty(true);
     } finally {
       setIsSaving(false);
     }
@@ -40,7 +54,7 @@ const NewOrderPage: React.FC = () => {
   }, [isDirty]);
 
   return (
-    <div>
+    <div className="p-6">
       <h2 className="text-3xl font-bold text-gray-100 mb-6">Create New Order</h2>
       
       <UnsavedChangesModal 
@@ -56,9 +70,8 @@ const NewOrderPage: React.FC = () => {
         </div>
       )}
       
-      <div className="bg-slate-800/30 backdrop-blur-sm border border-slate-700/50 rounded-xl p-6 lg:p-8">
-        <OrderForm onSave={handleSave} isSaving={isSaving} onFormChange={onFormChange} />
-      </div>
+      {/* --- THIS IS THE MAIN CHANGE --- */}
+      <OrderForm onSave={handleSave} isSaving={isSaving} onFormChange={onFormChange} />
     </div>
   );
 };

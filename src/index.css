@@ -1,20 +1,129 @@
+/* 1. Import the Google Font */
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@100..900&display=swap');
+
+/* 2. Import Tailwind's base, components, and utilities */
 @import "tailwindcss/base";
 @import "tailwindcss/components";
 @import "tailwindcss/utilities";
 
-/* ==== FILE UPLOAD FALLBACK STYLE ==== */
+/* 3. Apply your custom base styles to the 'base' layer */
+@layer base {
+  body {
+    font-family: 'Outfit', sans-serif;
+    color: #FFFFFF;
+    background: linear-gradient(to bottom right, #0f172a, #1e293b);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+}
+
+/* 4. Custom Animations */
+@keyframes blob {
+  0%, 100% {
+    transform: translate(0, 0) scale(1);
+  }
+  25% {
+    transform: translate(20px, -50px) scale(1.1);
+  }
+  50% {
+    transform: translate(-20px, 20px) scale(0.9);
+  }
+  75% {
+    transform: translate(50px, 50px) scale(1.05);
+  }
+}
+
+@keyframes shimmer {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+@keyframes pulse-glow {
+  0%, 100% {
+    opacity: 1;
+    box-shadow: 0 0 20px rgba(251, 110, 29, 0.3);
+  }
+  50% {
+    opacity: 0.8;
+    box-shadow: 0 0 40px rgba(251, 110, 29, 0.5);
+  }
+}
+
+/* 5. Utility Classes */
+@layer utilities {
+  .animate-blob {
+    animation: blob 20s infinite;
+  }
+  
+  .animation-delay-2000 {
+    animation-delay: 2s;
+  }
+  
+  .animation-delay-4000 {
+    animation-delay: 4s;
+  }
+  
+  .shimmer {
+    position: relative;
+    overflow: hidden;
+  }
+  
+  .shimmer::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    background: linear-gradient(
+      90deg,
+      transparent,
+      rgba(255, 255, 255, 0.1),
+      transparent
+    );
+    animation: shimmer 2s infinite;
+  }
+  
+  .glow-text {
+    text-shadow: 0 0 20px rgba(251, 110, 29, 0.5);
+  }
+}
+
+/* 6. Scrollbar Styling */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(15, 23, 42, 0.5);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(251, 110, 29, 0.5);
+  border-radius: 4px;
+  transition: background 0.3s;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(251, 110, 29, 0.8);
+}
+
+/* 7. File Upload Styles */
 input[type="file"] {
-  color: #94A3B8; /* Text Secondary */
-  background-color: transparent;
-  border: none;
+  color: #94A3B8;
   font-size: 0.875rem;
 }
 
-/* Remove ugly default "No file chosen" background in Safari/Edge */
 input[type="file"]::-webkit-file-upload-button {
-  background: rgba(99, 102, 241, 0.1);
-  color: #6366F1; /* Primary */
-  border: 1px solid rgba(99, 102, 241, 0.3);
+  background: rgba(251, 110, 29, 0.1);
+  color: #FB6E1D;
+  border: 1px solid rgba(251, 110, 29, 0.3);
   border-radius: 0.5rem;
   padding: 0.5rem 1rem;
   font-weight: 500;
@@ -23,23 +132,18 @@ input[type="file"]::-webkit-file-upload-button {
 }
 
 input[type="file"]::-webkit-file-upload-button:hover {
-  background: rgba(99, 102, 241, 0.2);
-  border-color: rgba(99, 102, 241, 0.4);
+  background: rgba(251, 110, 29, 0.2);
+  border-color: rgba(251, 110, 29, 0.4);
 }
 
-/* Firefox fallback */
-input[type="file"]::file-selector-button {
-  background: rgba(99, 102, 241, 0.1);
-  color: #6366F1; /* Primary */
-  border: 1px solid rgba(99, 102, 241, 0.3);
-  border-radius: 0.5rem;
-  padding: 0.5rem 1rem;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.25s ease-in-out;
+/* 8. Selection Styling */
+::selection {
+  background-color: rgba(251, 110, 29, 0.3);
+  color: white;
 }
 
-input[type="file"]::file-selector-button:hover {
-  background: rgba(99, 102, 241, 0.2);
-  border-color: rgba(99, 102, 241, 0.4);
+/* 9. Focus Visible Styles */
+*:focus-visible {
+  outline: 2px solid rgba(251, 110, 29, 0.5);
+  outline-offset: 2px;
 }

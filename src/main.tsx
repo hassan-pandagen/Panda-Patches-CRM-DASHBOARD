@@ -1,23 +1,38 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
+import { createBrowserRouter, RouterProvider } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AuthProvider } from './contexts/AuthContext';
+import { ErrorBoundary } from './components/ErrorBoundary'; // <--- 1. IMPORT THIS
 import App from './App';
-import './index.css'; // Make sure this file includes your Tailwind imports
+import './index.css';
 
-// Create the query client once at the top level
 const queryClient = new QueryClient({
-  defaultOptions: { queries: { retry: 1, refetchOnWindowFocus: process.env.NODE_ENV === 'production' } },
+  defaultOptions: {
+    queries: {
+      retry: 1, // Don't retry endlessly if Supabase is down
+      refetchOnWindowFocus: false,
+    },
+  },
 });
 
-// Create a root and render your main App component
+// Create a browser router instance.
+const router = createBrowserRouter([
+  {
+    path: '*',
+    element: <App />,
+  },
+]);
+
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
-    {/* Providers are now at the absolute root, ensuring they mount only once */}
-    <QueryClientProvider client={queryClient}>
-      <AuthProvider>
-        <App />
-      </AuthProvider>
-    </QueryClientProvider>
-  </React.StrictMode>,
-)
+    {/* 2. WRAP EVERYTHING INSIDE ERROR BOUNDARY */}
+    <ErrorBoundary>
+      <QueryClientProvider client={queryClient}>
+        <AuthProvider>
+          <RouterProvider router={router} />
+        </AuthProvider>
+      </QueryClientProvider>
+    </ErrorBoundary>
+  </React.StrictMode>
+);

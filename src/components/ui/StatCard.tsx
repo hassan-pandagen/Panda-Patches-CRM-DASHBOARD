@@ -1,63 +1,90 @@
-import React from 'react';
+import React, { useEffect } from 'react';
+import { motion, useMotionValue, useTransform, animate } from 'framer-motion';
+import { ArrowUpRight, ArrowDownRight } from 'lucide-react';
 
+const AnimatedCounter: React.FC<{ value: number; prefix?: string }> = ({ value, prefix = '' }) => {
+  const count = useMotionValue(0);
+  const rounded = useTransform(count, (latest) => `${prefix}${Math.round(latest).toLocaleString()}`);
+
+  useEffect(() => {
+    const controls = animate(count, value, { duration: 1.5, ease: "easeOut" });
+    return controls.stop;
+  }, [value]);
+
+  return <motion.span>{rounded}</motion.span>;
+};
 interface StatCardProps {
   title: string;
-  value: string | number;
-  subtitle?: string;
-  icon?: React.ReactNode;
-  color?: 'primary' | 'success' | 'warning' | 'error' | 'info';
-  onClick?: () => void;
-  className?: string;
+  value: number;
+  icon: React.ReactNode;
+  trend?: {
+    value: number;
+    isPositive: boolean;
+  };
+  prefix?: string;
+  isLoading?: boolean;
 }
 
-const StatCard: React.FC<StatCardProps> = ({ 
-  title, 
-  value, 
-  subtitle, 
-  icon, 
-  color = 'primary', 
-  onClick,
-  className = ''
+const StatCard: React.FC<StatCardProps> = ({
+  title,
+  value,
+  icon,
+  trend,
+  prefix = '',
+  isLoading = false,
 }) => {
-  const colorClasses = {
-    primary: 'from-blue-500/10 to-indigo-600/10 border-blue-500/30',
-    success: 'from-emerald-500/10 to-green-600/10 border-emerald-500/30',
-    warning: 'from-amber-500/10 to-orange-600/10 border-amber-500/30',
-    error: 'from-red-500/10 to-rose-600/10 border-red-500/30',
-    info: 'from-cyan-500/10 to-blue-600/10 border-cyan-500/30'
-  };
+  if (isLoading) {
+    return (
+      <div className="h-[140px] w-full animate-pulse rounded-2xl bg-slate-800/60 p-5">
+        <div className="h-6 w-3/4 rounded-md bg-slate-700/50"></div>
+        <div className="mt-4 h-10 w-1/2 rounded-md bg-slate-700/50"></div>
+        <div className="mt-2 h-4 w-1/4 rounded-md bg-slate-700/50"></div>
+      </div>
+    );
+  }
 
-  const iconColors = {
-    primary: 'text-blue-400',
-    success: 'text-emerald-400',
-    warning: 'text-amber-400',
-    error: 'text-red-400',
-    info: 'text-cyan-400'
-  };
-
-  const baseClasses = `bg-gradient-to-br ${colorClasses[color]} border rounded-xl p-6 backdrop-blur-sm transition-all duration-200`;
-  const clickableClasses = onClick ? 'cursor-pointer hover:scale-105 hover:shadow-lg' : '';
+  const trendColor = trend?.isPositive ? 'text-brand-green' : 'text-red-500';
+  const TrendIcon = trend?.isPositive ? ArrowUpRight : ArrowDownRight;
 
   return (
-    <div 
-      className={`${baseClasses} ${clickableClasses} ${className}`}
-      onClick={onClick}
-      role={onClick ? "button" : undefined}
-      tabIndex={onClick ? 0 : undefined}
+    <motion.div
+      whileHover={{ y: -8, scale: 1.02 }}
+      transition={{ type: 'spring', stiffness: 300, damping: 20 }}
+      className="group relative overflow-hidden rounded-2xl bg-slate-800/40 p-5 backdrop-blur-lg shadow-lg"
     >
-      <div className="flex items-start justify-between">
-        <div className="flex-1">
-          <p className="text-slate-400 text-sm font-medium mb-2">{title}</p>
-          <p className="text-3xl font-bold text-white mb-1">{value}</p>
-          {subtitle && <p className="text-slate-400 text-xs mt-1">{subtitle}</p>}
-        </div>
-        {icon && (
-          <div className={`p-3 rounded-lg bg-white/5 ${iconColors[color]}`}>
+      <div className="absolute inset-0 z-0 opacity-0 transition-opacity duration-500 group-hover:opacity-100">
+        <div className="absolute inset-0 bg-gradient-to-r from-brand-orange to-purple-500 blur-md"></div>
+      </div>
+
+      <div className="relative z-10 flex flex-col justify-between h-full">
+        <div className="flex items-center justify-between text-slate-400">
+          <h3 className="font-medium">{title}</h3>
+          <motion.div
+            className="text-slate-500 transition-colors duration-300 group-hover:text-brand-orange"
+            initial={{ rotate: 0 }}
+            whileHover={{ rotate: 15, scale: 1.2 }}
+          >
             {icon}
+          </motion.div>
+        </div>
+
+        <div>
+          <h2 className="text-4xl font-bold text-white">
+            <AnimatedCounter value={value} prefix={prefix} />
+          </h2>
+        </div>
+
+        {trend && (
+          <div className="flex items-center gap-1 text-sm">
+            <span className={`flex items-center font-semibold ${trendColor}`}>
+              <TrendIcon className="mr-1 h-4 w-4" />
+              {trend.value.toFixed(1)}%
+            </span>
+            <span className="text-slate-500">vs last month</span>
           </div>
         )}
       </div>
-    </div>
+    </motion.div>
   );
 };
 

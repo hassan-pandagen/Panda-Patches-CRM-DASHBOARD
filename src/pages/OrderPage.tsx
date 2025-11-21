@@ -1,91 +1,46 @@
+// src/pages/OrderPage.tsx - FINAL WITH APPROVAL WORKFLOW
 
-import React, { useState, useEffect, useCallback } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
-import { getOrder, updateOrder, triggerNotificationWorkflow, deleteOrder, getOrderHistory, getOrdersByCustomer } from '../services/orderService';
-import { useQueryClient } from '@tanstack/react-query';
-import { Order, OrderStatus, OrderHistoryEntry } from '../types/index';
-import { getStatusInfo } from '../constants';
-import Spinner from '../components/ui/Spinner';
-import { useAuth } from '../contexts/AuthContext';
-import OrderHistory from '../components/orders/OrderHistory';
-import ProductionFiles from '../components/orders/ProductionFiles';
-import ConfirmationModal from '../components/ui/ConfirmationModal';
-import { UserRole } from '../types'; // Import UserRole
+import React, { useState } from 'react';
+import { useParams, Link, useNavigate } from 'react-router-dom';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../services/supabaseClient';
+import { Order, UserRole, OrderStatus } from '../types';
+import { useAuth } from '../contexts/AuthContext';
+import { useToast } from '../hooks/useToast'; // Check your path
 
-const DetailItem: React.FC<{ label: string; value?: string | number }> = ({ label, value }) => {
-    if (!value && value !== 0) return null;
-    return <p><strong className="font-semibold text-slate-400">{label}:</strong> {value}</p>;
-};
+// UI Components
+import Spinner from '../components/ui/Spinner';
+import Button from '../components/ui/Button';
+import GlassCard from '../components/ui/GlassCard';
+import StatusBadge from '../components/ui/StatusBadge';
 
-const NotesSection: React.FC<{ title: string, notes?: string}> = ({ title, notes }) => {
-    if(!notes) return null;
-    return (
-        <div className="transition-all duration-200 ease-in-out">
-            <h4 className="font-bold text-md mb-2 text-slate-100">{title}</h4>
-            <p className="text-slate-300 whitespace-pre-wrap bg-[#0A0A0F]/70 p-3 rounded-lg border border-[#252836]">{notes}</p>
-        </div>
-    );
-};
+// Icons
+import { Edit, Trash2, ShieldAlert, ArrowLeft, Lock, MapPin, Smartphone, Maximize, Check, XCircle, AlertTriangle } from 'lucide-react';
 
-const AttachmentSection: React.FC<{ title: string; attachments?: string[] }> = ({ title, attachments }) => {
-    if (!attachments || attachments.length === 0) return null;
-    return (
-        <div className="transition-all duration-200 ease-in-out">
-            <h4 className="font-bold text-md mb-2 text-slate-100">{title}</h4>
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
-                {attachments.map((url, index) => (
-                    <a key={index} href={url} target="_blank" rel="noopener noreferrer" className="relative group">
-                        <img 
-                            src={url} 
-                            alt={`Attachment ${index + 1}`} 
-                            className="rounded-lg object-cover h-24 w-full ring-2 ring-transparent group-hover:ring-[#6366F1] transition-all duration-200" 
-                        />
-                    </a>
-                ))}
-            </div>
-        </div>
-    );
-};
-
-// --- NEW COMPONENT: Modal to display customer's order history ---
-const CustomerHistoryModal: React.FC<{
+// --- CONFIRMATION MODAL ---
+const ConfirmationModal: React.FC<{
   isOpen: boolean;
   onClose: () => void;
-  orders: Order[];
-  customerName: string; 
-  role: UserRole | null; // Add role prop here
-}> = ({ isOpen, onClose, orders, customerName, role }) => {
+  onConfirm: () => void;
+  orderNumber: string;
+}> = ({ isOpen, onClose, onConfirm, orderNumber }) => {
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm" onClick={onClose}>
-      <div className="relative w-full max-w-2xl p-6 bg-slate-800 border border-slate-700 rounded-xl shadow-lg" onClick={e => e.stopPropagation()}>
-        <div className="flex justify-between items-start mb-4">
-          <h3 className="text-xl font-semibold text-slate-100">Order History for {customerName}</h3>
-          <button onClick={onClose} className="text-slate-400 hover:text-white">&times;</button>
+    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+      <div className="bg-slate-800 border border-slate-700 rounded-2xl p-6 max-w-md w-full shadow-2xl">
+        <div className="flex items-center gap-4 mb-4">
+          <div className="p-3 bg-red-500/10 rounded-full">
+            <ShieldAlert className="w-6 h-6 text-red-400" />
+          </div>
+          <h2 className="text-xl font-bold text-white">Confirm Deletion</h2>
         </div>
-        <div className="max-h-[60vh] overflow-y-auto space-y-2 pr-2">
-          {orders.length === 0 ? (
-            <p className="text-slate-400">No other orders found for this customer.</p>
-          ) : (
-            orders.map(order => (
-              <Link 
-                to={`/order/${order.orderNumber}`} 
-                key={order.id}
-                onClick={onClose}
-                className="block p-3 bg-slate-900/50 rounded-lg hover:bg-slate-700/50 transition-colors"
-              >
-                <div className="flex justify-between items-center">
-                  <span className="font-semibold text-blue-400">{order.orderNumber}</span>
-                  <span className="text-sm text-slate-400">{new Date(order.createdAt).toLocaleDateString()}</span>
-                </div>
-                <div className="text-sm text-slate-300 mt-1">
-                  Status: {getStatusInfo(order.status).label} {role !== 'PRODUCTION' && `| Total: $${order.orderAmount.toLocaleString()}`}
-                </div>
-              </Link>
-            ))
-          )}
+        <p className="text-slate-300 mb-6">
+          This will permanently delete Order <strong>{orderNumber}</strong>. This action cannot be undone.
+        </p>
+        <div className="flex justify-end gap-4">
+          <Button variant="secondary" onClick={onClose}>Cancel</Button>
+          <Button variant="danger" onClick={onConfirm}>Delete Permanently</Button>
         </div>
       </div>
     </div>
@@ -94,486 +49,334 @@ const CustomerHistoryModal: React.FC<{
 
 const OrderPage: React.FC = () => {
   const { orderNumber } = useParams<{ orderNumber: string }>();
+  const { user, role, permissions } = useAuth(); 
   const navigate = useNavigate();
-  const { user, role } = useAuth();
-  const [order, setOrder] = useState<Order | null>(null);
   const queryClient = useQueryClient();
-  const [history, setHistory] = useState<OrderHistoryEntry[]>([]);
-  const [loading, setLoading] = useState<boolean>(true);
-  const [error, setError] = useState<string | null>(null);
-  const [isUpdating, setIsUpdating] = useState<boolean>(false);
-  const [isDeleting, setIsDeleting] = useState<boolean>(false);
-  const [selectedStatus, setSelectedStatus] = useState<OrderStatus | undefined>();
-  const [updateMessage, setUpdateMessage] = useState<{type: 'success' | 'error', text: string} | null>(null);
-  const [deleteError, setDeleteError] = useState<string | null>(null);
-  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState<boolean>(false);
-  const [isReturningCustomer, setIsReturningCustomer] = useState<boolean>(false);
-  const [isHistoryModalOpen, setIsHistoryModalOpen] = useState<boolean>(false);
-  const [customerOrderHistory, setCustomerOrderHistory] = useState<Order[]>([]);
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const { toast } = useToast(); // <--- INITIALIZE TOAST
+  const [isProcessing, setIsProcessing] = useState(false);
 
-  const fetchOrderData = useCallback(async () => {
-    if (!orderNumber) return;
-    setLoading(true);
-    setError(null);
-    try {
-      const fetchedOrder = await getOrder(orderNumber);
-      if (fetchedOrder) {
-        setOrder(fetchedOrder);
-        setSelectedStatus(fetchedOrder.status);
+  // --- PERMISSION CHECKS ---
+  const isAdmin = role === UserRole.ADMIN;
+  const canViewFinancials = isAdmin || permissions?.view_financials;
+  const canViewShipping = isAdmin || permissions?.view_shipping;
+  const canViewProduction = isAdmin || permissions?.view_production;
+  const canDelete = isAdmin || permissions?.can_delete_orders;
 
-        // --- RETURNING CUSTOMER LOGIC ---
-        // After fetching the order, check if the customer has more than one order.
-        if (fetchedOrder.customerEmail) {
-          const { count, error: countError } = await supabase
+  // --- DATA FETCHING ---
+  const { data: order, isLoading, error } = useQuery<Order | null, Error>({
+    queryKey: ['order', orderNumber],
+    queryFn: async () => {
+      if (!orderNumber) throw new Error("No order number provided.");
+      const { data, error } = await supabase
+        .from('orders_with_details')
+        .select('*')
+        .eq('order_number', orderNumber) 
+        .single();
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!orderNumber,
+  });
+
+  // --- APPROVAL MUTATIONS ---
+  const updateUrgentStatus = useMutation({
+    mutationFn: async ({ isApproved, isUrgent }: { isApproved: boolean; isUrgent: boolean }) => {
+        setIsProcessing(true);
+        // 1. Update the Order
+        const { error } = await supabase
             .from('orders')
-            .select('id', { count: 'exact', head: true }) // `head: true` is efficient, just gets the count
-            .eq('customer_email', fetchedOrder.customerEmail);
+            .update({ 
+                is_urgent: isUrgent,
+                is_urgent_approved: isApproved 
+            })
+            .eq('id', order?.id);
+        
+        if (error) throw error;
 
-          if (countError) {
-            console.warn("Could not check for returning customer:", countError.message);
-          } else if (count && count > 1) {
-            setIsReturningCustomer(true);
-          }
-        }
-
-        // --- FIX: Gracefully handle missing history table ---
-        // After getting the order, try to fetch its history.
-        try {
-            const fetchedHistory = await getOrderHistory(fetchedOrder.id);
-            setHistory(fetchedHistory);
-        } catch (historyError: any) {
-            // If fetching history fails, log a warning but don't crash the page.
-            console.warn("Could not fetch order history.", historyError.message);
-            setHistory([]);
-        }
-
-      } else {
-        setError(`Order #${orderNumber} could not be found.`);
-      }
-    } catch (e: any) {
-      const errorMessage = e.message || 'An unknown error occurred.';
-      console.error(`Failed to fetch order #${orderNumber}:`, errorMessage);
-      setError(`Failed to load order: ${errorMessage}`);
-    } finally {
-      setLoading(false);
+        // 2. Add Audit Log
+        await supabase.from('order_history').insert({
+            order_id: order?.id,
+            user_email: user?.email || 'unknown',
+            field_changed: 'URGENT_STATUS',
+            old_value: `Urgent: ${order?.isUrgent}, Approved: ${order?.isUrgentApproved}`,
+            new_value: `Urgent: ${isUrgent}, Approved: ${isApproved}`
+        });
+    },
+    onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: ['order', orderNumber] });
+        queryClient.invalidateQueries({ queryKey: ['orders', 'urgent'] }); // Refresh notifications
+        // REPLACED ALERT WITH TOAST
+        toast.success('Urgent status updated successfully', 'The order priority has been changed.');
+        setIsProcessing(false);
+    },
+    onError: (err) => {
+        setIsProcessing(false);
+        // REPLACED ALERT WITH TOAST
+        toast.error('Update Failed', err.message);
     }
-  }, [orderNumber, setHistory, role]);
+  });
 
-  // --- FIX: useEffect should depend on orderNumber directly ---
-  useEffect(() => {
-    fetchOrderData();
-  }, [orderNumber, fetchOrderData]);
-
-  const handleStatusChange = async () => {
-    if (!order || !selectedStatus || order.status === selectedStatus) return;
-    setIsUpdating(true);
-    setUpdateMessage(null);
-    setDeleteError(null);
-    try {
-      // --- Optimistic UI Update ---
-      // Create a new history entry locally before calling the database.
-      const newHistoryEntry: OrderHistoryEntry = {
-        id: Date.now(), // Temporary ID for React key
-        order_id: order.id,
-        user_email: user?.email || 'System',
-        field_changed: 'status',
-        old_value: order.status,
-        new_value: selectedStatus,
-        changed_at: new Date().toISOString(),
-      };
-      // Add it to the top of the current history state.
-      setHistory([newHistoryEntry, ...history]);
-
-      const updatedOrderData = { ...order, status: selectedStatus };
-      const updatedOrder = await updateOrder(updatedOrderData);
-      setOrder(updatedOrder);
-      
-      queryClient.invalidateQueries({ queryKey: ['order', orderNumber] }); // Invalidate to ensure fresh data
-      await triggerNotificationWorkflow(updatedOrder);
-
-      setUpdateMessage({ type: 'success', text: 'Status updated and notification sent!' });
-
-    } catch (error: any) {
-      console.error(error);
-       if (error.message.includes('Webhook URL not configured')) {
-            setUpdateMessage({ type: 'error', text: 'Order updated, but n8n webhook is not configured.' });
-       } else {
-            setUpdateMessage({ type: 'error', text: `Order status saved, but notification failed: ${error.message}` });
-       }
-    } finally {
-      setIsUpdating(false);
-      setTimeout(() => setUpdateMessage(null), 5000);
+  // --- DELETE MUTATION ---
+  const deleteMutation = useMutation({
+    mutationFn: async (orderToDelete: Order) => {
+      await supabase.from('order_history').insert({
+          order_id: orderToDelete.id,
+          user_email: user?.email || 'unknown',
+          field_changed: 'ORDER_DELETED',
+          new_value: `Deleted by ${user?.email}`,
+        });
+      const { error } = await supabase.from('orders').delete().eq('id', orderToDelete.id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['allOrders'] });
+      navigate('/orders');
+      // REPLACED ALERT WITH TOAST
+      toast.success('Order Deleted', `Order ${order?.orderNumber} has been permanently removed.`);
+    },
+    onError: (err) => {
+       // REPLACED ALERT WITH TOAST
+       toast.error('Delete Failed', err.message);
     }
-  };
+  });
 
-  const handleConfirmDelete = async () => {
-    if (!order || !order.id) return;
-
-    setIsDeleting(true);
-    setDeleteError(null);
-    try {
-      await deleteOrder(order.id);
-      setIsDeleteModalOpen(false);
-      navigate('/');
-    } catch (error: any) {
-      console.error("Failed to delete order:", error);
-      setDeleteError(error.message || 'An unknown error occurred while deleting the order.');
-      setIsDeleteModalOpen(false); // Close modal on error to show banner
-    } finally {
-      setIsDeleting(false);
-    }
-  };
-
-  const handleMarkPaymentComplete = async () => {
-    if (!order) return;
-    setIsUpdating(true);
-    setUpdateMessage(null);
-    try {
-      const updatedOrder = await updateOrder({
-        ...order,
-        amountPaid: order.orderAmount, // Set amount paid to the total
-        status: OrderStatus.COMPLETED, // Set status to Completed
-        // Note: The backend trigger for order history will log this status change.
-      });
-      setOrder(updatedOrder); // Refresh the UI with the updated order
-      setUpdateMessage({ type: 'success', text: 'Payment marked as complete!' });
-    } catch (error: any) {
-      setUpdateMessage({ type: 'error', text: `Error updating payment: ${error.message}` });
-    } finally {
-      setIsUpdating(false);
-      setTimeout(() => setUpdateMessage(null), 5000);
-    }
-  };
-
-  // --- NEW: Handler to fetch and display customer's past orders ---
-  const handleViewCustomerHistory = async () => {
-    if (!order?.customerEmail) return;
-    try {
-      // Fetch all orders by this customer's email
-      const allOrders = await getOrdersByCustomer(order.customerEmail, null);
-      // Filter out the current order to only show "previous" ones
-      setCustomerOrderHistory(allOrders.filter(o => o.id !== order.id));
-      setIsHistoryModalOpen(true);
-    } catch (error) {
-      console.error("Failed to fetch customer order history:", error);
-    }
-  };
-
-  if (loading) {
-    return <div className="flex justify-center items-center h-64"><Spinner /></div>;
-  }
-
-  if (error) {
-    return (
-      <div className="text-center py-10 px-6 bg-[#EF4444]/10 text-red-300 rounded-lg shadow-md border border-[#EF4444]/20">
-        <h3 className="text-xl font-semibold text-slate-100">Could not load order</h3>
-        <p className="mt-2 text-sm max-w-2xl mx-auto">{error}</p>
-        <div className="flex items-center justify-center gap-4 mt-6">
-            <button onClick={fetchOrderData} className="px-4 py-2 rounded-lg bg-[#6366F1] text-white font-medium hover:bg-indigo-500 focus:ring-2 focus:ring-[#6366F1]/50 shadow-[0_0_15px_rgba(99,102,241,0.2)] transition-all duration-300 ease-in-out">
-                Try Again
-            </button>
-             <Link to="/" className="px-4 py-2 rounded-lg bg-[#252836] border border-[#252836] text-slate-300 hover:text-[#6366F1] hover:border-[#6366F1]/50 transition-all duration-300">
-                Back to Dashboard
-            </Link>
-        </div>
-      </div>
-    );
-  }
-
-  if (!order) {
-    return <p className="text-center text-slate-400">Order not found.</p>;
-  }
-  
-  const statusInfo = getStatusInfo(order.status);
+  if (isLoading) return <div className="flex h-screen items-center justify-center"><Spinner /></div>;
+  if (error || !order) return <div className="text-center py-10 text-red-400">Error loading order.</div>;
 
   return (
-    <div className="max-w-7xl mx-auto">
-       <ConfirmationModal
+    <>
+      <ConfirmationModal
         isOpen={isDeleteModalOpen}
         onClose={() => setIsDeleteModalOpen(false)}
-        onConfirm={handleConfirmDelete}
-        title={`Delete Order ${order.orderNumber}`}
-        message={`Are you sure you want to permanently delete Order ${order.orderNumber}? This action cannot be undone.`}
-        confirmButtonText="Delete"
-        isConfirming={isDeleting}
+        onConfirm={() => deleteMutation.mutate(order)}
+        orderNumber={order.orderNumber}
       />
 
-      <CustomerHistoryModal
-        isOpen={isHistoryModalOpen}
-        onClose={() => setIsHistoryModalOpen(false)}
-        orders={customerOrderHistory}
-        customerName={order.customerName}
-        role={role} // Pass the role prop from OrderPage
-      />
-
-      <div className="flex justify-between items-center mb-6 flex-wrap gap-4">
-        <div className="flex items-center gap-4">
-            <h2 className="text-3xl font-semibold tracking-wide text-slate-100 flex items-center gap-3">
-              Order {order.orderNumber}
-              {order.is_urgent && (
-                <span className="text-xs font-bold uppercase tracking-wider bg-red-500/20 text-red-400 border border-red-500/30 px-2 py-1 rounded-full">Urgent</span>
-              )}
-            </h2>
-            <span className={`px-4 py-2 text-sm font-semibold text-white rounded-full ${statusInfo.color}`}>
-              {statusInfo.label}
-            </span>
-        </div>
-        <div className="flex items-center gap-2">
-            <Link to={`/order/${order.orderNumber}/edit`} className="px-4 py-2 rounded-lg bg-[#252836] border border-[#252836] text-slate-300 hover:text-[#6366F1] hover:border-[#6366F1]/50 transition-all duration-300">
-                Edit Order
-            </Link>
-            {/* --- PROTECTED ACTION --- */}
-            {/* The delete button is now only visible to ADMIN users. */}
-            {role === 'ADMIN' && (
-                <button 
-                    onClick={() => setIsDeleteModalOpen(true)}
-                    className="px-4 py-2 rounded-lg bg-[#EF4444]/10 border border-[#EF4444]/20 text-red-300 hover:bg-[#EF4444]/20 hover:border-[#EF4444]/40 transition-all duration-300"
-                >
-                    Delete Order
-                </button>
-            )}
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {/* Left Column: Order Details */}
-        <div className="lg:col-span-2 space-y-6">
-          {/* URGENT APPROVAL BLOCK */}
-          {role === 'ADMIN' && order.is_urgent && !order.is_urgent_approved && ( // Only ADMIN
-            <div className="bg-amber-500/10 border-l-4 border-amber-500 text-amber-200 p-4 flex items-center justify-between gap-4 rounded-r-lg">
-              <div>
-                <p className="font-bold">Urgent Request Pending</p>
-                <p className="text-sm">This order has been marked as urgent by the sales agent and requires your approval.</p>
-              </div>
-
-              <div className="flex gap-2 flex-shrink-0">
-                {isUpdating ? (
-                  <div className="flex items-center justify-center px-3 py-1 rounded-md bg-slate-700 text-slate-300 text-sm font-semibold">
-                    <Spinner small /> Updating...
-                  </div>
-                ) : (
-                  <>
-                    <button
-                      onClick={async () => {
-                        setIsUpdating(true);
-                        try {
-                          // ✅ Update database (approve urgent)
-                          const { error } = await supabase
-                            .from("orders")
-                            .update({ is_urgent_approved: true, is_urgent: true })
-                            .eq("order_number", order.orderNumber);
-
-                          if (error) throw error;
-
-                          // ✅ Update local state immediately
-                          // This optimistic update will be confirmed/overwritten by the query invalidation
-                          setOrder({ ...order, is_urgent_approved: true, is_urgent: true });
-
-                          // ✅ Send realtime update manually (optional but ensures bell clears fast)
-                          supabase.channel('orders').send({
-                            type: 'broadcast',
-                            event: 'urgent_approval',
-                            payload: { orderNumber: order.orderNumber, approved: true },
-                          });
-                          queryClient.invalidateQueries({ queryKey: ['order', orderNumber] }); // Invalidate to ensure fresh data
-
-                          setUpdateMessage({ type: 'success', text: 'Urgent order approved!' });
-                        } catch (err: any) {
-                          setUpdateMessage({ type: 'error', text: err.message || 'Failed to approve order.' });
-                        } finally {
-                          setIsUpdating(false);
-                          setTimeout(() => setUpdateMessage(null), 4000);
-                        }
-                      }}
-                      className="px-3 py-1 rounded-md bg-green-600/80 text-white text-sm font-semibold hover:bg-green-500"
-                    >
-                      Approve
-                    </button>
-
-                    <button
-                      onClick={async () => {
-                        setIsUpdating(true);
-                        try {
-                          // ✅ Update database (deny urgent)
-                          const { error } = await supabase
-                            .from("orders")
-                            .update({ is_urgent_approved: false, is_urgent: false })
-                            .eq("order_number", order.orderNumber);
-
-                          if (error) throw error;
-
-                          // This optimistic update will be confirmed/overwritten by the query invalidation
-                          setOrder({ ...order, is_urgent_approved: false, is_urgent: false });
-
-                          supabase.channel('orders').send({
-                            type: 'broadcast',
-                            event: 'urgent_denied',
-                            payload: { orderNumber: order.orderNumber, approved: false },
-                          });
-                          queryClient.invalidateQueries({ queryKey: ['order', orderNumber] }); // Invalidate to ensure fresh data
-
-                          setUpdateMessage({ type: 'success', text: 'Urgent order denied.' });
-                        } catch (err: any) {
-                          setUpdateMessage({ type: 'error', text: err.message || 'Failed to deny order.' });
-                        } finally {
-                          setIsUpdating(false);
-                          setTimeout(() => setUpdateMessage(null), 4000);
-                        }
-                      }}
-                      className="px-3 py-1 rounded-md bg-red-600/80 text-white text-sm font-semibold hover:bg-red-500"
-                    >
-                      Deny
-                    </button>
-                  </>
-                )}
-              </div>
-            </div>
-          )}
-
-          <div className="bg-[#1A1B23] border border-[#252836] rounded-2xl p-6 space-y-4">
-            <h3 className="text-xl font-semibold tracking-wide text-slate-100 mb-2">Design & Product</h3>
-            <div className="space-y-4">
-                <DetailItem label="Design Name" value={order.designName} />
-                <DetailItem label="Quantity" value={order.patchesQuantity} />
-                <DetailItem label="Type" value={order.patchesType} />
-                <DetailItem label="Size" value={order.designSize} />
-                <DetailItem label="Backing" value={order.designBacking} />
-                <NotesSection title="Instructions" notes={order.instructions} />
-                <ProductionFiles order={order} onUpdate={setOrder} />
-                <AttachmentSection title="Customer Attachments" attachments={order.customerAttachmentURLs} />
-                <AttachmentSection title="Mockup Attachments" attachments={order.mockupURLs} />
-            </div>
-          </div>
-          <div className="bg-[#1A1B23] border border-[#252836] rounded-2xl p-6 space-y-4">
-            <h3 className="text-xl font-semibold tracking-wide text-slate-100 mb-2">Revisions & Redos</h3>
-            <NotesSection title="Revision Notes" notes={order.revisionNotes} />
-            <NotesSection title="Redo Notes" notes={order.redoNotes} />
-            <AttachmentSection title="Redo Attachments" attachments={order.redoAttachments} />
-          </div>
-          <div className="bg-[#1A1B23] border border-[#252836] rounded-2xl p-6 space-y-2">
-            <h3 className="text-xl font-semibold tracking-wide text-slate-100 mb-2">Customer Information</h3>
-            <div className="flex items-center gap-3">
-              <DetailItem label="Name" value={order.customerName} />
-              {/* --- MODIFIED: Badge is now a clickable button --- */}
-              {isReturningCustomer && (
-                <button onClick={handleViewCustomerHistory} className="text-xs font-bold uppercase tracking-wider bg-green-500/20 text-green-300 border border-green-500/30 px-2 py-1 rounded-full hover:bg-green-500/40 transition-colors">
-                  Returning Customer
-                </button>
-              )}
-            </div>
-            <DetailItem label="Email" value={order.customerEmail} />
-            <DetailItem label="Phone" value={order.customerPhone} />
-            <DetailItem label="Shipping Address" value={order.shippingAddress} />
-          </div> 
-           {(role === 'ADMIN' || role === 'AGENT' ) && (
-            <div className="bg-[#1A1B23] border border-[#252836] rounded-2xl p-6 space-y-2">
-                <div className="flex justify-between items-center mb-4">
-                  <h3 className="text-xl font-semibold tracking-wide text-slate-100">Financials</h3>
-                  {order.amountRemaining > 0 && (
-                    <button
-                      onClick={handleMarkPaymentComplete}
-                      disabled={isUpdating}
-                      className="px-3 py-1 text-sm rounded-lg bg-green-600/80 border border-green-500/60 text-white font-medium hover:bg-green-500/90 focus:ring-2 focus:ring-green-500/50 shadow-[0_0_10px_rgba(34,197,94,0.3)] transition-all duration-300 ease-in-out disabled:opacity-40 disabled:cursor-not-allowed"
-                    >
-                      Mark Payment Complete
-                    </button>
-                  )}
+      <div className="space-y-6 pb-10">
+        {/* --- HEADER & APPROVAL SECTION --- */}
+        <div className="space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                <div>
+                    <Link to="/orders" className="flex items-center gap-2 text-sm text-slate-400 hover:text-white transition-colors mb-2">
+                    <ArrowLeft size={16} /> Back to All Orders
+                    </Link>
+                    <h1 className="text-3xl font-bold text-white flex items-center gap-3">
+                        Order {order.orderNumber}
+                        {order.isUrgent && (
+                            <span className={`text-sm px-3 py-1 rounded-full border font-bold ${
+                                order.isUrgentApproved 
+                                ? 'bg-red-600/20 border-red-500 text-red-400' 
+                                : 'bg-yellow-500/20 border-yellow-500 text-yellow-400 animate-pulse'
+                            }`}>
+                                {order.isUrgentApproved ? 'URGENT' : 'URGENT (APPROVAL NEEDED)'}
+                            </span>
+                        )}
+                    </h1>
                 </div>
-                <DetailItem label="Total Amount" value={`$${order.orderAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} />
-                <DetailItem label="Amount Paid" value={`$${order.amountPaid.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} />
-                <p><strong className="font-semibold text-slate-400">Amount Remaining:</strong> <span className="font-bold text-[#6366F1]">${order.amountRemaining.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span></p>
+                <div className="flex items-center gap-3">
+                    {(isAdmin || user?.email === order.salesAgent) && (
+                    <Link to={`/order/${order.orderNumber}/edit`}>
+                        <Button variant="secondary" size="md"><Edit size={16} /> Edit Order</Button>
+                    </Link>
+                    )}
+                </div>
             </div>
-           )}
-           {(role === 'ADMIN' || role === 'AGENT' ) && (
-            <div className="bg-[#1A1B23] border border-[#252836] rounded-2xl p-6 space-y-2">
-                <div className="flex justify-between items-center mb-4">
-                  <h3 className="text-xl font-semibold tracking-wide text-slate-100">Costs & Profitability</h3>
-                </div>
-                <DetailItem label="Production Cost" value={`$${order.production_cost.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} />
-                <DetailItem label="Shipping Cost" value={`$${order.shipping_cost.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} />
-                <DetailItem label="Marketing Cost" value={`$${order.marketing_cost.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} />
-                <hr className="border-slate-700 my-2" />
-                <p><strong className="font-semibold text-slate-400">Profit:</strong> <span className={`font-bold ${order.profit >= 0 ? 'text-green-400' : 'text-red-400'}`}>${order.profit.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span></p>
 
-            </div>
-           )}
-           <div className="bg-[#1A1B23] border border-[#252836] rounded-2xl p-6 space-y-4">
-                <h3 className="text-xl font-semibold tracking-wide text-slate-100">Shipping Details</h3>
-                
-                <div className="border border-slate-700 rounded-lg p-4 space-y-2 bg-slate-900/30">
-                  <DetailItem label="Order Number" value={order.orderNumber} />
-                  <DetailItem label="Customer Name" value={order.customerName} />
-                  <DetailItem label="Phone Number" value={order.customerPhone} />
-                  <DetailItem label="Address" value={order.shippingAddress} />
-                  {role !== 'PRODUCTION' && ( // Hide financial separator for Production
-                    <hr className="border-slate-700 my-2" />
-                  )}
-                  <DetailItem label="Patch Type" value={order.patchesType} />
-                  <DetailItem label="Quantity" value={order.patchesQuantity} />
-                </div>
-                <div className="space-y-2 pt-2">
-                  <DetailItem label="Courier" value={order.courier} />
-                  <DetailItem label="Tracking Number" value={order.trackingNumber} />
-                  <AttachmentSection title="Shipping / QA Attachments" attachments={order.shippingAttachmentURLs} />
-                </div>
-           </div>
-        </div>
-
-        {/* Right Column: Status Update & History */}
-        <div className="lg:col-span-1 space-y-6">
-            <div className="sticky top-8">
-              <div className="bg-[#1A1B23] border border-[#252836] rounded-2xl p-6">
-                  <h3 className="text-xl font-semibold tracking-wide text-slate-100 mb-4">Update Status & Notify</h3>
-                  <div className="space-y-4">
-                      <div>
-                          <label htmlFor="status" className="block text-sm font-medium text-slate-400 mb-2">New Status</label>
-                          <select
-                          id="status"
-                          name="status"
-                          value={selectedStatus}
-                          onChange={(e) => setSelectedStatus(e.target.value as OrderStatus)}
-                          className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white placeholder-slate-400 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 appearance-none"
-                          >
-                          {Object.values(OrderStatus).map((status) => (
-                              <option key={status} value={status}>
-                                  {getStatusInfo(status).label}
-                              </option>
-                          ))}
-                          </select>
-                      </div>
-                      <button
-                          onClick={handleStatusChange}
-                          disabled={isUpdating || order.status === selectedStatus}
-                          className="w-full flex justify-center px-4 py-2 rounded-lg bg-[#6366F1] text-white font-medium hover:bg-indigo-500 focus:ring-2 focus:ring-[#6366F1]/50 shadow-[0_0_15px_rgba(99,102,241,0.2)] transition-all duration-300 ease-in-out disabled:opacity-50 disabled:cursor-not-allowed"
-                      >
-                          {isUpdating ? <Spinner small /> : 'Update & Send Notification'}
-                      </button>
-                  </div>
-              </div>
-
-                {/* --- NOTIFICATION TOAST --- */}
-                {/* This is the banner that shows success/error messages. It's now a "toast" notification. */}
-                {(updateMessage || deleteError) && (
-                    <div className={`fixed bottom-8 right-8 z-50 max-w-sm rounded-lg shadow-lg border ${
-                        (updateMessage?.type === 'success') ? 'bg-green-500/10 border-green-500/30 text-green-300' : 'bg-red-500/10 border-red-500/30 text-red-300'
-                    }`}>
-                        <div className="p-4">
-                            <div className="flex items-start">
-                                <div className="ml-3 w-0 flex-1 pt-0.5">
-                                    <p className="text-sm font-medium text-slate-100">
-                                        {updateMessage?.text || deleteError}
-                                    </p>
-                                </div>
-                            </div>
+            {/* --- URGENT APPROVAL BANNER (ADMIN ONLY) --- */}
+            {isAdmin && order.isUrgent && !order.isUrgentApproved && (
+                <div className="bg-slate-800 border-l-4 border-yellow-500 rounded-r-xl p-4 shadow-lg flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                    <div className="flex items-start gap-3">
+                        <div className="p-2 bg-yellow-500/10 rounded-lg text-yellow-500 mt-1 sm:mt-0">
+                            <AlertTriangle className="w-6 h-6" />
+                        </div>
+                        <div>
+                            <h3 className="font-bold text-white text-lg">Urgent Approval Required</h3>
+                            <p className="text-slate-400 text-sm">
+                                The customer or agent has requested urgent production. This usually incurs a rush fee.
+                            </p>
                         </div>
                     </div>
-                )}
-            </div>
+                    <div className="flex items-center gap-3 w-full sm:w-auto">
+                        <button 
+                            disabled={isProcessing}
+                            onClick={() => updateUrgentStatus.mutate({ isApproved: false, isUrgent: false })}
+                            className="flex-1 sm:flex-none px-4 py-2 rounded-lg border border-slate-600 text-slate-300 hover:bg-slate-700 hover:text-white transition-colors font-medium text-sm"
+                        >
+                            Reject Request
+                        </button>
+                        <button 
+                            disabled={isProcessing}
+                            onClick={() => updateUrgentStatus.mutate({ isApproved: true, isUrgent: true })}
+                            className="flex-1 sm:flex-none px-4 py-2 rounded-lg bg-red-600 text-white hover:bg-red-500 transition-colors font-bold text-sm flex items-center justify-center gap-2 shadow-lg shadow-red-900/20"
+                        >
+                            <Check className="w-4 h-4" />
+                            Approve Urgent
+                        </button>
+                    </div>
+                </div>
+            )}
+        </div>
 
-            <OrderHistory history={history} />
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          
+          {/* --- LEFT COLUMN --- */}
+          <div className="lg:col-span-2 space-y-6">
+            
+            {/* CUSTOMER INFO (Secured) */}
+            <GlassCard>
+              <div className="flex justify-between items-start mb-6">
+                <h3 className="text-lg font-semibold text-white flex items-center gap-2">
+                    Customer Information
+                </h3>
+                {!canViewShipping && <Lock className="w-4 h-4 text-slate-500" />}
+              </div>
+              
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                <div>
+                  <p className="text-xs font-medium text-slate-400 uppercase mb-1">Customer Name</p>
+                  <p className="font-medium text-white text-base">{order.customerName}</p>
+                </div>
+                <div>
+                  <p className="text-xs font-medium text-slate-400 uppercase mb-1">Email Address</p>
+                  <p className="font-medium text-white break-all">
+                    {canViewShipping ? order.customerEmail : '•••••••• (Hidden)'}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs font-medium text-slate-400 uppercase mb-1 flex items-center gap-1">
+                    <Smartphone className="w-3 h-3" /> Phone / Mobile
+                  </p>
+                  <p className="font-medium text-white">
+                    {canViewShipping ? (order.customerPhone || 'N/A') : '•••••••• (Hidden)'}
+                  </p>
+                </div>
+                <div>
+                   <p className="text-xs font-medium text-slate-400 uppercase mb-1 flex items-center gap-1">
+                     <MapPin className="w-3 h-3" /> Shipping Address
+                   </p>
+                   <p className="font-medium text-white text-sm leading-relaxed">
+                     {canViewShipping ? (order.shippingAddress || 'No address provided') : '•••••••• (Hidden)'}
+                   </p>
+                </div>
+              </div>
+            </GlassCard>
+
+            {/* DESIGN & PRODUCTION INFO */}
+            {canViewProduction ? (
+              <GlassCard>
+                <h3 className="text-lg font-semibold text-white mb-6">Design & Production</h3>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
+                  <div>
+                      <p className="text-xs font-medium text-slate-400 uppercase mb-1">Design Name</p>
+                      <p className="font-medium text-white text-base">{order.designName || 'N/A'}</p>
+                  </div>
+                  <div>
+                      <p className="text-xs font-medium text-slate-400 uppercase mb-1">Patch Type</p>
+                      <div className="flex items-center gap-2">
+                        <span className="w-2 h-2 rounded-full bg-brand-orange"></span>
+                        <p className="font-medium text-white">{order.patchesType || 'Custom'}</p>
+                      </div>
+                  </div>
+                  <div>
+                      <p className="text-xs font-medium text-slate-400 uppercase mb-1">Quantity</p>
+                      <p className="font-bold text-white text-xl">{order.patchesQuantity?.toLocaleString() || '0'} <span className="text-sm font-normal text-slate-400">pcs</span></p>
+                  </div>
+                  <div>
+                      <p className="text-xs font-medium text-slate-400 uppercase mb-1 flex items-center gap-1">
+                          <Maximize className="w-3 h-3" /> Size
+                      </p>
+                      <p className="font-medium text-white">{order.designSize || 'N/A'}</p>
+                  </div>
+                  <div>
+                      <p className="text-xs font-medium text-slate-400 uppercase mb-1">Backing</p>
+                      <p className="font-medium text-white">{order.designBacking || 'N/A'}</p>
+                  </div>
+                </div>
+                
+                {/* File Downloads would go here */}
+                
+              </GlassCard>
+            ) : (
+              <div className="p-8 rounded-xl border border-slate-700/50 bg-slate-800/20 flex flex-col items-center justify-center gap-3 text-slate-500 text-center">
+                <Lock className="w-8 h-8 opacity-50" />
+                <span className="font-medium">Production details are restricted for your role.</span>
+              </div>
+            )}
+          </div>
+
+          {/* --- RIGHT COLUMN --- */}
+          <div className="lg:col-span-1 space-y-6">
+            <GlassCard>
+              <h3 className="text-lg font-semibold text-white mb-4">Summary</h3>
+              <div className="space-y-4">
+                <div className="flex justify-between items-center"><p className="text-slate-400 text-sm">Status</p><StatusBadge status={order.status as OrderStatus}/></div>
+                <div className="flex justify-between items-center"><p className="text-slate-400 text-sm">Created Date</p><p className="font-medium text-white">{new Date(order.createdAt).toLocaleDateString()}</p></div>
+                <div className="flex justify-between items-center"><p className="text-slate-400 text-sm">Sales Agent</p><p className="font-medium text-white">{order.salesAgent}</p></div>
+                <div className="flex justify-between items-center"><p className="text-slate-400 text-sm">Lead Source</p><p className="font-medium text-white">{order.leadSource || 'N/A'}</p></div>
+              </div>
+            </GlassCard>
+
+            {/* FINANCIALS (Secured) */}
+            {canViewFinancials ? (
+              <GlassCard>
+                <h3 className="text-lg font-semibold text-white mb-4">Financials</h3>
+                <div className="space-y-3">
+                  <div className="flex justify-between items-center py-1">
+                      <p className="text-slate-300">Total Amount</p>
+                      <p className="font-bold text-white text-lg">${order.orderAmount.toLocaleString()}</p>
+                  </div>
+                  <div className="w-full bg-slate-700 h-px my-1"></div>
+                  
+                  <div className="flex justify-between items-center">
+                      <p className="text-slate-400 text-sm">Amount Paid</p>
+                      <p className="font-medium text-green-400">${order.amountPaid.toLocaleString()}</p>
+                  </div>
+                  <div className="flex justify-between items-center">
+                      <p className="text-slate-400 text-sm">Remaining</p>
+                      <p className="font-medium text-yellow-400">${order.amountRemaining.toLocaleString()}</p>
+                  </div>
+                  
+                  {/* Detailed Breakdown (Admin Only) */}
+                  {isAdmin && (
+                    <div className="bg-slate-900/50 rounded-lg p-3 mt-4 space-y-2 border border-white/5">
+                      <p className="text-xs font-bold text-slate-500 uppercase mb-2">Internal Costs</p>
+                      <div className="flex justify-between items-center"><p className="text-xs text-slate-400">Production</p><p className="text-xs font-medium text-white">-${order.productionCost.toLocaleString()}</p></div>
+                      <div className="flex justify-between items-center"><p className="text-xs text-slate-400">Shipping</p><p className="text-xs font-medium text-white">-${order.shippingCost.toLocaleString()}</p></div>
+                      <div className="flex justify-between items-center"><p className="text-xs text-slate-400">Marketing</p><p className="text-xs font-medium text-white">-${order.marketingCost.toLocaleString()}</p></div>
+                      <div className="border-t border-white/10 pt-2 mt-1 flex justify-between items-center">
+                          <p className="text-sm text-slate-300">Net Profit</p>
+                          <p className={`text-sm font-bold ${order.profit >= 0 ? 'text-cyan-400' : 'text-red-400'}`}>
+                              ${order.profit.toLocaleString()}
+                          </p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </GlassCard>
+            ) : (
+               // Empty state for non-financial users is handled by simply NOT rendering the card.
+               // Or you can render a locked state if you prefer:
+              <div className="p-6 rounded-xl border border-slate-700/50 bg-slate-800/20 flex items-center justify-center gap-3 text-slate-500">
+                <Lock className="w-5 h-5" />
+                <span>Financials restricted</span>
+              </div>
+            )}
+
+            {/* DELETE BUTTON */}
+            {canDelete && (
+              <div className="pt-2">
+                <Button variant="danger" size="sm" onClick={() => setIsDeleteModalOpen(true)} className="w-full bg-red-500/10 text-red-400 hover:bg-red-500/20 hover:text-red-300 border border-red-500/20">
+                  <Trash2 size={14} />
+                  <span>Permanently Delete Order</span>
+                </Button>
+              </div>
+            )}
+          </div>
+
         </div>
       </div>
-    </div>
+    </>
   );
 };
 

@@ -6,7 +6,7 @@
 interface ImportMetaEnv {
   readonly VITE_SUPABASE_URL: string;
   readonly VITE_SUPABASE_ANON_KEY: string;
-  readonly VITE_SUPABASE_SERVICE_ROLE_KEY?: string; // Keep if used for admin client
+  readonly VITE_SUPABASE_SERVICE_ROLE_KEY: string; // This should NOT be exposed to the client.
   readonly VITE_CRM_BASE_URL?: string; // Keep if used for CRM base URL
   readonly VITE_SENDGRID_API_KEY?: string;
   readonly VITE_TWILIO_ACCOUNT_SID?: string;

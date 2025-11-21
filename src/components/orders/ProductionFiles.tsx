@@ -55,7 +55,7 @@ const ProductionFiles: React.FC<ProductionFilesProps> = ({ order, onUpdate }) =>
 
             const updatedOrder = {
                 ...order,
-                production_file_urls: [...(order.production_file_urls || []), ...uploadedUrls],
+                productionFileUrls: [...(order.productionFileUrls || []), ...uploadedUrls],
             };
             const savedOrder = await updateOrder(updatedOrder);
             onUpdate(savedOrder);
@@ -75,8 +75,8 @@ const ProductionFiles: React.FC<ProductionFilesProps> = ({ order, onUpdate }) =>
             const { error } = await supabase.storage.from('order-attachments').remove([filePath]);
             if (error) throw error;
 
-            const updatedUrls = (order.production_file_urls || []).filter(url => url !== urlToDelete);
-            const updatedOrder = { ...order, production_file_urls: updatedUrls };
+            const updatedUrls = (order.productionFileUrls || []).filter((url: string) => url !== urlToDelete);
+            const updatedOrder = { ...order, productionFileUrls: updatedUrls };
             const savedOrder = await updateOrder(updatedOrder);
             onUpdate(savedOrder);
         } catch (error: any) {
@@ -90,10 +90,10 @@ const ProductionFiles: React.FC<ProductionFilesProps> = ({ order, onUpdate }) =>
             <h3 className="text-xl font-semibold tracking-wide text-slate-100 mb-2">Production Files</h3>
             
             <div className="space-y-3">
-                {(order.production_file_urls || []).length === 0 ? (
+                {(order.productionFileUrls || []).length === 0 ? (
                     <p className="text-slate-400 text-sm">No production files uploaded yet.</p>
                 ) : (
-                    (order.production_file_urls || []).map((url, index) => {
+                    (order.productionFileUrls || []).map((url: string, index: number) => {
                         const filename = url.split('/').pop()?.split('?')[0] || 'file';
                         const decodedFilename = decodeURIComponent(filename.substring(filename.indexOf('_') + 1));
                         const revision = getRevisionFromFilename(decodedFilename);

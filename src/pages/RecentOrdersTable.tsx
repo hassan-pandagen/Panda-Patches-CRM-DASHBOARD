@@ -33,7 +33,7 @@ const RecentOrdersTable = ({ orders }: { orders: Order[] }) => {
               </div>
             </div>
             <div className="flex items-center gap-4">
-              <StatusBadge status={order.status} />
+              <StatusBadge status={order.status as OrderStatus} />
               <div className="text-right">
                 <p className="text-white font-semibold text-sm">${order.orderAmount}</p>
                 <p className="text-slate-400 text-xs">{new Date(order.createdAt).toLocaleDateString()}</p>

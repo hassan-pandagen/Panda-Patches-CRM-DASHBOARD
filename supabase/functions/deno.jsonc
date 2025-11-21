@@ -1,0 +1,11 @@
+// supabase/functions/deno.jsonc
+
+{
+  "compilerOptions": {
+    "lib": ["deno.ns", "esnext"]
+  },
+  // This tells Deno where to find the Supabase module
+  "imports": {
+    "@supabase/supabase-js": "https://esm.sh/@supabase/supabase-js@2"
+  }
+}

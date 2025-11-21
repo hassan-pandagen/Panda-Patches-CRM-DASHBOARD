@@ -1,70 +1,93 @@
+import React, { useEffect, useState } from 'react';
+import { motion } from 'framer-motion';
+import { X, CheckCircle, XCircle, AlertTriangle, Info } from 'lucide-react';
+import { ToastMessage, ToastType } from '../../contexts/ToastContext';
 
-import React, { useEffect } from 'react';
-
-interface ToastProps {
-  message: string;
-  type: 'success' | 'info' | 'error';
-  onClose: () => void;
+interface ToastProps extends ToastMessage {
+  onDismiss: () => void;
+  index: number;
 }
 
-const Toast: React.FC<ToastProps> = ({ message, type, onClose }) => {
+const toastConfig: Record<ToastType, { icon: React.FC<any>; color: string }> = {
+  success: { icon: CheckCircle, color: 'border-brand-green/50' },
+  error: { icon: XCircle, color: 'border-red-500/50' },
+  warning: { icon: AlertTriangle, color: 'border-amber-500/50' },
+  info: { icon: Info, color: 'border-blue-500/50' },
+};
+
+const Toast: React.FC<ToastProps> = ({
+  id,
+  type,
+  title,
+  message,
+  duration = 4000,
+  onDismiss,
+  index,
+}) => {
+  const [isPaused, setIsPaused] = useState(false);
+  const { icon: Icon, color } = toastConfig[type];
+
   useEffect(() => {
+    if (isPaused) return;
+
     const timer = setTimeout(() => {
-      onClose();
-    }, 6000); // Auto-dismiss after 6 seconds
+      onDismiss();
+    }, duration);
 
-    return () => {
-      clearTimeout(timer);
-    };
-  }, [onClose]);
-
-  const baseClasses = 'fixed top-5 right-5 max-w-sm w-full z-50 transition-all duration-200 ease-in-out';
-  const typeClasses = {
-    info: 'border-blue-500/40 text-blue-400',
-    success: 'border-green-500/40 text-green-400',
-    error: 'border-[#BC13FE]/40 text-[#BC13FE]',
-  };
-  const iconClasses = {
-    info: 'text-blue-400',
-    success: 'text-green-400',
-    error: 'text-[#BC13FE]',
-  }
-
-  const Icon = () => (
-      <svg className={`h-6 w-6 ${iconClasses[type]}`} xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-      </svg>
-  );
+    return () => clearTimeout(timer);
+  }, [id, duration, onDismiss, isPaused]);
 
   return (
-    <div className={`${baseClasses} flex items-center gap-3 bg-slate-900/70 border border-slate-700/70 text-gray-200 rounded-lg p-3 shadow-[0_0_20px_rgba(188,19,254,0.15)] ${typeClasses[type]}`}>
-      <div className="p-4">
-        <div className="flex items-start">
-          <div className="flex-shrink-0">
-            <Icon />
-          </div>
-          <div className="ml-3 w-0 flex-1">
-            <p className="text-sm font-medium text-gray-100">
-              Real-Time Notification
-            </p>
-            <p className="mt-1 text-sm text-gray-300">
-              {message}
-            </p>
-          </div>
-          <div className="ml-4 flex-shrink-0 flex">
-            <button
-              onClick={onClose}
-              className="bg-transparent rounded-md inline-flex text-gray-400 hover:text-gray-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#BC13FE]/20"
-            >
-              <span className="sr-only">Close</span>
-              <svg className="h-5 w-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
-                <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
-              </svg>
-            </button>
-          </div>
+    <motion.div
+      layout
+      initial={{ opacity: 0, y: -50, scale: 0.8 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      exit={{
+        opacity: 0,
+        x: 100,
+        transition: { duration: 0.3, ease: 'easeOut' },
+      }}
+      transition={{ type: 'spring', stiffness: 300, damping: 25 }}
+      drag="x"
+      dragConstraints={{ left: 0, right: 200 }}
+      onDragEnd={(_, info) => {
+        if (info.offset.x > 100) {
+          onDismiss();
+        }
+      }}
+      onMouseEnter={() => setIsPaused(true)}
+      onMouseLeave={() => setIsPaused(false)}
+      onClick={() => onDismiss()}
+      className={`relative w-80 cursor-pointer overflow-hidden rounded-xl border bg-slate-900/60 p-4 shadow-2xl shadow-black/50 backdrop-blur-lg ${color}`}
+      style={{ zIndex: 100 - index }}
+    >
+      <div className="flex items-start gap-3">
+        <Icon className={`mt-0.5 h-6 w-6 flex-shrink-0 ${color.replace('border-', 'text-')}`} />
+        <div className="flex-grow">
+          <p className="font-semibold text-white">{title}</p>
+          {message && <p className="mt-1 text-sm text-slate-300">{message}</p>}
         </div>
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            onDismiss();
+          }}
+          className="ml-2 flex-shrink-0 rounded-full p-1 text-slate-500 transition-colors hover:bg-white/10 hover:text-white"
+        >
+          <X size={16} />
+        </button>
       </div>
-    </div>
+
+      {/* Progress Bar */}
+      <div className="absolute bottom-0 left-0 h-1 w-full bg-white/10">
+        <motion.div
+          className={`h-full ${color.replace('border-', 'bg-')}`}
+          initial={{ width: '100%' }}
+          animate={isPaused ? { width: '100%' } : { width: '0%' }}
+          transition={{ duration: duration / 1000, ease: 'linear' }}
+        />
+      </div>
+    </motion.div>
   );
 };
 

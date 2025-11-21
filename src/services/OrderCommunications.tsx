@@ -1,69 +1,62 @@
-import React, { useState, useEffect } from 'react';
+import React from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { getOrderCommunications } from './orderService';
-import { OrderCommunication } from '../../types/index';
-import { Mail, User } from 'lucide-react';
-import { format } from 'date-fns';
+import { OrderCommunication } from '../types';
+import { Mail, User, Send } from 'lucide-react';
+import Spinner from '../components/ui/Spinner';
 
 interface OrderCommunicationsProps {
   orderId: number;
 }
 
-const OrderCommunications: React.FC<OrderCommunicationsProps> = ({ orderId }) => {
-  const [communications, setCommunications] = useState<OrderCommunication[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    const fetchCommunications = async () => {
-      setLoading(true);
-      const data = await getOrderCommunications(orderId);
-      setCommunications(data);
-      setLoading(false);
-    };
-
-    if (orderId) {
-      fetchCommunications();
-    }
-  }, [orderId]);
-
-  if (loading) {
-    return <div className="text-center p-4">Loading email history...</div>;
-  }
-
-  if (communications.length === 0) {
-    return (
-      <div className="bg-gray-800 rounded-lg p-4 mt-6">
-        <h3 className="text-lg font-semibold text-white mb-2">Communication History</h3>
-        <p className="text-gray-400">No emails have been sent for this order yet.</p>
+const CommunicationItem: React.FC<{ comm: OrderCommunication }> = ({ comm }) => {
+  const isInternal = comm.visibility === 'INTERNAL';
+  return (
+    <div className={`p-4 rounded-lg border ${isInternal ? 'bg-slate-800/50 border-slate-700' : 'bg-blue-900/20 border-blue-800'}`}>
+      <div className="flex justify-between items-center text-xs text-slate-400 mb-2">
+        <div className="flex items-center gap-2">
+          <User className="w-3 h-3" />
+          <span>From: {comm.userEmail || 'System'}</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <Send className="w-3 h-3" />
+          <span>To: {comm.recipientEmail}</span>
+        </div>
       </div>
-    );
-  }
+      <p className="font-semibold text-slate-200 mb-1">{comm.subject}</p>
+      <p className="text-xs text-slate-500">
+        {new Date(comm.sentAt).toLocaleString()}
+      </p>
+      {isInternal && (
+        <span className="mt-2 inline-block text-xs font-bold uppercase tracking-wider bg-yellow-500/20 text-yellow-300 border border-yellow-500/30 px-2 py-0.5 rounded-full">
+          Internal
+        </span>
+      )}
+    </div>
+  );
+};
+
+const OrderCommunications: React.FC<OrderCommunicationsProps> = ({ orderId }) => {
+  const { data: communications = [], isLoading, error } = useQuery({
+    queryKey: ['orderCommunications', orderId],
+    queryFn: () => getOrderCommunications(orderId),
+    enabled: !!orderId,
+  });
 
   return (
-    <div className="bg-gray-800 rounded-lg p-4 mt-6">
-      <h3 className="text-lg font-semibold text-white mb-4">Communication History</h3>
-      <div className="space-y-4">
-        {communications.map((comm) => (
-          <div key={comm.id} className="p-3 bg-gray-700 rounded-md border border-gray-600">
-            <div className="flex justify-between items-start">
-              <div>
-                <p className="font-bold text-white">{comm.subject}</p>
-                <p className="text-sm text-gray-300 flex items-center">
-                  <Mail className="w-4 h-4 mr-2" />
-                  To: {comm.recipient_email}
-                </p>
-              </div>
-              <div className="text-right text-xs text-gray-400">
-                <p>{format(new Date(comm.sent_at), 'MMM d, yyyy')}</p>
-                <p>{format(new Date(comm.sent_at), 'h:mm a')}</p>
-              </div>
-            </div>
-            {comm.user_email && (
-              <div className="mt-2 pt-2 border-t border-gray-600 text-xs text-gray-400 flex items-center">
-                <User className="w-3 h-3 mr-2" />
-                Sent by: {comm.user_email}
-              </div>
-            )}
-          </div>
+    <div className="bg-slate-800/30 backdrop-blur-sm border border-slate-700/50 rounded-xl p-6">
+      <h3 className="text-xl font-semibold tracking-wide text-slate-100 mb-4 flex items-center gap-2">
+        <Mail className="w-5 h-5" />
+        Communication Log
+      </h3>
+      <div className="space-y-4 max-h-96 overflow-y-auto pr-2">
+        {isLoading && <div className="flex justify-center p-4"><Spinner /></div>}
+        {error && <p className="text-red-400 text-sm">Failed to load communications: {(error as Error).message}</p>}
+        {!isLoading && communications.length === 0 && (
+          <p className="text-slate-400 text-sm text-center py-4">No communications have been sent for this order yet.</p>
+        )}
+        {communications.map(comm => (
+          <CommunicationItem key={comm.id} comm={comm} />
         ))}
       </div>
     </div>

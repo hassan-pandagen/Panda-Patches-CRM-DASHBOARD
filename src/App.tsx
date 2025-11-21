@@ -1,118 +1,62 @@
-// src/App.tsx
+// src/App.tsx - FINAL, CORRECTED VERSION
 
-import { createBrowserRouter, RouterProvider, RouteObject } from 'react-router-dom';
-import ProtectedRoute from './ProtectedRoute';
-import { UserRole } from './types';
+import React from 'react';
+import { Routes, Route, Navigate } from 'react-router-dom';
+import { ToastProvider } from './constants/ToastContext';
 
-// Pages
-import LoginPage from './pages/LoginPage';
-import DashboardPage from './pages/Dashboard';
-import AllOrdersPage from './pages/AllOrdersPage';
-import NewOrderPage from './pages/NewOrderPage';
-import OrderPage from './pages/OrderPage';
-import EditOrderPage from './pages/EditOrderPage';
-import ReportsPage from './pages/ReportsPage';
-import UserManagementPage from './pages/UserManagement';
-import SettingsPage from './pages/SettingsPage';
-import EmailTemplatesPage from './pages/EmailTemplatesPage';
-import SearchResultsPage from './pages/SearchResultsPage';
-import AppLayout from './components/layout/AppLayout';
-import NotFoundPage from './pages/NotFoundPage';
+// Your Pages and Layouts
+import AppLayout from '@/components/layout/AppLayout';
+import Dashboard from '@/pages/Dashboard';
+import AllOrdersPage from '@/pages/AllOrdersPage';
+import NewOrderPage from '@/pages/NewOrderPage';
+import EditOrderPage from '@/pages/EditOrderPage';
+import OrderPage from '@/pages/OrderPage';
+import ReportsPage from '@/pages/ReportsPage';
+import SettingsPage from '@/pages/SettingsPage';
+import LoginPage from '@/pages/LoginPage';
+import SearchResultsPage from '@/pages/SearchResultsPage';
+import UserManagementPage from '@/pages/UserManagementPage';
 
-// ---------------------------
-// THE FIX: Simplified Routes Configuration
-// ---------------------------
-const routes: RouteObject[] = [
-  {
-    path: '/login',
-    element: <LoginPage />,
-  },
-  {
-    path: '/',
-    // STEP 1: The AppLayout is protected ONCE here. This is the only protection it needs.
-    element: (
-      <ProtectedRoute>
-        <AppLayout />
-      </ProtectedRoute>
-    ),
-    // STEP 2: The children are now clean. They do not need their own ProtectedRoute wrapper.
-    // They are implicitly protected because they can only be reached through the parent AppLayout.
-    children: [
-      {
-        index: true,
-        element: ( // Restrict dashboard to ADMIN, redirect AGENT and PRODUCTION to /reports
-          <ProtectedRoute roles={[UserRole.ADMIN]} redirectPath="/reports"><DashboardPage /></ProtectedRoute>
-        ),
-      },
-      {
-        path: 'orders',
-        element: <AllOrdersPage />,
-      },
-      {
-        path: 'order/:orderNumber',
-        element: <OrderPage />,
-      },
-      {
-        path: 'order/:orderNumber/edit',
-        element: <EditOrderPage />,
-      },
-      {
-        path: 'new-order',
-        element: ( // Restrict new order creation to ADMIN and AGENT
-          <ProtectedRoute roles={[UserRole.ADMIN, UserRole.AGENT]}><NewOrderPage /></ProtectedRoute>
-        ),
-      },
-      {
-        path: 'reports',
-        // STEP 3: We now protect the role-specific routes here.
-        // This single wrapper will check for the role and render the page.
-        element: (
-          <ProtectedRoute roles={[UserRole.ADMIN, UserRole.AGENT, UserRole.PRODUCTION]}>
-            <ReportsPage />
-          </ProtectedRoute>
-        ),
-      },
-      {
-        path: 'search',
-        element: <SearchResultsPage />,
-      },
-      {
-        path: 'users',
-        element: (
-          <ProtectedRoute roles={[UserRole.ADMIN]}>
-            <UserManagementPage />
-          </ProtectedRoute>
-        ),
-      },
-      {
-        path: 'email-templates',
-        element: (
-          <ProtectedRoute roles={[UserRole.ADMIN]}>
-            <EmailTemplatesPage />
-          </ProtectedRoute>
-        ),
-      },
-      {
-        path: 'settings',
-        element: (
-          <ProtectedRoute roles={[UserRole.ADMIN]}>
-            <SettingsPage />
-          </ProtectedRoute>
-        ),
-      },
-      {
-        path: '*',
-        element: <NotFoundPage />,
-      },
-    ],
-  },
-];
+// Your Protection Components
+import ProtectedRoute from './ProtectedRoute'; // Adjust path if needed
+import AdminRoute from './AdminRoute'; // Adjust path if needed
 
-// ---------------------------
-// App Root (No changes needed)
-// ---------------------------
-const router = createBrowserRouter(routes);
+const App: React.FC = () => {
+  return (
+    <ToastProvider>
+      <Routes>
+        {/* Public Route: Anyone can access the login page. */}
+        <Route path="/login" element={<LoginPage />} />
 
-const App = () => <RouterProvider router={router} />;
+        {/* All other routes are nested inside the ProtectedRoute. */}
+        {/* This ensures the user is authenticated and the loading state is handled. */}
+        <Route element={<ProtectedRoute />}>
+          {/* All protected routes will render inside the AppLayout */}
+          <Route element={<AppLayout />}>
+            
+            {/* --- ALWAYS RENDER ALL POSSIBLE ROUTES --- */}
+            <Route path="/" element={<Dashboard />} />
+            <Route path="/orders" element={<AllOrdersPage />} />
+            <Route path="/new-order" element={<NewOrderPage />} />
+            <Route path="/order/:orderNumber" element={<OrderPage />} />
+            <Route path="/order/:orderNumber/edit" element={<EditOrderPage />} />
+            <Route path="/reports" element={<ReportsPage />} />
+            <Route path="/settings" element={<SettingsPage />} />
+            <Route path="/search" element={<SearchResultsPage />} />
+
+            {/* This admin route is now wrapped in the AdminRoute component */}
+            {/* It will always exist, but only admins can access it. */}
+            <Route element={<AdminRoute />}>
+              <Route path="/user-management" element={<UserManagementPage />} />
+            </Route>
+
+            {/* Catch-all redirects to the dashboard */}
+            <Route path="*" element={<Navigate to="/" />} />
+          </Route>
+        </Route>
+      </Routes>
+    </ToastProvider>
+  );
+};
 
 export default App;
