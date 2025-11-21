@@ -7,6 +7,7 @@ import { supabase } from '../services/supabaseClient';
 import { Order, UserRole, OrderStatus } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../hooks/useToast'; // Check your path
+import InvoiceModal from '../components/invoices/InvoiceModal';
 
 // UI Components
 import Spinner from '../components/ui/Spinner';
@@ -15,7 +16,7 @@ import GlassCard from '../components/ui/GlassCard';
 import StatusBadge from '../components/ui/StatusBadge';
 
 // Icons
-import { Edit, Trash2, ShieldAlert, ArrowLeft, Lock, MapPin, Smartphone, Maximize, Check, XCircle, AlertTriangle, Copy } from 'lucide-react';
+import { Edit, Trash2, ShieldAlert, ArrowLeft, Lock, MapPin, Smartphone, Maximize, Check, XCircle, AlertTriangle, Copy, FileText } from 'lucide-react';
 
 // --- CONFIRMATION MODAL ---
 const ConfirmationModal: React.FC<{
@@ -54,6 +55,7 @@ const OrderPage: React.FC = () => {
   const queryClient = useQueryClient();
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const { toast } = useToast(); // <--- INITIALIZE TOAST
+  const [isInvoiceModalOpen, setIsInvoiceModalOpen] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
 
   // --- PERMISSION CHECKS ---
@@ -153,6 +155,12 @@ const OrderPage: React.FC = () => {
         orderNumber={order.orderNumber}
       />
 
+      <InvoiceModal 
+        isOpen={isInvoiceModalOpen} 
+        onClose={() => setIsInvoiceModalOpen(false)} 
+        order={order}
+      />
+
       <div className="space-y-6 pb-10">
         {/* --- HEADER & APPROVAL SECTION --- */}
         <div className="space-y-4">
@@ -185,6 +193,15 @@ const OrderPage: React.FC = () => {
                     >
                       <Copy size={16} />
                       <span className="hidden sm:inline">Repeat Order</span>
+                    </Button>
+                    <Button 
+                      variant="secondary" 
+                      size="md"
+                      onClick={() => setIsInvoiceModalOpen(true)}
+                      className="bg-purple-500/10 text-purple-400 border-purple-500/20 hover:bg-purple-500/20"
+                    >
+                      <FileText size={16} />
+                      <span className="hidden sm:inline">Invoice</span>
                     </Button>
                     {/* ----------------------------- */}
 
