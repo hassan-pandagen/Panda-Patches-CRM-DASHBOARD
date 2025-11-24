@@ -5,17 +5,21 @@ import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '../contexts/AuthContext';
 import { Order, UserRole, OrderStatus } from '../types/index';
 import Spinner from '../components/ui/Spinner';
-import { LEAD_SOURCE_OPTIONS, PATCH_TYPE_COLORS } from '../constants/index';
+import { LEAD_SOURCE_OPTIONS } from '../constants/index';
 import DateRangeFilter, { DateRange, getDefaultRange } from '../components/ui/DateRangeFilter';
 import { supabase } from '../services/supabaseClient';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, LineChart, Line, CartesianGrid, PieChart, Pie, Legend } from 'recharts';
-import { DollarSign, Package, TrendingUp, Zap, Share2, Download, CheckCircle, AlertCircle, Award, ChevronDown, FileText, Lock } from 'lucide-react';
+import { DollarSign, Package, TrendingUp, Zap, Share2, Download, CheckCircle, AlertCircle, Award, ChevronDown, FileText, Lock, ShieldAlert } from 'lucide-react';
 import { motion, Variants } from 'framer-motion';
 import { TooltipProps } from 'recharts';
 import { NameType, ValueType } from 'recharts/types/component/DefaultTooltipContent';
 import { useNavigate } from 'react-router-dom';
 import { CSVLink } from 'react-csv';
 import ProfitLossReportComponent from '../components/Reports/ProfitLossReportComponent';
+// ✅ IMPORT THE NEW CHART
+import CancellationChart from '../components/Reports/CancellationChart';
+import { SOURCE_COLORS, PATCH_TYPE_COLORS } from '../constants/colors';
+
 
 const containerVariants: Variants = {
     hidden: { opacity: 0 },
@@ -44,7 +48,6 @@ interface ReportComponentProps {
 
 // --- UI COMPONENTS ---
 
-// --- UPDATED WRAPPER: Accepts onClick ---
 const StatCardWrapper: FC<{ children: React.ReactNode; gradient: string; className?: string; onClick?: () => void }> = ({ children, gradient, className = '', onClick }) => (
   <motion.div variants={cardVariants} className={className}>
     <div className={`group relative ${onClick ? 'cursor-pointer' : ''}`} onClick={onClick}>
@@ -56,7 +59,6 @@ const StatCardWrapper: FC<{ children: React.ReactNode; gradient: string; classNa
   </motion.div>
 );
 
-// SIMPLE STAT CARD (no internal background)
 const SimpleStatCard: FC<{ title: string; value: number | string; prefix?: string; suffix?: string; icon: React.ReactNode }> = ({ title, value, prefix = '', suffix = '', icon }) => (
   <div className="flex items-center justify-between">
     <div className="flex-1">
@@ -120,7 +122,6 @@ const SalesReportComponent: FC<ReportComponentProps> = ({ orders, role }) => {
 
     return (
         <div className="space-y-6">
-            {/* CLICKABLE CARDS */}
             <motion.div variants={containerVariants} initial="hidden" animate="visible" className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                 <StatCardWrapper gradient="bg-gradient-to-r from-brand-orange to-orange-600" onClick={() => navigate('/orders')}>
                     <SimpleStatCard title="Total Revenue" value={totalRevenue} prefix="$" icon={<DollarSign className="w-6 h-6 text-brand-orange" />} />
@@ -136,7 +137,6 @@ const SalesReportComponent: FC<ReportComponentProps> = ({ orders, role }) => {
                 </StatCardWrapper>
             </motion.div>
 
-            {/* Charts (Omitted for brevity, logic stays same) */}
             <div className="bg-slate-900/40 backdrop-blur-xl border border-white/10 rounded-2xl p-6 shadow-xl">
                 <h4 className="text-lg font-semibold text-white mb-4">Revenue Trend</h4>
                 <ResponsiveContainer width="100%" height={300}>
@@ -183,7 +183,6 @@ const SalesReportComponent: FC<ReportComponentProps> = ({ orders, role }) => {
                             </thead>
                             <tbody className="divide-y divide-slate-700/50">
                                 {salesByAgent.map((agent) => (
-                                    // DRILL-DOWN CLICK HANDLER
                                     <tr key={agent.name} className="hover:bg-slate-700/30 cursor-pointer transition-colors" onClick={() => navigate(`/orders?salesAgent=${encodeURIComponent(agent.name)}`)}>
                                         <td className="px-4 py-3 font-semibold text-white">{agent.name}</td>
                                         <td className="px-4 py-3 text-right">${agent.revenue.toLocaleString()}</td>
@@ -200,9 +199,6 @@ const SalesReportComponent: FC<ReportComponentProps> = ({ orders, role }) => {
     );
 };
 
-// ... imports remain the same
-
-// --- 1. NEW RICH TOOLTIP FOR PIE CHART ---
 const LeadSourceTooltip = ({ active, payload, totalRevenue }: any) => {
   if (active && payload && payload.length) {
     const data = payload[0].payload;
@@ -237,7 +233,6 @@ const LeadSourceTooltip = ({ active, payload, totalRevenue }: any) => {
   return null;
 };
 
-// --- 2. UPDATED COMPONENT ---
 const LeadSourceReportComponent: FC<ReportComponentProps> = ({ orders }) => {
     const navigate = useNavigate();
     
@@ -263,11 +258,8 @@ const LeadSourceReportComponent: FC<ReportComponentProps> = ({ orders }) => {
 
     const pieChartData = useMemo(() => leadSourceStats.filter(item => item.revenue > 0), [leadSourceStats]);
     
-    const COLORS = ['#3B82F6', '#8B5CF6', '#06B6D4', '#10B981', '#F59E0B', '#EF4444', '#EC4899'];
-
     return (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* TABLE SECTION */}
             <div className="bg-slate-900/40 backdrop-blur-xl border border-white/10 rounded-2xl p-6 shadow-xl">
                 <h4 className="text-lg font-semibold text-white mb-4">Performance by Source</h4>
                  <div className="overflow-x-auto max-h-[400px] custom-scrollbar">
@@ -287,7 +279,6 @@ const LeadSourceReportComponent: FC<ReportComponentProps> = ({ orders }) => {
                                     onClick={() => navigate(`/orders?leadSource=${encodeURIComponent(source.name)}`)}
                                 >
                                     <td className="px-4 py-3.5 text-sm font-semibold text-white flex items-center gap-3">
-                                        {/* Dynamic Color Dot */}
                                         <span 
                                             className={`w-2.5 h-2.5 rounded-full shadow-sm ${
                                                 source.revenue > 0 
@@ -295,9 +286,7 @@ const LeadSourceReportComponent: FC<ReportComponentProps> = ({ orders }) => {
                                                 : 'bg-slate-600'
                                             }`}
                                             style={{ 
-                                                backgroundColor: source.revenue > 0 
-                                                    ? COLORS[pieChartData.findIndex(p => p.name === source.name) % COLORS.length] 
-                                                    : undefined 
+                                                backgroundColor: source.revenue > 0 ? (SOURCE_COLORS[source.name] || SOURCE_COLORS['Other']) : undefined 
                                             }}
                                         />
                                         <span className="group-hover:text-brand-orange transition-colors">{source.name}</span>
@@ -315,7 +304,6 @@ const LeadSourceReportComponent: FC<ReportComponentProps> = ({ orders }) => {
                 </div>
             </div>
 
-            {/* CHART SECTION */}
             <div className="bg-slate-900/40 backdrop-blur-xl border border-white/10 rounded-2xl p-6 shadow-xl flex flex-col">
                 <div className="flex items-center justify-between mb-2">
                     <h4 className="text-lg font-semibold text-white">Revenue Distribution</h4>
@@ -333,16 +321,16 @@ const LeadSourceReportComponent: FC<ReportComponentProps> = ({ orders }) => {
                                 nameKey="name" 
                                 cx="50%" 
                                 cy="50%" 
-                                innerRadius={95}  // Increased Hole Size
-                                outerRadius={135} // Increased Overall Size
-                                paddingAngle={4}  // More spacing
-                                cornerRadius={6}  // Smoother look
+                                innerRadius={95}
+                                outerRadius={135}
+                                paddingAngle={4}
+                                cornerRadius={6}
                                 stroke="none"
                             >
-                                {pieChartData.map((_, index) => (
+                                {pieChartData.map((entry, index) => (
                                     <Cell 
                                         key={`cell-${index}`} 
-                                        fill={COLORS[index % COLORS.length]} 
+                                        fill={SOURCE_COLORS[entry.name] || SOURCE_COLORS['Other']} 
                                         className="outline-none hover:opacity-80 transition-opacity duration-300 cursor-pointer"
                                         onClick={() => navigate(`/orders?leadSource=${encodeURIComponent(pieChartData[index].name)}`)}
                                     />
@@ -354,8 +342,8 @@ const LeadSourceReportComponent: FC<ReportComponentProps> = ({ orders }) => {
                                 verticalAlign="middle" 
                                 align="right"
                                 iconType="circle"
-                                iconSize={10} // Bigger dots
-                                wrapperStyle={{ fontSize: '14px', fontWeight: 500, color: '#e2e8f0', lineHeight: '24px' }} // Bigger Font & Spacing
+                                iconSize={10}
+                                wrapperStyle={{ fontSize: '14px', fontWeight: 500, color: '#e2e8f0', lineHeight: '24px' }}
                             />
                         </PieChart>
                     </ResponsiveContainer>
@@ -366,23 +354,21 @@ const LeadSourceReportComponent: FC<ReportComponentProps> = ({ orders }) => {
 };
 
 
-// --- PRODUCTION REPORT (Fixed Missing Card) ---
 const ProductionReportComponent: FC<ReportComponentProps> = ({ orders }) => {
     const navigate = useNavigate();
     const inProductionCount = useMemo(() => orders.filter(o => o.status === OrderStatus.IN_PRODUCTION).length, [orders]);
     const revisionCount = useMemo(() => orders.filter(o => o.status === OrderStatus.REVISION_REQUESTED).length, [orders]);
-    const urgentCount = useMemo(() => orders.filter(o => o.isUrgent).length, [orders]); // NEW COUNT
+    const urgentCount = useMemo(() => orders.filter(o => o.isUrgent).length, [orders]);
     const completionRate = orders.length > 0 ? ((orders.filter(o => o.status === OrderStatus.COMPLETED || o.status === OrderStatus.SHIPPED).length) / orders.length) * 100 : 0;
     const [expandedStatus, setExpandedStatus] = useState<string | null>(null);
 
-  // 1. Define a quick color helper
   const getStatusColor = (status: string) => {
       if (status.includes('COMPLETED') || status.includes('SHIPPED')) return 'bg-emerald-500';
       if (status.includes('URGENT')) return 'bg-red-500 animate-pulse';
       if (status.includes('REVISION')) return 'bg-amber-500';
       if (status.includes('NEW')) return 'bg-brand-orange';
       if (status.includes('CANCELLED')) return 'bg-slate-500';
-      return 'bg-blue-500'; // Default for In Production
+      return 'bg-blue-500';
   };
 
   const statusDistribution = useMemo(() => {
@@ -400,13 +386,9 @@ const ProductionReportComponent: FC<ReportComponentProps> = ({ orders }) => {
         return Object.entries(stats).map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count);
     }, [orders]);
 
-    const COLORS = ['#3B82F6', '#8B5CF6', '#06B6D4', '#10B981', '#F59E0B', '#EF4444'];
-
     return (
         <div className="space-y-6">
-            {/* CLICKABLE CARDS - URGENT CARD RESTORED */}
             <motion.div variants={containerVariants} initial="hidden" animate="visible" className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                {/* NEW URGENT CARD */}
                 <StatCardWrapper gradient="bg-gradient-to-r from-red-500 to-orange-500" onClick={() => navigate('/orders?filter=URGENT')}>
                     <SimpleStatCard title="Urgent Orders" value={urgentCount} icon={<AlertCircle className="w-6 h-6 text-red-300" />} />
                 </StatCardWrapper>
@@ -424,7 +406,6 @@ const ProductionReportComponent: FC<ReportComponentProps> = ({ orders }) => {
                 </StatCardWrapper>
             </motion.div>
             
-            {/* Breakdown and Chart logic logic stays exactly the same as previous version */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 <div className="bg-slate-900/40 backdrop-blur-xl border border-white/10 rounded-2xl p-6 shadow-xl">
                     <h4 className="text-lg font-semibold text-white mb-4">Production Breakdown</h4>
@@ -433,7 +414,6 @@ const ProductionReportComponent: FC<ReportComponentProps> = ({ orders }) => {
                             <div key={group.name} className="bg-slate-800/50 rounded-lg">
                                 <button onClick={() => setExpandedStatus(expandedStatus === group.name ? null : group.name)} className="w-full flex items-center justify-between p-3 text-left hover:bg-white/5 transition-colors rounded-lg">
                                     <div className="flex items-center gap-3">
-                                        {/* USE THE DYNAMIC COLOR HERE */}
                                         <span className={`w-2.5 h-2.5 rounded-full shadow-[0_0_8px_rgba(0,0,0,0.5)] ${getStatusColor(group.name.toUpperCase())}`}></span>
                                         
                                         <span className="text-slate-200 text-sm font-medium capitalize">{group.name.toLowerCase()}</span>
@@ -457,9 +437,8 @@ const ProductionReportComponent: FC<ReportComponentProps> = ({ orders }) => {
                             <YAxis type="category" dataKey="name" stroke="#cbd5e1" width={90} style={{ fontSize: '12px', fontWeight: 500 }} />
                             <Tooltip cursor={{ fill: 'rgba(100, 116, 139, 0.1)' }} content={<CustomTooltip />} />
                             <Bar dataKey="count" name="Orders" radius={[0, 6, 6, 0]} activeBar={false}>
-                                {/* DYNAMIC COLOR MAPPING */}
                                 {patchTypeStats.map((entry, index) => (
-                                    <Cell key={`cell-${index}`} fill={PATCH_TYPE_COLORS[entry.name] || '#64748B'} />
+                                    <Cell key={`cell-${index}`} fill={PATCH_TYPE_COLORS[entry.name] || PATCH_TYPE_COLORS['Unknown']} />
                                 ))}
                             </Bar>
                         </BarChart>
@@ -472,32 +451,25 @@ const ProductionReportComponent: FC<ReportComponentProps> = ({ orders }) => {
 
 // --- MAIN REPORT PAGE WRAPPER ---
 
-type ReportType = 'sales' | 'production' | 'leadSource' | 'profitLoss';
+type ReportType = 'sales' | 'production' | 'leadSource' | 'profitLoss' | 'quality';
 
 const ReportsPage: React.FC = () => {
-    // ... (Standard boilerplate logic for fetching/filtering) ...
-    // I am keeping this brief since it is identical to your existing file, 
-    // just ensuring the <ProductionReportComponent> is used correctly.
-    
     const { user, role, permissions, isLoading: isAuthLoading } = useAuth();
     
-    // --- PERMISSION CHECKS ---
     const isAdmin = role === UserRole.ADMIN;
     const canViewFinancials = isAdmin || permissions?.view_financials;
     const canViewProduction = isAdmin || permissions?.view_production;
 
-    // --- DYNAMIC REPORT TABS ---
     const availableReports = useMemo(() => {
         const options: { key: ReportType, label: string, icon: React.FC<any> }[] = [];
         
-        // Only show Sales, P&L, and Lead Source if user can view financials
         if (canViewFinancials) {
             options.push({ key: 'sales', label: 'Sales', icon: TrendingUp });
             options.push({ key: 'profitLoss', label: 'Profit & Loss', icon: FileText });
+            options.push({ key: 'quality', label: 'Quality & Refunds', icon: ShieldAlert });
             options.push({ key: 'leadSource', label: 'Lead Source', icon: Share2 });
         }
         
-        // Only show Production if user can view production
         if (canViewProduction) {
             options.push({ key: 'production', label: 'Production', icon: Zap });
         }
@@ -508,9 +480,7 @@ const ReportsPage: React.FC = () => {
     const [dateRange, setDateRange] = useState<DateRange>(getDefaultRange);
     const [activeReport, setActiveReport] = useState<ReportType>('sales');
 
-    // --- AUTO-REDIRECT IF UNAUTHORIZED ---
     useEffect(() => {
-        // If the current activeReport is NOT in the available list, switch to the first available one.
         if (availableReports.length > 0 && !availableReports.find(r => r.key === activeReport)) {
             setActiveReport(availableReports[0].key);
         }
@@ -525,7 +495,7 @@ const ReportsPage: React.FC = () => {
         setDateRange({ startDate: startDate.toISOString().split('T')[0], endDate: endDate.toISOString().split('T')[0] });
     }, []);
 
-    // --- DATA FETCHING ---
+    // --- DATA FETCHING (WITH FIX FOR PROFIT CALCULATION) ---
     const { data: filteredOrders = [], isLoading: isQueryLoading, isError, error } = useQuery({
         queryKey: ['allOrdersReport', dateRange.startDate, dateRange.endDate],
         queryFn: async () => {
@@ -537,20 +507,58 @@ const ReportsPage: React.FC = () => {
 
             const { data, error } = await supabase
                 .from('orders_with_details')
-                .select('*') // Fetch all fields, filtering happens in UI
+                .select('*')
                 .gte('created_at', startDate.toISOString())
                 .lte('created_at', endDate.toISOString());
 
-            if (error) throw new Error(error.message);
-            return data as Order[];
+            if (error) throw error;
+
+            return (data || []).map((item: any) => {
+                // 1. EXTRACT RAW COSTS
+                const prodCost = Number(item.production_cost || item.productionCost || 0);
+                const shipCost = Number(item.shipping_cost || item.shippingCost || 0);
+                const marketCost = Number(item.marketing_cost || item.marketingCost || 0);
+                const totalCosts = prodCost + shipCost + marketCost;
+
+                // 2. DETERMINE REAL REVENUE
+                // If cancelled, Real Revenue is $0. Otherwise, it's the Order Amount.
+                const isCancelled = item.status === 'CANCELLED' || item.status === 'REFUNDED';
+                // Sales Report needs 0, but Quality Report needs the real number
+                const rawAmount = Number(item.order_amount || item.orderAmount || 0); 
+                const realRevenue = isCancelled ? 0 : rawAmount;
+
+                // 3. CALCULATE REAL PROFIT
+                const realProfit = realRevenue - totalCosts;
+
+                // 4. RETURN MAPPED OBJECT
+                return {
+                    ...item,
+                    
+                    // ✅ NEW: Keep the original amount for the "Lost Revenue" chart
+                    originalAmount: rawAmount, 
+
+                    // Override with Corrected Financials
+                    orderAmount: realRevenue,
+                    productionCost: prodCost,
+                    shippingCost: shipCost,
+                    marketingCost: marketCost,
+                    profit: realProfit,
+                    
+                    // Mappings
+                    amountPaid: Number(item.amount_paid || item.amountPaid || 0),
+                    reasonCategory: item.reason_category,
+                    reasonDetails: item.reason_details,
+                    salesAgent: item.sales_agent || item.salesAgent,
+                    leadSource: item.lead_source || item.leadSource,
+                    patchesType: item.patches_type || item.patchesType,
+                };
+            }) as Order[];
         },
         enabled: !!user && availableReports.length > 0,
         staleTime: 60000,
     });
 
-    // --- CSV CONFIG (Protected) ---
     const getCsvConfig = () => {
-        // If user can't view financials, they can't download the financial CSV
         if (!canViewFinancials) return null;
         let headers = [{ label: "Order Number", key: "orderNumber" }, { label: "Date", key: "createdAt" }, { label: "Customer Name", key: "customerName" }, { label: "Total Amount", key: "orderAmount" }, { label: "Status", key: "status" }, { label: "Sales Agent", key: "salesAgent" }];
         if (activeReport === 'production') headers.push({ label: "Design Name", key: "designName" }, { label: "Quantity", key: "patchesQuantity" }, { label: "Urgent", key: "is_urgent" });
@@ -564,14 +572,12 @@ const ReportsPage: React.FC = () => {
 
     return (
         <div className="relative min-h-screen pb-10">
-            {/* BACKGROUND BLOBS */}
             <div className="fixed inset-0 overflow-hidden pointer-events-none">
                 <div className="absolute top-0 left-1/4 w-[500px] h-[500px] bg-gradient-to-br from-brand-orange/10 to-pink-500/10 rounded-full blur-3xl animate-blob" style={{ animationDuration: '8s' }} />
                 <div className="absolute top-1/3 right-1/4 w-[600px] h-[600px] bg-gradient-to-br from-purple-500/10 to-blue-500/10 rounded-full blur-3xl animate-blob animation-delay-2000" style={{ animationDuration: '10s' }} />
             </div>
 
             <div className="relative z-10 space-y-8">
-                {/* HEADER */}
                 <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
                     <div>
                         <h1 className="text-4xl font-bold text-white bg-gradient-to-r from-white to-slate-300 bg-clip-text text-transparent">Reports</h1>
@@ -585,7 +591,6 @@ const ReportsPage: React.FC = () => {
                         </div>
                         <DateRangeFilter value={dateRange} onChange={handleDateChange} />
                         
-                        {/* ONLY SHOW DOWNLOAD IF PERMITTED */}
                         {csvConfig && (
                             <CSVLink {...csvConfig} className="flex items-center gap-2 px-4 py-2 bg-emerald-600/80 hover:bg-emerald-600 rounded-lg text-white text-sm font-semibold transition-colors shadow-lg backdrop-blur-sm">
                                 <Download className="w-4 h-4" /> CSV
@@ -594,7 +599,6 @@ const ReportsPage: React.FC = () => {
                     </div>
                 </div>
 
-                {/* TABS */}
                 <div className="bg-slate-900/40 backdrop-blur-xl border border-white/10 rounded-2xl p-2 shadow-xl inline-flex gap-2">
                     {availableReports.map(report => (
                         <button
@@ -612,7 +616,6 @@ const ReportsPage: React.FC = () => {
                     ))}
                 </div>
 
-                {/* CONTENT */}
                 <motion.div
                     key={activeReport}
                     initial={{ opacity: 0, y: 20 }}
@@ -623,6 +626,7 @@ const ReportsPage: React.FC = () => {
                     {activeReport === 'production' && <ProductionReportComponent orders={filteredOrders} />}
                     {activeReport === 'leadSource' && <LeadSourceReportComponent orders={filteredOrders} />}
                     {activeReport === 'profitLoss' && <ProfitLossReportComponent orders={filteredOrders} />}
+                    {activeReport === 'quality' && <CancellationChart orders={filteredOrders} />}
                 </motion.div>
             </div>
         </div>

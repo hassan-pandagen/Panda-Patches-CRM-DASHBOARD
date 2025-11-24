@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { format } from 'date-fns';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Order, OrderStatus } from '@/types';
-import { ChevronDown, ChevronUp, ArrowDown, ArrowUp } from 'lucide-react';
+import { Calendar, ArrowDown, ArrowUp } from 'lucide-react';
 import StatusBadge from '@/components/ui/StatusBadge';
 
 const TableSkeleton: React.FC = () => (
@@ -75,7 +75,6 @@ const OrdersTable: React.FC<OrdersTableProps> = ({ orders, isLoading = false }) 
         <thead className="bg-slate-900 text-xs text-slate-400 uppercase">
           <tr>
             <SortableHeader sortField="orderNumber">Order #</SortableHeader>
-            <SortableHeader sortField="createdAt">Date</SortableHeader>
             <SortableHeader sortField="customerName">Customer</SortableHeader>
             <SortableHeader sortField="salesAgent">Sales Agent</SortableHeader>
             <SortableHeader sortField="status">Status</SortableHeader>
@@ -108,12 +107,20 @@ const OrdersTable: React.FC<OrdersTableProps> = ({ orders, isLoading = false }) 
                     `}
                     whileTap={{ scale: 0.99 }}
                   >
-                    <td className="px-6 py-4 font-medium text-sky-400 whitespace-nowrap group-hover:text-sky-300">
-                      <Link to={`/order/${order.orderNumber}`} onClick={(e) => e.stopPropagation()} className="hover:underline">
-                        {order.orderNumber}
-                      </Link>
+                    <td className="px-6 py-4 font-medium whitespace-nowrap">
+                      <div className="flex flex-col">
+                        <Link to={`/order/${order.orderNumber}`} onClick={(e) => e.stopPropagation()} className="text-sky-400 hover:underline group-hover:text-sky-300 transition-colors">
+                          {order.orderNumber}
+                        </Link>
+                        {/* ✅ REQUIREMENT FULFILLED: Date with icon and styling */}
+                        {order.createdAt && !isNaN(new Date(order.createdAt).getTime()) && (
+                          <div className="flex items-center gap-1.5 text-cyan-400 text-xs mt-1">
+                            <Calendar className="w-3 h-3" />
+                            <span>{format(new Date(order.createdAt), 'MMM dd')}</span>
+                          </div>
+                        )}
+                      </div>
                     </td>
-                    <td className="px-6 py-4">{format(new Date(order.createdAt), 'MMM dd, yyyy')}</td>
                     <td className="px-6 py-4">{order.customerName}</td>
                     <td className="px-6 py-4">{order.salesAgent}</td>
                     <td className="px-6 py-4"><StatusBadge status={order.status as OrderStatus} /></td>

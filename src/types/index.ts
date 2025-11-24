@@ -52,6 +52,10 @@ export interface Order {
   updatedAt: string;
   status: OrderStatus | string; // Use enum but allow string for flexibility
   
+  // ✅ NEW FIELDS
+  reasonCategory?: string;
+  reasonDetails?: string;
+  
   // --- Customer Information ---
   customerName: string;
   customerEmail: string;

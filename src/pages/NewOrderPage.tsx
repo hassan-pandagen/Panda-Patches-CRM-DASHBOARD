@@ -50,36 +50,60 @@ const NewOrderPage: React.FC = () => {
   }, [sourceOrder]);
 
   const handleSave = async (formData: SaveData) => {
-    const productionCost = Number(formData.productionCost) || 0;
-    const shippingCost = Number(formData.shippingCost) || 0;
-    const marketingCost = Number(formData.marketingCost) || 0;
-    const orderAmount = Number(formData.orderAmount) || 0;
-    const profit = orderAmount - (productionCost + shippingCost + marketingCost);
-
     setIsSaving(true);
     setError(null);
     
     try {
-      // We map the SaveData back to what createOrder expects
-      const payload = {
-          ...formData,
-          profit,
-          // Ensure status is string for DB
-          status: formData.status.toString() 
+      // --- CRITICAL MAPPING: CAMELCASE -> SNAKE_CASE ---
+      const dbPayload = {
+        customer_name: formData.customerName,
+        customer_email: formData.customerEmail,
+        customer_phone: formData.customerPhone,
+        customer_profile_url: formData.customerProfileUrl,
+        
+        shipping_address: formData.shippingAddress,
+        shipping_carrier: formData.shippingCarrier,
+        shipping_tracking_number: formData.shippingTrackingNumber,
+        
+        design_name: formData.designName,
+        patches_quantity: formData.patchesQuantity,
+        patches_type: formData.patchesType,
+        design_size: formData.designSize,
+        design_backing: formData.designBacking,
+        instructions: formData.instructions,
+        
+        order_amount: formData.orderAmount,
+        
+        // *** THIS IS THE FIX ***
+        amount_paid: formData.amountPaid, 
+        
+        production_cost: formData.productionCost,
+        shipping_cost: formData.shippingCost,
+        marketing_cost: formData.marketingCost,
+
+        lead_source: formData.leadSource,
+        status: formData.status.toString(),
+        is_urgent: formData.isUrgent,
+        
+        // Arrays
+        mockup_urls: formData.mockupUrls,
+        production_file_urls: formData.productionFileUrls,
+        shipping_attachment_urls: formData.shippingAttachmentUrls,
+        customer_attachment_urls: formData.customerAttachmentUrls
       };
 
-      const newOrder = await createOrder(payload, user?.email || 'unknown');
+      // Send the mapped payload (dbPayload), NOT formData
+      const newOrder = await createOrder(dbPayload, user?.email || 'unknown');
       
-      // Success!
       setIsDirty(false);
       await queryClient.invalidateQueries({ queryKey: ['allOrders'] });
       await queryClient.invalidateQueries({ queryKey: ['dashboard-orders'] });
-      navigate(`/order/${newOrder.orderNumber}`);
+      navigate(`/order/${newOrder.order_number || newOrder.orderNumber}`);
       
     } catch (err: any) {
       console.error('Failed to create order', err);
       setError(`Failed to create order: ${err.message || 'An unknown error occurred.'}`);
-      setIsDirty(true); // Keep dirty so they don't lose data
+      setIsDirty(true);
     } finally {
       setIsSaving(false);
     }

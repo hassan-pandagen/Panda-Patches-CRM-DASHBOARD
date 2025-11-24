@@ -18,6 +18,9 @@ import StatusBadge from '../components/ui/StatusBadge';
 // Icons
 import { Edit, Trash2, ShieldAlert, ArrowLeft, Lock, MapPin, Smartphone, Maximize, Check, XCircle, AlertTriangle, Copy, FileText } from 'lucide-react';
 
+// 1. Import the new component
+import OrderTimeline from '../components/orders/OrderTimeline';
+
 // --- CONFIRMATION MODAL ---
 const ConfirmationModal: React.FC<{
   isOpen: boolean;
@@ -161,7 +164,7 @@ const OrderPage: React.FC = () => {
         order={order}
       />
 
-      <div className="space-y-6 pb-10">
+      <div className="p-6 max-w-7xl mx-auto space-y-6">
         {/* --- HEADER & APPROVAL SECTION --- */}
         <div className="space-y-4">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
@@ -404,6 +407,13 @@ const OrderPage: React.FC = () => {
             )}
           </div>
 
+        </div>
+        
+        {/* ✅ NEW: ACTIVITY TIMELINE (Full Width at Bottom) */}
+        <div className="w-full animate-fadeIn lg:col-span-3">
+          {/* Pass the numeric ID (e.g., 123) not the string "PP-10021" 
+              Ensure 'order.id' is the DB Primary Key */}
+          {order && <OrderTimeline orderId={order.id} />}
         </div>
       </div>
     </>

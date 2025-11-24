@@ -1,94 +1,162 @@
-// src/pages/EditOrderPage.tsx - FINAL VERSION WITH CORRECTED IMPORTS
-
-import React, { useState, useCallback } from 'react';
-import { useAuth } from '../contexts/AuthContext';
+import React, { useState, useCallback, useRef } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-// 1. Import useQuery and useMutation for modern state management
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { updateOrderDetails } from '../services/orderService'; // <--- Use the new service
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+
+// Contexts & Hooks
+import { useAuth } from '../contexts/AuthContext';
+import { useToast } from '../hooks/useToast';
+import { useWarnIfUnsaved } from '../hooks/useWarnIfUnsaved';
+
+// Services & Types
+import { supabase } from '../services/supabaseClient';
+import { updateOrderDetails } from '../services/orderService';
 import { Order } from '../types';
-// 1. Correct the import to use a named import for OrderForm and its type
+
+// Components
 import OrderForm, { SaveData } from '../components/orders/OrderForm';
 import Spinner from '../components/ui/Spinner';
-import { useWarnIfUnsaved } from '../components/layout/useWarnIfUnsaved';
 import UnsavedChangesModal from '../components/ui/UnsavedChangesModal';
-import Button from '../components/ui/Button'; // Assuming you have a standard Button component
-// Add the missing import for GlassCard
-import GlassCard from '../components/ui/GlassCard'; 
-
-// Mock toast functions since they are in the request but not the file
-// In a real app, you'd import this from a library like 'react-hot-toast'
-const toast = {
-  success: (title: string, message: string) => console.log(`SUCCESS: ${title} - ${message}`),
-  error: (title: string, message: string) => console.error(`ERROR: ${title} - ${message}`),
-};
-
-// A mock getOrder function since it's not in the provided orderService.ts
-const getOrder = async (orderNumber: string): Promise<Order | null> => {
-  // This would fetch from supabase in a real scenario
-  console.log(`Fetching order ${orderNumber}`);
-  return null; 
-};
+import Button from '../components/ui/Button';
+import GlassCard from '../components/ui/GlassCard';
 
 const EditOrderPage: React.FC = () => {
   const { orderNumber } = useParams<{ orderNumber: string }>();
-  const { user } = useAuth(); // Get the user's role
+  const { user } = useAuth();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const [isDirty, setIsDirty] = useState(false);
-  const { showModal, confirmLeave, cancelLeave } = useWarnIfUnsaved(isDirty);
+  const toast = useToast();
 
-  // Use `useQuery` to fetch the order data.
-  // This handles loading, error, and caching automatically.
+  // State for Unsaved Changes
+  const [isDirty, setIsDirty] = useState(false);
+  const [allowNavigation, setAllowNavigation] = useState(false); // ✅ NEW STATE
+  
+  // ✅ Pass both isDirty and allowNavigation
+  const { showModal, confirmLeave, cancelLeave } = useWarnIfUnsaved(isDirty, allowNavigation);
+
+  // State for Saving Process
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState<Error | null>(null);
+
+  // FETCH DATA
   const { data: order, isLoading, error: fetchError } = useQuery<Order | null, Error>({
     queryKey: ['order', orderNumber],
-    queryFn: () => {
+    queryFn: async () => {
       if (!orderNumber) throw new Error("Order number is required.");
-      return getOrder(orderNumber);
+      
+      const { data, error } = await supabase
+        .from('orders_with_details')
+        .select('*')
+        .eq('order_number', orderNumber)
+        .single();
+
+      if (error) throw error;
+      return data as Order;
     },
     enabled: !!orderNumber,
   });
 
-  const [isSaving, setIsSaving] = useState(false);
-  const [saveError, setSaveError] = useState<Error | null>(null);
-
-  const handleSave = async (formData: any) => {
+  // HANDLE SAVE
+  const handleSave = async (formData: SaveData) => {
     if (!order) return;
+    
     setIsSaving(true);
     setSaveError(null);
+    
     try {
-      // USE THE SERVICE FUNCTION
-      // We pass: ID, New Data, Old Data (for comparison), User Email
-      const savedOrder = await updateOrderDetails(order.id, formData, order, user?.email || 'unknown');
-      
-      setIsDirty(false);
-      queryClient.invalidateQueries({ queryKey: ['allOrders'] });
-      queryClient.invalidateQueries({ queryKey: ['allOrdersReport'] });
-      queryClient.invalidateQueries({ queryKey: ['order', savedOrder.orderNumber] });
+      // Map Form Data (CamelCase) -> DB Columns (snake_case)
+      const dbPayload = {
+        customer_name: formData.customerName,
+        customer_email: formData.customerEmail,
+        customer_phone: formData.customerPhone,
+        customer_profile_url: formData.customerProfileUrl,
+        
+        shipping_address: formData.shippingAddress,
+        shipping_carrier: formData.shippingCarrier,
+        shipping_tracking_number: formData.shippingTrackingNumber,
+        
+        design_name: formData.designName,
+        patches_quantity: formData.patchesQuantity,
+        patches_type: formData.patchesType,
+        design_size: formData.designSize,
+        design_backing: formData.designBacking,
+        instructions: formData.instructions,
+        
+        order_amount: formData.orderAmount,
+        amount_paid: formData.amountPaid,
+        production_cost: formData.productionCost,
+        shipping_cost: formData.shippingCost,
+        marketing_cost: formData.marketingCost,
+        
+        lead_source: formData.leadSource,
+        status: formData.status.toString(),
+        is_urgent: formData.isUrgent,
+        
+        // ✅ ADD THESE TWO LINES
+        reason_category: formData.reasonCategory,
+        reason_details: formData.reasonDetails,
+        
+        // Arrays
+        mockup_urls: formData.mockupUrls,
+        production_file_urls: formData.productionFileUrls,
+        shipping_attachment_urls: formData.shippingAttachmentUrls,
+        customer_attachment_urls: formData.customerAttachmentUrls
+      };
 
+      // Call Service
+      const savedOrder = await updateOrderDetails(order.id, dbPayload, order, user?.email || 'unknown');
+      
+      // ✅ CRITICAL: Set flags BEFORE any async operations
+      setAllowNavigation(true);
+      setIsDirty(false);
+      
       toast.success('Order Updated', 'Changes saved successfully.');
-      navigate(`/order/${savedOrder.orderNumber}`);
+      
+      // ✅ Use Promise.all to ensure queries complete, THEN navigate
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['allOrders'] }),
+        queryClient.invalidateQueries({ queryKey: ['allOrdersReport'] }),
+        queryClient.invalidateQueries({ queryKey: ['order', savedOrder.orderNumber] })
+      ]);
+
+      // ✅ Small delay to ensure React has processed the state updates
+      setTimeout(() => {
+        navigate(`/order/${savedOrder.orderNumber}`, { replace: true });
+      }, 50);
+      
     } catch (err: any) {
+      console.error("Save failed:", err);
       setSaveError(err);
-      toast.error('Update Failed', 'Could not save changes.');
-      setIsDirty(true);
+      toast.error('Update Failed', err.message || 'Could not save changes.');
+    } finally {
+      setIsSaving(false);
     }
-    setIsSaving(false);
   };
 
   const onFormChange = useCallback(() => {
-    if (!isDirty) setIsDirty(true);
-  }, [isDirty]);
+    // 🟢 SAFETY: Don't mark as dirty if we are currently saving
+    if (isSaving) return; 
+
+    if (!isDirty) {
+      setIsDirty(true);
+      setAllowNavigation(false); // ✅ Reset when form changes
+    }
+  }, [isDirty, isSaving]); // Add isSaving to dependencies
   
   if (isLoading) {
-    return <div className="flex justify-center items-center h-64"><Spinner /></div>;
+    return (
+      <div className="flex justify-center items-center h-screen">
+        <Spinner />
+      </div>
+    );
   }
   
-  if (fetchError) {
+  if (fetchError || !order) {
     return (
-      <div className="text-center py-10 px-6 bg-red-900/30 text-red-200 rounded-lg shadow-md">
-        <h3 className="text-xl font-semibold">Could not load order for editing</h3>
-        <p className="mt-2 text-sm max-w-2xl mx-auto">{fetchError.message}</p>
+      <div className="text-center py-10 px-6 bg-red-900/30 text-red-200 rounded-lg shadow-md m-8">
+        <h3 className="text-xl font-semibold">Could not load order</h3>
+        <p className="mt-2 text-sm max-w-2xl mx-auto">
+          {fetchError?.message || "Order not found"}
+        </p>
         <div className="mt-6">
           <Link to="/orders">
             <Button variant="secondary">Back to All Orders</Button>
@@ -98,18 +166,15 @@ const EditOrderPage: React.FC = () => {
     );
   }
 
-  if (!order) {
-    return <p className="text-center">Order not found.</p>;
-  }
-
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 p-6 max-w-7xl mx-auto">
+      {/* Header */}
       <div className="flex items-center justify-between">
         <h2 className="text-3xl font-bold text-white">
-          Edit Order <span className="text-brand-orange">#{order.orderNumber}</span>
+          Edit Order <span className="text-brand-orange">{order.orderNumber}</span>
         </h2>
-        <Link to="/orders">
-          <Button variant="secondary">Back to All Orders</Button>
+        <Link to={`/order/${order.orderNumber}`}>
+          <Button variant="secondary">Cancel & Go Back</Button>
         </Link>
       </div>
 
@@ -120,7 +185,7 @@ const EditOrderPage: React.FC = () => {
       />
       
       {saveError && (
-        <div className="p-4 bg-red-500/10 border-l-4 border-red-500 text-red-300" role="alert">
+        <div className="p-4 bg-red-500/10 border-l-4 border-red-500 text-red-300 rounded-r-lg" role="alert">
           <h3 className="font-bold">An Error Occurred</h3>
           <p>{saveError.message}</p>
         </div>
@@ -128,9 +193,8 @@ const EditOrderPage: React.FC = () => {
       
       <GlassCard padding="lg">
         <OrderForm 
-          onSave={handleSave} 
-          // Safely pass initial data to pre-fill the form
           initialData={order}
+          onSave={handleSave} 
           isSaving={isSaving} 
           onFormChange={onFormChange} 
         />

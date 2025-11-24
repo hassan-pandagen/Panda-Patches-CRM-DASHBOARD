@@ -1,8 +1,10 @@
-import { useCallback, useEffect, useState, useSyncExternalStore, useRef } from "react";
+// src/hooks/useWarnIfUnsaved.ts - FINAL UNIFIED VERSION
+
+import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 import { useBlocker } from "react-router-dom";
 
 /**
- * A simple external store to track if any component on the page is dirty.
+ * External store to track dirty components across the app
  */
 const dirtyComponents = new Set<symbol>();
 const listeners = new Set<() => void>();
@@ -18,18 +20,20 @@ const dirtyStore = {
   },
   getSnapshot: () => dirtyComponents.size > 0,
 };
-export function useWarnIfUnsaved(isDirty: boolean) {
+
+/**
+ * Warns user when navigating away with unsaved changes.
+ * Handles both browser unload and internal route changes.
+ * 
+ * @param isDirty - Whether the form has unsaved changes
+ * @param forceAllow - Set to true after successful save to bypass blocking
+ */
+export function useWarnIfUnsaved(isDirty: boolean, forceAllow: boolean = false) {
   const [showModal, setShowModal] = useState(false);  
   const [componentKey] = useState(() => Symbol());
-  const isDirtyRef = useRef(isDirty);
 
-  // Keep ref in sync
-  useEffect(() => {
-    isDirtyRef.current = isDirty;
-  }, [isDirty]);
-
-  // 🧭 Handle internal navigation
-  const blocker = useBlocker(isDirty);
+  // 🧭 Handle internal navigation - only block if dirty AND not force allowed
+  const blocker = useBlocker(isDirty && !forceAllow);
 
   useEffect(() => {
     if (blocker.state === "blocked") {
@@ -37,9 +41,9 @@ export function useWarnIfUnsaved(isDirty: boolean) {
     }
   }, [blocker.state]);
   
-  // 🌐 Handle browser/tab close
+  // 🌐 Track this component's dirty state in the global store
   useEffect(() => {
-    if (isDirty) {
+    if (isDirty && !forceAllow) {
       dirtyStore.add(componentKey);
     } else {
       dirtyStore.delete(componentKey);
@@ -48,32 +52,32 @@ export function useWarnIfUnsaved(isDirty: boolean) {
     return () => {
       dirtyStore.delete(componentKey);
     };
-  }, [isDirty, componentKey]);
+  }, [isDirty, forceAllow, componentKey]);
 
+  // Subscribe to global dirty state
   const isAnyDirty = useSyncExternalStore(
     dirtyStore.subscribe, 
     dirtyStore.getSnapshot, 
     () => false
   );
 
-  // Enhanced beforeunload handler
+  // 🚪 Handle browser/tab close - native browser dialog
   useEffect(() => {
     const handleBeforeUnload = (event: BeforeUnloadEvent) => {
-      // Double check using both the store and local ref
-      if (isAnyDirty || isDirtyRef.current) {
-        console.log("Blocking unload - dirty state detected");
+      // Only warn if something is dirty AND not force allowed
+      if ((isAnyDirty || isDirty) && !forceAllow) {
         event.preventDefault();
-        event.returnValue = "unsaved-changes";
+        event.returnValue = "You have unsaved changes. Are you sure you want to leave?";
+        return event.returnValue;
       }
     };
 
-    // Use capture phase to ensure we catch the event
-    window.addEventListener("beforeunload", handleBeforeUnload, { capture: true });
+    window.addEventListener("beforeunload", handleBeforeUnload);
     
     return () => {
-      window.removeEventListener("beforeunload", handleBeforeUnload, { capture: true });
+      window.removeEventListener("beforeunload", handleBeforeUnload);
     };
-  }, [isAnyDirty]);
+  }, [isAnyDirty, isDirty, forceAllow]);
 
   const confirmLeave = useCallback(() => {
     setShowModal(false);

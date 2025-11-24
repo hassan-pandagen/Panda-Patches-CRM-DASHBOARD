@@ -10,6 +10,24 @@ import FileUpload from './FileUpload';
 import Textarea from '../ui/Textarea'; 
 import { LEAD_SOURCE_OPTIONS } from '../../constants';
 
+const CANCELLATION_REASONS = [
+  "Customer Ghosted / No Reply",
+  "Changed Mind",
+  "Price Too High",
+  "Duplicate Order",
+  "Copyright / Policy Violation",
+  "Other"
+];
+
+const REFUND_REASONS = [
+  "Production Defect / Quality Issue",
+  "Shipping Lost / Damaged",
+  "Late Delivery",
+  "Design Mismatch",
+  "Customer Error",
+  "Other"
+];
+
 const FormSectionWrapper: FC<{ title: string; children: React.ReactNode }> = ({ title, children }) => (
   <div className="group relative bg-slate-900/40 backdrop-blur-xl border border-white/10 rounded-2xl shadow-xl p-6">
     <h3 className="relative text-lg font-semibold text-white pb-2 mb-6">
@@ -38,7 +56,7 @@ export interface SaveData {
   shippingCost: number;
   marketingCost: number;
   leadSource?: string;
-  status: OrderStatus | string;
+  status: string;
   isUrgent: boolean;
   shippingCarrier?: string;
   shippingTrackingNumber?: string;
@@ -47,6 +65,9 @@ export interface SaveData {
   productionFileUrls?: string[];
   shippingAttachmentUrls?: string[];
   customerAttachmentUrls?: string[];
+  // ✅ Add these
+  reasonCategory: string;
+  reasonDetails: string;
 }
 
 interface OrderFormProps {
@@ -66,6 +87,10 @@ const transformOrderToFormData = (order: Order | null | undefined): SaveData => 
     productionFileUrls: Array.isArray(order.productionFileUrls) ? order.productionFileUrls : [],
     shippingAttachmentUrls: Array.isArray(order.shippingAttachmentUrls) ? order.shippingAttachmentUrls : [],
     customerAttachmentUrls: Array.isArray(order.customerAttachmentUrls) ? order.customerAttachmentUrls : [],
+    
+    // ✅ Initialize new fields
+    reasonCategory: order.reasonCategory || '',
+    reasonDetails: order.reasonDetails || '',
   };
 };
 
@@ -100,6 +125,7 @@ const OrderForm: React.FC<OrderFormProps> = ({ onSave, initialData, isSaving = f
   const marketingCost = watch('marketingCost', 0) || 0;
   const amountRemaining = orderAmount - amountPaid;
   const profit = orderAmount - (productionCost + shippingCost + marketingCost);
+  const watchedStatus = watch('status');
 
   const patchTypes = ["Embroidered", "PVC", "Woven", "Chenille", "Leather", "Printed"];
   const shippingCarriers = ["FedEx", "DHL", "UPS", "USPS", "Other"];
@@ -312,6 +338,49 @@ const OrderForm: React.FC<OrderFormProps> = ({ onSave, initialData, isSaving = f
             </label>
           </div>
         </div>
+
+        {/* ✅ NEW: CONDITIONAL REASON BLOCK */}
+        {(watchedStatus === 'CANCELLED' || watchedStatus === 'REFUNDED') && (
+          <div className="mt-6 p-4 bg-red-500/10 border border-red-500/30 rounded-lg animate-fadeIn">
+            <h4 className="text-red-200 font-semibold mb-4 flex items-center gap-2">
+              ⚠️ {watchedStatus === 'CANCELLED' ? 'Cancellation' : 'Refund'} Details
+            </h4>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* Reason Category Dropdown */}
+              <div>
+                <label className="block text-sm font-medium text-slate-300">
+                  Reason Category <span className="text-red-400">*</span>
+                </label>
+                <select
+                  {...register('reasonCategory', { required: 'Reason is required' })}
+                  className="mt-1 block w-full bg-slate-800 border-slate-600 rounded-md text-white focus:ring-brand-orange focus:border-brand-orange"
+                >
+                  <option value="" disabled>Select a reason...</option>
+                  {watchedStatus === 'CANCELLED' 
+                    ? CANCELLATION_REASONS.map(r => <option key={r} value={r}>{r}</option>)
+                    : REFUND_REASONS.map(r => <option key={r} value={r}>{r}</option>)
+                  }
+                </select>
+                {errors.reasonCategory && <p className="text-red-400 text-xs mt-1">{errors.reasonCategory.message}</p>}
+              </div>
+
+              {/* Reason Details Text Area */}
+              <div className="md:col-span-2">
+                <label className="block text-sm font-medium text-slate-300">
+                  Additional Notes / Explanation
+                </label>
+                <textarea
+                  rows={3}
+                  {...register('reasonDetails')}
+                  className="mt-1 block w-full bg-slate-800 border-slate-600 rounded-md text-white focus:ring-brand-orange focus:border-brand-orange placeholder-slate-400"
+                  placeholder="Provide specific details (e.g., 'Customer denies receiving')..."
+                />
+              </div>
+            </div>
+          </div>
+        )}
+
       </FormSectionWrapper>
 
       <div className="flex justify-end gap-4 pt-6 border-t border-slate-700">

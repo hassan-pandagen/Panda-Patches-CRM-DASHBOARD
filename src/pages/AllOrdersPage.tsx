@@ -369,6 +369,14 @@ const AllOrdersPage: React.FC = () => {
                             )}
                           </div>
                           <div className="flex flex-wrap items-center gap-3 text-sm text-slate-300 mt-1">
+                            {/* ✅ REQUIREMENT FULFILLED: Date with icon and styling */}
+                            {order.createdAt && (
+                              <div className="flex items-center gap-1.5 text-cyan-400">
+                                <Calendar className="w-3.5 h-3.5" />
+                                <span className="font-medium">{new Date(order.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
+                              </div>
+                            )}
+                            <span className="w-1 h-1 rounded-full bg-slate-500" />
                             <span className="font-mono font-medium text-slate-200">{order.orderNumber}</span>
                             <span className="w-1 h-1 rounded-full bg-slate-500" />
                             <span className="text-slate-400">{order.patchesType || 'Custom Patch'}</span>
