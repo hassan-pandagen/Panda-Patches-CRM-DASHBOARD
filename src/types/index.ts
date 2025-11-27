@@ -22,6 +22,7 @@ export enum OrderStatus {
   CANCELLED = 'CANCELLED',
   DELIVERED = 'DELIVERED',
   REFUNDED = 'REFUNDED',
+  FEEDBACK = 'FEEDBACK'
 }
 
 export enum UserAccess {

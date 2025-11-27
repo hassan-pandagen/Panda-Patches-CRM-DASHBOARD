@@ -44,7 +44,8 @@ const TableRow: React.FC<TableRowProps> = ({ order }) => {
       <td className="whitespace-nowrap px-6 py-4">
         <StatusBadge status={order.status as OrderStatus} />
       </td>
-      <td className="whitespace-nowrap px-6 py-4 text-right font-semibold text-white">
+      {/* ✅ FIX 1: Force Left Alignment here */}
+      <td className="whitespace-nowrap px-6 py-4 text-left font-semibold text-white">
         ${order.orderAmount.toLocaleString()}
       </td>
     </motion.tr>
@@ -98,13 +99,14 @@ const DashboardRecentOrdersTable: React.FC<DashboardRecentOrdersTableProps> = ({
     setSortConfig({ key, direction });
   };
 
-  const headers: { key: keyof Order; label: string; align?: 'left' | 'right' }[] = [
+  // ✅ FIX 2: Set header align to 'left'
+  const headers: { key: keyof Order; label: string; align?: 'left' | 'right' | 'center' }[] = [
     { key: 'orderNumber', label: 'Order ID' },
     { key: 'createdAt', label: 'Date' },
     { key: 'customerName', label: 'Customer' },
     { key: 'salesAgent', label: 'Sales Agent' },
     { key: 'status', label: 'Status' },
-    { key: 'orderAmount', label: 'Amount', align: 'right' },
+    { key: 'orderAmount', label: 'Amount', align: 'left' }, 
   ];
 
   return (
@@ -120,15 +122,17 @@ const DashboardRecentOrdersTable: React.FC<DashboardRecentOrdersTableProps> = ({
                 <th 
                   key={header.key} 
                   scope="col" 
-                  className={`px-6 py-4 text-xs font-medium uppercase tracking-wider text-slate-400 ${
-                    header.align === 'right' ? 'text-right' : ''
-                  }`}
+                  className={`px-6 py-4 text-xs font-medium uppercase tracking-wider text-slate-400`}
                 >
+                  {/* ✅ FIX 3: Dynamic alignment logic ensures header stays left */}
                   <button 
                     onClick={() => requestSort(header.key)} 
-                    className="hover:text-slate-200 transition-colors"
+                    className="hover:text-slate-200 transition-colors w-full"
                   >
-                    <span className="flex items-center gap-2">
+                    <span className={`flex items-center gap-2 ${
+                      header.align === 'right' ? 'justify-end' : 
+                      header.align === 'center' ? 'justify-center' : 'justify-start'
+                    }`}>
                       {header.label}
                       {sortConfig?.key === header.key ? (
                         sortConfig.direction === 'asc' ? (

@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef } from 'react';
+import React, { useState, useCallback } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 
@@ -21,19 +21,21 @@ import GlassCard from '../components/ui/GlassCard';
 
 const EditOrderPage: React.FC = () => {
   const { orderNumber } = useParams<{ orderNumber: string }>();
-  const { user } = useAuth();
+  const { user, role, permissions } = useAuth(); // ✅ Get Permissions
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const toast = useToast();
 
+  // ✅ CRITICAL FIX: 
+  // Allow if user is ADMIN -OR- if user has 'view_financials' tick mark
+  const canViewFinancials = role === 'ADMIN' || permissions?.view_financials === true;
+
   // State for Unsaved Changes
   const [isDirty, setIsDirty] = useState(false);
-  const [allowNavigation, setAllowNavigation] = useState(false); // ✅ NEW STATE
-  
-  // ✅ Pass both isDirty and allowNavigation
+  const [allowNavigation, setAllowNavigation] = useState(false);
   const { showModal, confirmLeave, cancelLeave } = useWarnIfUnsaved(isDirty, allowNavigation);
 
-  // State for Saving Process
+  // State for Saving
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<Error | null>(null);
 
@@ -63,8 +65,10 @@ const EditOrderPage: React.FC = () => {
     setSaveError(null);
     
     try {
-      // Map Form Data (CamelCase) -> DB Columns (snake_case)
+      // Map Form Data
+      
       const dbPayload = {
+        // --- COMMON FIELDS (Everyone can edit) ---
         customer_name: formData.customerName,
         customer_email: formData.customerEmail,
         customer_phone: formData.customerPhone,
@@ -81,44 +85,42 @@ const EditOrderPage: React.FC = () => {
         design_backing: formData.designBacking,
         instructions: formData.instructions,
         
-        order_amount: formData.orderAmount,
-        amount_paid: formData.amountPaid,
-        production_cost: formData.productionCost,
-        shipping_cost: formData.shippingCost,
-        marketing_cost: formData.marketingCost,
-        
         lead_source: formData.leadSource,
         status: formData.status.toString(),
         is_urgent: formData.isUrgent,
         
-        // ✅ ADD THESE TWO LINES
         reason_category: formData.reasonCategory,
         reason_details: formData.reasonDetails,
         
-        // Arrays
         mockup_urls: formData.mockupUrls,
         production_file_urls: formData.productionFileUrls,
         shipping_attachment_urls: formData.shippingAttachmentUrls,
-        customer_attachment_urls: formData.customerAttachmentUrls
+        customer_attachment_urls: formData.customerAttachmentUrls,
+
+        // --- FINANCIAL FIELDS (Protected Logic) ---
+        // If they have permission, save the Form Data.
+        // If they DO NOT have permission, keep the existing Database Data (don't overwrite with 0)
+        order_amount: canViewFinancials ? formData.orderAmount : order.orderAmount,
+        amount_paid: canViewFinancials ? formData.amountPaid : order.amountPaid,
+        production_cost: canViewFinancials ? formData.productionCost : order.productionCost,
+        shipping_cost: canViewFinancials ? formData.shippingCost : order.shippingCost,
+        marketing_cost: canViewFinancials ? formData.marketingCost : order.marketingCost,
       };
 
       // Call Service
       const savedOrder = await updateOrderDetails(order.id, dbPayload, order, user?.email || 'unknown');
       
-      // ✅ CRITICAL: Set flags BEFORE any async operations
       setAllowNavigation(true);
       setIsDirty(false);
       
       toast.success('Order Updated', 'Changes saved successfully.');
       
-      // ✅ Use Promise.all to ensure queries complete, THEN navigate
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['allOrders'] }),
         queryClient.invalidateQueries({ queryKey: ['allOrdersReport'] }),
         queryClient.invalidateQueries({ queryKey: ['order', savedOrder.orderNumber] })
       ]);
 
-      // ✅ Small delay to ensure React has processed the state updates
       setTimeout(() => {
         navigate(`/order/${savedOrder.orderNumber}`, { replace: true });
       }, 50);
@@ -133,22 +135,14 @@ const EditOrderPage: React.FC = () => {
   };
 
   const onFormChange = useCallback(() => {
-    // 🟢 SAFETY: Don't mark as dirty if we are currently saving
-    if (isSaving) return; 
-
+    if (isSaving) return;
     if (!isDirty) {
       setIsDirty(true);
-      setAllowNavigation(false); // ✅ Reset when form changes
+      setAllowNavigation(false);
     }
-  }, [isDirty, isSaving]); // Add isSaving to dependencies
+  }, [isDirty, isSaving]);
   
-  if (isLoading) {
-    return (
-      <div className="flex justify-center items-center h-screen">
-        <Spinner />
-      </div>
-    );
-  }
+  if (isLoading) return <div className="flex justify-center items-center h-screen"><Spinner /></div>;
   
   if (fetchError || !order) {
     return (
@@ -157,11 +151,7 @@ const EditOrderPage: React.FC = () => {
         <p className="mt-2 text-sm max-w-2xl mx-auto">
           {fetchError?.message || "Order not found"}
         </p>
-        <div className="mt-6">
-          <Link to="/orders">
-            <Button variant="secondary">Back to All Orders</Button>
-          </Link>
-        </div>
+        <div className="mt-6"><Link to="/orders"><Button variant="secondary">Back to All Orders</Button></Link></div>
       </div>
     );
   }
@@ -178,11 +168,7 @@ const EditOrderPage: React.FC = () => {
         </Link>
       </div>
 
-      <UnsavedChangesModal 
-        show={showModal}
-        onConfirm={confirmLeave}
-        onCancel={cancelLeave}
-      />
+      <UnsavedChangesModal show={showModal} onConfirm={confirmLeave} onCancel={cancelLeave} />
       
       {saveError && (
         <div className="p-4 bg-red-500/10 border-l-4 border-red-500 text-red-300 rounded-r-lg" role="alert">
@@ -197,6 +183,9 @@ const EditOrderPage: React.FC = () => {
           onSave={handleSave} 
           isSaving={isSaving} 
           onFormChange={onFormChange} 
+          
+          // ✅ PASS THE PERMISSION: Admin OR Financial User = TRUE
+          showFinancials={canViewFinancials} 
         />
       </GlassCard>
     </div>

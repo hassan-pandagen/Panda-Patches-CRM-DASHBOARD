@@ -150,16 +150,35 @@ const AllOrdersPage: React.FC = () => {
   // --- DATA FETCHING ---
   const { data: orders = [], isLoading, error } = useQuery({
     queryKey: ['allOrders'],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('orders_with_details')
-        .select('*')
-        .order('created_at', { ascending: false });
-      
-      if (error) throw new Error(error.message);
-      return data as Order[];
-    },
+     queryFn: async () => {
+       const { data, error } = await supabase
+         .from('orders_with_details')
+         .select('*')
+         // Default to newest first, but overdue filter will override this
+         .order('created_at', { ascending: false });
+       
+       if (error) throw new Error(error.message);
+       return data as Order[];
+     },
   });
+
+  // --- OVERDUE LOGIC ---
+  const tenDaysAgo = useMemo(() => {
+    const date = new Date();
+    date.setDate(date.getDate() - 10);
+    return date;
+  }, []);
+
+  const isOrderOverdue = (order: Order) => {
+    const daysOpen = Math.floor((new Date().getTime() - new Date(order.createdAt).getTime()) / (1000 * 60 * 60 * 24));
+    return daysOpen > 10 && !['SHIPPED', 'DELIVERED', 'COMPLETED', 'CANCELLED', 'REFUNDED'].includes(order.status);
+  };
+
+  const overdueOrders = useMemo(() => {
+    return orders.filter(isOrderOverdue);
+  }, [orders]);
+
+  const overdueCount = overdueOrders.length;
 
   // --- FILTERING LOGIC ---
   const filteredOrders = useMemo(() => {
@@ -181,8 +200,8 @@ const AllOrdersPage: React.FC = () => {
       });
     }
 
-    if (activeFilter === 'URGENT') {
-      filtered = filtered.filter(o => o.isUrgent);
+    if (activeFilter === 'OVERDUE') {
+      filtered = overdueOrders.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()); // Oldest first
     } else if (activeFilter !== 'ALL') {
       filtered = filtered.filter(o => o.status === activeFilter);
     }
@@ -215,7 +234,7 @@ const AllOrdersPage: React.FC = () => {
   );
 
   // --- COUNTS FOR TABS ---
-  const urgentCount = orders.filter(o => o.isUrgent).length;
+  const urgentCount = orders.filter(o => o.isUrgent && !isOrderOverdue(o)).length; // Don't double-count in urgent if also overdue
   const getCount = (status: string) => orders.filter(o => o.status === status).length;
 
   const clearDrillDown = () => {
@@ -298,6 +317,7 @@ const AllOrdersPage: React.FC = () => {
         <div className="flex items-center gap-2 overflow-x-auto pb-2 no-scrollbar">
           <FilterTab active={activeFilter === 'ALL'} label="All Orders" count={orders.length} onClick={() => setActiveFilter('ALL')} />
           <FilterTab active={activeFilter === 'URGENT'} label="Urgent" count={urgentCount} onClick={() => setActiveFilter('URGENT')} isUrgent={true} />
+          <FilterTab active={activeFilter === 'OVERDUE'} label="Overdue" count={overdueCount} onClick={() => setActiveFilter('OVERDUE')} isUrgent={true} />
           
           <div className="w-px h-6 bg-slate-600 mx-2 shrink-0" />
           
@@ -334,89 +354,102 @@ const AllOrdersPage: React.FC = () => {
                 ) : null
               }
             />
-          ) : (
-            paginatedOrders.map((order, index) => (
-              <motion.div
-                key={order.id}
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: index * 0.03 }}
-              >
-                <Link to={`/order/${order.orderNumber}`} className="block group">
-                  <div className="relative bg-slate-900/60 backdrop-blur-sm border border-slate-700/50 rounded-xl p-4 hover:bg-slate-800 hover:border-brand-orange/40 transition-all duration-200 group-hover:shadow-lg group-hover:-translate-y-0.5 active:scale-[0.99]">
-                    
-                    {order.isUrgent && (
-                      <div className="absolute left-0 top-3 bottom-3 w-1 bg-red-500 rounded-r-full shadow-[0_0_8px_rgba(239,68,68,0.6)]" />
-                    )}
+          ) : ( paginatedOrders.map((order, index) => {
+              {/* 1. Calculate Days Open */}
+              const daysOpen = Math.floor((new Date().getTime() - new Date(order.createdAt).getTime()) / (1000 * 60 * 60 * 24));
+              const isOverdue = isOrderOverdue(order);
 
-                    <div className="flex flex-col md:flex-row md:items-center gap-4 justify-between pl-2">
-                      {/* LEFT: Info */}
-                      <div className="flex items-center gap-4">
-                        <div className={`w-12 h-12 rounded-lg flex items-center justify-center text-xl font-bold shadow-md ${
-                          order.isUrgent ? 'bg-red-600 text-white' : 'bg-blue-600 text-white'
-                        }`}>
-                          {order.customerName.charAt(0).toUpperCase()}
-                        </div>
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <span className="text-white font-bold text-lg group-hover:text-brand-orange transition-colors">
-                              {order.customerName}
-                            </span>
-                            {order.isUrgent && (
-                              <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-red-600 text-white shadow-sm">
-                                URGENT
-                              </span>
-                            )}
+              return (
+                <motion.div
+                  key={order.id}
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: index * 0.03 }}
+                >
+                  <Link to={`/order/${order.orderNumber}`} className="block group">
+                    <div className={`relative bg-slate-900/60 backdrop-blur-sm rounded-xl p-4 hover:bg-slate-800 transition-all duration-200 group-hover:shadow-lg group-hover:-translate-y-0.5 active:scale-[0.99]
+                      ${isOverdue ? 'border border-red-500/50 shadow-[0_0_15px_rgba(239,68,68,0.1)] hover:border-red-500/80' : 'border border-slate-700/50 hover:border-brand-orange/40'}`}
+                    >
+                      
+                      {order.isUrgent && !isOverdue && (
+                        <div className="absolute left-0 top-3 bottom-3 w-1 bg-red-500 rounded-r-full shadow-[0_0_8px_rgba(239,68,68,0.6)]" />
+                      )}
+
+                      <div className="flex flex-col md:flex-row md:items-center gap-4 justify-between pl-2">
+                        {/* LEFT: Info */}
+                        <div className="flex items-center gap-4">
+                          <div className={`w-12 h-12 rounded-lg flex items-center justify-center text-xl font-bold shadow-md ${
+                            isOverdue || order.isUrgent ? 'bg-red-600 text-white' : 'bg-blue-600 text-white'
+                          }`}>
+                            {order.customerName.charAt(0).toUpperCase()}
                           </div>
-                          <div className="flex flex-wrap items-center gap-3 text-sm text-slate-300 mt-1">
-                            {/* ✅ REQUIREMENT FULFILLED: Date with icon and styling */}
-                            {order.createdAt && (
-                              <div className="flex items-center gap-1.5 text-cyan-400">
-                                <Calendar className="w-3.5 h-3.5" />
-                                <span className="font-medium">{new Date(order.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
+                          <div>
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="text-white font-bold text-lg group-hover:text-brand-orange transition-colors">
+                                {order.customerName}
+                              </span>
+                              {/* ✅ NEW: THE RED BADGE */}
+                              {isOverdue && (
+                                <span className="flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-red-500 text-white animate-pulse">
+                                  ⚠️ {daysOpen} DAYS OPEN
+                                </span>
+                              )}
+                              {order.isUrgent && !isOverdue && (
+                                <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-red-600 text-white shadow-sm">
+                                  URGENT
+                                </span>
+                              )}
+                            </div>
+                            <div className="flex flex-wrap items-center gap-3 text-sm text-slate-300 mt-1">
+                              {/* ✅ REQUIREMENT FULFILLED: Date with icon and styling */}
+                              {order.createdAt && (
+                                <div className="flex items-center gap-1.5 text-cyan-400">
+                                  <Calendar className="w-3.5 h-3.5" />
+                                  <span className="font-medium">{new Date(order.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
+                                </div>
+                              )}
+                              <span className="w-1 h-1 rounded-full bg-slate-500" />
+                              <span className="font-mono font-medium text-slate-200">{order.orderNumber}</span>
+                              <span className="w-1 h-1 rounded-full bg-slate-500" />
+                              <span className="text-slate-400">{order.patchesType || 'Custom Patch'}</span>
+                              {order.salesAgent && (
+                                <>
+                                  <span className="w-1 h-1 rounded-full bg-slate-500" />
+                                  <span className="text-slate-400">{order.salesAgent}</span>
+                                </>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* RIGHT: Stats & Status */}
+                        <div className="flex items-center justify-between md:justify-end gap-6 md:gap-10 mt-2 md:mt-0 border-t md:border-t-0 border-white/5 pt-3 md:pt-0">
+                          
+                          <div className="flex flex-col items-end min-w-[140px]"> {/* Increased width for statuses */}
+                            <span className="text-[10px] text-slate-400 uppercase tracking-wider font-bold mb-1">Status</span>
+                            <StatusBadge status={order.status as OrderStatus} />
+                          </div>
+
+                          <div className="flex flex-col items-end min-w-[90px]">
+                            <span className="text-[10px] text-slate-400 uppercase tracking-wider font-bold mb-1">Amount</span>
+                            {canViewFinancials ? (
+                              <span className="text-white font-bold text-base tracking-tight">${order.orderAmount.toLocaleString()}</span>
+                            ) : (
+                              <div className="flex items-center gap-1 text-slate-500">
+                                <Lock className="w-3 h-3" />
+                                <span className="text-xs">Hidden</span>
                               </div>
                             )}
-                            <span className="w-1 h-1 rounded-full bg-slate-500" />
-                            <span className="font-mono font-medium text-slate-200">{order.orderNumber}</span>
-                            <span className="w-1 h-1 rounded-full bg-slate-500" />
-                            <span className="text-slate-400">{order.patchesType || 'Custom Patch'}</span>
-                            {order.salesAgent && (
-                              <>
-                                <span className="w-1 h-1 rounded-full bg-slate-500" />
-                                <span className="text-slate-400">{order.salesAgent}</span>
-                              </>
-                            )}
                           </div>
-                        </div>
-                      </div>
 
-                      {/* RIGHT: Stats & Status */}
-                      <div className="flex items-center justify-between md:justify-end gap-6 md:gap-10 mt-2 md:mt-0 border-t md:border-t-0 border-white/5 pt-3 md:pt-0">
-                        
-                        <div className="flex flex-col items-end min-w-[140px]"> {/* Increased width for statuses */}
-                          <span className="text-[10px] text-slate-400 uppercase tracking-wider font-bold mb-1">Status</span>
-                          <StatusBadge status={order.status as OrderStatus} />
+                          <ArrowRight className="w-5 h-5 text-slate-500 group-hover:text-brand-orange group-hover:translate-x-1 transition-all" />
                         </div>
-
-                        <div className="flex flex-col items-end min-w-[90px]">
-                          <span className="text-[10px] text-slate-400 uppercase tracking-wider font-bold mb-1">Amount</span>
-                          {canViewFinancials ? (
-                            <span className="text-white font-bold text-base tracking-tight">${order.orderAmount.toLocaleString()}</span>
-                          ) : (
-                            <div className="flex items-center gap-1 text-slate-500">
-                              <Lock className="w-3 h-3" />
-                              <span className="text-xs">Hidden</span>
-                            </div>
-                          )}
-                        </div>
-
-                        <ArrowRight className="w-5 h-5 text-slate-500 group-hover:text-brand-orange group-hover:translate-x-1 transition-all" />
                       </div>
                     </div>
-                  </div>
-                </Link>
-              </motion.div>
-            ))
+                  </Link>
+                </motion.div>
+              )
+            })
           )}
         </AnimatePresence>
       </div>

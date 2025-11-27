@@ -6,7 +6,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { Order, OrderStatus, UserRole } from '../../types';
 import Button from '../ui/Button';
 import Spinner from '../ui/Spinner';
-import FileUpload from './FileUpload'; 
+import FileUploadSection from './FileUpload'; 
 import Textarea from '../ui/Textarea'; 
 import { LEAD_SOURCE_OPTIONS } from '../../constants';
 
@@ -29,8 +29,8 @@ const REFUND_REASONS = [
 ];
 
 const FormSectionWrapper: FC<{ title: string; children: React.ReactNode }> = ({ title, children }) => (
-  <div className="group relative bg-slate-900/40 backdrop-blur-xl border border-white/10 rounded-2xl shadow-xl p-6">
-    <h3 className="relative text-lg font-semibold text-white pb-2 mb-6">
+  <div className="group relative bg-slate-900/40 backdrop-blur-xl border border-white/10 rounded-2xl shadow-xl p-10">
+    <h3 className="relative text-lg font-semibold text-white pb-2 mb-10">
       {title}
       <div className="absolute bottom-0 left-0 h-px w-0 bg-gradient-to-r from-brand-orange to-orange-500 transition-all duration-300 group-hover:w-full" />
     </h3>
@@ -75,6 +75,7 @@ interface OrderFormProps {
   initialData?: Order | null;
   isSaving?: boolean;
   onFormChange?: () => void;
+  showFinancials?: boolean;
 }
 
 // TRANSFORM: Convert DB data to Form Data
@@ -94,8 +95,14 @@ const transformOrderToFormData = (order: Order | null | undefined): SaveData => 
   };
 };
 
-const OrderForm: React.FC<OrderFormProps> = ({ onSave, initialData, isSaving = false, onFormChange }) => {
-  const { role } = useAuth();
+const OrderForm: React.FC<OrderFormProps> = ({ 
+  onSave, 
+  initialData, 
+  isSaving = false, 
+  onFormChange,
+  showFinancials: showFinancialsProp // Use prop if provided
+}) => {
+  const { role, permissions } = useAuth();
 
   const formDefaultValues = useMemo(() => transformOrderToFormData(initialData), [initialData]);
 
@@ -115,7 +122,11 @@ const OrderForm: React.FC<OrderFormProps> = ({ onSave, initialData, isSaving = f
     onSave(data);
   };
 
-  const canViewFinancials = role === UserRole.ADMIN || role === UserRole.AGENT;
+  // ✅ CRITICAL FIX: Determine visibility. Prioritize prop from parent (like on the Edit page), 
+  // then fallback to a proper role/permission check (which fixes the New Order page).
+  const canViewFinancials = showFinancialsProp !== undefined 
+    ? showFinancialsProp 
+    : (role === UserRole.ADMIN || permissions?.view_financials === true);
 
   // Financial Calcs
   const orderAmount = watch('orderAmount', 0) || 0;
@@ -127,19 +138,16 @@ const OrderForm: React.FC<OrderFormProps> = ({ onSave, initialData, isSaving = f
   const profit = orderAmount - (productionCost + shippingCost + marketingCost);
   const watchedStatus = watch('status');
 
-  const patchTypes = ["Embroidered", "PVC", "Woven", "Chenille", "Leather", "Printed"];
+  const patchTypes = ["Embroidered", "PVC", "Woven", "Chenille", "Leather", "Printed", "3D Embroidery Transfer", "Chenille Transfer", "Sequin Patch"];
   const shippingCarriers = ["FedEx", "DHL", "UPS", "USPS", "Other"];
   const backingOptions = ["Iron on", "Sew on", "Sticker", "Velcro"];
   
   // Helper for file updates
-  const updateFiles = (fieldName: keyof SaveData, newUrl: string) => {
-    const currentFiles = (watch(fieldName) as string[]) || [];
-    setValue(fieldName, [...currentFiles, newUrl], { shouldDirty: true });
-  };
-
-  const removeFile = (fieldName: keyof SaveData, urlToRemove: string) => {
-    const currentFiles = (watch(fieldName) as string[]) || [];
-    setValue(fieldName, currentFiles.filter(u => u !== urlToRemove), { shouldDirty: true });
+  const moveFile = (url: string, from: keyof SaveData, to: keyof SaveData) => {
+    // Remove from the 'from' list
+    setValue(from, ((watch(from) as string[]) || []).filter(u => u !== url), { shouldDirty: true });
+    // Add to the 'to' list
+    setValue(to, [...((watch(to) as string[]) || []), url], { shouldDirty: true });
   };
 
   const orderNum = initialData?.orderNumber || 'new-order';
@@ -150,7 +158,7 @@ const OrderForm: React.FC<OrderFormProps> = ({ onSave, initialData, isSaving = f
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-8">
       <FormSectionWrapper title="Customer Information">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
           <div>
             <label className="block text-sm font-medium text-slate-300">Customer Name</label>
             <input type="text" {...register('customerName', { required: 'Required' })} className="mt-1 block w-full bg-slate-800 border-slate-600 rounded-md text-white focus:ring-brand-orange focus:border-brand-orange" />
@@ -172,7 +180,7 @@ const OrderForm: React.FC<OrderFormProps> = ({ onSave, initialData, isSaving = f
       </FormSectionWrapper>
 
       <FormSectionWrapper title="Design & Product">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-10">
           <div className="md:col-span-2">
             <label className="block text-sm font-medium text-slate-300">Design Name</label>
             <input type="text" {...register('designName')} className="mt-1 block w-full bg-slate-800 border-slate-600 rounded-md text-white focus:ring-brand-orange focus:border-brand-orange" />
@@ -200,7 +208,7 @@ const OrderForm: React.FC<OrderFormProps> = ({ onSave, initialData, isSaving = f
             </select>
           </div>
         </div>
-        <div className="mt-6">
+        <div className="mt-10">
           {/* REPLACED STANDARD <textarea> WITH YOUR CUSTOM <Textarea> */}
           <Textarea 
             label="Special Instructions"
@@ -213,7 +221,7 @@ const OrderForm: React.FC<OrderFormProps> = ({ onSave, initialData, isSaving = f
       </FormSectionWrapper>
 
       <FormSectionWrapper title="Shipping Details">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
           <div className="md:col-span-2">
             {/* REPLACED STANDARD <textarea> WITH YOUR CUSTOM <Textarea> */}
             <Textarea 
@@ -239,77 +247,67 @@ const OrderForm: React.FC<OrderFormProps> = ({ onSave, initialData, isSaving = f
 
       {/* ATTACHMENTS SECTION */}
       <FormSectionWrapper title="Attachments & Files">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
           
-          {/* 1. Production Files */}
-          <div className="md:col-span-2 bg-slate-800/30 p-4 rounded-xl border border-white/5">
-            <label className="block text-sm font-bold text-brand-orange mb-3">Production Files (DST, EMB, PDF)</label>
-            <FileUpload
-              orderNumber={orderNum}
-              bucketName={BUCKET_NAME} // <--- FIX: Uses correct bucket
-              folderPath="production-files"
-              initialFiles={watch('productionFileUrls') || []}
-              onUploadComplete={(url) => updateFiles('productionFileUrls', url)}
-              onFileRemove={(url) => removeFile('productionFileUrls', url)}
-              label="Upload Production Files"
-            />
-          </div>
-
-          {/* 2. Mockups */}
-          <div>
-            <label className="block text-sm font-medium text-slate-300 mb-2">Mockups / Proofs</label>
-            <FileUpload
-              orderNumber={orderNum}
-              bucketName={BUCKET_NAME} // <--- FIX
-              folderPath="mockups"
-              initialFiles={watch('mockupUrls') || []}
-              onUploadComplete={(url) => updateFiles('mockupUrls', url)}
-              onFileRemove={(url) => removeFile('mockupUrls', url)}
-              label="Upload Mockups (JPG, PNG, PDF)"
-            />
-          </div>
-
-          {/* 3. Customer References */}
-          <div>
-            <label className="block text-sm font-medium text-slate-300 mb-2">Customer References</label>
-            <FileUpload
-              orderNumber={orderNum}
-              bucketName={BUCKET_NAME} // <--- FIX
-              folderPath="customer-refs"
-              initialFiles={watch('customerAttachmentUrls') || []}
-              onUploadComplete={(url) => updateFiles('customerAttachmentUrls', url)}
-              onFileRemove={(url) => removeFile('customerAttachmentUrls', url)}
-              label="Upload Customer Files"
-            />
-          </div>
-          
-          {/* 4. Shipping Labels */}
+          {/* Mockups */}
           <div className="md:col-span-2">
-            <label className="block text-sm font-medium text-slate-300 mb-2">Shipping Attachments / Labels</label>
-             <FileUpload
-              orderNumber={orderNum}
+            <FileUploadSection
+              title="Mockups / Proofs"
+              bucketName={BUCKET_NAME} // <--- FIX: Uses correct bucket
+              folderPath={`mockups/${orderNum}`}
+              urls={watch('mockupUrls') || []}
+              onUrlsChange={(newUrls) => setValue('mockupUrls', newUrls, { shouldDirty: true })}
+              onMoveFile={(url) => moveFile(url, 'mockupUrls', 'productionFileUrls')}
+              moveLabel="Move to Production Files"
+            />
+          </div>
+
+          {/* Production Files */}
+          <div className="md:col-span-2">
+            <FileUploadSection
+              title="Production Files (DST, EMB, PDF)"
               bucketName={BUCKET_NAME} // <--- FIX
-              folderPath="shipping-docs"
-              initialFiles={watch('shippingAttachmentUrls') || []}
-              onUploadComplete={(url) => updateFiles('shippingAttachmentUrls', url)}
-              onFileRemove={(url) => removeFile('shippingAttachmentUrls', url)}
-              label="Upload Shipping Labels (PDF, JPG, PNG)"
+              folderPath={`production-files/${orderNum}`}
+              urls={watch('productionFileUrls') || []}
+              onUrlsChange={(newUrls) => setValue('productionFileUrls', newUrls, { shouldDirty: true })}
+            />
+          </div>
+
+          {/* Customer References */}
+          <div>
+            <FileUploadSection
+              title="Customer References"
+              bucketName={BUCKET_NAME} // <--- FIX
+              folderPath={`customer-refs/${orderNum}`}
+              urls={watch('customerAttachmentUrls') || []}
+              onUrlsChange={(newUrls) => setValue('customerAttachmentUrls', newUrls, { shouldDirty: true })}
+            />
+          </div>
+          
+          {/* Shipping Labels */}
+          <div>
+            <FileUploadSection
+              title="Shipping Attachments / Labels"
+              bucketName={BUCKET_NAME} // <--- FIX
+              folderPath={`shipping-docs/${orderNum}`}
+              urls={watch('shippingAttachmentUrls') || []}
+              onUrlsChange={(newUrls) => setValue('shippingAttachmentUrls', newUrls, { shouldDirty: true })}
             />
           </div>
 
         </div>
       </FormSectionWrapper>
 
-      {canViewFinancials && (
+      {canViewFinancials && ( // This now uses the corrected logic
         <FormSectionWrapper title="Financials">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-10">
             <div><label className="block text-xs text-slate-400">Order Amount</label><input type="number" step="0.01" {...register('orderAmount', { valueAsNumber: true })} className="w-full bg-slate-800 border-slate-600 rounded-md text-white" /></div>
             <div><label className="block text-xs text-slate-400">Amount Paid</label><input type="number" step="0.01" {...register('amountPaid', { valueAsNumber: true })} className="w-full bg-slate-800 border-slate-600 rounded-md text-white" /></div>
             <div><label className="block text-xs text-slate-400">Production Cost</label><input type="number" step="0.01" {...register('productionCost', { valueAsNumber: true })} className="w-full bg-slate-800 border-slate-600 rounded-md text-white" /></div>
             <div><label className="block text-xs text-slate-400">Shipping Cost</label><input type="number" step="0.01" {...register('shippingCost', { valueAsNumber: true })} className="w-full bg-slate-800 border-slate-600 rounded-md text-white" /></div>
             <div className="col-span-2 md:col-span-4"><label className="block text-xs text-slate-400">Marketing Cost</label><input type="number" step="0.01" {...register('marketingCost', { valueAsNumber: true })} className="w-full bg-slate-800 border-slate-600 rounded-md text-white" /></div>
           </div>
-          <div className="grid grid-cols-2 gap-6 pt-4 mt-4 border-t border-slate-700">
+          <div className="grid grid-cols-2 gap-10 pt-6 mt-6 border-t border-slate-700">
             <div><p className="text-xs text-slate-500">Remaining</p><p className="text-xl font-bold text-amber-400">${amountRemaining.toFixed(2)}</p></div>
             <div><p className="text-xs text-slate-500">Profit</p><p className={`text-xl font-bold ${profit >= 0 ? 'text-green-400' : 'text-red-400'}`}>${profit.toFixed(2)}</p></div>
           </div>
@@ -317,7 +315,7 @@ const OrderForm: React.FC<OrderFormProps> = ({ onSave, initialData, isSaving = f
       )}
 
       <FormSectionWrapper title="Order Status">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-10">
           <div>
             <label className="block text-sm font-medium text-slate-300">Status</label>
             <select {...register('status')} className="mt-1 block w-full bg-slate-800 border-slate-600 rounded-md text-white focus:ring-brand-orange focus:border-brand-orange">
@@ -341,12 +339,12 @@ const OrderForm: React.FC<OrderFormProps> = ({ onSave, initialData, isSaving = f
 
         {/* ✅ NEW: CONDITIONAL REASON BLOCK */}
         {(watchedStatus === 'CANCELLED' || watchedStatus === 'REFUNDED') && (
-          <div className="mt-6 p-4 bg-red-500/10 border border-red-500/30 rounded-lg animate-fadeIn">
+          <div className="mt-10 p-8 rounded-lg animate-fadeIn bg-red-500/10 border border-red-500/30">
             <h4 className="text-red-200 font-semibold mb-4 flex items-center gap-2">
               ⚠️ {watchedStatus === 'CANCELLED' ? 'Cancellation' : 'Refund'} Details
             </h4>
-            
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
               {/* Reason Category Dropdown */}
               <div>
                 <label className="block text-sm font-medium text-slate-300">

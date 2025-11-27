@@ -63,10 +63,13 @@ const OrderPage: React.FC = () => {
 
   // --- PERMISSION CHECKS ---
   const isAdmin = role === UserRole.ADMIN;
-  const canViewFinancials = isAdmin || permissions?.view_financials;
+  const canViewFinancials = role === 'ADMIN' || permissions?.view_financials === true;
   const canViewShipping = isAdmin || permissions?.view_shipping;
   const canViewProduction = isAdmin || permissions?.view_production;
   const canDelete = isAdmin || permissions?.can_delete_orders;
+
+  // ✅ NEW LOGIC: Allow Admin OR Production OR Shipping to edit
+  const canEdit = role === 'ADMIN' || permissions?.view_production || permissions?.view_shipping;
 
   // --- DATA FETCHING ---
   const { data: order, isLoading, error } = useQuery<Order | null, Error>({
@@ -208,11 +211,13 @@ const OrderPage: React.FC = () => {
                     </Button>
                     {/* ----------------------------- */}
 
-                    {(isAdmin || user?.email === order.salesAgent) && (
-                    <Link to={`/order/${order.orderNumber}/edit`}>
-                        <Button variant="secondary" size="md"><Edit size={16} /> Edit Order</Button>
-                    </Link>
+                    {/* ✅ UPDATED CONDITION */}
+                    {canEdit && (
+                      <Link to={`/order/${order.orderNumber}/edit`}>
+                          <Button variant="secondary" size="md"><Edit size={16} /> Edit Order</Button>
+                      </Link>
                     )}
+
                 </div>
             </div>
 

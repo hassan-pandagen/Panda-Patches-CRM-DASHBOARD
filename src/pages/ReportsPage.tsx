@@ -463,19 +463,25 @@ const ReportsPage: React.FC = () => {
     const availableReports = useMemo(() => {
         const options: { key: ReportType, label: string, icon: React.FC<any> }[] = [];
         
+        // Sales and Quality reports are available to anyone with financial view
         if (canViewFinancials) {
             options.push({ key: 'sales', label: 'Sales', icon: TrendingUp });
-            options.push({ key: 'profitLoss', label: 'Profit & Loss', icon: FileText });
             options.push({ key: 'quality', label: 'Quality & Refunds', icon: ShieldAlert });
-            options.push({ key: 'leadSource', label: 'Lead Source', icon: Share2 });
         }
         
+        // Profit & Loss and Lead Source reports are Admin-only
+        if (isAdmin) {
+            options.push({ key: 'profitLoss', label: 'Profit & Loss', icon: FileText });
+            options.push({ key: 'leadSource', label: 'Lead Source', icon: Share2 });
+        }
+
+        // Production report is available to anyone with production view
         if (canViewProduction) {
             options.push({ key: 'production', label: 'Production', icon: Zap });
         }
 
         return options;
-    }, [canViewFinancials, canViewProduction]);
+    }, [isAdmin, canViewFinancials, canViewProduction]);
 
     const [dateRange, setDateRange] = useState<DateRange>(getDefaultRange);
     const [activeReport, setActiveReport] = useState<ReportType>('sales');
