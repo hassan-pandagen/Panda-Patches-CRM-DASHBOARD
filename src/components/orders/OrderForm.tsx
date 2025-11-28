@@ -319,7 +319,6 @@ const OrderForm: React.FC<OrderFormProps> = ({
           <div>
             <label className="block text-sm font-medium text-slate-300">Status</label>
             <select {...register('status')} className="mt-1 block w-full bg-slate-800 border-slate-600 rounded-md text-white focus:ring-brand-orange focus:border-brand-orange">
-              {Object.values(OrderStatus).map(s => <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>)}
             </select>
           </div>
           <div>

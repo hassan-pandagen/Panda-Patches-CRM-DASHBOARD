@@ -177,11 +177,11 @@ const AllOrdersPage: React.FC = () => {
   const overdueOrders = useMemo(() => {
     return orders.filter(isOrderOverdue);
   }, [orders]);
-
-  const overdueCount = overdueOrders.length;
+  const overdueCount = overdueOrders.length;  
 
   // --- FILTERING LOGIC ---
   const filteredOrders = useMemo(() => {
+
     let filtered = orders;
 
     if (salesAgentParam) filtered = filtered.filter(o => o.salesAgent === salesAgentParam);
@@ -202,6 +202,14 @@ const AllOrdersPage: React.FC = () => {
 
     if (activeFilter === 'OVERDUE') {
       filtered = overdueOrders.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()); // Oldest first
+    } else if (activeFilter === 'PAYMENT_PENDING') {
+      filtered = filtered.filter(o => o.amountRemaining > 0.01 && o.status !== 'CANCELLED' && o.status !== 'REFUNDED');
+    } else if (activeFilter === 'URGENT') {
+      // ✅ FINAL FIX: Show orders that are urgent BUT NOT ALSO overdue.
+      filtered = filtered.filter(o => o.isUrgent === true && !isOrderOverdue(o));
+    } else if (searchParams.get('ids')) {
+      const idList = searchParams.get('ids')!.split(',');
+      filtered = filtered.filter(order => idList.includes(order.orderNumber));
     } else if (activeFilter !== 'ALL') {
       filtered = filtered.filter(o => o.status === activeFilter);
     }
@@ -224,7 +232,7 @@ const AllOrdersPage: React.FC = () => {
     }
 
     return filtered;
-  }, [orders, activeFilter, searchQuery, salesAgentParam, leadSourceParam, dateParam]);
+  }, [orders, activeFilter, searchQuery, salesAgentParam, leadSourceParam, dateParam, overdueOrders, searchParams]);
 
   // --- PAGINATION ---
   const totalPages = Math.ceil(filteredOrders.length / ITEMS_PER_PAGE);
@@ -330,7 +338,7 @@ const AllOrdersPage: React.FC = () => {
           
           <FilterTab active={activeFilter === 'SHIPPED'} label="Shipped" count={getCount('SHIPPED')} onClick={() => setActiveFilter('SHIPPED')} />
           <FilterTab active={activeFilter === 'DELIVERED'} label="Delivered" count={getCount('DELIVERED')} onClick={() => setActiveFilter('DELIVERED')} />
-          <FilterTab active={activeFilter === 'COMPLETED'} label="Completed" count={getCount('COMPLETED')} onClick={() => setActiveFilter('COMPLETED')} />
+          <FilterTab active={activeFilter === 'QUALITY_ASSURANCE'} label="Quality Assurance" count={getCount('QUALITY_ASSURANCE')} onClick={() => setActiveFilter('QUALITY_ASSURANCE')} />
           <FilterTab active={activeFilter === 'CANCELLED'} label="Cancelled" count={getCount('CANCELLED')} onClick={() => setActiveFilter('CANCELLED')} />
         </div>
       </div>

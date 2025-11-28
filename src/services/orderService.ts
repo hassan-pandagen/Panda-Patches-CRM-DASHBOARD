@@ -1,4 +1,5 @@
 import { supabase } from './supabaseClient';
+import { queryClient } from '../App'; // Assuming queryClient is exported from your main App file
 import { Order, OrderStatus } from '../types/index';
 
 // =====================================================================
@@ -17,6 +18,7 @@ const SENDGRID_TEMPLATES = {
   // --- PRODUCTION KICKOFF ---
   CUSTOMER_PAYMENT_NEEDED: '', 
   CUSTOMER_PRODUCTION_START: 'd-0dcf24e7ef3b4195b24ab4dfdf53cde8',
+  INTERNAL_QUALITY_ASSURANCE: '', // Placeholder for new QA template
   INTERNAL_PRODUCTION_START: 'd-0a3e1e4cc4a74b49baf0de6b03823cef',
   
   // --- FULFILLMENT & CLOSING ---
@@ -232,6 +234,12 @@ export const triggerStatusEmail = async (order: Order, statusToCheck: string) =>
         requests.push({ to: order.customerEmail, template_id: SENDGRID_TEMPLATES.CUSTOMER_SHIPPED });
       break;
       
+    case OrderStatus.QUALITY_ASSURANCE:
+      // This can be an internal notification to the QA team/manager.
+      if (SENDGRID_TEMPLATES.INTERNAL_QUALITY_ASSURANCE)
+        requests.push({ to: PRODUCTION_MANAGER_EMAIL, template_id: SENDGRID_TEMPLATES.INTERNAL_QUALITY_ASSURANCE });
+      break;
+
     case OrderStatus.DELIVERED: 
       if (SENDGRID_TEMPLATES.CUSTOMER_DELIVERED)
         requests.push({ to: order.customerEmail, template_id: SENDGRID_TEMPLATES.CUSTOMER_DELIVERED });
@@ -325,6 +333,26 @@ export const updateOrderDetails = async (orderId: number, updates: any, oldOrder
 
   const newOrder = mapDbToOrder(data);
 
+  // --- ✅ NEW: Comprehensive Audit Logging ---
+  const historyRecords = [];
+  for (const key in updates) {
+    // Find the corresponding camelCase key in the oldOrder object
+    const oldOrderKey = Object.keys(oldOrder).find(
+      (k) => k.toLowerCase() === key.replace(/_/g, '').toLowerCase()
+    ) as keyof Order;
+
+    if (oldOrderKey && oldOrder[oldOrderKey] !== updates[key]) {
+      historyRecords.push({
+        order_id: orderId,
+        user_email: userEmail,
+        field_changed: key, // e.g., 'order_amount'
+        old_value: String(oldOrder[oldOrderKey] ?? 'N/A'),
+        new_value: String(updates[key] ?? 'N/A'),
+      });
+    }
+  }
+  // --- End of Audit Logging ---
+
   if (updates.status && updates.status !== oldOrder.status) {
     await supabase.from('order_history').insert({
       order_id: orderId,
@@ -337,5 +365,13 @@ export const updateOrderDetails = async (orderId: number, updates: any, oldOrder
     await triggerStatusEmail(newOrder, updates.status);
   }
   
+  // Insert all detected changes into the history table
+  if (historyRecords.length > 0) {
+    await supabase.from('order_history').insert(historyRecords);
+  }
+
+  // ✅ THE FIX: Invalidate the reports query to force a refetch of fresh data.
+  await queryClient.invalidateQueries({ queryKey: ['allOrdersReport'] });
+
   return newOrder;
 };

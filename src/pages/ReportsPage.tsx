@@ -13,7 +13,7 @@ import { DollarSign, Package, TrendingUp, Zap, Share2, Download, CheckCircle, Al
 import { motion, Variants } from 'framer-motion';
 import { TooltipProps } from 'recharts';
 import { NameType, ValueType } from 'recharts/types/component/DefaultTooltipContent';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { CSVLink } from 'react-csv';
 import ProfitLossReportComponent from '../components/Reports/ProfitLossReportComponent';
 // ✅ IMPORT THE NEW CHART
@@ -85,12 +85,24 @@ const CustomTooltip: FC<TooltipProps<ValueType, NameType>> = ({ active, payload,
 // --- REPORT COMPONENTS (Sales, Production, etc.) ---
 
 
-const SalesReportComponent: FC<ReportComponentProps> = ({ orders, role }) => {
+const SalesReportComponent: FC<ReportComponentProps> = ({ orders }) => {
     const navigate = useNavigate();
-    const totalRevenue = useMemo(() => orders.reduce((sum, order) => sum + (order.orderAmount || 0), 0), [orders]);
+    // Use originalAmount for accurate revenue reporting before cancellations
+    const totalGrossRevenue = useMemo(() => orders.reduce((sum, order) => sum + (order.originalAmount || 0), 0), [orders]);
+    const totalNetRevenue = useMemo(() => orders.reduce((sum, order) => sum + (order.orderAmount || 0), 0), [orders]);
     const totalOrders = orders.length;
-    const aov = totalOrders > 0 ? totalRevenue / totalOrders : 0;
+    const aov = totalOrders > 0 ? totalGrossRevenue / totalOrders : 0;
     const totalCollected = useMemo(() => orders.reduce((sum, order) => sum + (order.amountPaid || 0), 0), [orders]);
+
+    // ✅ CORRECTED CALCULATION: Pending amount should be based on original amounts, not net revenue.
+    const totalAmountPending = useMemo(() => orders.reduce((sum, order) => sum + ((order.originalAmount || 0) - (order.amountPaid || 0)), 0), [orders]);
+
+    // ✅ NEW: Get the list of order numbers with pending payments
+    const pendingOrderNumbers = useMemo(() => 
+        orders
+            .filter(order => order.amountRemaining > 0.01) // ✅ FIX: Use the pre-calculated amountRemaining for accuracy
+            .map(order => order.orderNumber), 
+    [orders]);
 
     const salesByAgent = useMemo(() => {
         const agentSales = orders.reduce((acc, order) => {
@@ -124,10 +136,10 @@ const SalesReportComponent: FC<ReportComponentProps> = ({ orders, role }) => {
         <div className="space-y-6">
             <motion.div variants={containerVariants} initial="hidden" animate="visible" className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                 <StatCardWrapper gradient="bg-gradient-to-r from-brand-orange to-orange-600" onClick={() => navigate('/orders')}>
-                    <SimpleStatCard title="Total Revenue" value={totalRevenue} prefix="$" icon={<DollarSign className="w-6 h-6 text-brand-orange" />} />
+                    <SimpleStatCard title="Net Revenue" value={totalNetRevenue} prefix="$" icon={<DollarSign className="w-6 h-6 text-brand-orange" />} />
                 </StatCardWrapper>
-                <StatCardWrapper gradient="bg-gradient-to-r from-cyan-500 to-blue-500" onClick={() => navigate('/orders')}>
-                    <SimpleStatCard title="Total Orders" value={totalOrders} icon={<Package className="w-6 h-6 text-cyan-400" />} />
+                <StatCardWrapper gradient="bg-gradient-to-r from-amber-500 to-yellow-500" onClick={() => navigate(`/orders?ids=${pendingOrderNumbers.join(',')}`)}>
+                    <SimpleStatCard title="Amount Pending" value={totalAmountPending} prefix="$" icon={<AlertCircle className="w-6 h-6 text-amber-300" />} />
                 </StatCardWrapper>
                 <StatCardWrapper gradient="bg-gradient-to-r from-purple-500 to-pink-500" onClick={() => navigate('/orders')}>
                     <SimpleStatCard title="Avg. Order Value" value={aov.toFixed(2)} prefix="$" icon={<TrendingUp className="w-6 h-6 text-purple-400" />} />
@@ -483,14 +495,18 @@ const ReportsPage: React.FC = () => {
         return options;
     }, [isAdmin, canViewFinancials, canViewProduction]);
 
+  const [searchParams, setSearchParams] = useSearchParams();
+  const activeReport = searchParams.get('type') || (availableReports.length > 0 ? availableReports[0].key : 'sales');
+
     const [dateRange, setDateRange] = useState<DateRange>(getDefaultRange);
-    const [activeReport, setActiveReport] = useState<ReportType>('sales');
 
     useEffect(() => {
-        if (availableReports.length > 0 && !availableReports.find(r => r.key === activeReport)) {
-            setActiveReport(availableReports[0].key);
-        }
-    }, [availableReports, activeReport]);
+    // If the active report from the URL isn't in the list of available reports,
+    // redirect to the first available one.
+    if (availableReports.length > 0 && !availableReports.find(r => r.key === activeReport)) {
+      setSearchParams({ type: availableReports[0].key });
+    }
+  }, [availableReports, activeReport, setSearchParams]);
 
     const handleDateChange = useCallback((newDateRange: DateRange) => { setDateRange(newDateRange); }, []);
     const handleQuickFilter = useCallback((days: number) => {
@@ -609,7 +625,7 @@ const ReportsPage: React.FC = () => {
                     {availableReports.map(report => (
                         <button
                             key={report.key}
-                            onClick={() => setActiveReport(report.key)}
+                            onClick={() => setSearchParams({ type: report.key })}
                             className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium rounded-lg transition-all duration-200 ${
                                 activeReport === report.key 
                                     ? 'bg-brand-orange text-white shadow-lg shadow-brand-orange/30' 
