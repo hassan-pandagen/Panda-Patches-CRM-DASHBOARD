@@ -17,6 +17,7 @@ export enum OrderStatus {
   AWAITING_APPROVAL = 'AWAITING_CUSTOMER_APPROVAL',
   APPROVED = 'APPROVED',
   IN_PRODUCTION = 'IN_PRODUCTION',
+  QUALITY_ASSURANCE = 'QUALITY_ASSURANCE', // ✅ The missing status
   COMPLETED = 'COMPLETED',
   SHIPPED = 'SHIPPED',
   CANCELLED = 'CANCELLED',
@@ -81,6 +82,7 @@ export interface Order {
   shippingCost: number;
   marketingCost: number;
   profit: number;
+  originalAmount?: number; // ✅ NEW: Add optional field for reporting
 
   // --- Personnel & Sourcing ---
   salesAgent: string;

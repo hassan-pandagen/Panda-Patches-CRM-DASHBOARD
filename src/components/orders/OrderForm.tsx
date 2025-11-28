@@ -155,6 +155,21 @@ const OrderForm: React.FC<OrderFormProps> = ({
   // *** CRITICAL FIX: The exact bucket name from your Supabase ***
   const BUCKET_NAME = 'order-attachments';
 
+  // ✅ NEW: Define the status order manually to ensure correctness
+  const statusOptions = [
+    OrderStatus.NEW_ORDER,
+    OrderStatus.AWAITING_APPROVAL,
+    OrderStatus.REVISION_REQUESTED,
+    OrderStatus.APPROVED,
+    OrderStatus.IN_PRODUCTION,
+    OrderStatus.QUALITY_ASSURANCE, // <-- The missing status
+    OrderStatus.SHIPPED,
+    OrderStatus.DELIVERED,
+    OrderStatus.FEEDBACK,
+    OrderStatus.CANCELLED,
+    OrderStatus.REFUNDED,
+  ];
+
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-8">
       <FormSectionWrapper title="Customer Information">
@@ -319,6 +334,8 @@ const OrderForm: React.FC<OrderFormProps> = ({
           <div>
             <label className="block text-sm font-medium text-slate-300">Status</label>
             <select {...register('status')} className="mt-1 block w-full bg-slate-800 border-slate-600 rounded-md text-white focus:ring-brand-orange focus:border-brand-orange">
+              {/* ✅ FIX: Use the manually defined list to guarantee order and inclusion */}
+              {statusOptions.map(s => <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>)}
             </select>
           </div>
           <div>

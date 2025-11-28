@@ -18,7 +18,7 @@ const SENDGRID_TEMPLATES = {
   // --- PRODUCTION KICKOFF ---
   CUSTOMER_PAYMENT_NEEDED: '', 
   CUSTOMER_PRODUCTION_START: 'd-0dcf24e7ef3b4195b24ab4dfdf53cde8',
-  INTERNAL_QUALITY_ASSURANCE: '', // Placeholder for new QA template
+  INTERNAL_QUALITY_ASSURANCE: 'd-70206008ac7c47fbb87585bcc60e59ce', // ✅ READY: Add your new SendGrid Template ID here
   INTERNAL_PRODUCTION_START: 'd-0a3e1e4cc4a74b49baf0de6b03823cef',
   
   // --- FULFILLMENT & CLOSING ---
@@ -34,53 +34,114 @@ const PRODUCTION_MANAGER_EMAIL = 'peacefulvibes2024@gmail.com';
 // 2. HELPER FUNCTIONS
 // =====================================================================
 
-const mapDbToOrder = (data: any): Order => {
+export const mapDbToOrder = (data: any): Order => {
+  // --- DEBUG LOGGING (Remove this after fixing) ---
+  // This will print the raw data of the first order to your browser console
+  if (data && !window['hasLoggedOrder']) {
+    console.log("🔥 RAW SUPABASE ORDER DATA:", data);
+    console.log("🧐 Check these values:", {
+      "order_amount": data.order_amount,
+      "orderAmount": data.orderAmount,
+      "production_cost": data.production_cost,
+      "productionCost": data.productionCost
+    });
+    window['hasLoggedOrder'] = true; // Only log once
+  }
+  // ------------------------------------------------
+
+  // Helper to safely convert string/null to number
+  const toNumber = (val: any) => {
+    if (val === null || val === undefined || val === '') return 0;
+    const num = Number(val);
+    return isNaN(num) ? 0 : num;
+  };
+
+  // ✅ TRY BOTH SNAKE_CASE AND CAMELCASE
+  // This ensures we catch the value regardless of how the DB sends it
+  const orderAmount = toNumber(data.order_amount ?? data.orderAmount);
+  const amountPaid = toNumber(data.amount_paid ?? data.amountPaid);
+  const productionCost = toNumber(data.production_cost ?? data.productionCost);
+  const shippingCost = toNumber(data.shipping_cost ?? data.shippingCost);
+  const marketingCost = toNumber(data.marketing_cost ?? data.marketingCost);
+  const patchesQuantity = toNumber(data.patches_quantity ?? data.patchesQuantity);
+
   return {
     id: data.id,
-    orderNumber: data.order_number,
-    customerName: data.customer_name,
-    customerEmail: data.customer_email,
-    customerPhone: data.customer_phone,
-    customerProfileUrl: data.customer_profile_url,
+    orderNumber: data.order_number ?? data.orderNumber,
+    customerName: data.customer_name ?? data.customerName,
+    customerEmail: data.customer_email ?? data.customerEmail,
+    customerPhone: data.customer_phone ?? data.customerPhone,
+    customerProfileUrl: data.customer_profile_url ?? data.customerProfileUrl,
     
-    shippingAddress: data.shipping_address,
-    shippingTrackingNumber: data.shipping_tracking_number,
-    shippingCarrier: data.shipping_carrier,
+    shippingAddress: data.shipping_address ?? data.shippingAddress,
+    shippingTrackingNumber: data.shipping_tracking_number ?? data.shippingTrackingNumber,
+    shippingCarrier: data.shipping_carrier ?? data.shippingCarrier,
     
-    designName: data.design_name,
-    patchesType: data.patches_type,
-    patchesQuantity: data.patches_quantity,
-    designSize: data.design_size,
-    designBacking: data.design_backing,
+    designName: data.design_name ?? data.designName,
+    patchesType: data.patches_type ?? data.patchesType,
+    patchesQuantity: patchesQuantity,
+    designSize: data.design_size ?? data.designSize,
+    designBacking: data.design_backing ?? data.designBacking,
     instructions: data.instructions,
     
-    orderAmount: data.order_amount,
-    amountPaid: data.amount_paid,
-    productionCost: data.production_cost,
-    shippingCost: data.shipping_cost,
-    marketingCost: data.marketing_cost,
-    profit: (data.order_amount || 0) - (data.production_cost || 0) - (data.shipping_cost || 0) - (data.marketing_cost || 0),
-    amountRemaining: (data.order_amount || 0) - (data.amount_paid || 0),
+    // ✅ Financials
+    orderAmount,
+    amountPaid,
+    productionCost,
+    shippingCost,
+    marketingCost,
+    profit: orderAmount - productionCost - shippingCost - marketingCost,
+    amountRemaining: orderAmount - amountPaid,
 
     status: data.status,
     
-    reasonCategory: data.reason_category,
-    reasonDetails: data.reason_details,
-    isUrgent: data.is_urgent,
-    isUrgentApproved: data.is_urgent_approved,
-    leadSource: data.lead_source,
-    salesAgent: data.sales_agent,
-    createdAt: data.created_at,
-    updatedAt: data.updated_at,
+    reasonCategory: data.reason_category ?? data.reasonCategory,
+    reasonDetails: data.reason_details ?? data.reasonDetails,
+    isUrgent: data.is_urgent ?? data.isUrgent,
+    isUrgentApproved: data.is_urgent_approved ?? data.isUrgentApproved,
+    leadSource: data.lead_source ?? data.leadSource,
+    salesAgent: data.sales_agent ?? data.salesAgent,
+    createdAt: data.created_at ?? data.createdAt,
+    updatedAt: data.updated_at ?? data.updatedAt,
 
-    mockupUrls: data.mockup_urls || [],
-    productionFileUrls: data.production_file_urls || [],
-    shippingAttachmentUrls: data.shipping_attachment_urls || [],
-    customerAttachmentUrls: data.customer_attachment_urls || [],
+    mockupUrls: data.mockup_urls || data.mockupUrls || [],
+    productionFileUrls: data.production_file_urls || data.productionFileUrls || [],
+    shippingAttachmentUrls: data.shipping_attachment_urls || data.shippingAttachmentUrls || [],
+    customerAttachmentUrls: data.customer_attachment_urls || data.customerAttachmentUrls || [],
     
-    revisionNotes: data.revision_notes,
-    redoNotes: data.redo_notes
+    revisionNotes: data.revision_notes ?? data.revisionNotes,
+    redoNotes: data.redo_notes ?? data.redoNotes
   } as Order;
+};
+
+/**
+ * ✅ NEW: A specialized mapper for financial reporting.
+ * This function takes a raw DB order and applies financial rules,
+ * like zeroing out revenue for cancelled orders.
+ */
+export const mapOrderForReporting = (dbOrder: any): Order => {
+  // First, get the base Order object using the generic mapper
+  const baseOrder = mapDbToOrder(dbOrder);
+
+  // Now, apply special financial logic for reports
+  const isCancelled = baseOrder.status === 'CANCELLED' || baseOrder.status === 'REFUNDED';
+  
+  // For reports, we need to know the original amount before it was zeroed out
+  const originalAmountValue = baseOrder.orderAmount; 
+
+  // If cancelled, the effective revenue for net calculations is 0
+  const netRevenue = isCancelled ? 0 : originalAmountValue;
+
+  // Recalculate profit based on net revenue
+  const netProfit = netRevenue - (baseOrder.productionCost + baseOrder.shippingCost + baseOrder.marketingCost);
+
+  // Return a new object with the corrected financial data
+  return {
+    ...baseOrder,
+    originalAmount: originalAmountValue, // Keep track of the original amount
+    orderAmount: netRevenue,      // Use the adjusted net revenue
+    profit: netProfit,            // Use the adjusted net profit
+  };
 };
 
 // ✅ FIXED: Now this function is actually used

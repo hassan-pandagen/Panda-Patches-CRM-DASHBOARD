@@ -10,6 +10,7 @@ import { useAuth } from '../contexts/AuthContext';
 import DateRangeFilter, { DateRange, getDefaultRange } from "../components/ui/DateRangeFilter";
 import { supabase } from '../services/supabaseClient';
 import { useDashboardMetrics } from "../hooks/useDashboardMetrics";
+import { mapDbToOrder } from '../services/orderService'; // ✅ NEW: Import the mapper
 import { Order, OrderStatus } from "../types";
 import GlassCard from '../components/ui/GlassCard';
 import CardSkeleton from '../components/CardSkeleton';
@@ -55,9 +56,8 @@ export default function Dashboard() {
         `)
         .gte('created_at', start)
         .lte('created_at', end);
-        
       if (error) throw error;
-      return data as Order[];
+      return (data || []).map(mapDbToOrder); // ✅ FIX: Map the raw data to Order objects
     },
     staleTime: 60000,
     enabled: !!user,
@@ -170,11 +170,11 @@ export default function Dashboard() {
             <p className="text-slate-400 mt-2 text-base">Real-time business overview and performance metrics</p>
           </div>
           
-          <div className="flex flex-wrap items-center gap-3">
-            <div className="flex items-center gap-2 bg-slate-900/40 backdrop-blur-xl border border-white/10 rounded-xl p-1.5 shadow-xl">
-              <button onClick={() => setDatePreset('week')} className="px-4 py-2 text-sm font-medium rounded-lg transition-all duration-200 text-slate-300 hover:text-white hover:bg-white/10">This Week</button>
-              <button onClick={() => setDatePreset('month')} className="px-4 py-2 text-sm font-medium rounded-lg transition-all duration-200 text-slate-300 hover:text-white hover:bg-white/10">This Month</button>
-              <button onClick={() => setDatePreset('60days')} className="px-4 py-2 text-sm font-medium rounded-lg transition-all duration-200 text-slate-300 hover:text-white hover:bg-white/10">Last 60 Days</button>
+          <div className="flex flex-col sm:flex-row items-center gap-4">
+            <div className="flex items-center gap-1 bg-slate-900/40 backdrop-blur-xl border border-white/10 rounded-lg p-1 shadow-xl h-[42px]">
+              <button onClick={() => setDatePreset('week')} className="px-4 h-full text-sm font-medium rounded-md text-slate-300 hover:text-white hover:bg-white/10 transition-colors">This Week</button>
+              <button onClick={() => setDatePreset('month')} className="px-4 h-full text-sm font-medium rounded-md text-slate-300 hover:text-white hover:bg-white/10 transition-colors">This Month</button>
+              <button onClick={() => setDatePreset('60days')} className="px-4 h-full text-sm font-medium rounded-md text-slate-300 hover:text-white hover:bg-white/10 transition-colors">Last 60 Days</button>
             </div>
             <DateRangeFilter value={dateRange} onChange={handleDateChange} />
           </div>

@@ -9,6 +9,9 @@ import { LEAD_SOURCE_OPTIONS } from '../constants/index';
 import DateRangeFilter, { DateRange, getDefaultRange } from '../components/ui/DateRangeFilter';
 import { supabase } from '../services/supabaseClient';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, LineChart, Line, CartesianGrid, PieChart, Pie, Legend } from 'recharts';
+// ✅ 1. IMPORT THE CENTRALIZED MAPPER
+import { mapOrderForReporting } from '../services/orderService';
+
 import { DollarSign, Package, TrendingUp, Zap, Share2, Download, CheckCircle, AlertCircle, Award, ChevronDown, FileText, Lock, ShieldAlert } from 'lucide-react';
 import { motion, Variants } from 'framer-motion';
 import { TooltipProps } from 'recharts';
@@ -535,46 +538,8 @@ const ReportsPage: React.FC = () => {
 
             if (error) throw error;
 
-            return (data || []).map((item: any) => {
-                // 1. EXTRACT RAW COSTS
-                const prodCost = Number(item.production_cost || item.productionCost || 0);
-                const shipCost = Number(item.shipping_cost || item.shippingCost || 0);
-                const marketCost = Number(item.marketing_cost || item.marketingCost || 0);
-                const totalCosts = prodCost + shipCost + marketCost;
-
-                // 2. DETERMINE REAL REVENUE
-                // If cancelled, Real Revenue is $0. Otherwise, it's the Order Amount.
-                const isCancelled = item.status === 'CANCELLED' || item.status === 'REFUNDED';
-                // Sales Report needs 0, but Quality Report needs the real number
-                const rawAmount = Number(item.order_amount || item.orderAmount || 0); 
-                const realRevenue = isCancelled ? 0 : rawAmount;
-
-                // 3. CALCULATE REAL PROFIT
-                const realProfit = realRevenue - totalCosts;
-
-                // 4. RETURN MAPPED OBJECT
-                return {
-                    ...item,
-                    
-                    // ✅ NEW: Keep the original amount for the "Lost Revenue" chart
-                    originalAmount: rawAmount, 
-
-                    // Override with Corrected Financials
-                    orderAmount: realRevenue,
-                    productionCost: prodCost,
-                    shippingCost: shipCost,
-                    marketingCost: marketCost,
-                    profit: realProfit,
-                    
-                    // Mappings
-                    amountPaid: Number(item.amount_paid || item.amountPaid || 0),
-                    reasonCategory: item.reason_category,
-                    reasonDetails: item.reason_details,
-                    salesAgent: item.sales_agent || item.salesAgent,
-                    leadSource: item.lead_source || item.leadSource,
-                    patchesType: item.patches_type || item.patchesType,
-                };
-            }) as Order[];
+            // ✅ 2. REUSE THE CENTRALIZED MAPPER
+            return (data || []).map(mapOrderForReporting);
         },
         enabled: !!user && availableReports.length > 0,
         staleTime: 60000,
@@ -605,17 +570,19 @@ const ReportsPage: React.FC = () => {
                         <h1 className="text-4xl font-bold text-white bg-gradient-to-r from-white to-slate-300 bg-clip-text text-transparent">Reports</h1>
                         <p className="text-slate-400 mt-2">Analytics and performance insights</p>
                     </div>
-                    <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
-                        <div className="flex items-center gap-2 bg-slate-900/40 backdrop-blur-xl border border-white/10 rounded-xl p-1.5 shadow-xl">
-                            <button onClick={() => handleQuickFilter(7)} className="px-3 py-1.5 text-xs font-medium rounded-lg text-slate-300 hover:text-white hover:bg-white/10">7 Days</button>
-                            <button onClick={() => handleQuickFilter(30)} className="px-3 py-1.5 text-xs font-medium rounded-lg text-slate-300 hover:text-white hover:bg-white/10">30 Days</button>
-                            <button onClick={() => handleQuickFilter(60)} className="px-3 py-1.5 text-xs font-medium rounded-lg text-slate-300 hover:text-white hover:bg-white/10">60 Days</button>
+                    {/* ✅ DEFINITIVE FIX: A single flex container to rule alignment */}
+                    <div className="flex flex-col sm:flex-row items-center gap-4">
+                        <div className="flex items-center gap-1 bg-slate-900/40 backdrop-blur-xl border border-white/10 rounded-lg p-1 shadow-xl h-[42px]">
+                            <button onClick={() => handleQuickFilter(7)} className="px-4 h-full text-xs font-medium rounded-md text-slate-300 hover:text-white hover:bg-white/10 transition-colors">7 Days</button>
+                            <button onClick={() => handleQuickFilter(30)} className="px-4 h-full text-xs font-medium rounded-md text-slate-300 hover:text-white hover:bg-white/10 transition-colors">30 Days</button>
+                            <button onClick={() => handleQuickFilter(60)} className="px-4 h-full text-xs font-medium rounded-md text-slate-300 hover:text-white hover:bg-white/10 transition-colors">60 Days</button>
                         </div>
                         <DateRangeFilter value={dateRange} onChange={handleDateChange} />
                         
                         {csvConfig && (
-                            <CSVLink {...csvConfig} className="flex items-center gap-2 px-4 py-2 bg-emerald-600/80 hover:bg-emerald-600 rounded-lg text-white text-sm font-semibold transition-colors shadow-lg backdrop-blur-sm">
-                                <Download className="w-4 h-4" /> CSV
+                            <CSVLink {...csvConfig} className="h-[42px] flex items-center gap-2 px-4 bg-emerald-600/80 hover:bg-emerald-600 rounded-lg text-white text-sm font-semibold transition-colors shadow-lg backdrop-blur-sm whitespace-nowrap">
+                                <Download className="w-4 h-4" /> 
+                                <span>Export CSV</span>
                             </CSVLink>
                         )}
                     </div>
