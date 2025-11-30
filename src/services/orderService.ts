@@ -1,5 +1,5 @@
 import { supabase } from './supabaseClient';
-import { queryClient } from '../App'; // Assuming queryClient is exported from your main App file
+import { queryClient } from '../App';
 import { Order, OrderStatus } from '../types/index';
 
 // =====================================================================
@@ -15,16 +15,16 @@ const SENDGRID_TEMPLATES = {
   CUSTOMER_REVISION_IN_PROGRESS: 'd-4c34e0002d9a43b091798fde84d36c59',
   INTERNAL_REVISION_REQUESTED: 'd-27bef8642f23433ea5ee8471887c8d61',
   
-  // --- PRODUCTION KICKOFF ---
+  // --- PRODUCTION ---
   CUSTOMER_PAYMENT_NEEDED: '', 
   CUSTOMER_PRODUCTION_START: 'd-0dcf24e7ef3b4195b24ab4dfdf53cde8',
-  INTERNAL_QUALITY_ASSURANCE: 'd-70206008ac7c47fbb87585bcc60e59ce', // ✅ READY: Add your new SendGrid Template ID here
+  INTERNAL_QUALITY_ASSURANCE: 'd-70206008ac7c47fbb87585bcc60e59ce',
   INTERNAL_PRODUCTION_START: 'd-0a3e1e4cc4a74b49baf0de6b03823cef',
   
-  // --- FULFILLMENT & CLOSING ---
+  // --- FULFILLMENT ---
   CUSTOMER_SHIPPED: 'd-30f79e97452342a7a2a42a3237a47479',
-  CUSTOMER_DELIVERED: 'd-d0ab08ed143e4a62900c257d63167630', // ✅ Only Delivered ID
-  CUSTOMER_FEEDBACK: 'd-563b0533e1d94a1bb830129a440c254b',  // ✅ Only Feedback ID
+  CUSTOMER_DELIVERED: 'd-d0ab08ed143e4a62900c257d63167630', 
+  CUSTOMER_FEEDBACK: 'd-563b0533e1d94a1bb830129a440c254b',  
   CUSTOMER_REFUNDED: 'd-8da31b3c8aca485cb82203af044e6ba7',
 };
 
@@ -35,29 +35,12 @@ const PRODUCTION_MANAGER_EMAIL = 'peacefulvibes2024@gmail.com';
 // =====================================================================
 
 export const mapDbToOrder = (data: any): Order => {
-  // --- DEBUG LOGGING (Remove this after fixing) ---
-  // This will print the raw data of the first order to your browser console
-  if (data && !window['hasLoggedOrder']) {
-    console.log("🔥 RAW SUPABASE ORDER DATA:", data);
-    console.log("🧐 Check these values:", {
-      "order_amount": data.order_amount,
-      "orderAmount": data.orderAmount,
-      "production_cost": data.production_cost,
-      "productionCost": data.productionCost
-    });
-    window['hasLoggedOrder'] = true; // Only log once
-  }
-  // ------------------------------------------------
-
-  // Helper to safely convert string/null to number
   const toNumber = (val: any) => {
     if (val === null || val === undefined || val === '') return 0;
     const num = Number(val);
     return isNaN(num) ? 0 : num;
   };
 
-  // ✅ TRY BOTH SNAKE_CASE AND CAMELCASE
-  // This ensures we catch the value regardless of how the DB sends it
   const orderAmount = toNumber(data.order_amount ?? data.orderAmount);
   const amountPaid = toNumber(data.amount_paid ?? data.amountPaid);
   const productionCost = toNumber(data.production_cost ?? data.productionCost);
@@ -84,7 +67,6 @@ export const mapDbToOrder = (data: any): Order => {
     designBacking: data.design_backing ?? data.designBacking,
     instructions: data.instructions,
     
-    // ✅ Financials
     orderAmount,
     amountPaid,
     productionCost,
@@ -94,7 +76,6 @@ export const mapDbToOrder = (data: any): Order => {
     amountRemaining: orderAmount - amountPaid,
 
     status: data.status,
-    
     reasonCategory: data.reason_category ?? data.reasonCategory,
     reasonDetails: data.reason_details ?? data.reasonDetails,
     isUrgent: data.is_urgent ?? data.isUrgent,
@@ -114,37 +95,6 @@ export const mapDbToOrder = (data: any): Order => {
   } as Order;
 };
 
-/**
- * ✅ NEW: A specialized mapper for financial reporting.
- * This function takes a raw DB order and applies financial rules,
- * like zeroing out revenue for cancelled orders.
- */
-export const mapOrderForReporting = (dbOrder: any): Order => {
-  // First, get the base Order object using the generic mapper
-  const baseOrder = mapDbToOrder(dbOrder);
-
-  // Now, apply special financial logic for reports
-  const isCancelled = baseOrder.status === 'CANCELLED' || baseOrder.status === 'REFUNDED';
-  
-  // For reports, we need to know the original amount before it was zeroed out
-  const originalAmountValue = baseOrder.orderAmount; 
-
-  // If cancelled, the effective revenue for net calculations is 0
-  const netRevenue = isCancelled ? 0 : originalAmountValue;
-
-  // Recalculate profit based on net revenue
-  const netProfit = netRevenue - (baseOrder.productionCost + baseOrder.shippingCost + baseOrder.marketingCost);
-
-  // Return a new object with the corrected financial data
-  return {
-    ...baseOrder,
-    originalAmount: originalAmountValue, // Keep track of the original amount
-    orderAmount: netRevenue,      // Use the adjusted net revenue
-    profit: netProfit,            // Use the adjusted net profit
-  };
-};
-
-// ✅ FIXED: Now this function is actually used
 const getTrackingLink = (carrier: string, trackingNumber: string) => {
   if (!trackingNumber) return "#";
   const c = (carrier || "").toLowerCase().trim();
@@ -159,96 +109,84 @@ const getTrackingLink = (carrier: string, trackingNumber: string) => {
 };
 
 // =====================================================================
-// 3. PREPARE EMAIL DATA - FIXED TRACKING LINK
+// 3. PREPARE EMAIL DATA (Smart Gallery + Formatting)
+// =====================================================================
+
+// =====================================================================
+// PREPARE EMAIL DATA (Winner Pic + Gallery List)
 // =====================================================================
 
 const prepareEmailData = (order: Order, triggerStatus: string) => {
-  
-  // 1. SELECT FILES BASED ON STATUS
-  let rawFiles: string[] = [];
-
-  if (triggerStatus === 'NEW_ORDER') {
-      rawFiles = order.customerAttachmentUrls || [];
-  } else if (['SHIPPED', 'DELIVERED', 'FEEDBACK'].includes(triggerStatus)) {
-      // For final stages, show Production files first, then Mockups
-      rawFiles = [...(order.productionFileUrls || []), ...(order.mockupUrls || [])];
+  // 1. GET ALL FILES
+  let allFiles: string[] = [];
+  if (triggerStatus === OrderStatus.NEW_ORDER) {
+      allFiles = order.customerAttachmentUrls || [];
   } else {
-      // For Approvals/Production, show Mockups
-      rawFiles = order.mockupUrls || [];
-      if (rawFiles.length === 0) rawFiles = order.customerAttachmentUrls || [];
+      allFiles = order.mockupUrls || [];
+      if (allFiles.length === 0 && order.customerAttachmentUrls?.length > 0) {
+          allFiles = order.customerAttachmentUrls;
+      }
   }
 
-  // 2. ICONS
-  const ICONS = {
-    PDF: "https://cdn-icons-png.flaticon.com/512/4726/4726010.png",
-    VECTOR: "https://cdn-icons-png.flaticon.com/512/136/136549.png", 
+  // 2. SORT & SEPARATE (Winner vs Gallery)
+  // We reverse so the Newest is first
+  const reversedFiles = [...allFiles].reverse();
+  
+  // Helper to detect images
+  const isImage = (url: string) => /\.(jpg|jpeg|png|gif|webp)$/i.test(url.toLowerCase());
+  
+  // Helper to get Icon or Image URL
+  const getPreview = (url: string) => {
+      if (!url) return "https://via.placeholder.com/150?text=No+File";
+      if (url.toLowerCase().endsWith('.pdf')) return "https://cdn-icons-png.flaticon.com/512/4726/4726010.png"; 
+      if (url.match(/\.(ai|eps|dst|emb)$/i)) return "https://cdn-icons-png.flaticon.com/512/136/136549.png"; 
+      return url; 
   };
 
-  // 3. BUILD SMART LIST
-  const processedFiles = rawFiles.map((url, index) => {
-    // Clean the URL to find the extension correctly
-    const cleanUrl = url.split('?')[0].toLowerCase(); 
-    const filename = url.split('/').pop()?.split('?')[0] || `File-${index + 1}`;
-    
-    // ✅ ROBUST IMAGE DETECTION
-    const isImage = cleanUrl.endsWith('.jpg') || 
-                    cleanUrl.endsWith('.jpeg') || 
-                    cleanUrl.endsWith('.png') || 
-                    cleanUrl.endsWith('.gif') || 
-                    cleanUrl.endsWith('.webp');
+  // A. FIND THE HERO (The Winner)
+  // Try to find the newest actual IMAGE. If only PDFs exist, take the newest PDF.
+  const heroUrl = reversedFiles.find(url => isImage(url)) || reversedFiles[0];
 
-    let previewUrl = url;
-    
-    // If it is NOT an image, assign an icon
-    if (!isImage) {
-        if (cleanUrl.endsWith('.pdf')) previewUrl = ICONS.PDF;
-        else previewUrl = ICONS.VECTOR;
-    }
+  // B. BUILD THE GALLERY (Everyone else)
+  const galleryUrls = reversedFiles.filter(url => url !== heroUrl);
 
-    return {
-      name: filename,
-      preview: previewUrl,
+  // 3. CONSTRUCT DATA OBJECTS
+  const heroData = heroUrl ? {
+      url: heroUrl,
+      preview: getPreview(heroUrl),
+      is_image: isImage(heroUrl)
+  } : null;
+
+  const galleryList = galleryUrls.map(url => ({
       url: url,
-      is_image: isImage
-    };
-  });
+      preview: getPreview(url),
+      is_image: isImage(url)
+  }));
 
-  const safeOrderNumber = order.orderNumber || order.id || "Pending";
-
-  // ✅ FIXED: Now includes tracking_link
+  // 4. RETURN FINAL DATA
   return {
-    customer_name: order.customerName || "Valued Customer",
-    email: order.customerEmail,
-    phone: order.customerPhone || 'N/A',
-    order_number: safeOrderNumber, 
-    order_id: order.id, 
-    design_name: order.designName || 'Custom Design',
-    quantity: order.patchesQuantity || 'N/A',
-    patch_type: order.patchesType || 'N/A',
-    backing: order.designBacking || 'N/A',
-    size: order.designSize || 'N/A',
+    // ... your standard fields ...
+    customer_name: order.customerName || "Customer",
+    order_number: order.orderNumber,
+    design_name: order.designName,
+    quantity: order.patchesQuantity,
+    patch_type: order.patchesType,
+    backing: order.designBacking,
+    instructions: order.instructions,
     
-    // ✅ The Smart List
-    files_list: processedFiles,
-    has_files: processedFiles.length > 0,
+    // --- THE MAGIC PARTS ---
+    hero_file: heroData,           // The Big Picture
+    gallery_files: galleryList,    // The Small Pictures
+    has_hero: !!heroData,
+    has_gallery: galleryList.length > 0,
     
-    total_price: `$${order.orderAmount?.toLocaleString()}`,
-    amount_paid: `$${order.amountPaid?.toLocaleString()}`,
-    amount_remaining: `$${order.amountRemaining?.toLocaleString()}`,
-    
-    order_link: `${window.location.origin}/order/${safeOrderNumber}`, 
-    
-    // ✅ FIXED: Add tracking link
-    tracking_number: order.shippingTrackingNumber || "",
-    carrier: order.shippingCarrier || "Carrier",
-    tracking_link: getTrackingLink(order.shippingCarrier || "", order.shippingTrackingNumber || ""),
-    
-    revision_notes: order.revisionNotes || "Check Dashboard."
+    // Links
+    order_link: `${window.location.origin}/order/${order.orderNumber}`,
   };
 };
 
 // =====================================================================
-// 4. TRIGGER LOGIC - FIXED: SEPARATED DELIVERED AND FEEDBACK
+// 4. TRIGGER LOGIC
 // =====================================================================
 
 export const triggerStatusEmail = async (order: Order, statusToCheck: string) => {
@@ -296,7 +234,6 @@ export const triggerStatusEmail = async (order: Order, statusToCheck: string) =>
       break;
       
     case OrderStatus.QUALITY_ASSURANCE:
-      // This can be an internal notification to the QA team/manager.
       if (SENDGRID_TEMPLATES.INTERNAL_QUALITY_ASSURANCE)
         requests.push({ to: PRODUCTION_MANAGER_EMAIL, template_id: SENDGRID_TEMPLATES.INTERNAL_QUALITY_ASSURANCE });
       break;
@@ -306,7 +243,6 @@ export const triggerStatusEmail = async (order: Order, statusToCheck: string) =>
         requests.push({ to: order.customerEmail, template_id: SENDGRID_TEMPLATES.CUSTOMER_DELIVERED });
       break;
 
-    // ✅ FIXED: Now uses the standard Enum
     case OrderStatus.FEEDBACK: 
       if (SENDGRID_TEMPLATES.CUSTOMER_FEEDBACK)
         requests.push({ to: order.customerEmail, template_id: SENDGRID_TEMPLATES.CUSTOMER_FEEDBACK });
@@ -394,44 +330,48 @@ export const updateOrderDetails = async (orderId: number, updates: any, oldOrder
 
   const newOrder = mapDbToOrder(data);
 
-  // --- ✅ NEW: Comprehensive Audit Logging ---
+  // --- Audit Logging ---
   const historyRecords = [];
   for (const key in updates) {
-    // Find the corresponding camelCase key in the oldOrder object
     const oldOrderKey = Object.keys(oldOrder).find(
       (k) => k.toLowerCase() === key.replace(/_/g, '').toLowerCase()
     ) as keyof Order;
 
-    if (oldOrderKey && oldOrder[oldOrderKey] !== updates[key]) {
-      historyRecords.push({
-        order_id: orderId,
-        user_email: userEmail,
-        field_changed: key, // e.g., 'order_amount'
-        old_value: String(oldOrder[oldOrderKey] ?? 'N/A'),
-        new_value: String(updates[key] ?? 'N/A'),
-      });
+    if (oldOrderKey) {
+      const oldValue = oldOrder[oldOrderKey];
+      const newValue = updates[key];
+      let hasChanged = false;
+
+      // If the properties are arrays, compare their stringified versions.
+      if (Array.isArray(oldValue) && Array.isArray(newValue)) {
+        if (JSON.stringify(oldValue.sort()) !== JSON.stringify(newValue.sort())) {
+          hasChanged = true;
+        }
+      } else if (oldValue !== newValue) {
+        hasChanged = true;
+      }
+
+      if (hasChanged) {
+        historyRecords.push({
+          order_id: orderId,
+          user_email: userEmail,
+          field_changed: key,
+          old_value: String(oldValue ?? 'N/A'),
+          new_value: String(newValue ?? 'N/A'),
+        });
+      }
     }
   }
-  // --- End of Audit Logging ---
 
+  // The loop above now handles status changes, so we only need to trigger the email.
   if (updates.status && updates.status !== oldOrder.status) {
-    await supabase.from('order_history').insert({
-      order_id: orderId,
-      user_email: userEmail,
-      field_changed: 'status',
-      old_value: oldOrder.status,
-      new_value: updates.status
-    });
-
     await triggerStatusEmail(newOrder, updates.status);
   }
   
-  // Insert all detected changes into the history table
   if (historyRecords.length > 0) {
     await supabase.from('order_history').insert(historyRecords);
   }
 
-  // ✅ THE FIX: Invalidate the reports query to force a refetch of fresh data.
   await queryClient.invalidateQueries({ queryKey: ['allOrdersReport'] });
 
   return newOrder;

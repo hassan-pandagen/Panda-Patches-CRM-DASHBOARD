@@ -77,9 +77,9 @@ const NewOrderPage: React.FC = () => {
         // *** THIS IS THE FIX ***
         amount_paid: formData.amountPaid, 
         
-        production_cost: formData.productionCost,
-        shipping_cost: formData.shippingCost,
-        marketing_cost: formData.marketingCost,
+        production_cost: formData.productionCost || 0,
+        shipping_cost: formData.shippingCost || 0,
+        marketing_cost: formData.marketingCost || 0,
 
         lead_source: formData.leadSource,
         status: formData.status.toString(),
@@ -152,6 +152,7 @@ const NewOrderPage: React.FC = () => {
         isSaving={isSaving} 
         onFormChange={onFormChange} 
         initialData={initialData} 
+        isNewOrder={true}
       />
     </div>
   );

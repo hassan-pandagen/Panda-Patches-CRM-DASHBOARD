@@ -9,8 +9,8 @@ import { LEAD_SOURCE_OPTIONS } from '../constants/index';
 import DateRangeFilter, { DateRange, getDefaultRange } from '../components/ui/DateRangeFilter';
 import { supabase } from '../services/supabaseClient';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, LineChart, Line, CartesianGrid, PieChart, Pie, Legend } from 'recharts';
-// ✅ 1. IMPORT THE CENTRALIZED MAPPER
-import { mapOrderForReporting } from '../services/orderService';
+// ✅ 1. IMPORT THE CENTRALIZED MAPPER (FIXED NAME)
+import { mapDbToOrder } from '../services/orderService';
 
 import { DollarSign, Package, TrendingUp, Zap, Share2, Download, CheckCircle, AlertCircle, Award, ChevronDown, FileText, Lock, ShieldAlert } from 'lucide-react';
 import { motion, Variants } from 'framer-motion';
@@ -539,7 +539,7 @@ const ReportsPage: React.FC = () => {
             if (error) throw error;
 
             // ✅ 2. REUSE THE CENTRALIZED MAPPER
-            return (data || []).map(mapOrderForReporting);
+            return (data || []).map(mapDbToOrder);
         },
         enabled: !!user && availableReports.length > 0,
         staleTime: 60000,

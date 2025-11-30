@@ -61,7 +61,8 @@ const EditOrderPage: React.FC = () => {
   const handleSave = async (formData: SaveData) => {
     if (!order) return;
     
-    setIsSaving(true);
+    // Start the shield
+    setIsSaving(true); 
     setSaveError(null);
     
     try {
@@ -110,32 +111,47 @@ const EditOrderPage: React.FC = () => {
       // Call Service
       const savedOrder = await updateOrderDetails(order.id, dbPayload, order, user?.email || 'unknown');
       
+      // ✅ SUCCESS SEQUENCE
+      
+      // 1. Permit Navigation (Unlock the door)
       setAllowNavigation(true);
+      
+      // 2. Clear Dirty Flag
       setIsDirty(false);
       
+      // 3. Show Success Message
       toast.success('Order Updated', 'Changes saved successfully.');
       
+      // 4. Refresh Data
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['allOrders'] }),
         queryClient.invalidateQueries({ queryKey: ['allOrdersReport'] }),
         queryClient.invalidateQueries({ queryKey: ['order', savedOrder.orderNumber] })
       ]);
 
+      // 5. Navigate
       setTimeout(() => {
         navigate(`/order/${savedOrder.orderNumber}`, { replace: true });
-      }, 50);
+      }, 100);
+      
+      // 🛑 CRITICAL CHANGE: 
+      // We do NOT set isSaving(false) here. 
+      // We leave it TRUE so the shield stays up until the page is gone.
       
     } catch (err: any) {
       console.error("Save failed:", err);
       setSaveError(err);
       toast.error('Update Failed', err.message || 'Could not save changes.');
-    } finally {
-      setIsSaving(false);
+      
+      // ❌ ON ERROR ONLY: Drop the shield so they can try again
+      setIsSaving(false); 
     }
   };
 
   const onFormChange = useCallback(() => {
-    if (isSaving) return;
+    // 🛡️ SHIELD: If we are currently saving (or finished saving), ignore changes.
+    if (isSaving) return; 
+
     if (!isDirty) {
       setIsDirty(true);
       setAllowNavigation(false);

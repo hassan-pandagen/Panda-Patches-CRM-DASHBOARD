@@ -76,6 +76,7 @@ interface OrderFormProps {
   isSaving?: boolean;
   onFormChange?: () => void;
   showFinancials?: boolean;
+  isNewOrder?: boolean; // Add this prop
 }
 
 // TRANSFORM: Convert DB data to Form Data
@@ -100,7 +101,8 @@ const OrderForm: React.FC<OrderFormProps> = ({
   initialData, 
   isSaving = false, 
   onFormChange,
-  showFinancials: showFinancialsProp // Use prop if provided
+  showFinancials: showFinancialsProp, // Use prop if provided
+  isNewOrder = false // Default to false (for edit pages)
 }) => {
   const { role, permissions } = useAuth();
 
@@ -224,13 +226,12 @@ const OrderForm: React.FC<OrderFormProps> = ({
           </div>
         </div>
         <div className="mt-10">
-          {/* REPLACED STANDARD <textarea> WITH YOUR CUSTOM <Textarea> */}
-          <Textarea 
-            label="Special Instructions"
+          <label className="block text-sm font-medium text-slate-300">Special Instructions</label>
+          <Textarea
             {...register('instructions')}
             error={errors.instructions?.message}
             maxLength={500} // Optional limit
-            className="w-full"
+            className="w-full mt-1"
           />
         </div>
       </FormSectionWrapper>
@@ -238,12 +239,11 @@ const OrderForm: React.FC<OrderFormProps> = ({
       <FormSectionWrapper title="Shipping Details">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
           <div className="md:col-span-2">
-            {/* REPLACED STANDARD <textarea> WITH YOUR CUSTOM <Textarea> */}
-            <Textarea 
-              label="Shipping Address"
+            <label className="block text-sm font-medium text-slate-300">Shipping Address</label>
+            <Textarea
               {...register('shippingAddress')}
               error={errors.shippingAddress?.message}
-              className="w-full"
+              className="w-full mt-1"
             />
           </div>
           <div>
@@ -316,11 +316,31 @@ const OrderForm: React.FC<OrderFormProps> = ({
       {canViewFinancials && ( // This now uses the corrected logic
         <FormSectionWrapper title="Financials">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-10">
-            <div><label className="block text-xs text-slate-400">Order Amount</label><input type="number" step="0.01" {...register('orderAmount', { valueAsNumber: true })} className="w-full bg-slate-800 border-slate-600 rounded-md text-white" /></div>
-            <div><label className="block text-xs text-slate-400">Amount Paid</label><input type="number" step="0.01" {...register('amountPaid', { valueAsNumber: true })} className="w-full bg-slate-800 border-slate-600 rounded-md text-white" /></div>
-            <div><label className="block text-xs text-slate-400">Production Cost</label><input type="number" step="0.01" {...register('productionCost', { valueAsNumber: true })} className="w-full bg-slate-800 border-slate-600 rounded-md text-white" /></div>
-            <div><label className="block text-xs text-slate-400">Shipping Cost</label><input type="number" step="0.01" {...register('shippingCost', { valueAsNumber: true })} className="w-full bg-slate-800 border-slate-600 rounded-md text-white" /></div>
-            <div className="col-span-2 md:col-span-4"><label className="block text-xs text-slate-400">Marketing Cost</label><input type="number" step="0.01" {...register('marketingCost', { valueAsNumber: true })} className="w-full bg-slate-800 border-slate-600 rounded-md text-white" /></div>
+            <div>
+              <label className="block text-xs text-slate-400">Order Amount</label>
+              <input type="number" step="0.01" {...register('orderAmount', { required: 'Required', valueAsNumber: true, min: { value: 0, message: "Cannot be negative" } })} className="w-full bg-slate-800 border-slate-600 rounded-md text-white" />
+              {errors.orderAmount && <p className="text-red-400 text-xs mt-1">{errors.orderAmount.message}</p>}
+            </div>
+            <div>
+              <label className="block text-xs text-slate-400">Amount Paid</label>
+              <input type="number" step="0.01" {...register('amountPaid', { required: 'Required', valueAsNumber: true, min: { value: 0, message: "Cannot be negative" } })} className="w-full bg-slate-800 border-slate-600 rounded-md text-white" />
+              {errors.amountPaid && <p className="text-red-400 text-xs mt-1">{errors.amountPaid.message}</p>}
+            </div>
+            <div>
+              <label className="block text-xs text-slate-400">Production Cost</label>
+              <input type="number" step="0.01" {...register('productionCost', { valueAsNumber: true, min: { value: 0, message: "Cannot be negative" } })} className="w-full bg-slate-800 border-slate-600 rounded-md text-white" />
+              {errors.productionCost && <p className="text-red-400 text-xs mt-1">{errors.productionCost.message}</p>}
+            </div>
+            <div>
+              <label className="block text-xs text-slate-400">Shipping Cost</label>
+              <input type="number" step="0.01" {...register('shippingCost', { valueAsNumber: true, min: { value: 0, message: "Cannot be negative" } })} className="w-full bg-slate-800 border-slate-600 rounded-md text-white" />
+              {errors.shippingCost && <p className="text-red-400 text-xs mt-1">{errors.shippingCost.message}</p>}
+            </div>
+            <div className="col-span-2 md:col-span-4">
+              <label className="block text-xs text-slate-400">Marketing Cost</label>
+              <input type="number" step="0.01" {...register('marketingCost', { valueAsNumber: true, min: { value: 0, message: "Cannot be negative" } })} className="w-full bg-slate-800 border-slate-600 rounded-md text-white" />
+              {errors.marketingCost && <p className="text-red-400 text-xs mt-1">{errors.marketingCost.message}</p>}
+            </div>
           </div>
           <div className="grid grid-cols-2 gap-10 pt-6 mt-6 border-t border-slate-700">
             <div><p className="text-xs text-slate-500">Remaining</p><p className="text-xl font-bold text-amber-400">${amountRemaining.toFixed(2)}</p></div>

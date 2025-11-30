@@ -6,159 +6,118 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+const getFileType = (url: string) => {
+  const cleanUrl = url.split('?')[0].toLowerCase();
+  if (cleanUrl.match(/\.(jpeg|jpg)$/)) return { type: 'image/jpeg', isImage: true };
+  if (cleanUrl.endsWith('.png')) return { type: 'image/png', isImage: true };
+  if (cleanUrl.endsWith('.gif')) return { type: 'image/gif', isImage: true };
+  if (cleanUrl.endsWith('.webp')) return { type: 'image/webp', isImage: true }; // Re-added for optimization
+  if (cleanUrl.endsWith('.pdf')) return { type: 'application/pdf', isImage: false };
+  return { type: 'application/octet-stream', isImage: false };
+};
+
+const fetchFileAsBase64 = async (url: string) => {
+  try {
+    const response = await fetch(url);
+    if (!response.ok) return null;
+    const arrayBuffer = await response.arrayBuffer();
+    const base64 = encode(new Uint8Array(arrayBuffer));
+    return { content: base64, ...getFileType(url) };
+  } catch (e) { return null; }
+};
+
 serve(async (req) => {
-  if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders });
-  }
+  if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
 
   try {
-    const requestBody = await req.json();
-    const { to, template_id, dynamic_data } = requestBody;
-
-    if (!to || !template_id) throw new Error('Missing to or template_id');
-
-    const SENDGRID_API_KEY = Deno.env.get('SENDGRID_API_KEY');
-    
-    // ✅ CLONE dynamic_data to avoid mutating the original
-    const processedData = JSON.parse(JSON.stringify(dynamic_data || {}));
+    const { to, template_id, dynamic_data } = await req.json();
     const attachments = [];
-    
-    if (processedData.files_list && Array.isArray(processedData.files_list)) {
-      console.log(`📦 Processing ${processedData.files_list.length} files...`);
+    const processedData = JSON.parse(JSON.stringify(dynamic_data));
 
-      // Process each file sequentially
-      for (let i = 0; i < processedData.files_list.length; i++) {
-        const file = processedData.files_list[i];
-        
-        try {
-          console.log(`📥 [${i}] Downloading: ${file.name} (${file.is_image ? 'IMAGE' : 'FILE'})`);
-          console.log(`    Original URL: ${file.url}`);
-          
-          // 1. Fetch the file from Supabase
-          const fileResp = await fetch(file.url);
-          if (!fileResp.ok) {
-            console.error(`❌ Failed to fetch ${file.url}: ${fileResp.status}`);
-            continue;
-          }
-          
-          // 2. Convert to ArrayBuffer then Base64
-          const arrayBuffer = await fileResp.arrayBuffer();
-          const base64Content = encode(new Uint8Array(arrayBuffer));
-          
-          console.log(`    File size: ${(arrayBuffer.byteLength / 1024).toFixed(2)} KB`);
+    console.log(`Processing Order for: ${to}`);
 
-          // 3. Process based on file type
-          if (file.is_image) {
-            // Generate unique content ID
-            const contentId = `img${i}${Date.now()}`;
-
-            // Determine MIME type
-            let mimeType = 'image/jpeg';
-            const lower = (file.name || file.url || '').toLowerCase();
-            if (lower.includes('.png')) mimeType = 'image/png';
-            else if (lower.includes('.gif')) mimeType = 'image/gif';
-            else if (lower.includes('.webp')) mimeType = 'image/webp';
-
-            // Add as inline attachment
-            attachments.push({
-              content: base64Content,
-              filename: file.name,
-              type: mimeType,
-              disposition: "inline",
-              content_id: contentId
-            });
-
-            // ✅ CRITICAL: Update the file reference in processedData
-            processedData.files_list[i].preview = `cid:${contentId}`;
-            processedData.files_list[i].url = `cid:${contentId}`;
-            
-            console.log(`✅ [${i}] Attached as inline: cid:${contentId}`);
-
-          } else {
-            // PDF/File attachment
-            attachments.push({
-              content: base64Content,
-              filename: file.name,
-              type: "application/pdf",
-              disposition: "attachment"
-            });
-            
-            console.log(`✅ [${i}] Attached as file: ${file.name}`);
-          }
-
-        } catch (err) {
-          console.error(`❌ Error processing file ${i}:`, err.message);
+    // --- 1. PROCESS HERO FILE (The Winner) ---
+    if (processedData.hero_file && processedData.hero_file.url) {
+        const fileData = await fetchFileAsBase64(processedData.hero_file.url);
+        if (fileData) {
+            if (fileData.isImage) {
+                // Inline Image
+                const cid = 'hero_img_cid';
+                attachments.push({
+                    content: fileData.content,
+                    filename: 'main-proof.jpg',
+                    type: fileData.type,
+                    disposition: 'inline',
+                    content_id: cid
+                });
+                processedData.hero_file.preview = `cid:${cid}`;
+            } else {
+                // PDF Attachment
+                attachments.push({
+                    content: fileData.content,
+                    filename: 'Main-Document.pdf',
+                    type: fileData.type,
+                    disposition: 'attachment'
+                });
+            }
         }
-      }
     }
 
-    console.log(`📧 Total attachments: ${attachments.length}`);
-    
-    // Debug: Show what we're sending to SendGrid
-    if (processedData.files_list) {
-      console.log(`🔍 Processed files_list:`);
-      processedData.files_list.forEach((f, idx) => {
-        console.log(`   [${idx}] ${f.name}: preview=${f.preview}, url=${f.url}`);
-      });
+    // --- 2. PROCESS GALLERY FILES ---
+    if (processedData.gallery_files && Array.isArray(processedData.gallery_files)) {
+        for (let i = 0; i < processedData.gallery_files.length; i++) {
+            const item = processedData.gallery_files[i];
+            const fileData = await fetchFileAsBase64(item.url);
+            
+            if (fileData) {
+                if (fileData.isImage) {
+                    const cid = `gal_img_${i}`;
+                    attachments.push({
+                        content: fileData.content,
+                        filename: `gallery-${i}.jpg`,
+                        type: fileData.type,
+                        disposition: 'inline',
+                        content_id: cid
+                    });
+                    processedData.gallery_files[i].preview = `cid:${cid}`;
+                } else {
+                    attachments.push({
+                        content: fileData.content,
+                        filename: `file-${i}.pdf`,
+                        type: fileData.type,
+                        disposition: 'attachment'
+                    });
+                }
+            }
+        }
     }
 
-    // --- PREPARE SENDGRID PAYLOAD ---
-    const payload = {
-      personalizations: [
-        {
-          to: [{ email: to }],
-          dynamic_template_data: processedData, // ✅ Use processed data with CIDs
-        },
-      ],
-      from: { 
-        email: 'hello@pandapatches.com', 
-        name: 'Panda Patches' 
-      },
-      template_id: template_id,
-      attachments: attachments,
-      asm: {
-        group_id: 28562,
-        groups_to_display: [28562],
-      },
-    };
-
-    // --- SEND ---
+    // --- 3. SEND ---
     const response = await fetch('https://api.sendgrid.com/v3/mail/send', {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${SENDGRID_API_KEY}`,
+        'Authorization': `Bearer ${Deno.env.get('SENDGRID_API_KEY')}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify(payload),
+      body: JSON.stringify({
+        personalizations: [{ to: [{ email: to }], dynamic_template_data: processedData }],
+        from: { email: 'hello@pandapatches.com', name: 'Panda Patches' },
+        template_id: template_id,
+        attachments: attachments,
+      }),
     });
 
-    if (!response.ok) {
-      const txt = await response.text();
-      throw new Error(`SendGrid Error (${response.status}): ${txt}`);
-    }
+    if (!response.ok) throw new Error(await response.text());
 
-    console.log(`✅ Email sent successfully!`);
-
-    return new Response(
-      JSON.stringify({ 
-        success: true, 
-        attachments_count: attachments.length 
-      }), 
-      { 
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' }, 
-        status: 200 
-      }
-    );
+    return new Response(JSON.stringify({ success: true }), {
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      status: 200,
+    });
 
   } catch (error: any) {
-    console.error('💥 ERROR:', error.message);
-    console.error('💥 STACK:', error.stack);
-    return new Response(
-      JSON.stringify({ error: error.message }), 
-      { 
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' }, 
-        status: 400 
-      }
-    );
+    return new Response(JSON.stringify({ error: error.message }), {
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      status: 400,
+    });
   }
 });
