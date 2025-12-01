@@ -97,8 +97,8 @@ const SalesReportComponent: FC<ReportComponentProps> = ({ orders }) => {
     const aov = totalOrders > 0 ? totalGrossRevenue / totalOrders : 0;
     const totalCollected = useMemo(() => orders.reduce((sum, order) => sum + (order.amountPaid || 0), 0), [orders]);
 
-    // ✅ CORRECTED CALCULATION: Pending amount should be based on original amounts, not net revenue.
-    const totalAmountPending = useMemo(() => orders.reduce((sum, order) => sum + ((order.originalAmount || 0) - (order.amountPaid || 0)), 0), [orders]);
+    // ✅ FIX: Calculate total pending by summing the pre-calculated 'amountRemaining' for each order.
+    const totalAmountPending = useMemo(() => orders.reduce((sum, order) => sum + (order.amountRemaining || 0), 0), [orders]);
 
     // ✅ NEW: Get the list of order numbers with pending payments
     const pendingOrderNumbers = useMemo(() => 
@@ -530,12 +530,19 @@ const ReportsPage: React.FC = () => {
             const endDate = new Date(dateRange.endDate);
             endDate.setHours(23, 59, 59, 999);
 
-            const { data, error } = await supabase
+            let query = supabase
                 .from('orders_with_details')
                 .select('*')
                 .gte('created_at', startDate.toISOString())
                 .lte('created_at', endDate.toISOString());
 
+            // ✅ SECURITY FIX: If user is not an Admin, only fetch their own orders.
+            // The 'user' object is from the useAuth() hook.
+            if (role !== UserRole.ADMIN) {
+                query = query.eq('sales_agent', user.email);
+            }
+
+            const { data, error } = await query;
             if (error) throw error;
 
             // ✅ 2. REUSE THE CENTRALIZED MAPPER

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '../services/supabaseClient';
@@ -12,13 +12,33 @@ const LoginPage: React.FC = () => {
   // Form State
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [mode, setMode] = useState<'login' | 'reset'>('login');
 
   // Redirect logic
   const state = location.state as { from?: { pathname: string } } | null;
   const from = state?.from?.pathname || '/';
+
+  // Listen for password recovery event from Supabase
+  useEffect(() => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'PASSWORD_RECOVERY') {
+        setMode('reset');
+        setSuccess('You can now set a new password.');
+        setError(null);
+      }
+    });
+
+    // Cleanup subscription on unmount
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, []);
 
   // 1. Fetch the Dynamic Logo (Same logic as Sidebar)
   // We use 'maybeSingle' to avoid errors if no logo is set yet
@@ -38,6 +58,7 @@ const LoginPage: React.FC = () => {
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+    setSuccess(null);
     setLoading(true);
 
     try {
@@ -51,6 +72,50 @@ const LoginPage: React.FC = () => {
     } catch (err: any) {
       console.error('Login Error:', err);
       setError('An unexpected error occurred. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handlePasswordResetRequest = async () => {
+    if (!email) {
+      setError('Please enter your email address to reset your password.');
+      return;
+    }
+    setError(null);
+    setSuccess(null);
+    setLoading(true);
+
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: window.location.origin, // Redirect back to the login page
+      });
+      if (error) throw error;
+      setSuccess('Password reset link has been sent to your email.');
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handlePasswordUpdate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (newPassword !== confirmPassword) {
+      setError('Passwords do not match.');
+      return;
+    }
+    setError(null);
+    setSuccess(null);
+    setLoading(true);
+
+    try {
+      const { error } = await supabase.auth.updateUser({ password: newPassword });
+      if (error) throw error;
+      setSuccess('Password updated successfully! You can now log in.');
+      setMode('login'); // Switch back to login mode
+    } catch (err: any) {
+      setError(err.message);
     } finally {
       setLoading(false);
     }
@@ -80,12 +145,18 @@ const LoginPage: React.FC = () => {
                 className="h-16 w-auto object-contain drop-shadow-lg" 
               />
             </div>
-            <h2 className="text-3xl font-bold text-white tracking-tight">
-              Welcome Back
-            </h2>
-            <p className="mt-2 text-sm text-slate-400">
-              Sign in to your CRM dashboard
-            </p>
+            {mode === 'login' && (
+              <>
+                <h2 className="text-3xl font-bold text-white tracking-tight">Welcome Back</h2>
+                <p className="mt-2 text-sm text-slate-400">Sign in to your CRM dashboard</p>
+              </>
+            )}
+            {mode === 'reset' && (
+              <>
+                <h2 className="text-3xl font-bold text-white tracking-tight">Set New Password</h2>
+                <p className="mt-2 text-sm text-slate-400">Enter your new password below.</p>
+              </>
+            )}
           </div>
 
           {/* ERROR MESSAGE */}
@@ -96,81 +167,136 @@ const LoginPage: React.FC = () => {
             </div>
           )}
 
-          <form className="space-y-6" onSubmit={handleLogin}>
-            
-            {/* EMAIL INPUT */}
-            <div>
-              <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2 ml-1">
-                Email Address
-              </label>
-              <div className="relative group">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  <Mail className="h-5 w-5 text-slate-500 group-focus-within:text-brand-orange transition-colors" />
-                </div>
-                <input
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  required
-                  autoComplete="email"
-                  placeholder="hello@pandapatches.com"
-                  className="block w-full pl-10 pr-3 py-3 bg-slate-800/50 border border-slate-700 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-brand-orange/50 focus:border-brand-orange transition-all duration-200"
-                />
-              </div>
+          {/* SUCCESS MESSAGE */}
+          {success && (
+            <div className="mb-6 p-4 bg-green-500/10 border border-green-500/20 rounded-lg flex items-center gap-3">
+              <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+              <p className="text-sm text-green-200">{success}</p>
             </div>
+          )}
 
-            {/* PASSWORD INPUT WITH EYE ICON */}
-            <div>
-              <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2 ml-1">
-                Password
-              </label>
-              <div className="relative group">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  <Lock className="h-5 w-5 text-slate-500 group-focus-within:text-brand-orange transition-colors" />
+          {mode === 'login' ? (
+            <form className="space-y-6" onSubmit={handleLogin}>
+              {/* EMAIL INPUT */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2 ml-1">
+                  Email Address
+                </label>
+                <div className="relative group">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                    <Mail className="h-5 w-5 text-slate-500 group-focus-within:text-brand-orange transition-colors" />
+                  </div>
+                  <input
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    required
+                    autoComplete="email"
+                    placeholder="hello@pandapatches.com"
+                    className="block w-full pl-10 pr-3 py-3 bg-slate-800/50 border border-slate-700 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-brand-orange/50 focus:border-brand-orange transition-all duration-200"
+                  />
                 </div>
-                <input
-                  type={showPassword ? "text" : "password"}
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  required
-                  autoComplete="current-password"
-                  placeholder="••••••••"
-                  className="block w-full pl-10 pr-10 py-3 bg-slate-800/50 border border-slate-700 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-brand-orange/50 focus:border-brand-orange transition-all duration-200"
-                />
-                {/* Toggle Password Visibility */}
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-500 hover:text-white transition-colors focus:outline-none"
-                >
-                  {showPassword ? (
-                    <EyeOff className="h-5 w-5" />
-                  ) : (
-                    <Eye className="h-5 w-5" />
-                  )}
+              </div>
+
+              {/* PASSWORD INPUT WITH EYE ICON */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2 ml-1">
+                  Password
+                </label>
+                <div className="relative group">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                    <Lock className="h-5 w-5 text-slate-500 group-focus-within:text-brand-orange transition-colors" />
+                  </div>
+                  <input
+                    type={showPassword ? "text" : "password"}
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    required
+                    autoComplete="current-password"
+                    placeholder="••••••••"
+                    className="block w-full pl-10 pr-10 py-3 bg-slate-800/50 border border-slate-700 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-brand-orange/50 focus:border-brand-orange transition-all duration-200"
+                  />
+                  {/* Toggle Password Visibility */}
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-500 hover:text-white transition-colors focus:outline-none"
+                  >
+                    {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                  </button>
+                </div>
+              </div>
+
+              <div className="text-right">
+                <button type="button" onClick={handlePasswordResetRequest} className="text-xs font-medium text-slate-400 hover:text-brand-orange transition-colors">
+                  Forgot Password?
                 </button>
               </div>
-            </div>
 
-            {/* SUBMIT BUTTON */}
-            <button
-              type="submit"
-              disabled={loading || !email || !password}
-              className="group relative w-full flex justify-center py-3 px-4 border border-transparent rounded-xl text-white bg-brand-orange hover:bg-orange-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand-orange disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 font-semibold shadow-lg shadow-brand-orange/20 hover:shadow-brand-orange/40"
-            >
-              {loading ? (
-                <div className="flex items-center gap-2">
-                  <Spinner size="sm" /> 
-                  <span>Signing in...</span>
+              {/* SUBMIT BUTTON */}
+              <button
+                type="submit"
+                disabled={loading || !email || !password}
+                className="group relative w-full flex justify-center py-3 px-4 border border-transparent rounded-xl text-white bg-brand-orange hover:bg-orange-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand-orange disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 font-semibold shadow-lg shadow-brand-orange/20 hover:shadow-brand-orange/40"
+              >
+                {loading ? (
+                  <div className="flex items-center gap-2"><Spinner size="sm" /><span>Signing in...</span></div>
+                ) : (
+                  <div className="flex items-center gap-2"><span>Sign In</span><ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" /></div>
+                )}
+              </button>
+            </form>
+          ) : (
+            <form className="space-y-6" onSubmit={handlePasswordUpdate}>
+              {/* NEW PASSWORD INPUT */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2 ml-1">New Password</label>
+                <div className="relative group">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none"><Lock className="h-5 w-5 text-slate-500 group-focus-within:text-brand-orange transition-colors" /></div>
+                  <input
+                    type={showPassword ? "text" : "password"}
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    required
+                    placeholder="Enter new password"
+                    className="block w-full pl-10 pr-10 py-3 bg-slate-800/50 border border-slate-700 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-brand-orange/50 focus:border-brand-orange transition-all duration-200"
+                  />
+                  <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-500 hover:text-white transition-colors focus:outline-none">
+                    {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                  </button>
                 </div>
-              ) : (
-                <div className="flex items-center gap-2">
-                  <span>Sign In</span>
-                  <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+              </div>
+
+              {/* CONFIRM PASSWORD INPUT */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2 ml-1">Confirm New Password</label>
+                <div className="relative group">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none"><Lock className="h-5 w-5 text-slate-500 group-focus-within:text-brand-orange transition-colors" /></div>
+                  <input
+                    type="password"
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    required
+                    placeholder="Confirm new password"
+                    className="block w-full pl-10 pr-3 py-3 bg-slate-800/50 border border-slate-700 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-brand-orange/50 focus:border-brand-orange transition-all duration-200"
+                  />
                 </div>
-              )}
-            </button>
-          </form>
+              </div>
+
+              {/* SUBMIT BUTTON */}
+              <button
+                type="submit"
+                disabled={loading || !newPassword || !confirmPassword}
+                className="group relative w-full flex justify-center py-3 px-4 border border-transparent rounded-xl text-white bg-brand-orange hover:bg-orange-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand-orange disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 font-semibold shadow-lg shadow-brand-orange/20 hover:shadow-brand-orange/40"
+              >
+                {loading ? (
+                  <div className="flex items-center gap-2"><Spinner size="sm" /><span>Updating...</span></div>
+                ) : (
+                  <div className="flex items-center gap-2"><span>Update Password</span><ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" /></div>
+                )}
+              </button>
+            </form>
+          )}
         </div>
 
         {/* Footer Text */}

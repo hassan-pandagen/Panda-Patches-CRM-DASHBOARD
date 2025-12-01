@@ -1,6 +1,6 @@
 // src/pages/NewOrderPage.tsx - UPDATED FOR DUPLICATION
 
-import React, { useState, useCallback, useMemo } from "react";
+import React, { useState, useCallback, useMemo, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom"; // Added useLocation
 import { useQueryClient } from "@tanstack/react-query";
 import { createOrder } from '../services/orderService';
@@ -15,13 +15,23 @@ const NewOrderPage: React.FC = () => {
   const [isSaving, setIsSaving] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [isDirty, setIsDirty] = useState(false);
+  const [navigateTo, setNavigateTo] = useState<string | null>(null); // NEW: For synchronized navigation
+  const [allowNavigation, setAllowNavigation] = useState(false); // NEW: For navigation shield
   
   const navigate = useNavigate();
   const location = useLocation(); // Hook to get the passed data
   const queryClient = useQueryClient();
   const { user } = useAuth();
   
-  const { showModal, confirmLeave, cancelLeave } = useWarnIfUnsaved(isDirty);
+  const { showModal, confirmLeave, cancelLeave } = useWarnIfUnsaved(isDirty, allowNavigation);
+
+  // This effect ensures navigation only happens after the state is clean.
+  useEffect(() => {
+    if (navigateTo && allowNavigation) {
+      navigate(navigateTo);
+    }
+  }, [navigateTo, allowNavigation, navigate]);
+
 
   // --- DUPLICATION LOGIC ---
   // Check if we were sent here with an order to duplicate
@@ -95,23 +105,32 @@ const NewOrderPage: React.FC = () => {
       // Send the mapped payload (dbPayload), NOT formData
       const newOrder = await createOrder(dbPayload, user?.email || 'unknown');
       
-      setIsDirty(false);
+      // ✅ SUCCESS SEQUENCE
+      // 1. Invalidate queries to start refetching data in the background.
       await queryClient.invalidateQueries({ queryKey: ['allOrders'] });
       await queryClient.invalidateQueries({ queryKey: ['dashboard-orders'] });
-      navigate(`/order/${newOrder.order_number || newOrder.orderNumber}`);
+
+      // 2. Set the state to allow navigation and define the destination path.
+      setAllowNavigation(true);
+      setIsDirty(false);
+      setNavigateTo(`/order/${newOrder.order_number || newOrder.orderNumber}`);
       
     } catch (err: any) {
       console.error('Failed to create order', err);
       setError(`Failed to create order: ${err.message || 'An unknown error occurred.'}`);
       setIsDirty(true);
-    } finally {
-      setIsSaving(false);
+      // ❌ ON ERROR ONLY: Drop the shield so they can try again
+      setIsSaving(false); 
     }
   };
 
   const onFormChange = useCallback(() => {
-    if (!isDirty) setIsDirty(true);
-  }, [isDirty]);
+    if (isSaving) return; // 🛡️ SHIELD: If we are saving, ignore changes.
+    if (!isDirty) {
+      setIsDirty(true);
+      setAllowNavigation(false); // Re-engage the shield if user makes more changes
+    }
+  }, [isDirty, isSaving]);
 
   return (
     <div className="p-6 max-w-7xl mx-auto">

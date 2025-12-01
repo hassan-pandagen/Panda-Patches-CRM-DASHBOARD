@@ -27,23 +27,22 @@ Deno.serve(async (req: Request) => {
     const { data: { user }, error: createError } = await supabaseAdmin.auth.admin.createUser({
       email: email,
       password: temporaryPassword,
-      email_confirm: true,
+      email_confirm: false, // ✅ FIX: Auto-confirm email since an admin is creating the user
       user_metadata: { full_name: fullName }
     });
 
     if (createError) throw createError;
     if (!user) throw new Error("User creation failed");
 
-    // Create Profile
+    // The `handle_new_user` trigger has already created a basic profile.
+    // Now, we just UPDATE it with the correct role and permissions.
     const { error: profileError } = await supabaseAdmin
       .from('user_profiles')
-      .upsert({
-        id: user.id,
-        email: email,
-        full_name: fullName,
+      .update({
         role: role,
         permissions: access
-      });
+      })
+      .eq('id', user.id);
 
     if (profileError) throw profileError;
 

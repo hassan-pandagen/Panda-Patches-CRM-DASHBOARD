@@ -95,29 +95,12 @@ export const mapDbToOrder = (data: any): Order => {
   } as Order;
 };
 
-const getTrackingLink = (carrier: string, trackingNumber: string) => {
-  if (!trackingNumber) return "#";
-  const c = (carrier || "").toLowerCase().trim();
-  const n = trackingNumber.trim();
-
-  if (c.includes('fedex')) return `https://www.fedex.com/fedextrack/?trknbr=${n}`;
-  if (c.includes('dhl')) return `https://www.dhl.com/en/express/tracking.html?AWB=${n}`;
-  if (c.includes('ups')) return `https://www.ups.com/track?tracknum=${n}`;
-  if (c.includes('usps')) return `https://tools.usps.com/go/TrackConfirmAction?tLabels=${n}`;
-  
-  return `https://www.google.com/search?q=${n}`;
-};
-
 // =====================================================================
-// 3. PREPARE EMAIL DATA (Smart Gallery + Formatting)
+// MASTER EMAIL DATA FUNCTION (With Fixed Tracking Logic)
 // =====================================================================
 
-// =====================================================================
-// PREPARE EMAIL DATA (Winner Pic + Gallery List)
-// =====================================================================
-
-const prepareEmailData = (order: Order, triggerStatus: string) => {
-  // 1. GET ALL FILES
+export const prepareEmailData = (order: Order, triggerStatus: string) => {
+  // --- 1. FILE GATHERING ---
   let allFiles: string[] = [];
   if (triggerStatus === OrderStatus.NEW_ORDER) {
       allFiles = order.customerAttachmentUrls || [];
@@ -128,141 +111,230 @@ const prepareEmailData = (order: Order, triggerStatus: string) => {
       }
   }
 
-  // 2. SORT & SEPARATE (Winner vs Gallery)
-  // We reverse so the Newest is first
-  const reversedFiles = [...allFiles].reverse();
-  
-  // Helper to detect images
+  // --- 2. SORT & IDENTIFY WINNER ---
+  const sortedFiles = [...allFiles].reverse();
   const isImage = (url: string) => /\.(jpg|jpeg|png|gif|webp)$/i.test(url.toLowerCase());
-  
-  // Helper to get Icon or Image URL
-  const getPreview = (url: string) => {
-      if (!url) return "https://via.placeholder.com/150?text=No+File";
-      if (url.toLowerCase().endsWith('.pdf')) return "https://cdn-icons-png.flaticon.com/512/4726/4726010.png"; 
-      if (url.match(/\.(ai|eps|dst|emb)$/i)) return "https://cdn-icons-png.flaticon.com/512/136/136549.png"; 
-      return url; 
+  const getFileName = (url: string) => {
+      try { return decodeURIComponent(url.split('/').pop() || 'File').substring(0, 25); } 
+      catch { return 'File'; }
   };
 
-  // A. FIND THE HERO (The Winner)
-  // Try to find the newest actual IMAGE. If only PDFs exist, take the newest PDF.
-  const heroUrl = reversedFiles.find(url => isImage(url)) || reversedFiles[0];
+  // Winner = First Image
+  const winnerUrl = sortedFiles.find(url => isImage(url)) || sortedFiles[0] || "";
+  // Gallery = Rest
+  const galleryUrls = sortedFiles.filter(url => url !== winnerUrl);
 
-  // B. BUILD THE GALLERY (Everyone else)
-  const galleryUrls = reversedFiles.filter(url => url !== heroUrl);
-
-  // 3. CONSTRUCT DATA OBJECTS
-  const heroData = heroUrl ? {
-      url: heroUrl,
-      preview: getPreview(heroUrl),
-      is_image: isImage(heroUrl)
+  // --- 3. BUILD FILE OBJECTS ---
+  const winnerObj = winnerUrl ? {
+      url: winnerUrl,
+      file_name: getFileName(winnerUrl),
+      is_image: isImage(winnerUrl)
   } : null;
 
   const galleryList = galleryUrls.map(url => ({
       url: url,
-      preview: getPreview(url),
+      file_name: getFileName(url),
       is_image: isImage(url)
   }));
 
-  // 4. RETURN FINAL DATA
+  // --- 4. SMART TRACKING LOGIC (RESTORED) ---
+  const carrier = (order.shippingCarrier || "").toLowerCase();
+  const trackingNum = (order.shippingTrackingNumber || "").trim();
+  
+  let trackingUrl = "#";
+  if (trackingNum) {
+      if (carrier.includes('fedex')) {
+          trackingUrl = `https://www.fedex.com/fedextrack/?trknbr=${trackingNum}`;
+      } else if (carrier.includes('dhl')) {
+          trackingUrl = `https://www.dhl.com/en/express/tracking.html?AWB=${trackingNum}`;
+      } else if (carrier.includes('ups')) {
+          trackingUrl = `https://www.ups.com/track?tracknum=${trackingNum}`;
+      } else if (carrier.includes('usps')) {
+          trackingUrl = `https://tools.usps.com/go/TrackConfirmAction?tLabels=${trackingNum}`;
+      } else {
+          // Fallback if carrier is unknown
+          trackingUrl = `https://www.google.com/search?q=${trackingNum}`;
+      }
+  }
+
+  // --- 5. RETURN FULL DATA ---
   return {
-    // ... your standard fields ...
-    customer_name: order.customerName || "Customer",
-    order_number: order.orderNumber,
-    design_name: order.designName,
-    quantity: order.patchesQuantity,
-    patch_type: order.patchesType,
-    backing: order.designBacking,
-    instructions: order.instructions,
-    
-    // --- THE MAGIC PARTS ---
-    hero_file: heroData,           // The Big Picture
-    gallery_files: galleryList,    // The Small Pictures
-    has_hero: !!heroData,
+    // > FILES
+    winner_file: winnerObj,
+    gallery_files: galleryList,
+    has_winner: !!winnerObj,
     has_gallery: galleryList.length > 0,
+
+    // > ORDER VARS
+    customer_name: order.customerName || "Valued Customer",
+    order_number: order.orderNumber || "Pending",
+    order_date: new Date(order.createdAt).toLocaleDateString(),
     
-    // Links
+    // > PRODUCT
+    design_name: order.designName || "Custom Design",
+    quantity: order.patchesQuantity || "0",
+    patch_type: order.patchesType || "N/A",
+    backing: order.designBacking || "N/A",
+    size: order.designSize || "N/A",
+    
+    // > FINANCIALS
+    total_price: `$${(order.orderAmount || 0).toLocaleString()}`,
+    amount_paid: `$${(order.amountPaid || 0).toLocaleString()}`,
+    amount_remaining: `$${((order.orderAmount || 0) - (order.amountPaid || 0)).toLocaleString()}`,
+    
+    // > SHIPPING & TRACKING
+    shipping_address: order.shippingAddress || "No address provided",
+    carrier: order.shippingCarrier || "Carrier",
+    tracking_number: trackingNum,
+    tracking_link: trackingUrl, // <--- This now has the correct FedEx Link
+    
+    // > EXTRAS
+    instructions: order.instructions,
     order_link: `${window.location.origin}/order/${order.orderNumber}`,
+    sales_agent_name: order.salesAgent || "Panda Team"
   };
 };
 
 // =====================================================================
-// 4. TRIGGER LOGIC
+// 5. EMAIL TRIGGER LOGIC
 // =====================================================================
 
 export const triggerStatusEmail = async (order: Order, statusToCheck: string) => {
-  
   const emailData = prepareEmailData(order, statusToCheck);
   const requests: { to: string; template_id: string }[] = [];
 
-  console.log(`📧 [Email Service] Triggering for Status: ${statusToCheck}`);
+  console.log(`📧 [Email Service] Triggering emails for status: ${statusToCheck}`);
+  console.log(`📎 Files: Winner=${emailData.has_winner ? 'Yes' : 'No'}, Gallery=${emailData.gallery_files.length}`);
   
+  // ---------------------------------------------------------
+  // Status-based Email Routing
+  // ---------------------------------------------------------
   switch (statusToCheck) {
     case OrderStatus.NEW_ORDER: 
-      if (SENDGRID_TEMPLATES.CUSTOMER_NEW_ORDER) 
-        requests.push({ to: order.customerEmail, template_id: SENDGRID_TEMPLATES.CUSTOMER_NEW_ORDER });
-      if (SENDGRID_TEMPLATES.INTERNAL_NEW_ORDER) 
-        requests.push({ to: PRODUCTION_MANAGER_EMAIL, template_id: SENDGRID_TEMPLATES.INTERNAL_NEW_ORDER });
+      if (SENDGRID_TEMPLATES.CUSTOMER_NEW_ORDER) {
+        requests.push({ 
+          to: order.customerEmail, 
+          template_id: SENDGRID_TEMPLATES.CUSTOMER_NEW_ORDER 
+        });
+      }
+      if (SENDGRID_TEMPLATES.INTERNAL_NEW_ORDER) {
+        requests.push({ 
+          to: PRODUCTION_MANAGER_EMAIL, 
+          template_id: SENDGRID_TEMPLATES.INTERNAL_NEW_ORDER 
+        });
+      }
       break;
 
     case OrderStatus.AWAITING_APPROVAL: 
-      if (SENDGRID_TEMPLATES.CUSTOMER_MOCKUP_READY) 
-        requests.push({ to: order.customerEmail, template_id: SENDGRID_TEMPLATES.CUSTOMER_MOCKUP_READY });
+      if (SENDGRID_TEMPLATES.CUSTOMER_MOCKUP_READY) {
+        requests.push({ 
+          to: order.customerEmail, 
+          template_id: SENDGRID_TEMPLATES.CUSTOMER_MOCKUP_READY 
+        });
+      }
       break;
 
     case OrderStatus.REVISION_REQUESTED: 
-      if (SENDGRID_TEMPLATES.CUSTOMER_REVISION_IN_PROGRESS) 
-        requests.push({ to: order.customerEmail, template_id: SENDGRID_TEMPLATES.CUSTOMER_REVISION_IN_PROGRESS });
-      if (SENDGRID_TEMPLATES.INTERNAL_REVISION_REQUESTED) 
-        requests.push({ to: PRODUCTION_MANAGER_EMAIL, template_id: SENDGRID_TEMPLATES.INTERNAL_REVISION_REQUESTED });
+      if (SENDGRID_TEMPLATES.CUSTOMER_REVISION_IN_PROGRESS) {
+        requests.push({ 
+          to: order.customerEmail, 
+          template_id: SENDGRID_TEMPLATES.CUSTOMER_REVISION_IN_PROGRESS 
+        });
+      }
+      if (SENDGRID_TEMPLATES.INTERNAL_REVISION_REQUESTED) {
+        requests.push({ 
+          to: PRODUCTION_MANAGER_EMAIL, 
+          template_id: SENDGRID_TEMPLATES.INTERNAL_REVISION_REQUESTED 
+        });
+      }
       break;
 
     case OrderStatus.IN_PRODUCTION: 
     case OrderStatus.APPROVED: 
       if (order.amountRemaining > 0 && SENDGRID_TEMPLATES.CUSTOMER_PAYMENT_NEEDED) {
-         requests.push({ to: order.customerEmail, template_id: SENDGRID_TEMPLATES.CUSTOMER_PAYMENT_NEEDED });
+        requests.push({ 
+          to: order.customerEmail, 
+          template_id: SENDGRID_TEMPLATES.CUSTOMER_PAYMENT_NEEDED 
+        });
       } else {
-         if (SENDGRID_TEMPLATES.CUSTOMER_PRODUCTION_START)
-           requests.push({ to: order.customerEmail, template_id: SENDGRID_TEMPLATES.CUSTOMER_PRODUCTION_START });
-         if (SENDGRID_TEMPLATES.INTERNAL_PRODUCTION_START)
-           requests.push({ to: PRODUCTION_MANAGER_EMAIL, template_id: SENDGRID_TEMPLATES.INTERNAL_PRODUCTION_START });
+        if (SENDGRID_TEMPLATES.CUSTOMER_PRODUCTION_START) {
+          requests.push({ 
+            to: order.customerEmail, 
+            template_id: SENDGRID_TEMPLATES.CUSTOMER_PRODUCTION_START 
+          });
+        }
+        if (SENDGRID_TEMPLATES.INTERNAL_PRODUCTION_START) {
+          requests.push({ 
+            to: PRODUCTION_MANAGER_EMAIL, 
+            template_id: SENDGRID_TEMPLATES.INTERNAL_PRODUCTION_START 
+          });
+        }
+      }
+      break;
+
+    case OrderStatus.QUALITY_ASSURANCE:
+      if (SENDGRID_TEMPLATES.INTERNAL_QUALITY_ASSURANCE) {
+        requests.push({ 
+          to: PRODUCTION_MANAGER_EMAIL, 
+          template_id: SENDGRID_TEMPLATES.INTERNAL_QUALITY_ASSURANCE 
+        });
       }
       break;
 
     case OrderStatus.SHIPPED: 
-      if (SENDGRID_TEMPLATES.CUSTOMER_SHIPPED) 
-        requests.push({ to: order.customerEmail, template_id: SENDGRID_TEMPLATES.CUSTOMER_SHIPPED });
-      break;
-      
-    case OrderStatus.QUALITY_ASSURANCE:
-      if (SENDGRID_TEMPLATES.INTERNAL_QUALITY_ASSURANCE)
-        requests.push({ to: PRODUCTION_MANAGER_EMAIL, template_id: SENDGRID_TEMPLATES.INTERNAL_QUALITY_ASSURANCE });
+      if (SENDGRID_TEMPLATES.CUSTOMER_SHIPPED) {
+        requests.push({ 
+          to: order.customerEmail, 
+          template_id: SENDGRID_TEMPLATES.CUSTOMER_SHIPPED 
+        });
+      }
       break;
 
     case OrderStatus.DELIVERED: 
-      if (SENDGRID_TEMPLATES.CUSTOMER_DELIVERED)
-        requests.push({ to: order.customerEmail, template_id: SENDGRID_TEMPLATES.CUSTOMER_DELIVERED });
+      if (SENDGRID_TEMPLATES.CUSTOMER_DELIVERED) {
+        requests.push({ 
+          to: order.customerEmail, 
+          template_id: SENDGRID_TEMPLATES.CUSTOMER_DELIVERED 
+        });
+      }
       break;
 
     case OrderStatus.FEEDBACK: 
-      if (SENDGRID_TEMPLATES.CUSTOMER_FEEDBACK)
-        requests.push({ to: order.customerEmail, template_id: SENDGRID_TEMPLATES.CUSTOMER_FEEDBACK });
+      if (SENDGRID_TEMPLATES.CUSTOMER_FEEDBACK) {
+        requests.push({ 
+          to: order.customerEmail, 
+          template_id: SENDGRID_TEMPLATES.CUSTOMER_FEEDBACK 
+        });
+      }
       break;
 
     case OrderStatus.REFUNDED: 
-      if (SENDGRID_TEMPLATES.CUSTOMER_REFUNDED)
-        requests.push({ to: order.customerEmail, template_id: SENDGRID_TEMPLATES.CUSTOMER_REFUNDED });
+      if (SENDGRID_TEMPLATES.CUSTOMER_REFUNDED) {
+        requests.push({ 
+          to: order.customerEmail, 
+          template_id: SENDGRID_TEMPLATES.CUSTOMER_REFUNDED 
+        });
+      }
       break;
   }
 
-  if (requests.length === 0) return;
+  if (requests.length === 0) {
+    console.log('⚠️ No email templates configured for this status');
+    return;
+  }
 
+  // ---------------------------------------------------------
+  // Send Emails
+  // ---------------------------------------------------------
   await Promise.all(requests.map(async (req) => {
     if (!req.to) {
-        console.warn("⚠️ Skipping email: Recipient address is missing.");
-        return;
+      console.warn('⚠️ Skipping email: Recipient address is missing');
+      return;
     }
     
     try {
+      console.log(`📤 Sending email to: ${req.to} (Template: ${req.template_id})`);
+      
       const { error } = await supabase.functions.invoke('send-email', {
         body: { 
           to: req.to, 
@@ -273,6 +345,7 @@ export const triggerStatusEmail = async (order: Order, statusToCheck: string) =>
       
       if (error) throw error;
 
+      // Log to communications table
       await supabase.from('order_communications').insert({
         order_id: order.id,
         recipient_email: req.to,
@@ -282,16 +355,16 @@ export const triggerStatusEmail = async (order: Order, statusToCheck: string) =>
         visibility: 'internal'
       });
 
-      console.log(`✅ Email sent to ${req.to}`);
+      console.log(`✅ Email sent successfully to ${req.to}`);
 
     } catch (err: any) {
-      console.error(`❌ Failed to send email to ${req.to}:`, err);
+      console.error(`❌ Failed to send email to ${req.to}:`, err.message || err);
     }
   }));
 };
 
 // =====================================================================
-// 5. EXPORTED ACTIONS
+// 6. CRUD OPERATIONS
 // =====================================================================
 
 export const createOrder = async (orderData: any, userEmail: string) => {
@@ -313,12 +386,17 @@ export const createOrder = async (orderData: any, userEmail: string) => {
   });
 
   const mappedOrder = mapDbToOrder(data);
-  triggerStatusEmail(mappedOrder, OrderStatus.NEW_ORDER);
+  await triggerStatusEmail(mappedOrder, OrderStatus.NEW_ORDER);
   
   return mappedOrder;
 };
 
-export const updateOrderDetails = async (orderId: number, updates: any, oldOrder: Order, userEmail: string) => {
+export const updateOrderDetails = async (
+  orderId: number, 
+  updates: any, 
+  oldOrder: Order, 
+  userEmail: string
+) => {
   const { data, error } = await supabase
     .from('orders')
     .update(updates)
@@ -330,7 +408,9 @@ export const updateOrderDetails = async (orderId: number, updates: any, oldOrder
 
   const newOrder = mapDbToOrder(data);
 
-  // --- Audit Logging ---
+  // ---------------------------------------------------------
+  // Audit Logging
+  // ---------------------------------------------------------
   const historyRecords = [];
   for (const key in updates) {
     const oldOrderKey = Object.keys(oldOrder).find(
@@ -342,7 +422,6 @@ export const updateOrderDetails = async (orderId: number, updates: any, oldOrder
       const newValue = updates[key];
       let hasChanged = false;
 
-      // If the properties are arrays, compare their stringified versions.
       if (Array.isArray(oldValue) && Array.isArray(newValue)) {
         if (JSON.stringify(oldValue.sort()) !== JSON.stringify(newValue.sort())) {
           hasChanged = true;
@@ -363,7 +442,9 @@ export const updateOrderDetails = async (orderId: number, updates: any, oldOrder
     }
   }
 
-  // The loop above now handles status changes, so we only need to trigger the email.
+  // ---------------------------------------------------------
+  // Trigger Status Email if Status Changed
+  // ---------------------------------------------------------
   if (updates.status && updates.status !== oldOrder.status) {
     await triggerStatusEmail(newOrder, updates.status);
   }

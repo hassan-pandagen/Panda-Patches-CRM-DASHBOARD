@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 
@@ -33,6 +33,7 @@ const EditOrderPage: React.FC = () => {
   // State for Unsaved Changes
   const [isDirty, setIsDirty] = useState(false);
   const [allowNavigation, setAllowNavigation] = useState(false);
+  const [navigateTo, setNavigateTo] = useState<string | null>(null); // NEW: For synchronized navigation
   const { showModal, confirmLeave, cancelLeave } = useWarnIfUnsaved(isDirty, allowNavigation);
 
   // State for Saving
@@ -40,6 +41,13 @@ const EditOrderPage: React.FC = () => {
   const [saveError, setSaveError] = useState<Error | null>(null);
 
   // FETCH DATA
+  // This effect ensures navigation only happens after the state is clean.
+  useEffect(() => {
+    if (navigateTo && allowNavigation) {
+      navigate(navigateTo, { replace: true });
+    }
+  }, [navigateTo, allowNavigation, navigate]);
+
   const { data: order, isLoading, error: fetchError } = useQuery<Order | null, Error>({
     queryKey: ['order', orderNumber],
     queryFn: async () => {
@@ -122,18 +130,13 @@ const EditOrderPage: React.FC = () => {
       // 3. Show Success Message
       toast.success('Order Updated', 'Changes saved successfully.');
       
-      // 4. Refresh Data
+      // 4. Invalidate queries to start refetching data in the background.
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['allOrders'] }),
         queryClient.invalidateQueries({ queryKey: ['allOrdersReport'] }),
         queryClient.invalidateQueries({ queryKey: ['order', savedOrder.orderNumber] })
       ]);
 
-      // 5. Navigate
-      setTimeout(() => {
-        navigate(`/order/${savedOrder.orderNumber}`, { replace: true });
-      }, 100);
-      
       // 🛑 CRITICAL CHANGE: 
       // We do NOT set isSaving(false) here. 
       // We leave it TRUE so the shield stays up until the page is gone.
