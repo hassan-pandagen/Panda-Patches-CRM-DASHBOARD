@@ -17,25 +17,23 @@ Deno.serve(async (req: Request) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
-    const { email, role, fullName, access } = await req.json();
-    if (!email) throw new Error("Email is required");
+    // 1. Get password from request
+    const { email, password, role, fullName, access } = await req.json();
+    
+    if (!email || !password) throw new Error("Email and Password are required");
 
-    // Generate Temp Password
-    const temporaryPassword = crypto.randomUUID().slice(0, 12);
-
-    // Create Auth User
+    // 2. Create User with Auto-Confirm
     const { data: { user }, error: createError } = await supabaseAdmin.auth.admin.createUser({
       email: email,
-      password: temporaryPassword,
-      email_confirm: false, // ✅ FIX: Auto-confirm email since an admin is creating the user
+      password: password,   // Set the password immediately
+      email_confirm: true,  // <--- CRITICAL: Marks email as verified immediately
       user_metadata: { full_name: fullName }
     });
 
     if (createError) throw createError;
     if (!user) throw new Error("User creation failed");
 
-    // The `handle_new_user` trigger has already created a basic profile.
-    // Now, we just UPDATE it with the correct role and permissions.
+    // 3. Update Profile Permissions
     const { error: profileError } = await supabaseAdmin
       .from('user_profiles')
       .update({
@@ -47,7 +45,7 @@ Deno.serve(async (req: Request) => {
     if (profileError) throw profileError;
 
     return new Response(
-      JSON.stringify({ user, temporaryPassword }),
+      JSON.stringify({ user }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
     );
 

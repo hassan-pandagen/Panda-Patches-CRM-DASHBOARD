@@ -1,14 +1,17 @@
 // src/components/orders/OrderForm.tsx
 
-import React, { useEffect, useMemo, FC } from 'react';
-import { useForm, useFieldArray } from 'react-hook-form';
+import React, { useEffect, useMemo, FC, useState } from 'react';
+import { useForm } from 'react-hook-form';
 import { useAuth } from '../../contexts/AuthContext';
 import { Order, OrderStatus, UserRole } from '../../types';
 import Button from '../ui/Button';
+import { useToast } from '../../hooks/useToast';
 import Spinner from '../ui/Spinner';
 import FileUploadSection from './FileUpload'; 
 import Textarea from '../ui/Textarea'; 
 import { LEAD_SOURCE_OPTIONS } from '../../constants';
+import { supabase } from '../../services/supabaseClient';
+import { History, UserCheck, ExternalLink } from 'lucide-react';
 
 const CANCELLATION_REASONS = [
   "Customer Ghosted / No Reply",
@@ -79,6 +82,12 @@ interface OrderFormProps {
   isNewOrder?: boolean; // Add this prop
 }
 
+interface ExistingCustomerInfo {
+  count: number;
+  lastOrder: string;
+}
+
+
 // TRANSFORM: Convert DB data to Form Data
 const transformOrderToFormData = (order: Order | null | undefined): SaveData => {
   if (!order) return {} as SaveData;
@@ -99,7 +108,6 @@ const transformOrderToFormData = (order: Order | null | undefined): SaveData => 
 const OrderForm: React.FC<OrderFormProps> = ({ 
   onSave, 
   initialData, 
-  isSaving = false, 
   onFormChange,
   showFinancials: showFinancialsProp, // Use prop if provided
   isNewOrder = false // Default to false (for edit pages)
@@ -107,6 +115,14 @@ const OrderForm: React.FC<OrderFormProps> = ({
   const { role, permissions } = useAuth();
 
   const formDefaultValues = useMemo(() => transformOrderToFormData(initialData), [initialData]);
+
+  // Internal state for the spinner, managed by the form itself.
+  const [isSaving, setIsSaving] = useState(false);
+  const toast = useToast();
+  
+  // ✅ State for live customer check
+  const [existingCustomer, setExistingCustomer] = useState<ExistingCustomerInfo | null>(null);
+  const [isCheckingCustomer, setIsCheckingCustomer] = useState(false);
 
   const { register, handleSubmit, watch, formState: { errors, isDirty }, reset, setValue } = useForm<SaveData>({
     defaultValues: formDefaultValues,
@@ -120,15 +136,84 @@ const OrderForm: React.FC<OrderFormProps> = ({
     reset(transformOrderToFormData(initialData));
   }, [initialData, reset]);
 
-  const onSubmit = (data: SaveData) => {
-    onSave(data);
+  // --- LIVE CUSTOMER CHECK ---
+  const watchEmail = watch('customerEmail');
+  const watchPhone = watch('customerPhone');
+
+  useEffect(() => {
+    const checkCustomer = async (identifier: string) => {
+      if (!identifier || identifier.length < 5) {
+        setExistingCustomer(null);
+        return;
+      }
+      setIsCheckingCustomer(true);
+      try {
+        const { data, error, count } = await supabase
+          .from('orders')
+          .select('created_at', { count: 'exact', head: false })
+          .or(`customer_email.eq.${identifier},customer_phone.eq.${identifier}`)
+          .order('created_at', { ascending: false })
+          .limit(1);
+
+        if (error) throw error;
+
+        if (count && count > 0) {
+          setExistingCustomer({
+            count: count,
+            lastOrder: new Date(data[0].created_at).toLocaleDateString(),
+          });
+        } else {
+          setExistingCustomer(null);
+        }
+      } catch (err) {
+        console.error("Error checking customer:", err);
+        setExistingCustomer(null);
+      } finally {
+        setIsCheckingCustomer(false);
+      }
+    };
+
+    const handler = setTimeout(() => {
+      const identifier = watchEmail || watchPhone;
+      if (isNewOrder && identifier) {
+        checkCustomer(identifier);
+      }
+    }, 750); // Debounce for 750ms
+
+    return () => clearTimeout(handler);
+  }, [watchEmail, watchPhone, isNewOrder]);
+
+  const onSubmit = async (data: SaveData) => {
+    setIsSaving(true); // Start Spinner
+
+    // ✅ NORMALIZE PHONE NUMBER: Remove all non-digit characters before saving.
+    const normalizedData = {
+      ...data,
+      customerPhone: data.customerPhone ? data.customerPhone.replace(/\D/g, '') : '',
+    };
+
+    try {
+      // This will now always succeed because of Step 1,
+      // unless the Database itself is down.
+      await onSave(normalizedData);
+
+      // The parent component handles navigation and major success toasts.
+      // This is a fallback in case it doesn't.
+      // toast.success('Order saved successfully');
+
+    } catch (error: any) {
+      console.error("Save Error:", error);
+      toast.error('Failed to save order', error.message || 'An unknown error occurred.');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
-  // ✅ CRITICAL FIX: Determine visibility. Prioritize prop from parent (like on the Edit page), 
-  // then fallback to a proper role/permission check (which fixes the New Order page).
-  const canViewFinancials = showFinancialsProp !== undefined 
-    ? showFinancialsProp 
-    : (role === UserRole.ADMIN || permissions?.view_financials === true);
+  // Determine if the user can edit financials.
+  // This is used for the Edit Order page. The New Order page controls this with the `showFinancials` prop.
+  const canEditFinancials = 
+    role === UserRole.ADMIN || 
+    permissions?.orders_edit_financials === true;
 
   // Financial Calcs
   const orderAmount = watch('orderAmount', 0) || 0;
@@ -176,6 +261,43 @@ const OrderForm: React.FC<OrderFormProps> = ({
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-8">
       <FormSectionWrapper title="Customer Information">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
+          
+          {/* --- LIVE CUSTOMER INSIGHTS --- */}
+          {existingCustomer && (
+            <div className="md:col-span-2 mb-6 p-4 bg-blue-500/10 border border-blue-500/30 rounded-xl flex items-center justify-between animate-in fade-in slide-in-from-top-2">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-blue-500/20 rounded-lg text-blue-400">
+                  <UserCheck className="w-5 h-5" />
+                </div>
+                <div>
+                  <h4 className="text-sm font-bold text-white flex items-center gap-2">
+                    Repeat Customer Detected
+                    <span className="text-xs font-normal bg-blue-600 text-white px-2 py-0.5 rounded-full">
+                      {existingCustomer.count} Past Orders
+                    </span>
+                  </h4>
+                  <p className="text-xs text-slate-400">
+                    Last order placed on: <span className="text-slate-200">{existingCustomer.lastOrder}</span>
+                  </p>
+                </div>
+              </div>
+              
+              <div className="text-right">
+                {/* ✅ THE FIX: Opens History in a NEW TAB so form data isn't lost */}
+                <a 
+                  href={`/customers/${encodeURIComponent(watchEmail || watchPhone)}`}
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-900/50 hover:bg-blue-600 border border-blue-500/30 rounded-lg text-xs font-bold text-blue-400 hover:text-white transition-all group"
+                >
+                  <History className="w-3 h-3 group-hover:animate-spin-slow" />
+                  View History
+                  <ExternalLink className="w-3 h-3 opacity-50" />
+                </a>
+              </div>
+            </div>
+          )}
+
           <div>
             <label className="block text-sm font-medium text-slate-300">Customer Name</label>
             <input type="text" {...register('customerName', { required: 'Required' })} className="mt-1 block w-full bg-slate-800 border-slate-600 rounded-md text-white focus:ring-brand-orange focus:border-brand-orange" />
@@ -313,32 +435,32 @@ const OrderForm: React.FC<OrderFormProps> = ({
         </div>
       </FormSectionWrapper>
 
-      {canViewFinancials && ( // This now uses the corrected logic
+      {(showFinancialsProp || canEditFinancials) && (
         <FormSectionWrapper title="Financials">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-10">
             <div>
               <label className="block text-xs text-slate-400">Order Amount</label>
-              <input type="number" step="0.01" {...register('orderAmount', { required: 'Required', valueAsNumber: true, min: { value: 0, message: "Cannot be negative" } })} className="w-full bg-slate-800 border-slate-600 rounded-md text-white" />
+              <input type="number" step="0.01" {...register('orderAmount', { required: 'Required', valueAsNumber: true, min: { value: 0, message: "Cannot be negative" } })} className="w-full bg-slate-800 border-slate-600 rounded-md text-white" disabled={!canEditFinancials} />
               {errors.orderAmount && <p className="text-red-400 text-xs mt-1">{errors.orderAmount.message}</p>}
             </div>
             <div>
               <label className="block text-xs text-slate-400">Amount Paid</label>
-              <input type="number" step="0.01" {...register('amountPaid', { required: 'Required', valueAsNumber: true, min: { value: 0, message: "Cannot be negative" } })} className="w-full bg-slate-800 border-slate-600 rounded-md text-white" />
+              <input type="number" step="0.01" {...register('amountPaid', { required: 'Required', valueAsNumber: true, min: { value: 0, message: "Cannot be negative" } })} className="w-full bg-slate-800 border-slate-600 rounded-md text-white" disabled={!canEditFinancials} />
               {errors.amountPaid && <p className="text-red-400 text-xs mt-1">{errors.amountPaid.message}</p>}
             </div>
             <div>
               <label className="block text-xs text-slate-400">Production Cost</label>
-              <input type="number" step="0.01" {...register('productionCost', { valueAsNumber: true, min: { value: 0, message: "Cannot be negative" } })} className="w-full bg-slate-800 border-slate-600 rounded-md text-white" />
+              <input type="number" step="0.01" {...register('productionCost', { valueAsNumber: true, min: { value: 0, message: "Cannot be negative" } })} className="w-full bg-slate-800 border-slate-600 rounded-md text-white" disabled={!canEditFinancials} />
               {errors.productionCost && <p className="text-red-400 text-xs mt-1">{errors.productionCost.message}</p>}
             </div>
             <div>
               <label className="block text-xs text-slate-400">Shipping Cost</label>
-              <input type="number" step="0.01" {...register('shippingCost', { valueAsNumber: true, min: { value: 0, message: "Cannot be negative" } })} className="w-full bg-slate-800 border-slate-600 rounded-md text-white" />
+              <input type="number" step="0.01" {...register('shippingCost', { valueAsNumber: true, min: { value: 0, message: "Cannot be negative" } })} className="w-full bg-slate-800 border-slate-600 rounded-md text-white" disabled={!canEditFinancials} />
               {errors.shippingCost && <p className="text-red-400 text-xs mt-1">{errors.shippingCost.message}</p>}
             </div>
             <div className="col-span-2 md:col-span-4">
               <label className="block text-xs text-slate-400">Marketing Cost</label>
-              <input type="number" step="0.01" {...register('marketingCost', { valueAsNumber: true, min: { value: 0, message: "Cannot be negative" } })} className="w-full bg-slate-800 border-slate-600 rounded-md text-white" />
+              <input type="number" step="0.01" {...register('marketingCost', { valueAsNumber: true, min: { value: 0, message: "Cannot be negative" } })} className="w-full bg-slate-800 border-slate-600 rounded-md text-white" disabled={!canEditFinancials} />
               {errors.marketingCost && <p className="text-red-400 text-xs mt-1">{errors.marketingCost.message}</p>}
             </div>
           </div>

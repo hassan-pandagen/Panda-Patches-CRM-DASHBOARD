@@ -1,5 +1,3 @@
-// src/pages/ReportsPage.tsx - FINAL, CLICKABLE, DRILL-DOWN ENABLED
-
 import React, { useState, useCallback, useMemo, useEffect, FC } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '../contexts/AuthContext';
@@ -9,17 +7,15 @@ import { LEAD_SOURCE_OPTIONS } from '../constants/index';
 import DateRangeFilter, { DateRange, getDefaultRange } from '../components/ui/DateRangeFilter';
 import { supabase } from '../services/supabaseClient';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, LineChart, Line, CartesianGrid, PieChart, Pie, Legend } from 'recharts';
-// ✅ 1. IMPORT THE CENTRALIZED MAPPER (FIXED NAME)
 import { mapDbToOrder } from '../services/orderService';
 
-import { DollarSign, Package, TrendingUp, Zap, Share2, Download, CheckCircle, AlertCircle, Award, ChevronDown, FileText, Lock, ShieldAlert } from 'lucide-react';
+import { DollarSign, TrendingUp, Zap, Share2, Download, CheckCircle, AlertCircle, Award, ChevronDown, FileText, Lock, ShieldAlert } from 'lucide-react';
 import { motion, Variants } from 'framer-motion';
 import { TooltipProps } from 'recharts';
 import { NameType, ValueType } from 'recharts/types/component/DefaultTooltipContent';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { CSVLink } from 'react-csv';
 import ProfitLossReportComponent from '../components/Reports/ProfitLossReportComponent';
-// ✅ IMPORT THE NEW CHART
 import CancellationChart from '../components/Reports/CancellationChart';
 import { SOURCE_COLORS, PATCH_TYPE_COLORS } from '../constants/colors';
 
@@ -27,11 +23,7 @@ import { SOURCE_COLORS, PATCH_TYPE_COLORS } from '../constants/colors';
 const containerVariants: Variants = {
     hidden: { opacity: 0 },
     visible: {
-      opacity: 1,
-      transition: {
-        staggerChildren: 0.1,
-        delayChildren: 0.1
-      }
+      opacity: 1, transition: { staggerChildren: 0.1, delayChildren: 0.1 }
     }
 };
 
@@ -39,8 +31,7 @@ const cardVariants: Variants = {
   hidden: { opacity: 0, y: 20 },
   visible: {
     opacity: 1,
-    y: 0,
-    transition: { type: "spring", stiffness: 100, damping: 15 }
+    y: 0, transition: { type: "spring", stiffness: 100, damping: 15 }
   }
 };
 
@@ -85,64 +76,41 @@ const CustomTooltip: FC<TooltipProps<ValueType, NameType>> = ({ active, payload,
   return null;
 };
 
-// --- REPORT COMPONENTS (Sales, Production, etc.) ---
-
-
+// --- 1. SALES REPORT (Visible to Admin & Sales Agent) ---
 const SalesReportComponent: FC<ReportComponentProps> = ({ orders }) => {
     const navigate = useNavigate();
-    // Use originalAmount for accurate revenue reporting before cancellations
-    const totalGrossRevenue = useMemo(() => orders.reduce((sum, order) => sum + (order.originalAmount || 0), 0), [orders]);
+    
+    // SAFEGUARDS: If DB sends NULL (masked), treat as 0
     const totalNetRevenue = useMemo(() => orders.reduce((sum, order) => sum + (order.orderAmount || 0), 0), [orders]);
-    const totalOrders = orders.length;
-    const aov = totalOrders > 0 ? totalGrossRevenue / totalOrders : 0;
     const totalCollected = useMemo(() => orders.reduce((sum, order) => sum + (order.amountPaid || 0), 0), [orders]);
-
-    // ✅ FIX: Calculate total pending by summing the pre-calculated 'amountRemaining' for each order.
     const totalAmountPending = useMemo(() => orders.reduce((sum, order) => sum + (order.amountRemaining || 0), 0), [orders]);
+    const totalOrders = orders.length;
+    const aov = totalOrders > 0 ? totalNetRevenue / totalOrders : 0;
 
-    // ✅ NEW: Get the list of order numbers with pending payments
     const pendingOrderNumbers = useMemo(() => 
-        orders
-            .filter(order => order.amountRemaining > 0.01) // ✅ FIX: Use the pre-calculated amountRemaining for accuracy
-            .map(order => order.orderNumber), 
+        orders.filter(order => (order.amountRemaining || 0) > 0.01).map(order => order.orderNumber), 
     [orders]);
-
-    const salesByAgent = useMemo(() => {
-        const agentSales = orders.reduce((acc, order) => {
-            const agentName = order.salesAgent || 'Unknown';
-            if (!acc[agentName]) { acc[agentName] = { revenue: 0, orders: 0 }; }
-            acc[agentName].revenue += (order.orderAmount || 0);
-            acc[agentName].orders += 1;
-            return acc;
-        }, {} as Record<string, { revenue: number, orders: number }>);
-
-        return Object.entries(agentSales).map(([name, data]) => ({
-            name, ...data, aov: data.orders > 0 ? data.revenue / data.orders : 0
-        })).sort((a, b) => b.revenue - a.revenue);
-    }, [orders]);
 
     const revenueTrend = useMemo(() => {
         const dailyRevenue = new Map<string, number>();
         for (const order of orders) {
             if (order.createdAt) {
                 const date = new Date(order.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-                dailyRevenue.set(date, (dailyRevenue.get(date) || 0) + (order.orderAmount || 0));
+                dailyRevenue.set(date, (dailyRevenue.get(date) || 0) + (order.orderAmount || 0)); // Use masked amount
             }
         }
         return Array.from(dailyRevenue.entries(), ([date, revenue]) => ({ date, revenue }))
             .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
     }, [orders]);
 
-    const COLORS = ['#3B82F6', '#8B5CF6', '#06B6D4', '#10B981', '#F59E0B', '#EF4444'];
-
     return (
         <div className="space-y-6">
             <motion.div variants={containerVariants} initial="hidden" animate="visible" className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                 <StatCardWrapper gradient="bg-gradient-to-r from-brand-orange to-orange-600" onClick={() => navigate('/orders')}>
-                    <SimpleStatCard title="Net Revenue" value={totalNetRevenue} prefix="$" icon={<DollarSign className="w-6 h-6 text-brand-orange" />} />
+                    <SimpleStatCard title="My Sales Revenue" value={totalNetRevenue} prefix="$" icon={<DollarSign className="w-6 h-6 text-brand-orange" />} />
                 </StatCardWrapper>
                 <StatCardWrapper gradient="bg-gradient-to-r from-amber-500 to-yellow-500" onClick={() => navigate(`/orders?ids=${pendingOrderNumbers.join(',')}`)}>
-                    <SimpleStatCard title="Amount Pending" value={totalAmountPending} prefix="$" icon={<AlertCircle className="w-6 h-6 text-amber-300" />} />
+                    <SimpleStatCard title="Pending Payment" value={totalAmountPending} prefix="$" icon={<AlertCircle className="w-6 h-6 text-amber-300" />} />
                 </StatCardWrapper>
                 <StatCardWrapper gradient="bg-gradient-to-r from-purple-500 to-pink-500" onClick={() => navigate('/orders')}>
                     <SimpleStatCard title="Avg. Order Value" value={aov.toFixed(2)} prefix="$" icon={<TrendingUp className="w-6 h-6 text-purple-400" />} />
@@ -153,62 +121,16 @@ const SalesReportComponent: FC<ReportComponentProps> = ({ orders }) => {
             </motion.div>
 
             <div className="bg-slate-900/40 backdrop-blur-xl border border-white/10 rounded-2xl p-6 shadow-xl">
-                <h4 className="text-lg font-semibold text-white mb-4">Revenue Trend</h4>
+                <h4 className="text-lg font-semibold text-white mb-4">Performance Trend</h4>
                 <ResponsiveContainer width="100%" height={300}>
                     <LineChart data={revenueTrend}>
-                        <defs>
-                            <linearGradient id="revenueGradient" x1="0" y1="0" x2="0" y2="1">
-                                <stop offset="5%" stopColor="#FB6E1D" stopOpacity={0.3}/>
-                                <stop offset="95%" stopColor="#FB6E1D" stopOpacity={0}/>
-                            </linearGradient>
-                        </defs>
                         <CartesianGrid strokeDasharray="3 3" stroke="#374151" opacity={0.3} />
                         <XAxis dataKey="date" stroke="#cbd5e1" style={{ fontSize: '12px' }} />
-                        <YAxis stroke="#cbd5e1" style={{ fontSize: '12px' }} tickFormatter={(v) => `$${(v/1000).toFixed(1)}k`} />
+                        <YAxis stroke="#cbd5e1" style={{ fontSize: '12px' }} tickFormatter={(v) => `$${v}`} />
                         <Tooltip content={<CustomTooltip />} />
-                        <Line type="monotone" dataKey="revenue" stroke="#FB6E1D" strokeWidth={3} dot={{ fill: '#FB6E1D', r: 5 }} fill="url(#revenueGradient)" />
+                        <Line type="monotone" dataKey="revenue" stroke="#FB6E1D" strokeWidth={3} dot={{ fill: '#FB6E1D', r: 5 }} />
                     </LineChart>
                 </ResponsiveContainer>
-            </div>
-
-            <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
-                <div className="lg:col-span-2 bg-slate-900/40 backdrop-blur-xl border border-white/10 rounded-2xl p-6 shadow-xl">
-                    <h4 className="text-lg font-semibold text-white mb-4">Top Sales Agents</h4>
-                    <ResponsiveContainer width="100%" height={300}>
-                        <BarChart data={salesByAgent.slice(0, 6)} layout="vertical">
-                            <XAxis type="number" hide /><YAxis type="category" dataKey="name" stroke="#cbd5e1" width={100} style={{ fontSize: '12px' }} />
-                            <Tooltip
-                                cursor={{ fill: 'rgba(100, 116, 139, 0.1)' }}
-                                content={<CustomTooltip />}
-                            />
-                            <Bar dataKey="revenue" name="Revenue" radius={[0, 6, 6, 0]} barSize={32} activeBar={false}>
-                                {salesByAgent.map((_, index) => (<Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />))}
-                            </Bar>
-                        </BarChart>
-                    </ResponsiveContainer>
-                </div>
-                <div className="lg:col-span-3 bg-slate-900/40 backdrop-blur-xl border border-white/10 rounded-2xl p-6 shadow-xl">
-                    <h4 className="text-lg font-semibold text-white mb-4">Agent Ranking</h4>
-                    <div className="overflow-y-auto h-[300px]">
-                        <table className="w-full text-sm text-left text-slate-200">
-                            <thead className="text-xs text-slate-400 uppercase bg-slate-800/50 sticky top-0">
-                                <tr>
-                                    <th className="px-4 py-2">Agent</th><th className="px-4 py-2 text-right">Revenue</th><th className="px-4 py-2 text-center">Orders</th><th className="px-4 py-2 text-right">AOV</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-slate-700/50">
-                                {salesByAgent.map((agent) => (
-                                    <tr key={agent.name} className="hover:bg-slate-700/30 cursor-pointer transition-colors" onClick={() => navigate(`/orders?salesAgent=${encodeURIComponent(agent.name)}`)}>
-                                        <td className="px-4 py-3 font-semibold text-white">{agent.name}</td>
-                                        <td className="px-4 py-3 text-right">${agent.revenue.toLocaleString()}</td>
-                                        <td className="px-4 py-3 text-center">{agent.orders}</td>
-                                        <td className="px-4 py-3 text-right text-cyan-400 font-medium">${agent.aov.toFixed(2)}</td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
             </div>
         </div>
     );
@@ -424,12 +346,12 @@ const ProductionReportComponent: FC<ReportComponentProps> = ({ orders }) => {
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 <div className="bg-slate-900/40 backdrop-blur-xl border border-white/10 rounded-2xl p-6 shadow-xl">
                     <h4 className="text-lg font-semibold text-white mb-4">Production Breakdown</h4>
-                    <div className="space-y-2">
+                    <div className="space-y-2 max-h-[300px] overflow-y-auto custom-scrollbar">
                         {statusDistribution.map((group) => (
                             <div key={group.name} className="bg-slate-800/50 rounded-lg">
                                 <button onClick={() => setExpandedStatus(expandedStatus === group.name ? null : group.name)} className="w-full flex items-center justify-between p-3 text-left hover:bg-white/5 transition-colors rounded-lg">
                                     <div className="flex items-center gap-3">
-                                        <span className={`w-2.5 h-2.5 rounded-full shadow-[0_0_8px_rgba(0,0,0,0.5)] ${getStatusColor(group.name.toUpperCase())}`}></span>
+                                        <span className={`w-2.5 h-2.5 rounded-full ${getStatusColor(group.name.toUpperCase())}`}></span>
                                         
                                         <span className="text-slate-200 text-sm font-medium capitalize">{group.name.toLowerCase()}</span>
                                     </div>
@@ -444,16 +366,15 @@ const ProductionReportComponent: FC<ReportComponentProps> = ({ orders }) => {
                     </div>
                 </div>
                 <div className="bg-slate-900/40 backdrop-blur-xl border border-white/10 rounded-2xl p-6 shadow-xl">
-                    <h4 className="text-lg font-semibold text-white mb-4">Patch Types in Production</h4>
+                    <h4 className="text-lg font-semibold text-white mb-4">Patch Types</h4>
                     <ResponsiveContainer width="100%" height={300}>
                         <BarChart data={patchTypeStats} layout="vertical" margin={{ left: 10 }}>
-                            <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />
                             <XAxis type="number" stroke="#94A3B8" hide />
-                            <YAxis type="category" dataKey="name" stroke="#cbd5e1" width={90} style={{ fontSize: '12px', fontWeight: 500 }} />
+                            <YAxis type="category" dataKey="name" stroke="#cbd5e1" width={90} style={{ fontSize: '12px' }} />
                             <Tooltip cursor={{ fill: 'rgba(100, 116, 139, 0.1)' }} content={<CustomTooltip />} />
-                            <Bar dataKey="count" name="Orders" radius={[0, 6, 6, 0]} activeBar={false}>
+                            <Bar dataKey="count" radius={[0, 6, 6, 0]} activeBar={false}>
                                 {patchTypeStats.map((entry, index) => (
-                                    <Cell key={`cell-${index}`} fill={PATCH_TYPE_COLORS[entry.name] || PATCH_TYPE_COLORS['Unknown']} />
+                                    <Cell key={`cell-${index}`} fill={PATCH_TYPE_COLORS[entry.name] || '#64748b'} />
                                 ))}
                             </Bar>
                         </BarChart>
@@ -471,57 +392,57 @@ type ReportType = 'sales' | 'production' | 'leadSource' | 'profitLoss' | 'qualit
 const ReportsPage: React.FC = () => {
     const { user, role, permissions, isLoading: isAuthLoading } = useAuth();
     
-    const isAdmin = role === UserRole.ADMIN;
-    const canViewFinancials = isAdmin || permissions?.view_financials;
-    const canViewProduction = isAdmin || permissions?.view_production;
-
-    const availableReports = useMemo(() => {
-        const options: { key: ReportType, label: string, icon: React.FC<any> }[] = [];
-        
-        // Sales and Quality reports are available to anyone with financial view
-        if (canViewFinancials) {
-            options.push({ key: 'sales', label: 'Sales', icon: TrendingUp });
-            options.push({ key: 'quality', label: 'Quality & Refunds', icon: ShieldAlert });
-        }
-        
-        // Profit & Loss and Lead Source reports are Admin-only
-        if (isAdmin) {
-            options.push({ key: 'profitLoss', label: 'Profit & Loss', icon: FileText });
-            options.push({ key: 'leadSource', label: 'Lead Source', icon: Share2 });
-        }
-
-        // Production report is available to anyone with production view
-        if (canViewProduction) {
-            options.push({ key: 'production', label: 'Production', icon: Zap });
-        }
-
-        return options;
-    }, [isAdmin, canViewFinancials, canViewProduction]);
-
-  const [searchParams, setSearchParams] = useSearchParams();
-  const activeReport = searchParams.get('type') || (availableReports.length > 0 ? availableReports[0].key : 'sales');
-
+    const [searchParams, setSearchParams] = useSearchParams();
     const [dateRange, setDateRange] = useState<DateRange>(getDefaultRange);
 
+    // --- 1. DYNAMIC TAB GENERATION (The Clean UI Fix) ---
+    const availableReports = useMemo(() => {
+        const tabs: { key: ReportType, label: string, icon: React.FC<any> }[] = [];
+
+        // ADMIN: Sees Everything
+        if (role === UserRole.ADMIN) {
+            return [
+                { key: 'sales', label: 'Sales', icon: TrendingUp },
+                { key: 'production', label: 'Production', icon: Zap },
+                { key: 'quality', label: 'Quality & Refunds', icon: ShieldAlert },
+                { key: 'profitLoss', label: 'Profit & Loss', icon: FileText },
+                { key: 'leadSource', label: 'Lead Source', icon: Share2 },
+            ];
+        }
+
+        // SALES AGENT: Sees Sales (Their data), Production, Quality
+        if (permissions?.orders_create && !permissions?.orders_view_all) {
+             tabs.push({ key: 'sales', label: 'My Performance', icon: TrendingUp }); // Renamed for clarity
+             tabs.push({ key: 'production', label: 'Production Queue', icon: Zap });
+             tabs.push({ key: 'quality', label: 'Quality Issues', icon: ShieldAlert });
+             return tabs;
+        }
+
+        // PRODUCTION: Sees ONLY Production
+        if (permissions?.orders_edit_production) {
+            tabs.push({ key: 'production', label: 'Production', icon: Zap });
+            return tabs;
+        }
+
+        return tabs;
+    }, [role, permissions]);
+
+    const activeReport = (searchParams.get('type') as ReportType) || (availableReports.length > 0 ? availableReports[0].key : 'production');
+
+    // --- 2. AUTO-REDIRECT SAFETY ---
+    // If a user tries to access a tab they don't have, switch them to their first available tab.
     useEffect(() => {
-    // If the active report from the URL isn't in the list of available reports,
-    // redirect to the first available one.
-    if (availableReports.length > 0 && !availableReports.find(r => r.key === activeReport)) {
-      setSearchParams({ type: availableReports[0].key });
-    }
-  }, [availableReports, activeReport, setSearchParams]);
+        if (!isAuthLoading && availableReports.length > 0) {
+            const isValidReport = availableReports.find(r => r.key === activeReport);
+            if (!isValidReport) {
+                setSearchParams({ type: availableReports[0].key });
+            }
+        }
+    }, [availableReports, activeReport, isAuthLoading, setSearchParams]);
 
-    const handleDateChange = useCallback((newDateRange: DateRange) => { setDateRange(newDateRange); }, []);
-    const handleQuickFilter = useCallback((days: number) => {
-        const endDate = new Date();
-        const startDate = new Date();
-        startDate.setDate(endDate.getDate() - (days - 1));
-        startDate.setHours(0, 0, 0, 0);
-        setDateRange({ startDate: startDate.toISOString().split('T')[0], endDate: endDate.toISOString().split('T')[0] });
-    }, []);
 
-    // --- DATA FETCHING (WITH FIX FOR PROFIT CALCULATION) ---
-    const { data: filteredOrders = [], isLoading: isQueryLoading, isError, error } = useQuery({
+    // --- 3. DATA FETCHING (Trusting the Database) ---
+    const { data: filteredOrders = [], isLoading: isQueryLoading } = useQuery({
         queryKey: ['allOrdersReport', dateRange.startDate, dateRange.endDate],
         queryFn: async () => {
             if (!user) return [];
@@ -530,71 +451,80 @@ const ReportsPage: React.FC = () => {
             const endDate = new Date(dateRange.endDate);
             endDate.setHours(23, 59, 59, 999);
 
+            // Fetch from the VIEW. The View handles filtering columns (NULL for restricted users).
             let query = supabase
                 .from('orders_with_details')
                 .select('*')
                 .gte('created_at', startDate.toISOString())
                 .lte('created_at', endDate.toISOString());
 
-            // ✅ SECURITY FIX: If user is not an Admin, only fetch their own orders.
-            // The 'user' object is from the useAuth() hook.
-            if (role !== UserRole.ADMIN) {
+            // OPTIONAL: Add extra filtering for Sales Agents to ensure 100% strictness,
+            // though RLS already does this.
+            if (role !== UserRole.ADMIN && !permissions?.orders_view_all) {
                 query = query.eq('sales_agent', user.email);
             }
 
             const { data, error } = await query;
             if (error) throw error;
-
-            // ✅ 2. REUSE THE CENTRALIZED MAPPER
             return (data || []).map(mapDbToOrder);
         },
-        enabled: !!user && availableReports.length > 0,
-        staleTime: 60000,
+        enabled: !!user && !isAuthLoading && availableReports.length > 0,
     });
 
-    const getCsvConfig = () => {
-        if (!canViewFinancials) return null;
-        let headers = [{ label: "Order Number", key: "orderNumber" }, { label: "Date", key: "createdAt" }, { label: "Customer Name", key: "customerName" }, { label: "Total Amount", key: "orderAmount" }, { label: "Status", key: "status" }, { label: "Sales Agent", key: "salesAgent" }];
-        if (activeReport === 'production') headers.push({ label: "Design Name", key: "designName" }, { label: "Quantity", key: "patchesQuantity" }, { label: "Urgent", key: "is_urgent" });
-        return { headers, data: filteredOrders, filename: `panda-patches-${activeReport}.csv` };
-    };
-    const csvConfig = getCsvConfig();
+    // CSV Export Logic
+    const csvConfig = useMemo(() => {
+        if (!permissions?.reports_view_financials && activeReport !== 'production') return null;
+        
+        let headers = [
+            { label: "Order #", key: "orderNumber" },
+            { label: "Status", key: "status" },
+            { label: "Customer", key: "customerName" }
+        ];
+
+        // Only add financial columns to CSV if they have permission
+        if (permissions?.reports_view_financials) {
+            headers.push(
+                { label: "Total", key: "orderAmount" },
+                { label: "Paid", key: "amountPaid" }
+            );
+        }
+        
+        return { headers, data: filteredOrders, filename: `report-${activeReport}.csv` };
+    }, [filteredOrders, permissions, activeReport]);
+
 
     if (isAuthLoading || isQueryLoading) return <div className="flex h-screen items-center justify-center"><Spinner /></div>;
-    if (isError) return <div className="text-center py-10 text-red-400">Error loading reports</div>;
-    if (availableReports.length === 0) return <div className="flex h-screen items-center justify-center flex-col gap-4 text-slate-500"><Lock className="w-16 h-16 opacity-50" /><h2 className="text-xl font-semibold text-slate-300">Access Restricted</h2><p>You do not have permission to view any reports.</p></div>;
+    if (availableReports.length === 0) return <div className="flex h-screen items-center justify-center text-slate-500">Access Restricted</div>;
 
     return (
         <div className="relative min-h-screen pb-10">
+            {/* Background Blobs */}
             <div className="fixed inset-0 overflow-hidden pointer-events-none">
-                <div className="absolute top-0 left-1/4 w-[500px] h-[500px] bg-gradient-to-br from-brand-orange/10 to-pink-500/10 rounded-full blur-3xl animate-blob" style={{ animationDuration: '8s' }} />
-                <div className="absolute top-1/3 right-1/4 w-[600px] h-[600px] bg-gradient-to-br from-purple-500/10 to-blue-500/10 rounded-full blur-3xl animate-blob animation-delay-2000" style={{ animationDuration: '10s' }} />
+                <div className="absolute top-0 left-1/4 w-[500px] h-[500px] bg-brand-orange/5 rounded-full blur-3xl" />
             </div>
 
             <div className="relative z-10 space-y-8">
+                {/* Header */}
                 <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
                     <div>
-                        <h1 className="text-4xl font-bold text-white bg-gradient-to-r from-white to-slate-300 bg-clip-text text-transparent">Reports</h1>
-                        <p className="text-slate-400 mt-2">Analytics and performance insights</p>
+                        <h1 className="text-4xl font-bold text-white">Reports</h1>
+                        <p className="text-slate-400 mt-2">
+                            {role === UserRole.ADMIN ? "Company Overview" : 
+                             permissions?.orders_edit_production ? "Production Dashboard" : "My Performance"}
+                        </p>
                     </div>
-                    {/* ✅ DEFINITIVE FIX: A single flex container to rule alignment */}
+                    
                     <div className="flex flex-col sm:flex-row items-center gap-4">
-                        <div className="flex items-center gap-1 bg-slate-900/40 backdrop-blur-xl border border-white/10 rounded-lg p-1 shadow-xl h-[42px]">
-                            <button onClick={() => handleQuickFilter(7)} className="px-4 h-full text-xs font-medium rounded-md text-slate-300 hover:text-white hover:bg-white/10 transition-colors">7 Days</button>
-                            <button onClick={() => handleQuickFilter(30)} className="px-4 h-full text-xs font-medium rounded-md text-slate-300 hover:text-white hover:bg-white/10 transition-colors">30 Days</button>
-                            <button onClick={() => handleQuickFilter(60)} className="px-4 h-full text-xs font-medium rounded-md text-slate-300 hover:text-white hover:bg-white/10 transition-colors">60 Days</button>
-                        </div>
-                        <DateRangeFilter value={dateRange} onChange={handleDateChange} />
-                        
-                        {csvConfig && (
-                            <CSVLink {...csvConfig} className="h-[42px] flex items-center gap-2 px-4 bg-emerald-600/80 hover:bg-emerald-600 rounded-lg text-white text-sm font-semibold transition-colors shadow-lg backdrop-blur-sm whitespace-nowrap">
-                                <Download className="w-4 h-4" /> 
-                                <span>Export CSV</span>
+                         <DateRangeFilter value={dateRange} onChange={setDateRange} />
+                         {csvConfig && (
+                            <CSVLink {...csvConfig} className="h-[42px] flex items-center gap-2 px-4 bg-emerald-600/80 hover:bg-emerald-600 rounded-lg text-white text-sm font-semibold transition-colors">
+                                <Download className="w-4 h-4" /> <span>Export</span>
                             </CSVLink>
                         )}
                     </div>
                 </div>
 
+                {/* Navigation Tabs (Only shows allowed tabs) */}
                 <div className="bg-slate-900/40 backdrop-blur-xl border border-white/10 rounded-2xl p-2 shadow-xl inline-flex gap-2">
                     {availableReports.map(report => (
                         <button
@@ -602,7 +532,7 @@ const ReportsPage: React.FC = () => {
                             onClick={() => setSearchParams({ type: report.key })}
                             className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium rounded-lg transition-all duration-200 ${
                                 activeReport === report.key 
-                                    ? 'bg-brand-orange text-white shadow-lg shadow-brand-orange/30' 
+                                    ? 'bg-brand-orange text-white shadow-lg' 
                                     : 'text-slate-300 hover:bg-white/10 hover:text-white'
                             }`}
                         >
@@ -612,11 +542,12 @@ const ReportsPage: React.FC = () => {
                     ))}
                 </div>
 
+                {/* Report Content */}
                 <motion.div
                     key={activeReport}
-                    initial={{ opacity: 0, y: 20 }}
+                    initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.5 }}
+                    transition={{ duration: 0.3 }}
                 >
                     {activeReport === 'sales' && <SalesReportComponent orders={filteredOrders} role={role} />}
                     {activeReport === 'production' && <ProductionReportComponent orders={filteredOrders} />}

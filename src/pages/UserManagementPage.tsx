@@ -2,23 +2,29 @@ import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 // --- THIS IS THE CORRECTED IMPORT SECTION ---
 import { createUserWithRole, getAllUsers, deleteUser, updateUserProfile } from '@/services/authService';
-import { useAuth } from '@/contexts/AuthContext';
+import { useAuth } from '../contexts/AuthContext';
 import { UserProfile, UserPermissions, UserRole } from '@/types'; // 1. Add 'Key' to imports
 import { Check, X, Plus, UserPlus, Edit, Trash2, Key } from 'lucide-react';
 import Spinner from '@/components/ui/Spinner';
 import ConfirmationModal from '@/components/ui/ConfirmationModal';
+import { useToast } from '@/hooks/useToast';
 
 const defaultPermissions: UserPermissions = {
-  can_manage_users: false,
-  view_financials: false,
-  view_production: true,
-  view_shipping: true,
-  can_delete_orders: false,
+  users_manage: false,
+  orders_create: true,
+  orders_view_all: false,
+  orders_change_status: true,
+  orders_edit_financials: false,
+  orders_edit_production: false,
+  orders_delete: false,
+  reports_view_financials: false,
+  shipping_view: true,
 };
 
 const UserManagementPage: React.FC = () => {
-  const { permissions } = useAuth();
+  const { role, permissions } = useAuth();
   const queryClient = useQueryClient();
+  const { toast } = useToast();
   const [isCreateModalOpen, setCreateModalOpen] = useState(false);
   const [isEditModalOpen, setEditModalOpen] = useState(false);
   const [isDeleteModalOpen, setDeleteModalOpen] = useState(false);
@@ -28,9 +34,10 @@ const UserManagementPage: React.FC = () => {
   // State for Create Modal
   const [newUserEmail, setNewUserEmail] = useState('');
   const [newUserName, setNewUserName] = useState('');
+  const [newUserPassword, setNewUserPassword] = useState('');
   const [newUserRole, setNewUserRole] = useState<UserRole>(UserRole.USER);
   const [newUserPermissions, setNewUserPermissions] = useState<UserPermissions>(defaultPermissions);
-  const [createdUserInfo, setCreatedUserInfo] = useState<{ email: string; tempPass: string } | null>(null);
+  const [createdUserInfo, setCreatedUserInfo] = useState<{ email: string; } | null>(null);
 
   // State for Edit Modal
   const [editUserName, setEditUserName] = useState('');
@@ -47,13 +54,13 @@ const UserManagementPage: React.FC = () => {
 
   // --- MUTATIONS ---
   const createUserMutation = useMutation({
-    mutationFn: () => createUserWithRole(newUserEmail, newUserRole, newUserPermissions, newUserName),
+    mutationFn: () => createUserWithRole(newUserEmail, newUserRole, newUserPermissions, newUserName, newUserPassword),
     onSuccess: (data) => {
       if (data.error) {
         throw new Error(data.error); // Ensure error is thrown for onError to catch
       }
-      if (data.user && data.temporaryPassword) {
-        setCreatedUserInfo({ email: data.user.email!, tempPass: data.temporaryPassword });
+      if (data.user) {
+        setCreatedUserInfo({ email: data.user.email! }); // This part might change based on new flow
       }
     },
     onError: (error: Error) => {
@@ -68,9 +75,9 @@ const UserManagementPage: React.FC = () => {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['allUsers'] });
       setDeleteModalOpen(false);
-      alert("User deleted successfully");
+      toast.success("User Deleted", `The user ${selectedUser?.email} has been removed.`);
     },
-    onError: (error: Error) => alert(error.message),
+    onError: (error: Error) => toast.error("Deletion Failed", error.message),
   });
 
   const editUserMutation = useMutation({
@@ -78,9 +85,10 @@ const UserManagementPage: React.FC = () => {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['allUsers'] }); // Refetch users after update
       closeEditModal(); // Use the dedicated close function to reset state
-      alert("User updated successfully");
+      closePasswordModal();
+      toast.success("User Updated", "The user's profile has been saved.");
     },
-    onError: (error: Error) => alert(error.message),
+    onError: (error: Error) => toast.error("Update Failed", error.message),
   });
 
   const changePasswordMutation = { isPending: false };
@@ -120,9 +128,7 @@ const UserManagementPage: React.FC = () => {
     // Close and cleanup
     setPasswordModalOpen(false);
     setResetPassword('');
-    alert(`Password for ${selectedUser.email} has been updated.`);
   };
-  const handleChangePassword = (e: React.FormEvent) => { e.preventDefault(); alert("Change Password function to be implemented with Edge Functions."); };
   const handleDeleteUser = () => {
     if (selectedUser) {
       deleteUserMutation.mutate(selectedUser.id);
@@ -134,6 +140,7 @@ const UserManagementPage: React.FC = () => {
     setCreateModalOpen(false);
     setNewUserEmail('');
     setNewUserName('');
+    setNewUserPassword(''); // Reset password field
     setNewUserRole(UserRole.USER);
     setCreatedUserInfo(null);
     createUserMutation.reset();
@@ -183,10 +190,10 @@ const UserManagementPage: React.FC = () => {
     queryFn: async () => {
       return await getAllUsers();
     },
-    enabled: !!permissions?.can_manage_users,
+    enabled: role === UserRole.ADMIN || !!permissions?.users_manage,
   });
 
-  if (!permissions?.can_manage_users) {
+  if (role !== UserRole.ADMIN && !permissions?.users_manage) {
     return (
       <div className="max-w-4xl mx-auto p-6">
         <div className="bg-red-900/20 border border-red-500/50 rounded-xl p-6 text-center">
@@ -255,7 +262,7 @@ const UserManagementPage: React.FC = () => {
                             {hasAccess ? (
                               <Check className="w-4 h-4 text-green-400" />
                             ) : (
-                              <X className="w-4 h-4 text-red-400" />
+                              <X className="w-4 h-4 text-slate-500" />
                             )}
                             <span className="text-xs capitalize">
                               {permission.replace('CAN_', '').replace(/_/g, ' ').toLowerCase()}
@@ -316,18 +323,24 @@ const UserManagementPage: React.FC = () => {
               {createdUserInfo && (
                 <div className="bg-green-900/30 border border-green-500/50 rounded-lg p-4 mb-4">
                   <div className="flex items-center gap-2 text-green-400 font-semibold mb-2">
-                    <Check className="w-5 h-5" /> User Created Successfully
+                    <Check className="w-5 h-5" /> User Created & Activated
                   </div>
                   <p className="text-sm text-slate-300">
-                    Temporary Password: <span className="font-mono bg-black/30 px-2 py-1 rounded text-white select-all">{createdUserInfo.tempPass}</span>
+                    The account for <strong className="text-white">{createdUserInfo.email}</strong> is ready.
                   </p>
-                  <p className="text-xs text-slate-400 mt-1">Copy this password immediately. It will not be shown again.</p>
+                  <p className="text-sm text-slate-300 mt-2 bg-black/20 p-2 rounded">
+                    Password: <strong className="text-brand-orange">{newUserPassword}</strong>
+                  </p>
+                  <p className="text-xs text-slate-400 mt-2">
+                    Please copy these credentials and send them to the agent via WhatsApp/Slack. They can log in immediately.
+                  </p>
+                  
                   <button 
                     type="button" 
                     onClick={closeAndResetModal}
                     className="mt-3 w-full py-2 bg-slate-700 hover:bg-slate-600 rounded-lg text-sm transition-colors"
                   >
-                    Close
+                    Done
                   </button>
                 </div>
               )}
@@ -342,10 +355,25 @@ const UserManagementPage: React.FC = () => {
                         required
                         value={newUserEmail}
                         onChange={(e) => setNewUserEmail(e.target.value)}
-                        className="w-full px-4 py-2 bg-slate-900/50 border border-slate-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-white"
-                        placeholder="user@example.com"
+                        className="w-full px-4 py-2 bg-slate-900/50 border border-slate-600 rounded-lg text-white"
+                        placeholder="agent@pandapatches.com"
                       />
                     </div>
+
+                    {/* NEW PASSWORD INPUT */}
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium text-slate-400">Assign Password</label>
+                      <input
+                        type="text" // Using "text" so you can see it and copy it easily
+                        required
+                        minLength={6}
+                        value={newUserPassword}
+                        onChange={(e) => setNewUserPassword(e.target.value)}
+                        className="w-full px-4 py-2 bg-slate-900/50 border border-slate-600 rounded-lg text-white focus:border-brand-orange"
+                        placeholder="e.g. Panda2025!"
+                      />
+                    </div>
+                    
                     <div className="space-y-2">
                       <label className="text-sm font-medium text-slate-400">Full Name</label>
                       <input
@@ -353,8 +381,8 @@ const UserManagementPage: React.FC = () => {
                         required
                         value={newUserName}
                         onChange={(e) => setNewUserName(e.target.value)}
-                        className="w-full px-4 py-2 bg-slate-900/50 border border-slate-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-white"
-                        placeholder="John Doe"
+                        className="w-full px-4 py-2 bg-slate-900/50 border border-slate-600 rounded-lg text-white"
+                        placeholder="Agent Name"
                       />
                     </div>
                   </div>
@@ -448,6 +476,33 @@ const UserManagementPage: React.FC = () => {
                 >
                   <option value={UserRole.USER}>Standard User</option>
                   <option value={UserRole.ADMIN}>Administrator</option>
+                </select>
+              </div>
+
+              {/* --- NEW: User Type Selector for easier permission management --- */}
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-slate-400">User Type (Preset)</label>
+                <select
+                  onChange={(e) => {
+                    if (e.target.value === 'production') {
+                      setEditUserPermissions({ // Use a dedicated Production preset
+                        ...defaultPermissions,
+                        orders_create: false,
+                        orders_view_all: true,
+                        orders_change_status: true, // Allow status changes
+                        orders_edit_financials: false,
+                        orders_edit_production: true,
+                      });
+                    } else { // 'sales'
+                      setEditUserPermissions(defaultPermissions);
+                    }
+                  }}
+                  className="w-full px-4 py-2 bg-slate-900/50 border border-slate-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-white"
+                  // Determine current type based on permissions
+                  value={editUserPermissions.orders_edit_production ? 'production' : 'sales'}
+                >
+                  <option value="sales">Sales Agent</option>
+                  <option value="production">Production User</option>
                 </select>
               </div>
 

@@ -1,105 +1,116 @@
-// src/components/layout/Sidebar.tsx
-
 import React from 'react';
-import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, Package, BarChart3, Settings, Users, PlusCircle } from 'lucide-react';
-import { useQuery } from '@tanstack/react-query';
-import { supabase } from '../../services/supabaseClient';
+import { NavLink, useLocation } from 'react-router-dom';
+import { LayoutDashboard, Package, BarChart3, Settings, Users, LogOut, PlusCircle } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query'; // Already imported
+import { supabase } from '../../services/supabaseClient'; // Already imported
 import { useAuth } from '../../contexts/AuthContext';
-import { UserRole } from '../../types';
 
-const navItems = [
-  { to: '/', label: 'Dashboard', icon: LayoutDashboard },
-  { 
-    to: '/new-order', 
-    label: 'New Order', 
-    icon: PlusCircle 
-  },
-  { to: '/orders', label: 'Orders', icon: Package },
-  { to: '/reports', label: 'Reports', icon: BarChart3 },
-  { 
-    to: '/user-management', 
-    label: 'User Management', 
-    icon: Users,
-    roles: [UserRole.ADMIN] // Only visible to Admins
-  },
-  { 
-    to: '/settings', 
-    label: 'Settings', 
-    icon: Settings,
-    roles: [UserRole.ADMIN] // Only visible to Admins
-  },
-];
+// Fetch the application settings (including logo)
+const fetchSettings = async () => {
+  const { data } = await supabase
+    .from('settings')
+    .select('logo_url')
+    .eq('id', 'global_settings')
+    .maybeSingle();
+  return data;
+};
 
-const Sidebar: React.FC = () => {
-  const { role } = useAuth();
 
-  // Fetch the dynamic logo URL from the database
-  const { data: logoUrl } = useQuery({
-    queryKey: ['company_logo'],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('settings')
-        .select('value')
-        .eq('id', 'company_logo')
-        .maybeSingle(); // <-- Use maybeSingle() to prevent 406 error
-      
-      // If there's a real error (other than just not finding a row), log it.
-      if (error) {
-        console.error('Error fetching logo:', error);
-        return null; // Return null on any error
-      }
+interface SidebarItemProps {
+  to: string;
+  label: string;
+  icon: React.ReactNode;
+}
 
-      // Return the logo URL if data exists, otherwise return null.
-      return data?.value || null;
-    },
-    staleTime: 1000 * 60 * 60, // Cache the logo URL for 1 hour
-  });
-
-  const getNavLinkClass = ({ isActive }: { isActive: boolean }) => {
-    const baseClasses = "flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-colors";
-    if (isActive) {
-      return `${baseClasses} bg-brand-orange text-white shadow-lg shadow-brand-orange/30`;
-    }
-    return `${baseClasses} text-slate-400 hover:bg-white/10 hover:text-white`;
-  };
-
-  // Filter navigation items based on the user's role
-  const visibleNavItems = navItems.filter(item => {
-    if (!item.roles) {
-      return true; // Item is visible to all roles
-    }
-    return role && item.roles.includes(role as UserRole);
-  });
+const SidebarItem: React.FC<SidebarItemProps> = ({ to, label, icon }) => {
+  const location = useLocation();
+  const isActive = location.pathname === to || (to !== '/' && location.pathname.startsWith(to));
 
   return (
-    <aside className="w-64 flex-shrink-0 h-screen flex flex-col p-4 bg-slate-900/40 backdrop-blur-xl border-r border-white/10">
-      {/* Logo Section */}
-      <div className="flex items-center gap-3 px-4 py-2 mb-8">
-        {/* You can replace this with your actual logo component or image */}
-        <img src={logoUrl || "/logo.png"} alt="Panda Patches Logo" className="h-8 w-8 object-contain" />
-        <span className="text-xl font-bold text-white tracking-tight">
-          Panda Patches
-        </span>
+    <NavLink
+      to={to}
+      className={ `flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-all duration-200 relative ${
+          isActive
+            ? 'bg-brand-orange text-white shadow-lg shadow-brand-orange/20'
+            : 'text-slate-300 hover:bg-white/10 hover:text-white'
+        }`
+      }
+    >
+      {icon}
+      <span>{label}</span>
+      {isActive && (
+        <div className="absolute left-0 top-1/2 -translate-y-1/2 h-6 w-1 bg-white rounded-r-full" />
+      )}
+    </NavLink>
+  );
+};
+
+const Sidebar: React.FC = () => {
+  const { role, permissions, logout } = useAuth();
+  const { data: settings } = useQuery({
+    queryKey: ['app_settings'],
+    queryFn: fetchSettings,
+  });
+
+  const navItems = [
+    { to: '/', label: 'Dashboard', icon: <LayoutDashboard className="w-5 h-5" /> },
+    { to: '/orders', label: 'Orders', icon: <Package className="w-5 h-5" /> },
+    { to: '/reports', label: 'Reports', icon: <BarChart3 className="w-5 h-5" /> },
+  ];
+  return (
+    <aside className="w-64 bg-slate-900/70 backdrop-blur-xl border-r border-white/10 p-4 flex flex-col">
+      <div className="flex items-center justify-center p-4 mb-4 h-20">
+        {settings?.logo_url ? (
+          <img src={settings.logo_url} alt="Company Logo" className="max-h-full max-w-full object-contain" />
+        ) : (
+          <div className="flex items-center gap-3">
+            <img src="/logo.png" alt="Panda Patches Logo" className="h-10 w-10" />
+            <h1 className="text-xl font-bold text-white">Panda Patches</h1>
+          </div>
+        )}
       </div>
 
-      {/* Navigation Links */}
-      <nav className="flex-grow">
-        <ul className="space-y-2">
-          {visibleNavItems.map((item) => (
-            <li key={item.to}>
-              <NavLink to={item.to} className={getNavLinkClass} end>
-                <item.icon className="w-5 h-5" />
-                <span>{item.label}</span>
-              </NavLink>
-            </li>
-          ))}
-        </ul>
+      <nav className="flex-grow space-y-2">
+        {navItems.map((item) => (
+          <SidebarItem key={item.to} {...item} />
+        ))}
+
+        {/* --- ADD NEW ORDER BUTTON (PERMISSION-BASED) --- */}
+        {/* Only show if user has 'orders_create' permission */}
+        {permissions?.orders_create && (
+          <SidebarItem
+            to="/new-order"
+            label="New Order"
+            icon={<PlusCircle className="w-5 h-5" />}
+          />
+        )}
+        {/* --- PERMISSION-BASED NAVIGATION --- */}
+        {/* Only show if Admin OR has explicit permission */}
+        {(role === 'ADMIN' || permissions?.users_manage) && (
+          <SidebarItem
+            to="/user-management"
+            label="User Management"
+            icon={<Users className="w-5 h-5" />}
+          />
+        )}
+
+        {role === 'ADMIN' && (
+          <SidebarItem
+            to="/settings"
+            label="Settings"
+            icon={<Settings className="w-5 h-5" />}
+          />
+        )}
       </nav>
 
-      {/* Optional: Footer or User Profile Section */}
       <div className="mt-auto">
-        {/* You can add a user profile or logout button here later */}
+        <button
+          onClick={logout}
+          className="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium text-slate-400 hover:bg-red-500/20 hover:text-red-300 transition-all duration-200"
+        >
+          <LogOut className="w-5 h-5" />
+          <span>Logout</span>
+        </button>
       </div>
     </aside>
   );

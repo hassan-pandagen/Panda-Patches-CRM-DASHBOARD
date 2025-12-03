@@ -20,6 +20,7 @@ import SettingsPage from '@/pages/SettingsPage';
 import LoginPage from '@/pages/LoginPage';
 import SearchResultsPage from '@/pages/SearchResultsPage';
 import UserManagementPage from '@/pages/UserManagementPage';
+import CustomerHistoryPage from '@/pages/CustomerHistoryPage';
 
 // Your Protection Components
 import ProtectedRoute from './ProtectedRoute'; // Adjust path if needed
@@ -50,6 +51,7 @@ const App: React.FC = () => {
               <Route path="/order/:orderNumber" element={<OrderPage />} />
               <Route path="/order/:orderNumber/edit" element={<EditOrderPage />} />
               <Route path="/reports" element={<ReportsPage />} />
+              <Route path="/customers/:identifier" element={<CustomerHistoryPage />} />
               <Route path="/settings" element={<SettingsPage />} />
               <Route path="/search" element={<SearchResultsPage />} />
   

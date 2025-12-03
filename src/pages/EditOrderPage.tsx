@@ -28,7 +28,7 @@ const EditOrderPage: React.FC = () => {
 
   // ✅ CRITICAL FIX: 
   // Allow if user is ADMIN -OR- if user has 'view_financials' tick mark
-  const canViewFinancials = role === 'ADMIN' || permissions?.view_financials === true;
+  const canViewFinancials = role === 'ADMIN' || permissions?.orders_edit_financials === true;
 
   // State for Unsaved Changes
   const [isDirty, setIsDirty] = useState(false);
@@ -68,12 +68,10 @@ const EditOrderPage: React.FC = () => {
   // HANDLE SAVE
   const handleSave = async (formData: SaveData) => {
     if (!order) return;
-    
-    // Start the shield
-    setIsSaving(true); 
+
+    setIsSaving(true);
     setSaveError(null);
-    
-    try {
+
       // Map Form Data
       
       const dbPayload = {
@@ -116,38 +114,34 @@ const EditOrderPage: React.FC = () => {
         marketing_cost: canViewFinancials ? formData.marketingCost : order.marketingCost,
       };
 
+    try {
       // Call Service
       const savedOrder = await updateOrderDetails(order.id, dbPayload, order, user?.email || 'unknown');
       
-      // ✅ SUCCESS SEQUENCE
-      
-      // 1. Permit Navigation (Unlock the door)
+      // On success, clear the dirty flag so the user can navigate away freely.
+      // We do NOT navigate programmatically, allowing the user to stay on the page.
       setAllowNavigation(true);
-      
-      // 2. Clear Dirty Flag
       setIsDirty(false);
       
-      // 3. Show Success Message
       toast.success('Order Updated', 'Changes saved successfully.');
+      // ✅ FIX: Use state to navigate, preventing a race condition with the unsaved changes modal.
+      setNavigateTo(`/order/${savedOrder.orderNumber}`);
       
-      // 4. Invalidate queries to start refetching data in the background.
+      // Invalidate queries to refetch fresh data
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['allOrders'] }),
         queryClient.invalidateQueries({ queryKey: ['allOrdersReport'] }),
         queryClient.invalidateQueries({ queryKey: ['order', savedOrder.orderNumber] })
       ]);
 
-      // 🛑 CRITICAL CHANGE: 
-      // We do NOT set isSaving(false) here. 
-      // We leave it TRUE so the shield stays up until the page is gone.
-      
     } catch (err: any) {
       console.error("Save failed:", err);
       setSaveError(err);
       toast.error('Update Failed', err.message || 'Could not save changes.');
-      
-      // ❌ ON ERROR ONLY: Drop the shield so they can try again
-      setIsSaving(false); 
+    } finally {
+      // ✅ CRITICAL FIX: Always stop the spinner, whether the save
+      // succeeded or failed. This prevents an infinite loading state.
+      setIsSaving(false);
     }
   };
 

@@ -82,7 +82,9 @@ const NewOrderPage: React.FC = () => {
         design_backing: formData.designBacking,
         instructions: formData.instructions,
         
-        order_amount: formData.orderAmount,
+        // ✅ FIX: Ensure order_amount is never null, defaulting to 0.
+        // This prevents the NOT NULL constraint violation for roles that can't see financials.
+        order_amount: formData.orderAmount ?? 0,
         
         // *** THIS IS THE FIX ***
         amount_paid: formData.amountPaid, 
@@ -113,14 +115,20 @@ const NewOrderPage: React.FC = () => {
       // 2. Set the state to allow navigation and define the destination path.
       setAllowNavigation(true);
       setIsDirty(false);
-      setNavigateTo(`/order/${newOrder.order_number || newOrder.orderNumber}`);
+      // ✅ FIX: Use state to navigate, preventing a race condition with the unsaved changes modal.
+      setNavigateTo(`/order/${newOrder.orderNumber}/edit`);
       
     } catch (err: any) {
       console.error('Failed to create order', err);
-      setError(`Failed to create order: ${err.message || 'An unknown error occurred.'}`);
+      // ✅ FIX: Properly handle different error shapes.
+      // Supabase errors are objects with a 'message' property. Other errors might be strings or standard Error objects.
+      const errorMessage = err?.message || (typeof err === 'string' ? err : 'An unknown error occurred. Check the console for details.');
+      setError(`Failed to create order: ${errorMessage}`);
       setIsDirty(true);
-      // ❌ ON ERROR ONLY: Drop the shield so they can try again
-      setIsSaving(false); 
+    } finally {
+      // ✅ Always stop the spinner, whether the save succeeded or failed.
+      // This ensures the UI is responsive and allows navigation to proceed.
+      setIsSaving(false);
     }
   };
 

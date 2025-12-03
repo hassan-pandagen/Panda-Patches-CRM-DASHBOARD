@@ -1,3 +1,5 @@
+// src/services/orderService.ts
+
 import { supabase } from './supabaseClient';
 import { queryClient } from '../App';
 import { Order, OrderStatus } from '../types/index';
@@ -16,7 +18,6 @@ const SENDGRID_TEMPLATES = {
   INTERNAL_REVISION_REQUESTED: 'd-27bef8642f23433ea5ee8471887c8d61',
   
   // --- PRODUCTION ---
-  CUSTOMER_PAYMENT_NEEDED: '', 
   CUSTOMER_PRODUCTION_START: 'd-0dcf24e7ef3b4195b24ab4dfdf53cde8',
   INTERNAL_QUALITY_ASSURANCE: 'd-70206008ac7c47fbb87585bcc60e59ce',
   INTERNAL_PRODUCTION_START: 'd-0a3e1e4cc4a74b49baf0de6b03823cef',
@@ -28,7 +29,12 @@ const SENDGRID_TEMPLATES = {
   CUSTOMER_REFUNDED: 'd-8da31b3c8aca485cb82203af044e6ba7',
 };
 
-const PRODUCTION_MANAGER_EMAIL = 'peacefulvibes2024@gmail.com';
+// ✅ Use an array for multiple production managers
+const PRODUCTION_MANAGER_EMAILS = [
+  'lilcustomerzdesign@gmail.com',
+  'lilcustomize550@gmail.com',
+  'pandaproductionoffice@gmail.com'
+];
 
 // =====================================================================
 // 2. HELPER FUNCTIONS
@@ -96,11 +102,11 @@ export const mapDbToOrder = (data: any): Order => {
 };
 
 // =====================================================================
-// MASTER EMAIL DATA FUNCTION (With Fixed Tracking Logic)
+// 3. MASTER EMAIL DATA FUNCTION (Backend-Ready)
 // =====================================================================
 
 export const prepareEmailData = (order: Order, triggerStatus: string) => {
-  // --- 1. FILE GATHERING ---
+  // 1. GET FILES
   let allFiles: string[] = [];
   if (triggerStatus === OrderStatus.NEW_ORDER) {
       allFiles = order.customerAttachmentUrls || [];
@@ -111,33 +117,19 @@ export const prepareEmailData = (order: Order, triggerStatus: string) => {
       }
   }
 
-  // --- 2. SORT & IDENTIFY WINNER ---
-  const sortedFiles = [...allFiles].reverse();
+  // 2. SORT & SEPARATE
+  const sortedFiles = [...allFiles].reverse(); // Newest first
+  
+  // Helper to check extensions
   const isImage = (url: string) => /\.(jpg|jpeg|png|gif|webp)$/i.test(url.toLowerCase());
-  const getFileName = (url: string) => {
-      try { return decodeURIComponent(url.split('/').pop() || 'File').substring(0, 25); } 
-      catch { return 'File'; }
-  };
-
-  // Winner = First Image
+  
+  // Find Winner (First Image)
   const winnerUrl = sortedFiles.find(url => isImage(url)) || sortedFiles[0] || "";
-  // Gallery = Rest
+  
+  // Gallery = Rest of files
   const galleryUrls = sortedFiles.filter(url => url !== winnerUrl);
 
-  // --- 3. BUILD FILE OBJECTS ---
-  const winnerObj = winnerUrl ? {
-      url: winnerUrl,
-      file_name: getFileName(winnerUrl),
-      is_image: isImage(winnerUrl)
-  } : null;
-
-  const galleryList = galleryUrls.map(url => ({
-      url: url,
-      file_name: getFileName(url),
-      is_image: isImage(url)
-  }));
-
-  // --- 4. SMART TRACKING LOGIC (RESTORED) ---
+  // --- TRACKING LOGIC ---
   const carrier = (order.shippingCarrier || "").toLowerCase();
   const trackingNum = (order.shippingTrackingNumber || "").trim();
   
@@ -152,44 +144,39 @@ export const prepareEmailData = (order: Order, triggerStatus: string) => {
       } else if (carrier.includes('usps')) {
           trackingUrl = `https://tools.usps.com/go/TrackConfirmAction?tLabels=${trackingNum}`;
       } else {
-          // Fallback if carrier is unknown
           trackingUrl = `https://www.google.com/search?q=${trackingNum}`;
       }
   }
 
-  // --- 5. RETURN FULL DATA ---
+  // 3. RETURN DATA
+  // Note: We do NOT define 'preview' here. The Backend will generate CIDs.
   return {
-    // > FILES
-    winner_file: winnerObj,
-    gallery_files: galleryList,
-    has_winner: !!winnerObj,
-    has_gallery: galleryList.length > 0,
+    // Files
+    winner_file: winnerUrl ? { url: winnerUrl } : null,
+    gallery_files: galleryUrls.map(url => ({ url })), 
+    has_winner: !!winnerUrl,
+    has_gallery: galleryUrls.length > 0,
 
-    // > ORDER VARS
+    // Variables (Your standard list)
     customer_name: order.customerName || "Valued Customer",
-    order_number: order.orderNumber || "Pending",
+    order_number: order.orderNumber,
     order_date: new Date(order.createdAt).toLocaleDateString(),
     
-    // > PRODUCT
-    design_name: order.designName || "Custom Design",
-    quantity: order.patchesQuantity || "0",
-    patch_type: order.patchesType || "N/A",
-    backing: order.designBacking || "N/A",
-    size: order.designSize || "N/A",
+    design_name: order.designName,
+    quantity: order.patchesQuantity,
+    patch_type: order.patchesType,
+    backing: order.designBacking,
+    size: order.designSize,
     
-    // > FINANCIALS
     total_price: `$${(order.orderAmount || 0).toLocaleString()}`,
     amount_paid: `$${(order.amountPaid || 0).toLocaleString()}`,
     amount_remaining: `$${((order.orderAmount || 0) - (order.amountPaid || 0)).toLocaleString()}`,
     
-    // > SHIPPING & TRACKING
-    shipping_address: order.shippingAddress || "No address provided",
-    carrier: order.shippingCarrier || "Carrier",
-    tracking_number: trackingNum,
-    tracking_link: trackingUrl, // <--- This now has the correct FedEx Link
+    shipping_address: order.shippingAddress,
+    carrier: order.shippingCarrier,
+    tracking_number: order.shippingTrackingNumber,
+    tracking_link: trackingUrl,
     
-    // > EXTRAS
-    instructions: order.instructions,
     order_link: `${window.location.origin}/order/${order.orderNumber}`,
     sales_agent_name: order.salesAgent || "Panda Team"
   };
@@ -204,7 +191,6 @@ export const triggerStatusEmail = async (order: Order, statusToCheck: string) =>
   const requests: { to: string; template_id: string }[] = [];
 
   console.log(`📧 [Email Service] Triggering emails for status: ${statusToCheck}`);
-  console.log(`📎 Files: Winner=${emailData.has_winner ? 'Yes' : 'No'}, Gallery=${emailData.gallery_files.length}`);
   
   // ---------------------------------------------------------
   // Status-based Email Routing
@@ -218,9 +204,11 @@ export const triggerStatusEmail = async (order: Order, statusToCheck: string) =>
         });
       }
       if (SENDGRID_TEMPLATES.INTERNAL_NEW_ORDER) {
-        requests.push({ 
-          to: PRODUCTION_MANAGER_EMAIL, 
-          template_id: SENDGRID_TEMPLATES.INTERNAL_NEW_ORDER 
+        PRODUCTION_MANAGER_EMAILS.forEach(email => {
+          requests.push({ 
+            to: email, 
+            template_id: SENDGRID_TEMPLATES.INTERNAL_NEW_ORDER 
+          });
         });
       }
       break;
@@ -242,42 +230,38 @@ export const triggerStatusEmail = async (order: Order, statusToCheck: string) =>
         });
       }
       if (SENDGRID_TEMPLATES.INTERNAL_REVISION_REQUESTED) {
-        requests.push({ 
-          to: PRODUCTION_MANAGER_EMAIL, 
-          template_id: SENDGRID_TEMPLATES.INTERNAL_REVISION_REQUESTED 
+        PRODUCTION_MANAGER_EMAILS.forEach(email => {
+          requests.push({ 
+            to: email, 
+            template_id: SENDGRID_TEMPLATES.INTERNAL_REVISION_REQUESTED 
+          });
         });
       }
       break;
 
     case OrderStatus.IN_PRODUCTION: 
     case OrderStatus.APPROVED: 
-      if (order.amountRemaining > 0 && SENDGRID_TEMPLATES.CUSTOMER_PAYMENT_NEEDED) {
+      if (SENDGRID_TEMPLATES.CUSTOMER_PRODUCTION_START) {
         requests.push({ 
           to: order.customerEmail, 
-          template_id: SENDGRID_TEMPLATES.CUSTOMER_PAYMENT_NEEDED 
+          template_id: SENDGRID_TEMPLATES.CUSTOMER_PRODUCTION_START 
         });
-      } else {
-        if (SENDGRID_TEMPLATES.CUSTOMER_PRODUCTION_START) {
-          requests.push({ 
-            to: order.customerEmail, 
-            template_id: SENDGRID_TEMPLATES.CUSTOMER_PRODUCTION_START 
-          });
-        }
-        if (SENDGRID_TEMPLATES.INTERNAL_PRODUCTION_START) {
-          requests.push({ 
-            to: PRODUCTION_MANAGER_EMAIL, 
-            template_id: SENDGRID_TEMPLATES.INTERNAL_PRODUCTION_START 
-          });
-        }
+      }
+      if (SENDGRID_TEMPLATES.INTERNAL_PRODUCTION_START) {
+        // ✅ Send to all production managers
+        PRODUCTION_MANAGER_EMAILS.forEach(email => {
+          requests.push({ to: email, template_id: SENDGRID_TEMPLATES.INTERNAL_PRODUCTION_START });
+        });
       }
       break;
 
     case OrderStatus.QUALITY_ASSURANCE:
       if (SENDGRID_TEMPLATES.INTERNAL_QUALITY_ASSURANCE) {
-        requests.push({ 
-          to: PRODUCTION_MANAGER_EMAIL, 
-          template_id: SENDGRID_TEMPLATES.INTERNAL_QUALITY_ASSURANCE 
-        });
+        // ✅ REVERTED: Send to the customer as requested to manage expectations on complex designs.
+        requests.push({
+          to: order.customerEmail,
+          template_id: SENDGRID_TEMPLATES.INTERNAL_QUALITY_ASSURANCE
+        })
       }
       break;
 
@@ -329,6 +313,11 @@ export const triggerStatusEmail = async (order: Order, statusToCheck: string) =>
   await Promise.all(requests.map(async (req) => {
     if (!req.to) {
       console.warn('⚠️ Skipping email: Recipient address is missing');
+      return;
+    }
+    // Skip empty template IDs
+    if (!req.template_id) {
+      console.warn(`⚠️ Skipping email for ${req.to}: Template ID is missing.`);
       return;
     }
     
@@ -386,8 +375,15 @@ export const createOrder = async (orderData: any, userEmail: string) => {
   });
 
   const mappedOrder = mapDbToOrder(data);
-  await triggerStatusEmail(mappedOrder, OrderStatus.NEW_ORDER);
-  
+
+  // Non-blocking email trigger
+  try {
+    console.log("Attempting to send new order email...");
+    await triggerStatusEmail(mappedOrder, OrderStatus.NEW_ORDER);
+  } catch (emailErr) {
+    console.error("⚠️ Order created, but email failed to send:", emailErr);
+  }
+
   return mappedOrder;
 };
 
@@ -408,13 +404,11 @@ export const updateOrderDetails = async (
 
   const newOrder = mapDbToOrder(data);
 
-  // ---------------------------------------------------------
-  // Audit Logging
-  // ---------------------------------------------------------
+  // 2. LOG HISTORY
   const historyRecords = [];
   for (const key in updates) {
     const oldOrderKey = Object.keys(oldOrder).find(
-      (k) => k.toLowerCase() === key.replace(/_/g, '').toLowerCase()
+      (k) => k.toLowerCase() === key.replace(/_/g, "").toLowerCase()
     ) as keyof Order;
 
     if (oldOrderKey) {
@@ -423,7 +417,9 @@ export const updateOrderDetails = async (
       let hasChanged = false;
 
       if (Array.isArray(oldValue) && Array.isArray(newValue)) {
-        if (JSON.stringify(oldValue.sort()) !== JSON.stringify(newValue.sort())) {
+        if (
+          JSON.stringify(oldValue.sort()) !== JSON.stringify(newValue.sort())
+        ) {
           hasChanged = true;
         }
       } else if (oldValue !== newValue) {
@@ -435,24 +431,28 @@ export const updateOrderDetails = async (
           order_id: orderId,
           user_email: userEmail,
           field_changed: key,
-          old_value: String(oldValue ?? 'N/A'),
-          new_value: String(newValue ?? 'N/A'),
+          old_value: String(oldValue ?? "N/A"),
+          new_value: String(newValue ?? "N/A"),
         });
       }
     }
-  }
-
-  // ---------------------------------------------------------
-  // Trigger Status Email if Status Changed
-  // ---------------------------------------------------------
-  if (updates.status && updates.status !== oldOrder.status) {
-    await triggerStatusEmail(newOrder, updates.status);
   }
   
   if (historyRecords.length > 0) {
     await supabase.from('order_history').insert(historyRecords);
   }
 
+  // 3. TRIGGER EMAILS (BACKGROUND)
+  if (updates.status && updates.status !== oldOrder.status) {
+    try {
+      console.log("Attempting to send status email...");
+      await triggerStatusEmail(newOrder, updates.status);
+    } catch (emailErr) {
+      console.error("⚠️ Order saved, but email failed:", emailErr);
+    }
+  }
+
+  // 4. CLEANUP
   await queryClient.invalidateQueries({ queryKey: ['allOrdersReport'] });
 
   return newOrder;

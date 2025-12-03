@@ -5,6 +5,15 @@ import { supabase } from '../services/supabaseClient';
 import Spinner from '../components/ui/Spinner';
 import { Eye, EyeOff, Lock, Mail, ArrowRight } from 'lucide-react';
 
+const fetchSettings = async () => {
+  const { data } = await supabase
+    .from('settings')
+    .select('logo_url')
+    .eq('id', 'global_settings')
+    .maybeSingle();
+  return data;
+};
+
 const LoginPage: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
@@ -40,20 +49,11 @@ const LoginPage: React.FC = () => {
     };
   }, []);
 
-  // 1. Fetch the Dynamic Logo (Same logic as Sidebar)
-  // We use 'maybeSingle' to avoid errors if no logo is set yet
-  const { data: logoUrl } = useQuery({
-    queryKey: ['company_logo'],
-    queryFn: async () => {
-      const { data } = await supabase
-        .from('settings')
-        .select('value')
-        .eq('id', 'company_logo')
-        .maybeSingle();
-      return data?.value || null;
-    },
-    staleTime: 1000 * 60 * 60, // Cache for 1 hour
+  const { data: settings } = useQuery({
+    queryKey: ['app_settings'],
+    queryFn: fetchSettings,
   });
+
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -139,8 +139,8 @@ const LoginPage: React.FC = () => {
           <div className="text-center mb-8">
             <div className="flex justify-center mb-4">
               {/* Falls back to /logo.svg if dynamic logo fails or isn't set */}
-              <img 
-                src={logoUrl || "/logo.svg"} 
+              <img
+                src={settings?.logo_url || "/logo.svg"}
                 alt="Panda Patches Logo" 
                 className="h-16 w-auto object-contain drop-shadow-lg" 
               />

@@ -63,13 +63,26 @@ const OrderPage: React.FC = () => {
 
   // --- PERMISSION CHECKS ---
   const isAdmin = role === UserRole.ADMIN;
-  const canViewFinancials = role === 'ADMIN' || permissions?.view_financials === true;
-  const canViewShipping = isAdmin || permissions?.view_shipping;
-  const canViewProduction = isAdmin || permissions?.view_production;
-  const canDelete = isAdmin || permissions?.can_delete_orders;
 
-  // ✅ NEW LOGIC: Allow Admin OR Production OR Shipping to edit
-  const canEdit = role === 'ADMIN' || permissions?.view_production || permissions?.view_shipping;
+  // A user can view financials if they are admin, or have either the report or edit financial permission.
+  const canViewFinancials = 
+      isAdmin || 
+      permissions?.reports_view_financials === true || 
+      permissions?.orders_edit_financials === true;
+
+  // Check for the correct 'shipping_view' key.
+  const canViewShipping = isAdmin || permissions?.shipping_view === true;
+  // Check for the correct 'orders_edit_production' key.
+  const canViewProduction = isAdmin || permissions?.orders_edit_production === true;
+  // Check for the correct 'orders_delete' key.
+  const canDelete = isAdmin || permissions?.orders_delete === true;
+
+  // A user can edit if they are admin, or have permission to edit production, financials, or change status.
+  const canEdit = 
+      isAdmin || 
+      permissions?.orders_edit_production || 
+      permissions?.orders_edit_financials || 
+      permissions?.orders_change_status;
 
   // --- DATA FETCHING ---
   const { data: order, isLoading, error } = useQuery<Order | null, Error>({

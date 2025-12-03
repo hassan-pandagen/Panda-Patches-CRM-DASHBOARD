@@ -34,12 +34,14 @@ export const createUserWithRole = async (
   email: string,
   role: UserRole,
   access: Record<string, boolean>,
-  fullName: string
+  fullName: string,
+  password: string // <--- Add this argument
 ): Promise<{ user?: User; temporaryPassword?: string; error?: string }> => {
   try {
     // Securely call the 'create-user' Edge Function
     const { data, error: invokeError } = await supabase.functions.invoke('create-user', {
-      body: { email, role, fullName, access },
+      // Send password to the edge function
+      body: { email, role, fullName, access, password },
     });
 
     if (invokeError) throw new Error(invokeError.message);
