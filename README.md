@@ -1,53 +1,51 @@
-# Panda Patches CRM
+# 🐼 Panda Patches CRM
 
-A powerful, real-time CRM built from the ground up to streamline order management, enhance team collaboration, and provide critical business insights for Panda Patches.
+A comprehensive, full-stack Customer Relationship Management (CRM) application built to manage orders, customers, and internal workflows for a custom patch business. This project features a modern tech stack with a focus on role-based access, real-time data, and a high-quality user experience.
 
-> **Note:** You can take a screenshot of your dashboard and replace the placeholder below to add a great visual to your project!
-> ![image](https://user-images.githubusercontent.com/12345/your-screenshot-url.png)
+ 
+*(Suggestion: Replace with a real screenshot of your dashboard)*
 
 ---
 
 ## ✨ Key Features
 
-This isn't just a basic app; it's a full-featured business tool with a professional tech stack.
-
-*   **⚡ Real-Time Dashboards:** Separate, tailored dashboards for the CEO and Sales Agents that update instantly with new orders and status changes using Supabase real-time subscriptions.
-*   **📊 Advanced Reporting:** A dedicated reports page with dynamic date-range filtering to analyze sales performance, production metrics, and agent productivity.
-*   **🔒 Role-Based Access Control:** A secure system with distinct roles (Admin/CEO, Sales Agent, Production) ensuring users only see the data and actions relevant to them.
-*   **🗂️ Comprehensive Order Management:** Full CRUD (Create, Read, Update, Delete) functionality for orders, including detailed views, edit history, and file attachments.
-*   **🚀 Urgent Order Workflow:** A special approval flow for high-priority orders, notifying Admins/CEOs to approve or deny urgent requests.
-*   **🔗 n8n Webhook Integration:** Automatically triggers external workflows for sending customer notifications (e.g., order status updates, approval links).
-*   **📁 File Storage:** Seamlessly upload and manage customer attachments, design mockups, and other files using Supabase Storage.
-*   **🔐 Secure Authentication:** A complete authentication system including login, sign-up, password reset, and protected routes.
+- **Role-Based Access Control (RBAC):** Delineated permissions for `ADMIN`, `SALES`, and `PRODUCTION` roles, ensuring users only see and interact with relevant data.
+- **Dynamic Order Management:** A complete lifecycle for orders from `NEW_ORDER` to `DELIVERED`, with status tracking and history logs.
+- **Live Customer Insights:** The "New Order" form intelligently detects repeat customers by email or phone number, providing instant access to their history.
+- **Customer 360° View:** A dedicated history page for each customer, showcasing key metrics like Lifetime Value (LTV), total orders, and a complete transaction history.
+- **Automated Email Notifications:** Integrated with Supabase Edge Functions and SendGrid to automatically send transactional emails to customers and internal teams based on order status changes.
+- **Secure File Management:** Secure file uploads to Supabase Storage for mockups, customer references, and production-ready files (`.DST`, `.EMB`).
+- **Admin Dashboard:** Centralized control panel for User Management (create, edit, delete users) and Application Settings (dynamic logo upload).
+- **Polished UI/UX:** Built with Tailwind CSS for a consistent "Panda Theme" and Framer Motion for smooth, meaningful animations.
 
 ---
 
-## 🛠️ Tech Stack
+## 🚀 Tech Stack
 
-*   **Frontend:** React, TypeScript
-*   **Styling:** Tailwind CSS
-*   **Data Fetching:** TanStack Query (React Query) for efficient caching and data synchronization.
-*   **Backend & Database:** Supabase (PostgreSQL, Auth, Realtime, Storage)
-*   **Routing:** React Router
-*   **Charts:** Recharts
+- **Frontend:**
+  - **Framework:** React (with Vite)
+  - **Language:** TypeScript
+  - **Styling:** Tailwind CSS
+  - **State Management:** TanStack Query (for server state) & React Context (for auth)
+  - **Animation:** Framer Motion
+
+- **Backend (Supabase):**
+  - **Database:** PostgreSQL with Row Level Security (RLS)
+  - **Authentication:** Supabase Auth
+  - **Storage:** Supabase Storage for file management
+  - **Serverless Functions:** Supabase Edge Functions (for email sending)
+
+- **Email Service:**
+  - **Provider:** SendGrid
 
 ---
 
-## 🚀 Getting Started with Vite
-
-### Prerequisites
-
-*   Node.js (v16 or later)
-*   npm or yarn
-*   An active Supabase project.
-*   A Supabase project with the database schema from the Settings page applied.
-
-### Installation & Setup
+## 🛠️ Setup & Installation
 
 1.  **Clone the repository:**
     ```bash
-    git clone https://github.com/SawamuraACE/Panda-Patches-CRM-DASHBOARD.git
-    cd Panda-Patches-CRM-DASHBOARD
+    git clone https://github.com/your-username/panda-patches-crm.git
+    cd panda-patches-crm
     ```
 
 2.  **Install dependencies:**
@@ -55,16 +53,28 @@ This isn't just a basic app; it's a full-featured business tool with a professio
     npm install
     ```
 
-3.  **Set up environment variables:**
-    Create a `.env` file in the root of the project and add your Supabase credentials:
-    ```
-    VITE_SUPABASE_URL=YOUR_SUPABASE_URL
-    VITE_SUPABASE_ANON_KEY=YOUR_SUPABASE_ANON_KEY
+3.  **Set up Environment Variables:**
+    - Create a `.env` file in the root of the project.
+    - Add your Supabase project URL and Anon Key:
+      ```
+      VITE_SUPABASE_URL=https://your-project-ref.supabase.co
+      VITE_SUPABASE_ANON_KEY=your-public-anon-key
+      ```
+
+4.  **Set up the Database:**
+    - Navigate to your Supabase project's SQL Editor.
+    - Copy the entire content of `src/assets/db_schema.sql`.
+    - Paste and run the script to set up all tables, views, and policies.
+
+5.  **Start the development server:**
+    ```bash
+    npm run dev
     ```
 
-### Available Scripts
+---
 
-*   `npm run dev`: Runs the app in development mode with hot-reloading.
-*   `npm run build`: Builds the app for production to the `dist` folder.
-*   `npm run preview`: Locally previews the production build.
-*   `npm test`: Runs the test suite (requires test runner setup like Vitest).
+## 部署 (Deployment)
+
+- The frontend is deployed and hosted on **Vercel**.
+- The backend, database, and authentication are managed by **Supabase**.
+- **Important:** Remember to set the `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` environment variables in your Vercel project settings to connect to your **LIVE** Supabase instance.
