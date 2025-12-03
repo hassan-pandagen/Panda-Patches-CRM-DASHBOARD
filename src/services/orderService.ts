@@ -110,6 +110,8 @@ export const prepareEmailData = (order: Order, triggerStatus: string) => {
   let allFiles: string[] = [];
   if (triggerStatus === OrderStatus.NEW_ORDER) {
       allFiles = order.customerAttachmentUrls || [];
+  } else if (triggerStatus === OrderStatus.REVISION_REQUESTED) {
+      allFiles = order.mockupUrls || []; // For revisions, ONLY use mockups
   } else {
       allFiles = order.mockupUrls || [];
       if (allFiles.length === 0 && order.customerAttachmentUrls?.length > 0) {
