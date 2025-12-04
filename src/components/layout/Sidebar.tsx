@@ -1,6 +1,6 @@
 import React from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
-import { LayoutDashboard, Package, BarChart3, Settings, Users, LogOut, PlusCircle } from 'lucide-react';
+import { LayoutDashboard, Package, BarChart3, Settings, Users, LogOut, PlusCircle, Clock } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query'; // Already imported
 import { supabase } from '../../services/supabaseClient'; // Already imported
 import { useAuth } from '../../contexts/AuthContext';
@@ -56,6 +56,7 @@ const Sidebar: React.FC = () => {
     { to: '/', label: 'Dashboard', icon: <LayoutDashboard className="w-5 h-5" /> },
     { to: '/orders', label: 'Orders', icon: <Package className="w-5 h-5" /> },
     { to: '/reports', label: 'Reports', icon: <BarChart3 className="w-5 h-5" /> },
+    { to: '/clock-in-out', label: 'Clock In/Out', icon: <Clock className="w-5 h-5" /> },
   ];
   return (
     <aside className="w-64 bg-slate-900/70 backdrop-blur-xl border-r border-white/10 p-4 flex flex-col">

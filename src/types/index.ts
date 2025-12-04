@@ -86,6 +86,7 @@ export type UserPermissions = {
   orders_delete?: boolean;
   reports_view_financials?: boolean;
   shipping_view?: boolean;
+  attendance_clock_only?: boolean;
 }
 
 export interface UserProfile {

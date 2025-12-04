@@ -22,6 +22,9 @@ import SearchResultsPage from '@/pages/SearchResultsPage';
 import UserManagementPage from '@/pages/UserManagementPage';
 import CustomerHistoryPage from '@/pages/CustomerHistoryPage';
 
+// ✅ Import Clock In/Out page
+import ClockInOutPage from '@/pages/ClockInOutPage';
+
 // Your Protection Components
 import ProtectedRoute from './ProtectedRoute'; // Adjust path if needed
 import AdminRoute from './AdminRoute'; // Adjust path if needed
@@ -55,13 +58,15 @@ const App: React.FC = () => {
               <Route path="/settings" element={<SettingsPage />} />
               <Route path="/search" element={<SearchResultsPage />} />
   
-              {/* This admin route is now wrapped in the AdminRoute component */}
-              {/* It will always exist, but only admins can access it. */}
+              {/* ✅ ATTENDANCE ROUTES */}
+              {/* All users can clock in/out */}
+              <Route path="/clock-in-out" element={<ClockInOutPage />} />
+              
+              {/* Admin-only routes */}
               <Route element={<AdminRoute />}>
                 <Route path="/user-management" element={<UserManagementPage />} />
               </Route>
   
-              {/* Catch-all redirects to the dashboard */}
               <Route path="*" element={<Navigate to="/" />} />
             </Route>
           </Route>

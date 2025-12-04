@@ -4,8 +4,45 @@ import { supabase } from './supabaseClient';
 import { queryClient } from '../App';
 import { Order, OrderStatus } from '../types/index';
 
+/**
+ * A generic, automated adapter to convert a camelCase object to a snake_case object
+ * suitable for a Supabase database payload.
+ * @param data The camelCase object from the frontend.
+ * @returns A new object with snake_case keys.
+ */
+const toSnakeCase = (data: any): any => {
+  // These fields are computed or managed by the database and should never be sent in an update.
+  const readOnlyFields = new Set([
+    'id', 'orderNumber', 'createdAt', 'updatedAt', 'createdBy', 'profit', 'amountRemaining'
+  ]);
+
+  const snakeCaseObject: { [key: string]: any } = {};
+
+  for (const key in data) {
+    // Ensure the key belongs to the object and is not a read-only field.
+    if (Object.prototype.hasOwnProperty.call(data, key) && !readOnlyFields.has(key)) {
+      // Convert camelCase to snake_case using a regular expression.
+      // e.g., 'orderAmount' becomes 'order_amount'
+      const snakeKey = key.replace(/[A-Z]/g, letter => `_${letter.toLowerCase()}`);
+      snakeCaseObject[snakeKey] = data[key];
+    }
+  }
+
+  // Special handling for array fields that might be null/undefined
+  // Ensure we send an empty array `[]` instead of `null` if they are cleared.
+  const arrayFields = ['mockupUrls', 'productionFileUrls', 'shippingAttachmentUrls', 'customerAttachmentUrls', 'redoAttachments'];
+  arrayFields.forEach(field => {
+    if (data[field] !== undefined) {
+      const snakeKey = field.replace(/[A-Z]/g, letter => `_${letter.toLowerCase()}`);
+      snakeCaseObject[snakeKey] = data[field] || [];
+    }
+  });
+
+  return snakeCaseObject;
+};
+
 // =====================================================================
-// 1. TEMPLATE CONFIGURATION (SendGrid IDs)
+// 2. TEMPLATE CONFIGURATION (SendGrid IDs)
 // =====================================================================
 const SENDGRID_TEMPLATES = {
   // --- NEW ORDERS ---
@@ -26,10 +63,9 @@ const SENDGRID_TEMPLATES = {
   CUSTOMER_SHIPPED: 'd-30f79e97452342a7a2a42a3237a47479',
   CUSTOMER_DELIVERED: 'd-d0ab08ed143e4a62900c257d63167630', 
   CUSTOMER_FEEDBACK: 'd-563b0533e1d94a1bb830129a440c254b',  
-  CUSTOMER_REFUNDED: 'd-8da31b3c8aca485cb82203af044e6ba7',
+  CUSTOMER_REFUNDED: 'd-8da31b3c8aca485cb82103af044e6ba7',
 };
 
-// ✅ Use an array for multiple production managers
 const PRODUCTION_MANAGER_EMAILS = [
   'lilcustomerzdesign@gmail.com',
   'lilcustomize550@gmail.com',
@@ -37,81 +73,90 @@ const PRODUCTION_MANAGER_EMAILS = [
 ];
 
 // =====================================================================
-// 2. HELPER FUNCTIONS
+// 3. HELPER FUNCTIONS
 // =====================================================================
 
+const getFileName = (url: string): string => {
+  try {
+    return url.split('/').pop()?.split('?')[0] || 'file';
+  } catch {
+    return 'file';
+  }
+};
+
 export const mapDbToOrder = (data: any): Order => {
+  // If no data is provided, return null to avoid errors downstream.
+  if (!data) return null as any;
+
+  // Helper to safely convert values to numbers, defaulting to 0.
   const toNumber = (val: any) => {
     if (val === null || val === undefined || val === '') return 0;
     const num = Number(val);
     return isNaN(num) ? 0 : num;
   };
 
-  const orderAmount = toNumber(data.order_amount ?? data.orderAmount);
-  const amountPaid = toNumber(data.amount_paid ?? data.amountPaid);
-  const productionCost = toNumber(data.production_cost ?? data.productionCost);
-  const shippingCost = toNumber(data.shipping_cost ?? data.shippingCost);
-  const marketingCost = toNumber(data.marketing_cost ?? data.marketingCost);
-  const patchesQuantity = toNumber(data.patches_quantity ?? data.patchesQuantity);
+  // Mapping: Try camelCase (from View) first, fall back to snake_case (from Table).
+  // This makes the mapper compatible with BOTH query types.
+  const orderAmount = toNumber(data.orderAmount ?? data.order_amount);
+  const amountPaid = toNumber(data.amountPaid ?? data.amount_paid);
+  const productionCost = toNumber(data.productionCost ?? data.production_cost);
+  const shippingCost = toNumber(data.shippingCost ?? data.shipping_cost);
+  const marketingCost = toNumber(data.marketingCost ?? data.marketing_cost);
+  const patchesQuantity = toNumber(data.patchesQuantity ?? data.patches_quantity);
 
   return {
     id: data.id,
-    orderNumber: data.order_number ?? data.orderNumber,
-    customerName: data.customer_name ?? data.customerName,
-    customerEmail: data.customer_email ?? data.customerEmail,
-    customerPhone: data.customer_phone ?? data.customerPhone,
-    customerProfileUrl: data.customer_profile_url ?? data.customerProfileUrl,
+    orderNumber: data.orderNumber ?? data.order_number,
+    customerName: data.customerName ?? data.customer_name,
+    customerEmail: data.customerEmail ?? data.customer_email,
+    customerPhone: data.customerPhone ?? data.customer_phone,
+    customerProfileUrl: data.customerProfileUrl ?? data.customer_profile_url,
     
-    shippingAddress: data.shipping_address ?? data.shippingAddress,
-    shippingTrackingNumber: data.shipping_tracking_number ?? data.shippingTrackingNumber,
-    shippingCarrier: data.shipping_carrier ?? data.shippingCarrier,
+    shippingAddress: data.shippingAddress ?? data.shipping_address,
+    shippingTrackingNumber: data.shippingTrackingNumber ?? data.shipping_tracking_number,
+    shippingCarrier: data.shippingCarrier ?? data.shipping_carrier,
     
-    designName: data.design_name ?? data.designName,
-    patchesType: data.patches_type ?? data.patchesType,
+    designName: data.designName ?? data.design_name,
+    patchesType: data.patchesType ?? data.patches_type,
     patchesQuantity: patchesQuantity,
-    designSize: data.design_size ?? data.designSize,
-    designBacking: data.design_backing ?? data.designBacking,
+    designSize: data.designSize ?? data.design_size,
+    designBacking: data.designBacking ?? data.design_backing,
     instructions: data.instructions,
     
-    orderAmount,
-    amountPaid,
-    productionCost,
-    shippingCost,
-    marketingCost,
+    orderAmount, amountPaid, productionCost, shippingCost, marketingCost,
     profit: orderAmount - productionCost - shippingCost - marketingCost,
     amountRemaining: orderAmount - amountPaid,
 
     status: data.status,
-    reasonCategory: data.reason_category ?? data.reasonCategory,
-    reasonDetails: data.reason_details ?? data.reasonDetails,
-    isUrgent: data.is_urgent ?? data.isUrgent,
-    isUrgentApproved: data.is_urgent_approved ?? data.isUrgentApproved,
-    leadSource: data.lead_source ?? data.leadSource,
-    salesAgent: data.sales_agent ?? data.salesAgent,
-    createdAt: data.created_at ?? data.createdAt,
-    updatedAt: data.updated_at ?? data.updatedAt,
+    reasonCategory: data.reasonCategory ?? data.reason_category,
+    reasonDetails: data.reasonDetails ?? data.reason_details,
+    isUrgent: data.isUrgent ?? data.is_urgent,
+    isUrgentApproved: data.isUrgentApproved ?? data.is_urgent_approved,
+    leadSource: data.leadSource ?? data.lead_source,
+    salesAgent: data.salesAgent ?? data.sales_agent,
+    createdAt: data.createdAt ?? data.created_at,
+    updatedAt: data.updatedAt ?? data.updated_at,
 
-    mockupUrls: data.mockup_urls || data.mockupUrls || [],
-    productionFileUrls: data.production_file_urls || data.productionFileUrls || [],
-    shippingAttachmentUrls: data.shipping_attachment_urls || data.shippingAttachmentUrls || [],
-    customerAttachmentUrls: data.customer_attachment_urls || data.customerAttachmentUrls || [],
+    mockupUrls: data.mockupUrls ?? data.mockup_urls ?? [],
+    productionFileUrls: data.productionFileUrls ?? data.production_file_urls ?? [],
+    shippingAttachmentUrls: data.shippingAttachmentUrls ?? data.shipping_attachment_urls ?? [],
+    customerAttachmentUrls: data.customerAttachmentUrls ?? data.customer_attachment_urls ?? [],
     
-    revisionNotes: data.revision_notes ?? data.revisionNotes,
-    redoNotes: data.redo_notes ?? data.redoNotes
+    revisionNotes: data.revisionNotes ?? data.revision_notes,
+    redoNotes: data.redoNotes ?? data.redo_notes
   } as Order;
 };
 
 // =====================================================================
-// 3. MASTER EMAIL DATA FUNCTION (Backend-Ready)
+// 4. EMAIL DATA PREPARATION
 // =====================================================================
 
 export const prepareEmailData = (order: Order, triggerStatus: string) => {
-  // 1. GET FILES
   let allFiles: string[] = [];
   if (triggerStatus === OrderStatus.NEW_ORDER) {
       allFiles = order.customerAttachmentUrls || [];
   } else if (triggerStatus === OrderStatus.REVISION_REQUESTED) {
-      allFiles = order.mockupUrls || []; // For revisions, ONLY use mockups
+      allFiles = order.mockupUrls || [];
   } else {
       allFiles = order.mockupUrls || [];
       if (allFiles.length === 0 && order.customerAttachmentUrls?.length > 0) {
@@ -119,19 +164,11 @@ export const prepareEmailData = (order: Order, triggerStatus: string) => {
       }
   }
 
-  // 2. SORT & SEPARATE
-  const sortedFiles = [...allFiles].reverse(); // Newest first
-  
-  // Helper to check extensions
+  const sortedFiles = [...allFiles].reverse();
   const isImage = (url: string) => /\.(jpg|jpeg|png|gif|webp)$/i.test(url.toLowerCase());
-  
-  // Find Winner (First Image)
   const winnerUrl = sortedFiles.find(url => isImage(url)) || sortedFiles[0] || "";
-  
-  // Gallery = Rest of files
   const galleryUrls = sortedFiles.filter(url => url !== winnerUrl);
 
-  // --- TRACKING LOGIC ---
   const carrier = (order.shippingCarrier || "").toLowerCase();
   const trackingNum = (order.shippingTrackingNumber || "").trim();
   
@@ -150,16 +187,12 @@ export const prepareEmailData = (order: Order, triggerStatus: string) => {
       }
   }
 
-  // 3. RETURN DATA
-  // Note: We do NOT define 'preview' here. The Backend will generate CIDs.
   return {
-    // Files
-    winner_file: winnerUrl ? { url: winnerUrl } : null,
-    gallery_files: galleryUrls.map(url => ({ url })), 
+    winner_file: winnerUrl ? { url: winnerUrl, file_name: getFileName(winnerUrl) } : null,
+    gallery_files: galleryUrls.map(url => ({ url, file_name: getFileName(url) })), 
     has_winner: !!winnerUrl,
     has_gallery: galleryUrls.length > 0,
 
-    // Variables (Your standard list)
     customer_name: order.customerName || "Valued Customer",
     order_number: order.orderNumber,
     order_date: new Date(order.createdAt).toLocaleDateString(),
@@ -194,9 +227,6 @@ export const triggerStatusEmail = async (order: Order, statusToCheck: string) =>
 
   console.log(`📧 [Email Service] Triggering emails for status: ${statusToCheck}`);
   
-  // ---------------------------------------------------------
-  // Status-based Email Routing
-  // ---------------------------------------------------------
   switch (statusToCheck) {
     case OrderStatus.NEW_ORDER: 
       if (SENDGRID_TEMPLATES.CUSTOMER_NEW_ORDER) {
@@ -250,7 +280,6 @@ export const triggerStatusEmail = async (order: Order, statusToCheck: string) =>
         });
       }
       if (SENDGRID_TEMPLATES.INTERNAL_PRODUCTION_START) {
-        // ✅ Send to all production managers
         PRODUCTION_MANAGER_EMAILS.forEach(email => {
           requests.push({ to: email, template_id: SENDGRID_TEMPLATES.INTERNAL_PRODUCTION_START });
         });
@@ -259,11 +288,10 @@ export const triggerStatusEmail = async (order: Order, statusToCheck: string) =>
 
     case OrderStatus.QUALITY_ASSURANCE:
       if (SENDGRID_TEMPLATES.INTERNAL_QUALITY_ASSURANCE) {
-        // ✅ REVERTED: Send to the customer as requested to manage expectations on complex designs.
         requests.push({
           to: order.customerEmail,
           template_id: SENDGRID_TEMPLATES.INTERNAL_QUALITY_ASSURANCE
-        })
+        });
       }
       break;
 
@@ -309,17 +337,9 @@ export const triggerStatusEmail = async (order: Order, statusToCheck: string) =>
     return;
   }
 
-  // ---------------------------------------------------------
-  // Send Emails
-  // ---------------------------------------------------------
   await Promise.all(requests.map(async (req) => {
-    if (!req.to) {
-      console.warn('⚠️ Skipping email: Recipient address is missing');
-      return;
-    }
-    // Skip empty template IDs
-    if (!req.template_id) {
-      console.warn(`⚠️ Skipping email for ${req.to}: Template ID is missing.`);
+    if (!req.to || !req.template_id) {
+      console.warn(`⚠️ Skipping email: Missing ${!req.to ? 'recipient' : 'template'}`);
       return;
     }
     
@@ -336,7 +356,6 @@ export const triggerStatusEmail = async (order: Order, statusToCheck: string) =>
       
       if (error) throw error;
 
-      // Log to communications table
       await supabase.from('order_communications').insert({
         order_id: order.id,
         recipient_email: req.to,
@@ -359,7 +378,7 @@ export const triggerStatusEmail = async (order: Order, statusToCheck: string) =>
 // =====================================================================
 
 export const createOrder = async (orderData: any, userEmail: string) => {
-  const payload = { ...orderData, sales_agent: userEmail };
+  const payload = toSnakeCase({ ...orderData, salesAgent: userEmail });
 
   const { data, error } = await supabase
     .from('orders')
@@ -378,13 +397,9 @@ export const createOrder = async (orderData: any, userEmail: string) => {
 
   const mappedOrder = mapDbToOrder(data);
 
-  // Non-blocking email trigger
-  try {
-    console.log("Attempting to send new order email...");
-    await triggerStatusEmail(mappedOrder, OrderStatus.NEW_ORDER);
-  } catch (emailErr) {
-    console.error("⚠️ Order created, but email failed to send:", emailErr);
-  }
+  triggerStatusEmail(mappedOrder, OrderStatus.NEW_ORDER).catch(err => 
+      console.error("⚠️ Email trigger failed (background):", err)
+  );
 
   return mappedOrder;
 };
@@ -395,18 +410,27 @@ export const updateOrderDetails = async (
   oldOrder: Order, 
   userEmail: string
 ) => {
+  console.log('📝 Updates received (camelCase):', updates);
+  // ✅ STEP 1: CONVERT DATA (The Fix)
+  // ✅ CONVERT TO SNAKE_CASE
+  const dbPayload = toSnakeCase(updates);
+  console.log('🔄 Converted to snake_case:', dbPayload);
+
   const { data, error } = await supabase
     .from('orders')
-    .update(updates)
+    .update(dbPayload)
     .eq('id', orderId)
     .select()
     .single();
 
-  if (error) throw error;
+  if (error) {
+    console.error('❌ Database error:', error);
+    throw error;
+  }
 
   const newOrder = mapDbToOrder(data);
 
-  // 2. LOG HISTORY
+  // Log history
   const historyRecords = [];
   for (const key in updates) {
     const oldOrderKey = Object.keys(oldOrder).find(
@@ -416,19 +440,7 @@ export const updateOrderDetails = async (
     if (oldOrderKey) {
       const oldValue = oldOrder[oldOrderKey];
       const newValue = updates[key];
-      let hasChanged = false;
-
-      if (Array.isArray(oldValue) && Array.isArray(newValue)) {
-        if (
-          JSON.stringify(oldValue.sort()) !== JSON.stringify(newValue.sort())
-        ) {
-          hasChanged = true;
-        }
-      } else if (oldValue !== newValue) {
-        hasChanged = true;
-      }
-
-      if (hasChanged) {
+      if (String(oldValue) !== String(newValue)) {
         historyRecords.push({
           order_id: orderId,
           user_email: userEmail,
@@ -444,17 +456,13 @@ export const updateOrderDetails = async (
     await supabase.from('order_history').insert(historyRecords);
   }
 
-  // 3. TRIGGER EMAILS (BACKGROUND)
+  // Trigger emails if status changed
   if (updates.status && updates.status !== oldOrder.status) {
-    try {
-      console.log("Attempting to send status email...");
-      await triggerStatusEmail(newOrder, updates.status);
-    } catch (emailErr) {
-      console.error("⚠️ Order saved, but email failed:", emailErr);
-    }
+    triggerStatusEmail(newOrder, updates.status).catch(err => 
+       console.error("⚠️ Email trigger failed (background):", err)
+    );
   }
 
-  // 4. CLEANUP
   await queryClient.invalidateQueries({ queryKey: ['allOrdersReport'] });
 
   return newOrder;

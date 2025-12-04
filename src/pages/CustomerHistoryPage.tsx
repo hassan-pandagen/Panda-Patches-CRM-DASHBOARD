@@ -6,6 +6,7 @@ import { motion } from 'framer-motion';
 import { supabase } from '../services/supabaseClient';
 import { Order, OrderStatus } from '../types';
 import Spinner from '../components/ui/Spinner';
+import { mapDbToOrder } from '../services/orderService';
 import StatusBadge from '../components/ui/StatusBadge';
 import { ArrowLeft, Mail, Phone, DollarSign, ShoppingBag, Clock, TrendingUp } from 'lucide-react';
 
@@ -45,43 +46,8 @@ const CustomerHistoryPage: React.FC = () => {
         return [];
       }
 
-      const transformedOrders = data.map((item: any) => ({
-        id: item.id,
-        orderNumber: item.order_number,
-        customerName: item.customer_name,
-        customerEmail: item.customer_email,
-        customerPhone: item.customer_phone,
-        customerProfileUrl: item.customer_profile_url,
-        shippingAddress: item.shipping_address,
-        designName: item.design_name,
-        patchesQuantity: Number(item.patches_quantity || 0),
-        patchesType: item.patches_type,
-        designSize: item.design_size,
-        designBacking: item.design_backing,
-        instructions: item.instructions,
-        orderAmount: Number(item.order_amount || 0),
-        amountPaid: Number(item.amount_paid || 0),
-        productionCost: Number(item.production_cost || 0),
-        shippingCost: Number(item.shipping_cost || 0),
-        marketingCost: Number(item.marketing_cost || 0),
-        leadSource: item.lead_source,
-        status: item.status,
-        isUrgent: item.is_urgent || false,
-        shippingCarrier: item.shipping_carrier,
-        shippingTrackingNumber: item.shipping_tracking_number,
-        salesAgent: item.sales_agent,
-        createdAt: item.created_at,
-        updatedAt: item.updated_at,
-        mockupUrls: item.mockup_urls || [],
-        productionFileUrls: item.production_file_urls || [],
-        shippingAttachmentUrls: item.shipping_attachment_urls || [],
-        customerAttachmentUrls: item.customer_attachment_urls || [],
-        reasonCategory: item.reason_category,
-        reasonDetails: item.reason_details,
-      })) as Order[];
-
-      console.log('✅ Transformed orders:', transformedOrders);
-      return transformedOrders;
+      console.log('✅ Mapping orders...');
+      return (data || []).map(mapDbToOrder);
     },
     enabled: !!customerId,
     retry: 1,

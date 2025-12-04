@@ -35,7 +35,7 @@ const updateSettings = async (updates: { logo_url: string }) => {
 
 const SettingsPage: React.FC = () => {
   const queryClient = useQueryClient();
-  const toast = useToast(); // ✅ Use YOUR custom toast hook
+  const { toast } = useToast(); // ✅ FIX: Destructure the toast object
   const { role } = useAuth();
   
   const [logoUrl, setLogoUrl] = useState<string>('');
@@ -59,7 +59,7 @@ const SettingsPage: React.FC = () => {
   const { mutate: saveSettings, isLoading: isSaving } = useMutation({
     mutationFn: updateSettings,
     onSuccess: (updatedData) => {
-      toast.success('Settings Saved', 'Your new logo has been saved.');
+      toast.success('Settings Saved');
       queryClient.invalidateQueries({ queryKey: ['app_settings'] });
       queryClient.invalidateQueries({ queryKey: ['user'] });
       setIsDirty(false);

@@ -7,6 +7,7 @@ import { supabase } from '../services/supabaseClient';
 import { Order, OrderStatus, UserRole } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 import { getStatusInfo } from '../constants';
+import { mapDbToOrder } from '../services/orderService';
 
 // UI Components
 import Button from '../components/ui/Button';
@@ -150,16 +151,18 @@ const AllOrdersPage: React.FC = () => {
   // --- DATA FETCHING ---
   const { data: orders = [], isLoading, error } = useQuery({
     queryKey: ['allOrders'],
-     queryFn: async () => {
-       const { data, error } = await supabase
-         .from('orders_with_details')
-         .select('*')
-         // Default to newest first, but overdue filter will override this
-         .order('created_at', { ascending: false });
-       
-       if (error) throw new Error(error.message);
-       return data as Order[];
-     },
+    queryFn: async () => {
+      // Query the base table (not the view) to get snake_case data
+      const { data, error } = await supabase
+        .from('orders')
+        .select('*')
+        .order('created_at', { ascending: false });
+      
+      if (error) throw new Error(error.message);
+
+      // Map snake_case DB columns to camelCase for frontend
+      return (data || []).map(mapDbToOrder);
+    },
   });
 
   // --- OVERDUE LOGIC ---

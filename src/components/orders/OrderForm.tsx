@@ -77,7 +77,6 @@ interface OrderFormProps {
   onSave: (formData: SaveData) => void;
   initialData?: Order | null;
   isSaving?: boolean;
-  onFormChange?: () => void;
   showFinancials?: boolean;
   isNewOrder?: boolean; // Add this prop
 }
@@ -108,17 +107,18 @@ const transformOrderToFormData = (order: Order | null | undefined): SaveData => 
 const OrderForm: React.FC<OrderFormProps> = ({ 
   onSave, 
   initialData, 
-  onFormChange,
-  showFinancials: showFinancialsProp, // Use prop if provided
-  isNewOrder = false // Default to false (for edit pages)
+  showFinancials: showFinancialsProp,
+  isNewOrder = false
 }) => {
   const { role, permissions } = useAuth();
+  
+  // ✅ FIX: Get toast methods directly
+  const { success, error: showError } = useToast();
 
   const formDefaultValues = useMemo(() => transformOrderToFormData(initialData), [initialData]);
 
   // Internal state for the spinner, managed by the form itself.
   const [isSaving, setIsSaving] = useState(false);
-  const toast = useToast();
   
   // ✅ State for live customer check
   const [existingCustomer, setExistingCustomer] = useState<ExistingCustomerInfo | null>(null);
@@ -127,10 +127,6 @@ const OrderForm: React.FC<OrderFormProps> = ({
   const { register, handleSubmit, watch, formState: { errors, isDirty }, reset, setValue } = useForm<SaveData>({
     defaultValues: formDefaultValues,
   });
-
-  useEffect(() => {
-    if (isDirty && onFormChange) onFormChange();
-  }, [isDirty, onFormChange]);
 
   useEffect(() => {
     reset(transformOrderToFormData(initialData));
@@ -184,26 +180,19 @@ const OrderForm: React.FC<OrderFormProps> = ({
   }, [watchEmail, watchPhone, isNewOrder]);
 
   const onSubmit = async (data: SaveData) => {
+    console.log('📝 Form submitted with data:', data);
     setIsSaving(true); // Start Spinner
-
-    // ✅ NORMALIZE PHONE NUMBER: Remove all non-digit characters before saving.
-    const normalizedData = {
-      ...data,
-      customerPhone: data.customerPhone ? data.customerPhone.replace(/\D/g, '') : '',
-    };
 
     try {
       // This will now always succeed because of Step 1,
       // unless the Database itself is down.
-      await onSave(normalizedData);
-
-      // The parent component handles navigation and major success toasts.
-      // This is a fallback in case it doesn't.
-      // toast.success('Order saved successfully');
-
+      await onSave(data);
+      // ✅ FIX: Use the destructured success method
+      success('Order saved successfully!');
     } catch (error: any) {
-      console.error("Save Error:", error);
-      toast.error('Failed to save order', error.message || 'An unknown error occurred.');
+      console.error("💥 Save Error:", error);
+      // ✅ FIX: Use the destructured showError method
+      showError(error.message || 'Failed to save order. Please try again.');
     } finally {
       setIsSaving(false);
     }
@@ -229,14 +218,6 @@ const OrderForm: React.FC<OrderFormProps> = ({
   const shippingCarriers = ["FedEx", "DHL", "UPS", "USPS", "Other"];
   const backingOptions = ["Iron on", "Sew on", "Sticker", "Velcro"];
   
-  // Helper for file updates
-  const moveFile = (url: string, from: keyof SaveData, to: keyof SaveData) => {
-    // Remove from the 'from' list
-    setValue(from, ((watch(from) as string[]) || []).filter(u => u !== url), { shouldDirty: true });
-    // Add to the 'to' list
-    setValue(to, [...((watch(to) as string[]) || []), url], { shouldDirty: true });
-  };
-
   const orderNum = initialData?.orderNumber || 'new-order';
   
   // *** CRITICAL FIX: The exact bucket name from your Supabase ***
@@ -393,9 +374,6 @@ const OrderForm: React.FC<OrderFormProps> = ({
               bucketName={BUCKET_NAME} // <--- FIX: Uses correct bucket
               folderPath={`mockups/${orderNum}`}
               urls={watch('mockupUrls') || []}
-              onUrlsChange={(newUrls) => setValue('mockupUrls', newUrls, { shouldDirty: true })}
-              onMoveFile={(url) => moveFile(url, 'mockupUrls', 'productionFileUrls')}
-              moveLabel="Move to Production Files"
             />
           </div>
 
@@ -406,7 +384,6 @@ const OrderForm: React.FC<OrderFormProps> = ({
               bucketName={BUCKET_NAME} // <--- FIX
               folderPath={`production-files/${orderNum}`}
               urls={watch('productionFileUrls') || []}
-              onUrlsChange={(newUrls) => setValue('productionFileUrls', newUrls, { shouldDirty: true })}
             />
           </div>
 
@@ -417,7 +394,6 @@ const OrderForm: React.FC<OrderFormProps> = ({
               bucketName={BUCKET_NAME} // <--- FIX
               folderPath={`customer-refs/${orderNum}`}
               urls={watch('customerAttachmentUrls') || []}
-              onUrlsChange={(newUrls) => setValue('customerAttachmentUrls', newUrls, { shouldDirty: true })}
             />
           </div>
           
@@ -428,7 +404,6 @@ const OrderForm: React.FC<OrderFormProps> = ({
               bucketName={BUCKET_NAME} // <--- FIX
               folderPath={`shipping-docs/${orderNum}`}
               urls={watch('shippingAttachmentUrls') || []}
-              onUrlsChange={(newUrls) => setValue('shippingAttachmentUrls', newUrls, { shouldDirty: true })}
             />
           </div>
 
@@ -540,7 +515,9 @@ const OrderForm: React.FC<OrderFormProps> = ({
       </FormSectionWrapper>
 
       <div className="flex justify-end gap-4 pt-6 border-t border-slate-700">
-        <Button type="button" variant="secondary" onClick={() => reset(formDefaultValues)}>Cancel</Button>
+        <Button type="button" variant="secondary" onClick={() => reset(formDefaultValues)}>
+          Cancel
+        </Button>
         <Button type="submit" disabled={isSaving}>{isSaving ? <Spinner small /> : 'Save Changes'}</Button>
       </div>
     </form>

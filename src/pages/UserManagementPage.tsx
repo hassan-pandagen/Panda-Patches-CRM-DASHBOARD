@@ -399,6 +399,46 @@ const UserManagementPage: React.FC = () => {
                     </select>
                   </div>
 
+                  {/* User Type Preset for Create Form */}
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-slate-400">User Type (Preset)</label>
+                    <select
+                      onChange={(e) => {
+                        if (e.target.value === 'production') {
+                          setNewUserPermissions({
+                            ...defaultPermissions,
+                            orders_create: false,
+                            orders_view_all: true,
+                            orders_change_status: true,
+                            orders_edit_financials: false,
+                            orders_edit_production: true,
+                          });
+                        } else if (e.target.value === 'clock_only') {
+                          setNewUserPermissions({
+                            users_manage: false,
+                            orders_create: false,
+                            orders_view_all: false,
+                            orders_change_status: false,
+                            orders_edit_financials: false,
+                            orders_edit_production: false,
+                            orders_delete: false,
+                            reports_view_financials: false,
+                            shipping_view: false,
+                            attendance_clock_only: true,
+                          });
+                        } else {
+                          setNewUserPermissions(defaultPermissions);
+                        }
+                      }}
+                      className="w-full px-4 py-2 bg-slate-900/50 border border-slate-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-white"
+                      defaultValue="sales"
+                    >
+                      <option value="sales">Sales Agent</option>
+                      <option value="production">Production User</option>
+                      <option value="clock_only">Clock In/Out Only</option>
+                    </select>
+                  </div>
+
                   <div className="space-y-3">
                     <label className="text-sm font-medium text-slate-400 block">Permissions</label>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -493,16 +533,30 @@ const UserManagementPage: React.FC = () => {
                         orders_edit_financials: false,
                         orders_edit_production: true,
                       });
+                    } else if (e.target.value === 'clock_only') {
+                      setEditUserPermissions({ // Clock-only user
+                        users_manage: false,
+                        orders_create: false,
+                        orders_view_all: false,
+                        orders_change_status: false,
+                        orders_edit_financials: false,
+                        orders_edit_production: false,
+                        orders_delete: false,
+                        reports_view_financials: false,
+                        shipping_view: false,
+                        attendance_clock_only: true,
+                      });
                     } else { // 'sales'
                       setEditUserPermissions(defaultPermissions);
                     }
                   }}
                   className="w-full px-4 py-2 bg-slate-900/50 border border-slate-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-white"
                   // Determine current type based on permissions
-                  value={editUserPermissions.orders_edit_production ? 'production' : 'sales'}
+                  value={editUserPermissions.attendance_clock_only ? 'clock_only' : (editUserPermissions.orders_edit_production ? 'production' : 'sales')}
                 >
                   <option value="sales">Sales Agent</option>
                   <option value="production">Production User</option>
+                  <option value="clock_only">Clock In/Out Only</option>
                 </select>
               </div>
 

@@ -8,6 +8,7 @@ import { Order, UserRole, OrderStatus } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../hooks/useToast'; // Check your path
 import InvoiceModal from '../components/invoices/InvoiceModal';
+import { mapDbToOrder } from '../services/orderService';
 
 // UI Components
 import Spinner from '../components/ui/Spinner';
@@ -89,13 +90,18 @@ const OrderPage: React.FC = () => {
     queryKey: ['order', orderNumber],
     queryFn: async () => {
       if (!orderNumber) throw new Error("No order number provided.");
+      
+      // 1. Query the TABLE (snake_case source)
       const { data, error } = await supabase
-        .from('orders_with_details')
+        .from('orders')
         .select('*')
-        .eq('order_number', orderNumber) 
+        .eq('order_number', orderNumber) // 2. Filter using SNAKE_CASE
         .single();
+
       if (error) throw error;
-      return data;
+
+      // 3. Map immediately (Convert to Frontend Language)
+      return mapDbToOrder(data);
     },
     enabled: !!orderNumber,
   });

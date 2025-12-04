@@ -85,7 +85,7 @@ const OrdersTable: React.FC<OrdersTableProps> = ({ orders, isLoading = false }) 
     navigate(`/customers/${encodeURIComponent(identifier)}`);
   };
 
-  const handleOrderClick = (orderNumber: string) => {
+  const handleRowClick = (orderNumber: string) => {
     navigate(`/order/${orderNumber}`);
   };
 
@@ -113,8 +113,8 @@ const OrdersTable: React.FC<OrdersTableProps> = ({ orders, isLoading = false }) 
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
                     exit={{ opacity: 0 }}
-                    // ✅ ROW CLICK: Navigates to Order Details
-                    onClick={() => handleOrderClick(order.orderNumber)}
+                    // ✅ THIS IS THE KEY: Add onClick to the ROW
+                    onClick={() => handleRowClick(order.orderNumber)}
                     className="border-b border-slate-800 hover:bg-slate-800/60 cursor-pointer transition-colors group"
                   >
                     {/* ORDER NUMBER */}
@@ -142,7 +142,10 @@ const OrdersTable: React.FC<OrdersTableProps> = ({ orders, isLoading = false }) 
                         {order.customerEmail && (
                           <button
                             type="button"
-                            onClick={(e) => handleContactClick(e, order.customerEmail)}
+                            onClick={(e) => { 
+                              e.stopPropagation(); // <--- PREVENTS ROW CLICK
+                              navigate(`/customers/${order.customerEmail}`); 
+                            }}
                             className="flex items-center gap-2 px-2 py-1 rounded bg-slate-900/50 border border-slate-700/50 hover:border-cyan-500/50 hover:bg-slate-800 transition-all group/btn"
                             title="View Customer History"
                           >
@@ -158,7 +161,10 @@ const OrdersTable: React.FC<OrdersTableProps> = ({ orders, isLoading = false }) 
                         {order.customerPhone && (
                           <button
                             type="button"
-                            onClick={(e) => handleContactClick(e, order.customerPhone)}
+                            onClick={(e) => { 
+                              e.stopPropagation(); // <--- PREVENTS ROW CLICK
+                              navigate(`/customers/${order.customerPhone}`); 
+                            }}
                             className="flex items-center gap-2 px-2 py-1 rounded bg-slate-900/50 border border-slate-700/50 hover:border-emerald-500/50 hover:bg-slate-800 transition-all group/btn"
                             title="View Customer History"
                           >

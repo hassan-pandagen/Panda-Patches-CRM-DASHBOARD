@@ -1,90 +1,116 @@
 import React, { createContext, useState, useCallback, ReactNode } from 'react';
-import { AnimatePresence } from 'framer-motion';
-import Toast from '../components/ui/Toast';
+import { X, CheckCircle, XCircle, AlertCircle, Info } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
 
-export type ToastType = 'success' | 'error' | 'warning' | 'info';
-export type ToastPosition =
-  | 'top-right'
-  | 'top-left'
-  | 'bottom-right'
-  | 'bottom-left'
-  | 'top-center'
-  | 'bottom-center';
-
-export interface ToastMessage {
+interface Toast {
   id: string;
-  type: ToastType;
-  title: string;
-  message?: string;
-  duration?: number;
-  position?: ToastPosition;
+  type: 'success' | 'error' | 'warning' | 'info';
+  message: string;
 }
 
 export interface ToastContextType {
-  showToast: (toast: Omit<ToastMessage, 'id'>) => void;
+  addToast: (toast: Omit<Toast, 'id'>) => void;
+  removeToast: (id: string) => void;
 }
 
 export const ToastContext = createContext<ToastContextType | undefined>(undefined);
 
-const MAX_VISIBLE_TOASTS = 3;
-
 export const ToastProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-  const [toasts, setToasts] = useState<ToastMessage[]>([]);
+  const [toasts, setToasts] = useState<Toast[]>([]);
 
-  const showToast = useCallback((toast: Omit<ToastMessage, 'id'>) => {
-    const id = Date.now().toString() + Math.random().toString();
-    setToasts(currentToasts => {
-      const newToasts = [...currentToasts, { ...toast, id }];
-      // Limit the number of visible toasts
-      return newToasts.slice(-MAX_VISIBLE_TOASTS);
-    });
+  const addToast = useCallback((toast: Omit<Toast, 'id'>) => {
+    const id = Math.random().toString(36).substring(2, 11);
+    setToasts((prev) => [...prev, { ...toast, id }]);
+
+    // Auto-remove after 5 seconds
+    setTimeout(() => {
+      setToasts((prev) => prev.filter((t) => t.id !== id));
+    }, 5000);
   }, []);
 
   const removeToast = useCallback((id: string) => {
-    setToasts(currentToasts => currentToasts.filter(toast => toast.id !== id));
+    setToasts((prev) => prev.filter((t) => t.id !== id));
   }, []);
 
-  const getPositionClasses = (position: ToastPosition) => {
-    switch (position) {
-      case 'top-left': return 'top-4 left-4';
-      case 'top-center': return 'top-4 left-1/2 -translate-x-1/2';
-      case 'bottom-right': return 'bottom-4 right-4';
-      case 'bottom-left': 'bottom-4 left-4';
-      case 'bottom-center': 'bottom-4 left-1/2 -translate-x-1/2';
-      default: return 'top-4 right-4'; // top-right
+  const getToastStyles = (type: Toast['type']) => {
+    switch (type) {
+      case 'success':
+        return {
+          bg: 'bg-emerald-500/10',
+          border: 'border-emerald-500/30',
+          text: 'text-emerald-400',
+          icon: <CheckCircle className="w-5 h-5" />,
+        };
+      case 'error':
+        return {
+          bg: 'bg-red-500/10',
+          border: 'border-red-500/30',
+          text: 'text-red-400',
+          icon: <XCircle className="w-5 h-5" />,
+        };
+      case 'warning':
+        return {
+          bg: 'bg-amber-500/10',
+          border: 'border-amber-500/30',
+          text: 'text-amber-400',
+          icon: <AlertCircle className="w-5 h-5" />,
+        };
+      case 'info':
+        return {
+          bg: 'bg-blue-500/10',
+          border: 'border-blue-500/30',
+          text: 'text-blue-400',
+          icon: <Info className="w-5 h-5" />,
+        };
     }
   };
 
-  // Group toasts by position
-  const toastsByPosition = toasts.reduce((acc, toast) => {
-    const pos = toast.position || 'top-right';
-    if (!acc[pos]) {
-      acc[pos] = [];
-    }
-    acc[pos].push(toast);
-    return acc;
-  }, {} as Record<ToastPosition, ToastMessage[]>);
-
   return (
-    <ToastContext.Provider value={{ showToast }}>
+    <ToastContext.Provider value={{ addToast, removeToast }}>
       {children}
-      {Object.entries(toastsByPosition).map(([position, positionToasts]) => (
-        <div
-          key={position}
-          className={`fixed z-[9999] flex flex-col gap-3 ${getPositionClasses(position as ToastPosition)}`}
-        >
-          <AnimatePresence>
-            {positionToasts.map((toast, index) => (
-              <Toast
+
+      {/* Toast Container */}
+      <div className="fixed top-4 right-4 z-[9999] flex flex-col gap-3 pointer-events-none">
+        <AnimatePresence>
+          {toasts.map((toast) => {
+            const styles = getToastStyles(toast.type);
+            return (
+              <motion.div
                 key={toast.id}
-                {...toast}
-                onDismiss={() => removeToast(toast.id)}
-                index={index}
-              />
-            ))}
-          </AnimatePresence>
-        </div>
-      ))}
+                initial={{ opacity: 0, y: -20, scale: 0.95 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, x: 100, scale: 0.95 }}
+                transition={{ duration: 0.2 }}
+                className={`
+                  ${styles.bg} ${styles.border} ${styles.text}
+                  backdrop-blur-xl border rounded-xl shadow-2xl
+                  px-4 py-3 min-w-[320px] max-w-md
+                  pointer-events-auto
+                  flex items-start gap-3
+                `}
+              >
+                {/* Icon */}
+                <div className="flex-shrink-0 mt-0.5">
+                  {styles.icon}
+                </div>
+
+                {/* Message */}
+                <div className="flex-1 text-sm font-medium">
+                  {toast.message}
+                </div>
+
+                {/* Close Button */}
+                <button
+                  onClick={() => removeToast(toast.id)}
+                  className="flex-shrink-0 hover:opacity-70 transition-opacity"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </motion.div>
+            );
+          })}
+        </AnimatePresence>
+      </div>
     </ToastContext.Provider>
   );
 };

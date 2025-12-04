@@ -451,22 +451,22 @@ const ReportsPage: React.FC = () => {
             const endDate = new Date(dateRange.endDate);
             endDate.setHours(23, 59, 59, 999);
 
-            // Fetch from the VIEW. The View handles filtering columns (NULL for restricted users).
+            // 1. Query the TABLE (snake_case source)
             let query = supabase
-                .from('orders_with_details')
+                .from('orders')
                 .select('*')
-                .gte('created_at', startDate.toISOString())
-                .lte('created_at', endDate.toISOString());
+                .gte('created_at', startDate.toISOString()) // 2. Filter using SNAKE_CASE
+                .lte('created_at', endDate.toISOString()); // 2. Filter using SNAKE_CASE
 
-            // OPTIONAL: Add extra filtering for Sales Agents to ensure 100% strictness,
-            // though RLS already does this.
-            if (role !== UserRole.ADMIN && !permissions?.orders_view_all) {
+            // RLS handles this, but explicit filtering is a good safeguard.
+            if (role === UserRole.USER && !permissions?.orders_view_all) {
                 query = query.eq('sales_agent', user.email);
             }
 
             const { data, error } = await query;
             if (error) throw error;
-            return (data || []).map(mapDbToOrder);
+            // 3. Map immediately (Convert to Frontend Language)
+            return (data || []).map(mapDbToOrder); 
         },
         enabled: !!user && !isAuthLoading && availableReports.length > 0,
     });

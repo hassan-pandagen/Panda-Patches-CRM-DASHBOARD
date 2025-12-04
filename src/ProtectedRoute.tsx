@@ -1,29 +1,24 @@
-// src/ProtectedRoute.tsx
-
 import React from 'react';
-import { Navigate, Outlet } from 'react-router-dom';
+import { Navigate, Outlet, useLocation } from 'react-router-dom';
 import { useAuth } from './contexts/AuthContext';
+import AppLoader from './components/ui/AppLoader';
 
 const ProtectedRoute: React.FC = () => {
-  const { isAuthenticated, isLoading } = useAuth();
-
-  console.log('🛡️ ProtectedRoute:', { isAuthenticated, isLoading });
+  const { user, isLoading } = useAuth();
+  const location = useLocation();
 
   if (isLoading) {
-    console.log('⏳ Still loading...');
-    return (
-      <div className="flex justify-center items-center h-screen bg-slate-900">
-        <div className="text-white text-xl">Loading... (isLoading={String(isLoading)})</div>
-      </div>
-    );
+    // ✅ Use the new, professional AppLoader
+    return <AppLoader />;
   }
 
-  if (!isAuthenticated) {
-    console.log('❌ Not authenticated, redirecting to login');
-    return <Navigate to="/login" replace />;
+  if (!user) {
+    // If the user is not authenticated, redirect them to the login page.
+    // We also pass the original location they were trying to access.
+    return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
-  console.log('✅ Authenticated, rendering children');
+  // If the user is authenticated, render the nested routes.
   return <Outlet />;
 };
 
