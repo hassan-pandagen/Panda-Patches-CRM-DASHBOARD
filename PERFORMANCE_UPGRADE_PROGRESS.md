@@ -78,13 +78,13 @@
    - Date Completed: December 5, 2025
    - Notes: Created performanceMonitor.ts service with automatic metric tracking. Exposed in dev console for debugging. Tracks API calls, operations, renders. Warns on slow operations (>1000ms). Added example tracking to updateOrderDetails API call.
 
-- [ ] **Upgrade 9: Add Service Worker for Offline Support**
-  - Status: ❌ NOT STARTED
-  - Effort: 3-4 hours
-  - Impact: App works offline
-  - Date Started:
-  - Date Completed:
-  - Notes:
+- [x] **Upgrade 9: Add Service Worker for Offline Support**
+   - Status: ✅ COMPLETED
+   - Effort: 3-4 hours
+   - Impact: App works offline
+   - Date Started: December 5, 2025
+   - Date Completed: December 5, 2025
+   - Notes: Created service-worker.js with cache-first strategy for assets. Created offlineManager.ts for online/offline detection. Added OfflineIndicator component showing status. Service worker caches pages visited, API calls skip cache (always network). Build outputs service-worker.js to dist root.
 
 ---
 

@@ -35,6 +35,9 @@ import AdminRoute from './AdminRoute'; // Adjust path if needed
 // ✅ NEW: Import ErrorBoundary for error handling
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 
+// ✅ UPGRADE 9: Offline indicator
+import OfflineIndicator from '@/components/OfflineIndicator';
+
 // ✅ UPGRADE 3: Create QueryClient with production-ready config
 export const queryClient = new QueryClient({
   defaultOptions: {
@@ -57,6 +60,8 @@ const App: React.FC = () => {
   return (
     // ✅ NEW: Wrap everything in QueryClientProvider
     <QueryClientProvider client={queryClient}>
+      {/* ✅ UPGRADE 9: Offline indicator */}
+      <OfflineIndicator />
       <ToastProvider>
         {/* ✅ UPGRADE 1: Suspense boundary for lazy-loaded routes */}
         <Suspense fallback={<LazyLoadingFallback />}>
