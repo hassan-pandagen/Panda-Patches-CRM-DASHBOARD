@@ -11,6 +11,7 @@ import { supabase } from '../services/supabaseClient';
 import { useDashboardMetrics } from "../hooks/useDashboardMetrics";
 import { mapDbToOrder } from '../services/orderService';
 import { Order, OrderStatus, UserRole } from "../types";
+import { queryKeys } from '../constants/queryKeys';
 import CardSkeleton from '../components/CardSkeleton';
 import DashboardRecentOrdersTable from '../components/dashboard/DashboardRecentOrdersTable';
 import ProductionProgress from '../components/dashboard/ProductionProgress'; 
@@ -105,9 +106,13 @@ export default function Dashboard() {
     };
   }, [metricsView]);
 
-  // 🎯 FETCH ORDERS FOR METRICS (Stat Cards)
-  const { data: metricsOrders = [], isLoading: metricsLoading } = useQuery({
-    queryKey: ["dashboard-metrics", metricsDateRange.startDate, metricsDateRange.endDate],
+  // 🎯 SINGLE QUERY - Fetch orders for BOTH metrics and table
+  // Metrics uses metricsDateRange, Table uses ordersDateRange
+  const { 
+    data: metricsOrders = [], 
+    isLoading: metricsLoading 
+  } = useQuery({
+    queryKey: queryKeys.dashboard.metrics(metricsDateRange.startDate, metricsDateRange.endDate),
     queryFn: async () => {
       const start = new Date(`${metricsDateRange.startDate}T00:00:00.000Z`).toISOString();
       const end = new Date(`${metricsDateRange.endDate}T23:59:59.999Z`).toISOString();
@@ -125,9 +130,13 @@ export default function Dashboard() {
     enabled: !!user,
   });
 
-  // 📋 FETCH ORDERS FOR TABLE (Custom Date Range)
-  const { data: tableOrders = [], isLoading, error } = useQuery({
-    queryKey: ["dashboard-table", ordersDateRange.startDate, ordersDateRange.endDate],
+  // 📋 Separate query for table (different date range)
+  const { 
+    data: tableOrders = [], 
+    isLoading, 
+    error 
+  } = useQuery({
+    queryKey: queryKeys.dashboard.table(ordersDateRange.startDate, ordersDateRange.endDate),
     queryFn: async () => {
       if (!ordersDateRange.startDate || !ordersDateRange.endDate) return [];
       

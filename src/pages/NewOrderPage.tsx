@@ -5,6 +5,7 @@ import { useNavigate, useLocation } from "react-router-dom"; // Added useLocatio
 import { useQueryClient } from "@tanstack/react-query";
 import { createOrder } from '../services/orderService';
 import { Order, OrderStatus } from '../types/index';
+import { queryKeys } from '../constants/queryKeys';
 import OrderForm, { SaveData } from '../components/orders/OrderForm';
 import { useWarnIfUnsaved } from "../hooks";
 import UnsavedChangesModal from "../components/ui/UnsavedChangesModal";
@@ -109,8 +110,8 @@ const NewOrderPage: React.FC = () => {
       
       // ✅ SUCCESS SEQUENCE
       // 1. Invalidate queries to start refetching data in the background.
-      await queryClient.invalidateQueries({ queryKey: ['allOrders'] });
-      await queryClient.invalidateQueries({ queryKey: ['dashboard-orders'] });
+      await queryClient.invalidateQueries({ queryKey: queryKeys.orders.all() });
+      await queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.table('', '') });
 
       // 2. Set the state to allow navigation and define the destination path.
       setAllowNavigation(true);

@@ -7,6 +7,7 @@ import { supabase } from '../services/supabaseClient';
 import { Order, UserRole, OrderStatus } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../hooks/useToast'; // Check your path
+import { queryKeys } from '../constants/queryKeys';
 import InvoiceModal from '../components/invoices/InvoiceModal';
 import { mapDbToOrder } from '../services/orderService';
 
@@ -87,7 +88,7 @@ const OrderPage: React.FC = () => {
 
   // --- DATA FETCHING ---
   const { data: order, isLoading, error } = useQuery<Order | null, Error>({
-    queryKey: ['order', orderNumber],
+    queryKey: queryKeys.orders.single(orderNumber),
     queryFn: async () => {
       if (!orderNumber) throw new Error("No order number provided.");
       
@@ -131,8 +132,8 @@ const OrderPage: React.FC = () => {
         });
     },
     onSuccess: () => {
-        queryClient.invalidateQueries({ queryKey: ['order', orderNumber] });
-        queryClient.invalidateQueries({ queryKey: ['orders', 'urgent'] }); // Refresh notifications
+        queryClient.invalidateQueries({ queryKey: queryKeys.orders.single(orderNumber) });
+        queryClient.invalidateQueries({ queryKey: queryKeys.orders.urgent() }); // Refresh notifications
         // REPLACED ALERT WITH TOAST
         toast.success('Urgent status updated successfully', 'The order priority has been changed.');
         setIsProcessing(false);
@@ -157,7 +158,7 @@ const OrderPage: React.FC = () => {
       if (error) throw error;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['allOrders'] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.orders.all() });
       navigate('/orders');
       // REPLACED ALERT WITH TOAST
       toast.success('Order Deleted', `Order ${order?.orderNumber} has been permanently removed.`);

@@ -10,15 +10,17 @@ import {
   CheckCircle,
   Users,
   Download,
+  Upload,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { format, parseISO } from 'date-fns';
+import { format, parseISO, startOfWeek, endOfWeek, startOfDay, endOfDay } from 'date-fns';
 import { useAuth } from '../contexts/AuthContext';
 import { Navigate } from 'react-router-dom';
 import { useClockInOut } from '../hooks/useClockInOut';
 import DateRangeFilter, { DateRange, getDefaultRange } from '../components/ui/DateRangeFilter';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '../services/supabaseClient';
+import { queryKeys } from '../constants/queryKeys';
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -67,7 +69,7 @@ const ClockInOutPage: React.FC = () => {
 
   // --- NEW: Admin-specific data fetching ---
   const { data: allAttendance = [], isLoading: isLoadingAll } = useQuery({
-    queryKey: ['allAttendance', dateRange, selectedUser],
+    queryKey: queryKeys.attendance.all(dateRange, selectedUser),
     queryFn: async () => {
       let query = supabase
         .from('attendance_logs')
@@ -157,7 +159,6 @@ const ClockInOutPage: React.FC = () => {
           email: record.user_email,
           totalDays: 0,
           totalHours: 0,
-          lateDays: 0,
           overtimeHours: 0,
           undertimeHours: 0,
           incompleteDays: 0,
@@ -166,17 +167,82 @@ const ClockInOutPage: React.FC = () => {
       const stats = userStats.get(record.user_email);
       stats.totalDays += 1;
       stats.totalHours += record.shift_hours;
-      if (record.status === 'LATE') stats.lateDays += 1;
-      if (record.status === 'INCOMPLETE') stats.incompleteDays += 1;
-      if (record.status === 'OVERTIME') {
+
+      // ✅ Map old "LATE" status to correct status (24/7 operation)
+      let correctedStatus = record.status;
+      if (record.status === 'LATE') {
+        if (record.shift_hours === 0) correctedStatus = 'INCOMPLETE';
+        else if (record.shift_hours >= SHIFT_CONFIG.OVERTIME_THRESHOLD) correctedStatus = 'OVERTIME';
+        else if (record.shift_hours < SHIFT_CONFIG.UNDERTIME_THRESHOLD) correctedStatus = 'UNDERTIME';
+        else correctedStatus = 'COMPLETED';
+      }
+
+      if (correctedStatus === 'INCOMPLETE') stats.incompleteDays += 1;
+      if (correctedStatus === 'OVERTIME') {
         stats.overtimeHours += Math.max(0, record.shift_hours - SHIFT_CONFIG.REQUIRED_HOURS);
       }
-      if (record.status === 'UNDERTIME') {
+      if (correctedStatus === 'UNDERTIME') {
         stats.undertimeHours += Math.max(0, SHIFT_CONFIG.REQUIRED_HOURS - record.shift_hours);
       }
     });
     return Array.from(userStats.values());
   }, [allAttendance, showMonthly, selectedMonth, SHIFT_CONFIG.REQUIRED_HOURS]);
+
+  // ✅ NEW: Quick filter functions
+  const filterToday = () => {
+    const today = new Date();
+    const dateStr = today.toISOString().split('T')[0];
+    setDateRange({
+      startDate: dateStr,
+      endDate: dateStr,
+    });
+  };
+
+  const filterThisWeek = () => {
+    const today = new Date();
+    const weekStart = startOfWeek(today, { weekStartsOn: 1 }); // Monday
+    const weekEnd = endOfWeek(today, { weekStartsOn: 1 });
+    setDateRange({
+      startDate: weekStart.toISOString().split('T')[0],
+      endDate: weekEnd.toISOString().split('T')[0],
+    });
+  };
+
+  // ✅ NEW: Export daily records to CSV (12-hour format with AM/PM)
+  const handleExportDaily = () => {
+    const exportData = allAttendance.map((record) => {
+      // Map old "LATE" status to correct status based on hours (24/7 no late tracking)
+      let correctedStatus = record.status;
+      if (record.status === 'LATE') {
+        if (record.shift_hours === 0) correctedStatus = 'INCOMPLETE';
+        else if (record.shift_hours >= SHIFT_CONFIG.OVERTIME_THRESHOLD) correctedStatus = 'OVERTIME';
+        else if (record.shift_hours < SHIFT_CONFIG.UNDERTIME_THRESHOLD) correctedStatus = 'UNDERTIME';
+        else correctedStatus = 'COMPLETED';
+      }
+
+      return {
+        'Employee Name': record.user_name,
+        'Email': record.user_email,
+        'Date': format(parseISO(record.work_date), 'MMM dd, yyyy'),
+        'Clock In': format(parseISO(record.clock_in_time), 'h:mm:ss a'), // 12-hour with AM/PM
+        'Clock Out': record.clock_out_time ? format(parseISO(record.clock_out_time), 'h:mm:ss a') : '—',
+        'Hours Worked': record.shift_hours.toFixed(2),
+        'Status': correctedStatus,
+      };
+    });
+
+    if (!exportData.length) return;
+    const headers = Object.keys(exportData[0]).join(',');
+    const rows = exportData.map(row => Object.values(row).join(','));
+    const csv = [headers, ...rows].join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `attendance-daily-${format(new Date(), 'yyyy-MM-dd')}.csv`;
+    a.click();
+    window.URL.revokeObjectURL(url);
+  };
 
   const handleExportMonthly = () => {
     const exportData = monthlyStats.map((stat) => ({
@@ -184,7 +250,6 @@ const ClockInOutPage: React.FC = () => {
       'Email': stat.email,
       'Days Worked': stat.totalDays,
       'Total Hours': stat.totalHours.toFixed(2),
-      'Late Days': stat.lateDays,
       'Overtime Hours': stat.overtimeHours.toFixed(2),
       'Undertime Hours': stat.undertimeHours.toFixed(2),
       'Absent/Incomplete': stat.incompleteDays,
@@ -223,14 +288,14 @@ const ClockInOutPage: React.FC = () => {
               Attendance Tracking
             </h1>
             <p className="text-slate-400">
-              Shift: {SHIFT_CONFIG.SHIFT_START} - {SHIFT_CONFIG.SHIFT_END} PKT ({SHIFT_CONFIG.REQUIRED_HOURS}h required)
+              Available 24/7 - Clock in/out anytime
             </p>
           </div>
 
           {/* Current Time Display */}
           <div className="text-right">
             <p className="text-5xl font-bold text-brand-orange font-mono">
-              {format(currentTime, 'HH:mm:ss')}
+              {format(currentTime, 'h:mm:ss a')}
             </p>
             <p className="text-slate-400 text-sm">
               {format(currentTime, 'EEE, MMM dd, yyyy')}
@@ -275,14 +340,14 @@ const ClockInOutPage: React.FC = () => {
                     <div className="flex justify-between items-center">
                       <span className="text-slate-400">Clock In Time:</span>
                       <span className="text-white font-semibold">
-                        {format(parseISO(todayAttendance.clock_in_time), 'HH:mm:ss')}
+                        {format(parseISO(todayAttendance.clock_in_time), 'h:mm:ss a')}
                       </span>
                     </div>
                     {todayAttendance.clock_out_time && (
                       <div className="flex justify-between items-center">
                         <span className="text-slate-400">Clock Out Time:</span>
                         <span className="text-white font-semibold">
-                          {format(parseISO(todayAttendance.clock_out_time), 'HH:mm:ss')}
+                          {format(parseISO(todayAttendance.clock_out_time), 'h:mm:ss a')}
                         </span>
                       </div>
                     )}
@@ -419,25 +484,55 @@ const ClockInOutPage: React.FC = () => {
                 <div className="absolute -inset-0.5 bg-gradient-to-r from-blue-500 to-cyan-500 rounded-2xl opacity-0 group-hover:opacity-30 blur transition duration-500" />
 
                 <div className="relative bg-slate-900/40 backdrop-blur-xl border border-white/10 rounded-2xl overflow-hidden">
-                  {/* Filters */}
-                  <div className="p-6 border-b border-white/10 space-y-4">
-                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                      <DateRangeFilter value={dateRange} onChange={setDateRange} />
+                   {/* Quick Filter Buttons */}
+                   <div className="p-6 border-b border-white/10 space-y-4">
+                     <div className="flex gap-2 flex-wrap">
+                       <button
+                         onClick={filterToday}
+                         className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-lg transition-colors"
+                       >
+                         Today
+                       </button>
+                       <button
+                         onClick={filterThisWeek}
+                         className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white text-sm font-semibold rounded-lg transition-colors"
+                       >
+                         This Week
+                       </button>
+                     </div>
 
-                      <select
-                        value={selectedUser}
-                        onChange={(e) => setSelectedUser(e.target.value)}
-                        className="px-4 py-2.5 bg-slate-900/40 backdrop-blur-xl border border-white/10 rounded-xl text-white focus:outline-none focus:border-brand-orange transition-all"
-                      >
-                        <option value="">All Employees</option>
-                        {uniqueUsers.map((u) => (
-                          <option key={u.email} value={u.email}>
-                            {u.name} ({u.email})
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  </div>
+                     {/* Filters */}
+                     <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                       <div className="lg:col-span-2">
+                         <DateRangeFilter value={dateRange} onChange={setDateRange} />
+                       </div>
+
+                       <select
+                         value={selectedUser}
+                         onChange={(e) => setSelectedUser(e.target.value)}
+                         className="px-4 py-2.5 bg-slate-900/40 backdrop-blur-xl border border-white/10 rounded-xl text-white focus:outline-none focus:border-brand-orange transition-all"
+                       >
+                         <option value="">All Employees</option>
+                         {uniqueUsers.map((u) => (
+                           <option key={u.email} value={u.email}>
+                             {u.name} ({u.email})
+                           </option>
+                         ))}
+                       </select>
+                     </div>
+
+                     {/* Export Button */}
+                     <div className="flex justify-end">
+                       <button
+                         onClick={handleExportDaily}
+                         disabled={allAttendance.length === 0}
+                         className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white rounded-lg font-semibold transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                       >
+                         <Download className="w-4 h-4" />
+                         Export to CSV
+                       </button>
+                     </div>
+                     </div>
 
                   {/* Table */}
                   <div className="overflow-x-auto">
@@ -497,18 +592,18 @@ const ClockInOutPage: React.FC = () => {
                                 </td>
 
                                 <td className="p-4">
-                                  <p className="text-white">
-                                    {format(parseISO(record.clock_in_time), 'HH:mm:ss')}
-                                  </p>
-                                </td>
+                                   <p className="text-white">
+                                     {format(parseISO(record.clock_in_time), 'h:mm:ss a')}
+                                   </p>
+                                 </td>
 
-                                <td className="p-4">
-                                  <p className="text-white">
-                                    {record.clock_out_time
-                                      ? format(parseISO(record.clock_out_time), 'HH:mm:ss')
-                                      : '—'}
-                                  </p>
-                                </td>
+                                 <td className="p-4">
+                                   <p className="text-white">
+                                     {record.clock_out_time
+                                       ? format(parseISO(record.clock_out_time), 'h:mm:ss a')
+                                       : '—'}
+                                   </p>
+                                 </td>
 
                                 <td className="p-4">
                                   <p className="text-white font-semibold">
@@ -517,7 +612,17 @@ const ClockInOutPage: React.FC = () => {
                                 </td>
 
                                 <td className="p-4">
-                                  <StatusBadge status={record.status} />
+                                  {(() => {
+                                    // Map old "LATE" status to correct status
+                                    let correctedStatus = record.status;
+                                    if (record.status === 'LATE') {
+                                      if (record.shift_hours === 0) correctedStatus = 'INCOMPLETE';
+                                      else if (record.shift_hours >= SHIFT_CONFIG.OVERTIME_THRESHOLD) correctedStatus = 'OVERTIME';
+                                      else if (record.shift_hours < SHIFT_CONFIG.UNDERTIME_THRESHOLD) correctedStatus = 'UNDERTIME';
+                                      else correctedStatus = 'COMPLETED';
+                                    }
+                                    return <StatusBadge status={correctedStatus} />;
+                                  })()}
                                 </td>
                               </motion.tr>
                             ))
@@ -575,9 +680,6 @@ const ClockInOutPage: React.FC = () => {
                               Total Hours
                             </th>
                             <th className="text-center text-slate-400 font-semibold p-4 text-sm">
-                              Late Days
-                            </th>
-                            <th className="text-center text-slate-400 font-semibold p-4 text-sm">
                               Overtime
                             </th>
                             <th className="text-center text-slate-400 font-semibold p-4 text-sm">
@@ -592,7 +694,7 @@ const ClockInOutPage: React.FC = () => {
                           <AnimatePresence>
                             {monthlyStats.length === 0 ? (
                               <tr>
-                                <td colSpan={7} className="text-center py-12 text-slate-500">
+                                <td colSpan={6} className="text-center py-12 text-slate-500">
                                   <Calendar className="w-12 h-12 mx-auto mb-3 text-slate-600" />
                                   <p>No data for {selectedMonth}</p>
                                 </td>
@@ -621,16 +723,6 @@ const ClockInOutPage: React.FC = () => {
                                   <td className="p-4 text-center">
                                     <p className="text-white font-bold">
                                       {stat.totalHours.toFixed(1)}h
-                                    </p>
-                                  </td>
-
-                                  <td className="p-4 text-center">
-                                    <p
-                                      className={`font-bold ${
-                                        stat.lateDays > 0 ? 'text-red-400' : 'text-slate-400'
-                                      }`}
-                                    >
-                                      {stat.lateDays}
                                     </p>
                                   </td>
 

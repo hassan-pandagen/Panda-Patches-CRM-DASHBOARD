@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../services/supabaseClient';
+import { queryKeys } from '../constants/queryKeys';
 
 export const useRealtimeOrders = () => {
 const queryClient = useQueryClient();
@@ -12,8 +13,8 @@ const channel = supabase
 'postgres_changes',
 { event: '*', schema: 'public', table: 'orders' },
 async () => {
-await queryClient.refetchQueries({ queryKey: ['orders'], type: 'active', exact: false });
-await queryClient.refetchQueries({ queryKey: ['allOrdersReport'], type: 'active', exact: false });
+await queryClient.refetchQueries({ queryKey: queryKeys.orders.all(), type: 'active', exact: false });
+await queryClient.refetchQueries({ queryKey: queryKeys.orders.report('', ''), type: 'active', exact: false });
 }
 )
 .subscribe();

@@ -1,22 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
 import { supabase } from '../services/supabaseClient';
+import { useAuth } from '../contexts/AuthContext';
 import Spinner from '../components/ui/Spinner';
 import { Eye, EyeOff, Lock, Mail, ArrowRight } from 'lucide-react';
-
-const fetchSettings = async () => {
-  const { data } = await supabase
-    .from('settings')
-    .select('logo_url')
-    .eq('id', 'global_settings')
-    .maybeSingle();
-  return data;
-};
 
 const LoginPage: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
+  const { settings } = useAuth();
   
   // Form State
   const [email, setEmail] = useState('');
@@ -48,12 +40,6 @@ const LoginPage: React.FC = () => {
       subscription.unsubscribe();
     };
   }, []);
-
-  const { data: settings } = useQuery({
-    queryKey: ['app_settings'],
-    queryFn: fetchSettings,
-  });
-
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();

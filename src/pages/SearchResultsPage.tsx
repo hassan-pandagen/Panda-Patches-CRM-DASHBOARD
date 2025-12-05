@@ -6,6 +6,7 @@ import { useQuery } from '@tanstack/react-query';
 import { supabase } from '../services/supabaseClient';
 import { Order, OrderStatus, UserRole } from '../types';
 import { useAuth } from '../contexts/AuthContext';
+import { queryKeys } from '../constants/queryKeys';
 import { getStatusInfo } from '../constants';
 import { Package, Lock, Search, ArrowRight } from 'lucide-react';
 import EmptyState from '../components/ui/EmptyState';
@@ -30,7 +31,7 @@ const SearchResultsPage: React.FC = () => {
 
   // --- FETCH SEARCH RESULTS ---
   const { data: results = [], isLoading } = useQuery({
-    queryKey: ['searchResults', query],
+    queryKey: queryKeys.search.results(query),
     queryFn: async () => {
       if (!query) return [];
       

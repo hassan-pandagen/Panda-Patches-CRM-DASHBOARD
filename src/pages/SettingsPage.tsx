@@ -1,25 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../services/supabaseClient';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../hooks/useToast';
+import { queryKeys } from '../constants/queryKeys';
 import FileUploadSection from '../components/orders/FileUpload';
 import Button from '../components/ui/Button';
-import Spinner from '../components/ui/Spinner';
 import GlassCard from '../components/ui/GlassCard';
 import { ChangePasswordForm } from '../components/settings/ChangePasswordForm';
-
-// ✅ FIX: Use 'global_settings' (String) instead of 1 (Number)
-const fetchSettings = async () => {
-  const { data, error } = await supabase
-    .from('settings')
-    .select('*')
-    .eq('id', 'global_settings')
-    .maybeSingle();
-
-  if (error) throw error;
-  return data;
-};
 
 // ✅ FIX: Use upsert() instead of update()
 const updateSettings = async (updates: { logo_url: string }) => {
@@ -36,32 +24,25 @@ const updateSettings = async (updates: { logo_url: string }) => {
 const SettingsPage: React.FC = () => {
   const queryClient = useQueryClient();
   const { toast } = useToast(); // ✅ FIX: Destructure the toast object
-  const { role } = useAuth();
+  const { role, settings } = useAuth();
   
   const [logoUrl, setLogoUrl] = useState<string>('');
   const [isDirty, setIsDirty] = useState(false);
 
-  // ✅ Load initial logo URL from query data
-  const { data: settingsData, isLoading: isLoadingSettings } = useQuery({
-    queryKey: ['app_settings'],
-    queryFn: fetchSettings,
-    staleTime: 1000 * 60 * 5,
-  });
-
-  // ✅ Set logo URL when data loads
+  // ✅ Load initial logo URL from context
   useEffect(() => {
-    if (settingsData?.logo_url) {
-      setLogoUrl(settingsData.logo_url);
+    if (settings?.logo_url) {
+      setLogoUrl(settings.logo_url);
     }
-  }, [settingsData]);
+  }, [settings]);
 
   // ✅ FIX: Proper mutation with YOUR custom toast system
   const { mutate: saveSettings, isLoading: isSaving } = useMutation({
     mutationFn: updateSettings,
     onSuccess: (updatedData) => {
       toast.success('Settings Saved');
-      queryClient.invalidateQueries({ queryKey: ['app_settings'] });
-      queryClient.invalidateQueries({ queryKey: ['user'] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.settings.all() });
+      queryClient.invalidateQueries({ queryKey: queryKeys.user.profile() });
       setIsDirty(false);
       if (updatedData?.logo_url) {
         setLogoUrl(updatedData.logo_url);
@@ -87,10 +68,6 @@ const SettingsPage: React.FC = () => {
     console.log('Saving logo URL:', logoUrl);
     saveSettings({ logo_url: logoUrl });
   };
-
-  if (isLoadingSettings) {
-    return <div className="flex justify-center items-center h-screen"><Spinner /></div>;
-  }
 
   return (
     <div className="p-6 max-w-4xl mx-auto space-y-8 animate-fadeIn">

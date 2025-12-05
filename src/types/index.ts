@@ -1,5 +1,13 @@
 // src/types/index.ts - FINAL, COMPREHensive, & ORGANIZED
 
+// --- Global Application Settings ---
+export interface GlobalSettings {
+  id: string;
+  logo_url?: string;
+  company_name?: string;
+  [key: string]: any; // Allow for extensibility
+}
+
 export enum UserRole {
   ADMIN = 'ADMIN',
   USER = 'USER'
@@ -18,6 +26,20 @@ export enum OrderStatus {
   DELIVERED = 'DELIVERED',
   REFUNDED = 'REFUNDED',
   FEEDBACK = 'FEEDBACK'
+}
+
+// --- User Permissions Enum ---
+export enum Permissions {
+  USERS_MANAGE = 'users_manage',
+  ORDERS_CREATE = 'orders_create',
+  ORDERS_VIEW_ALL = 'orders_view_all',
+  ORDERS_CHANGE_STATUS = 'orders_change_status',
+  ORDERS_EDIT_FINANCIALS = 'orders_edit_financials',
+  ORDERS_EDIT_PRODUCTION = 'orders_edit_production',
+  ORDERS_DELETE = 'orders_delete',
+  REPORTS_VIEW_FINANCIALS = 'reports_view_financials',
+  SHIPPING_VIEW = 'shipping_view',
+  ATTENDANCE_CLOCK_ONLY = 'attendance_clock_only'
 }
 
 export interface Order {

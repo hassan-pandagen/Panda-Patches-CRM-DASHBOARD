@@ -2,6 +2,7 @@ import React from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { getOrderCommunications } from './orderService';
 import { OrderCommunication } from '../types';
+import { queryKeys } from '../constants/queryKeys';
 import { Mail, User, Send } from 'lucide-react';
 import Spinner from '../components/ui/Spinner';
 
@@ -38,7 +39,7 @@ const CommunicationItem: React.FC<{ comm: OrderCommunication }> = ({ comm }) => 
 
 const OrderCommunications: React.FC<OrderCommunicationsProps> = ({ orderId }) => {
   const { data: communications = [], isLoading, error } = useQuery({
-    queryKey: ['orderCommunications', orderId],
+    queryKey: queryKeys.orders.communications(orderId.toString()),
     queryFn: () => getOrderCommunications(orderId),
     enabled: !!orderId,
   });

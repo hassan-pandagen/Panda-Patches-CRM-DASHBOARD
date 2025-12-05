@@ -7,6 +7,7 @@ import { supabase } from '../services/supabaseClient';
 import { Order, UserRole } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../hooks/useToast';
+import { queryKeys } from '../constants/queryKeys';
 // ✅ IMPORT THE ADAPTER
 import { updateOrderDetails, mapDbToOrder } from '../services/orderService';
 
@@ -25,7 +26,7 @@ const EditOrderPage: React.FC = () => {
 
   // --- DATA FETCHING (The Standard Pattern) ---
   const { data: initialOrder, isLoading, error } = useQuery<Order, Error>({
-    queryKey: ['order', orderNumber],
+    queryKey: queryKeys.orders.single(orderNumber),
     queryFn: async () => {
       if (!orderNumber) throw new Error("No order number provided.");
       
@@ -71,8 +72,8 @@ const EditOrderPage: React.FC = () => {
       success(`Order ${updatedOrder.orderNumber} updated successfully!`);
       
       // Refresh cache
-      await queryClient.invalidateQueries({ queryKey: ['order', orderNumber] });
-      await queryClient.invalidateQueries({ queryKey: ['allOrders'] });
+      await queryClient.invalidateQueries({ queryKey: queryKeys.orders.single(orderNumber) });
+      await queryClient.invalidateQueries({ queryKey: queryKeys.orders.all() });
       
       // ✅ CRITICAL FIX: Navigate back to order detail page after successful save
       // Give a small delay to let the success toast show

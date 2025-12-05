@@ -1,19 +1,7 @@
 import React from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import { LayoutDashboard, Package, BarChart3, Settings, Users, LogOut, PlusCircle, Clock } from 'lucide-react';
-import { useQuery } from '@tanstack/react-query'; // Already imported
-import { supabase } from '../../services/supabaseClient'; // Already imported
 import { useAuth } from '../../contexts/AuthContext';
-
-// Fetch the application settings (including logo)
-const fetchSettings = async () => {
-  const { data } = await supabase
-    .from('settings')
-    .select('logo_url')
-    .eq('id', 'global_settings')
-    .maybeSingle();
-  return data;
-};
 
 
 interface SidebarItemProps {
@@ -46,11 +34,7 @@ const SidebarItem: React.FC<SidebarItemProps> = ({ to, label, icon }) => {
 };
 
 const Sidebar: React.FC = () => {
-  const { role, permissions, logout } = useAuth();
-  const { data: settings } = useQuery({
-    queryKey: ['app_settings'],
-    queryFn: fetchSettings,
-  });
+  const { role, permissions, logout, settings } = useAuth();
 
   const navItems = [
     { to: '/', label: 'Dashboard', icon: <LayoutDashboard className="w-5 h-5" /> },

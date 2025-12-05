@@ -2,6 +2,7 @@
 
 import { supabase } from './supabaseClient';
 import { queryClient } from '../App';
+import { queryKeys } from '../constants/queryKeys';
 import { Order, OrderStatus } from '../types/index';
 
 /**
@@ -463,7 +464,7 @@ export const updateOrderDetails = async (
     );
   }
 
-  await queryClient.invalidateQueries({ queryKey: ['allOrdersReport'] });
+  await queryClient.invalidateQueries({ queryKey: queryKeys.orders.report('', '') });
 
   return newOrder;
 };

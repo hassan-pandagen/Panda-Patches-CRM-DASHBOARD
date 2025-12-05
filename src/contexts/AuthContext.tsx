@@ -3,7 +3,7 @@
 import React, { createContext, useState, useEffect, useContext, ReactNode } from 'react';
 import { supabase } from '../services/supabaseClient';
 import { Session, User } from '@supabase/supabase-js';
-import { UserProfile } from '../types';
+import { UserProfile, GlobalSettings } from '../types';
 
 interface AuthContextType {
   session: Session | null;
@@ -11,6 +11,7 @@ interface AuthContextType {
   profile: UserProfile | null;
   role: string | null;
   permissions: any | null;
+  settings: GlobalSettings | null;
   isLoading: boolean;
   isAuthenticated: boolean;
   signOut: () => Promise<void>;
@@ -22,6 +23,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [session, setSession] = useState<Session | null>(null);
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [settings, setSettings] = useState<GlobalSettings | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
@@ -34,6 +36,27 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         setIsLoading(false);
       }
     }, 2000);
+
+    // FETCH GLOBAL SETTINGS (Once per session)
+    const fetchSettings = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('settings')
+          .select('*')
+          .eq('id', 'global_settings')
+          .maybeSingle();
+
+        if (!mounted) return;
+
+        if (error) {
+          console.error('Error fetching settings:', error);
+        } else if (data) {
+          setSettings(data);
+        }
+      } catch (error) {
+        console.error('Unexpected error fetching settings:', error);
+      }
+    };
 
     const fetchUserProfile = async (currentUser: User) => {
       try {
@@ -67,6 +90,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     };
 
     // 2. INITIAL CHECK
+    // Fetch settings immediately (independent of auth state)
+    fetchSettings();
+
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (!mounted) return;
       
@@ -119,6 +145,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     profile,
     role: profile?.role || null,
     permissions: profile?.permissions || null,
+    settings,
     isLoading,
     isAuthenticated: !!user,
     signOut,

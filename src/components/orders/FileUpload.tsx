@@ -1,6 +1,5 @@
-import React, { useCallback } from 'react';
+import React, { useCallback, useState } from 'react';
 import { Upload, X, FileText, Image as ImageIcon, ArrowDownCircle } from 'lucide-react';
-import { useDropzone } from 'react-dropzone';
 import { supabase } from '../../services/supabaseClient';
 
 interface FileUploadSectionProps {
@@ -24,19 +23,13 @@ const FileUploadSection: React.FC<FileUploadSectionProps> = ({
   onMoveFile,
   moveLabel
 }) => {
-  
-  // ... (Keep your existing onDrop logic here) ...
-  // If you don't have the full code handy, I will provide the logic below
-  // But assuming you have the upload logic, we just need to update the UI rendering part.
+  const [isDragActive, setIsDragActive] = useState(false);
 
-  const onDrop = useCallback(async (acceptedFiles: File[]) => {
-    // ... (Your existing upload logic) ...
-    // I am omitting the upload implementation for brevity, 
-    // assume it uploads and calls onUrlsChange([...urls, newUrl])
-    
-    // TEMPORARY RE-IMPLEMENTATION FOR COMPLETENESS:
+  const handleUploadFiles = useCallback(async (files: FileList | null) => {
+    if (!files) return;
+
     const newUrls: string[] = [];
-    for (const file of acceptedFiles) {
+    for (const file of Array.from(files)) {
       const fileExt = file.name.split('.').pop();
       const fileName = `${Math.random().toString(36).substring(2)}_${Date.now()}.${fileExt}`;
       const filePath = `${folderPath}/${fileName}`;
@@ -49,7 +42,24 @@ const FileUploadSection: React.FC<FileUploadSectionProps> = ({
     onUrlsChange([...urls, ...newUrls]);
   }, [bucketName, folderPath, urls, onUrlsChange]);
 
-  const { getRootProps, getInputProps, isDragActive } = useDropzone({ onDrop });
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragActive(true);
+  };
+
+  const handleDragLeave = () => {
+    setIsDragActive(false);
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragActive(false);
+    handleUploadFiles(e.dataTransfer.files);
+  };
+
+  const handleFileInput = (e: React.ChangeEvent<HTMLInputElement>) => {
+    handleUploadFiles(e.target.files);
+  };
 
   const removeFile = (indexToRemove: number) => {
     onUrlsChange(urls.filter((_, index) => index !== indexToRemove));
@@ -64,15 +74,25 @@ const FileUploadSection: React.FC<FileUploadSectionProps> = ({
       
       {/* Drop Zone */}
       <div
-        {...getRootProps()}
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
         className={`border-2 border-dashed rounded-lg p-6 text-center cursor-pointer transition-colors
           ${isDragActive ? 'border-brand-orange bg-brand-orange/10' : 'border-white/10 hover:border-brand-orange/50 hover:bg-white/5'}`}
       >
-        <input {...getInputProps()} />
-        <Upload className="w-8 h-8 text-slate-400 mx-auto mb-2" />
-        <p className="text-sm text-slate-400">
-          {isDragActive ? "Drop files here..." : "Drag & drop or click to upload"}
-        </p>
+        <input 
+          type="file"
+          multiple
+          onChange={handleFileInput}
+          className="hidden"
+          id={`file-input-${title}`}
+        />
+        <label htmlFor={`file-input-${title}`} className="cursor-pointer block">
+          <Upload className="w-8 h-8 text-slate-400 mx-auto mb-2" />
+          <p className="text-sm text-slate-400">
+            {isDragActive ? "Drop files here..." : "Drag & drop or click to upload"}
+          </p>
+        </label>
       </div>
 
       {/* File List */}

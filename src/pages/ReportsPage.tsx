@@ -6,6 +6,7 @@ import Spinner from '../components/ui/Spinner';
 import { LEAD_SOURCE_OPTIONS } from '../constants/index';
 import DateRangeFilter, { DateRange, getDefaultRange } from '../components/ui/DateRangeFilter';
 import { supabase } from '../services/supabaseClient';
+import { queryKeys } from '../constants/queryKeys';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, LineChart, Line, CartesianGrid, PieChart, Pie, Legend } from 'recharts';
 import { mapDbToOrder } from '../services/orderService';
 
@@ -443,7 +444,7 @@ const ReportsPage: React.FC = () => {
 
     // --- 3. DATA FETCHING (Trusting the Database) ---
     const { data: filteredOrders = [], isLoading: isQueryLoading } = useQuery({
-        queryKey: ['allOrdersReport', dateRange.startDate, dateRange.endDate],
+        queryKey: queryKeys.orders.report(dateRange.startDate, dateRange.endDate),
         queryFn: async () => {
             if (!user) return [];
             const startDate = new Date(dateRange.startDate);

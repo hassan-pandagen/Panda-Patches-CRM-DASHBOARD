@@ -8,6 +8,7 @@ import { Order, OrderStatus, UserRole } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 import { getStatusInfo } from '../constants';
 import { mapDbToOrder } from '../services/orderService';
+import { queryKeys } from '../constants/queryKeys';
 
 // UI Components
 import Button from '../components/ui/Button';
@@ -150,7 +151,7 @@ const AllOrdersPage: React.FC = () => {
 
   // --- DATA FETCHING ---
   const { data: orders = [], isLoading, error } = useQuery({
-    queryKey: ['allOrders'],
+    queryKey: queryKeys.orders.all(),
     queryFn: async () => {
       // Query the base table (not the view) to get snake_case data
       const { data, error } = await supabase

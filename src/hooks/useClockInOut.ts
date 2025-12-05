@@ -1,8 +1,9 @@
 // src/hooks/useClockInOut.ts
-import { useCallback } from 'react';
+import { useCallback, useRef } from 'react';
 import { supabase } from '../services/supabaseClient';
 import { useAuth } from '../contexts/AuthContext';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { queryKeys } from '../constants/queryKeys';
 
 export interface AttendanceRecord {
   id: string;
@@ -20,17 +21,21 @@ export interface AttendanceRecord {
 }
 
 export const SHIFT_CONFIG = {
-  SHIFT_START: '19:00', // 7:00 PM PKT
-  SHIFT_END: '05:00',   // 5:00 AM PKT (next day)
+  SHIFT_START: '00:00', // 24/7 - anytime
+  SHIFT_END: '23:59',   // 24/7 - anytime
   REQUIRED_HOURS: 8,
-  LATE_THRESHOLD: 60,
   OVERTIME_THRESHOLD: 8.5,
   UNDERTIME_THRESHOLD: 7.5,
+  // Note: Late tracking disabled (24/7 operation)
 };
 
 export const useClockInOut = () => {
-  const { user } = useAuth();
-  const queryClient = useQueryClient();
+   const { user } = useAuth();
+   const queryClient = useQueryClient();
+   
+   // ✅ NEW: Debounce refs to prevent double submissions
+   const clockInTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+   const clockOutTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const getTodayDate = useCallback((): string => {
     const now = new Date();
@@ -38,15 +43,10 @@ export const useClockInOut = () => {
     return pakistanTime.toISOString().split('T')[0];
   }, []);
 
-  const isLateArrival = useCallback((clockInTime: Date): boolean => {
-    const pakistanTime = new Date(clockInTime.toLocaleString('en-US', { timeZone: 'Asia/Karachi' }));
-    const hours = pakistanTime.getHours();
-    return hours >= 20; // Late if after 8 PM
-  }, []);
+  // ✅ REMOVED: isLateArrival - 24/7 operation means no late tracking
 
-  const determineStatus = useCallback((hoursWorked: number, isLate: boolean): AttendanceRecord['status'] => {
+  const determineStatus = useCallback((hoursWorked: number): AttendanceRecord['status'] => {
     if (hoursWorked === 0) return 'INCOMPLETE';
-    if (isLate) return 'LATE';
     if (hoursWorked >= SHIFT_CONFIG.OVERTIME_THRESHOLD) return 'OVERTIME';
     if (hoursWorked < SHIFT_CONFIG.UNDERTIME_THRESHOLD) return 'UNDERTIME';
     return 'COMPLETED';
@@ -54,7 +54,7 @@ export const useClockInOut = () => {
 
   // --- DATA FETCHING with React Query ---
   const { data: todayAttendance, isLoading: isLoadingToday } = useQuery<AttendanceRecord | null>({
-    queryKey: ['todayAttendance', user?.id],
+    queryKey: queryKeys.attendance.today(user?.id),
     queryFn: async () => {
       if (!user) return null;
       const today = getTodayDate();
@@ -89,7 +89,6 @@ export const useClockInOut = () => {
 
       const now = new Date();
       const todayDate = getTodayDate();
-      const isLate = isLateArrival(now);
 
       const { data, error } = await supabase
         .from('attendance_logs')
@@ -99,7 +98,7 @@ export const useClockInOut = () => {
           user_name: user.user_metadata?.full_name || user.email.split('@')[0],
           work_date: todayDate,
           clock_in_time: now.toISOString(),
-          status: isLate ? 'LATE' : 'ON_TIME',
+          status: 'ON_TIME', // 24/7 operation - no late tracking
         })
         .select()
         .single();
@@ -113,7 +112,7 @@ export const useClockInOut = () => {
       return data;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['todayAttendance', user?.id] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.attendance.today(user?.id) });
     },
   });
 
@@ -124,8 +123,7 @@ export const useClockInOut = () => {
       const now = new Date();
       const clockInTime = new Date(todayAttendance.clock_in_time);
       const hoursWorked = (now.getTime() - clockInTime.getTime()) / 1000 / 60 / 60;
-      const isLate = isLateArrival(clockInTime);
-      const status = determineStatus(hoursWorked, isLate);
+      const status = determineStatus(hoursWorked);
 
       const { data, error } = await supabase
         .from('attendance_logs')
@@ -142,16 +140,41 @@ export const useClockInOut = () => {
       return data;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['todayAttendance', user?.id] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.attendance.today(user?.id) });
     },
   });
+
+  // ✅ NEW: Debounced clock in/out to prevent double submissions
+  const debouncedClockIn = useCallback(async () => {
+    if (clockInTimeoutRef.current) return; // Already pending
+    try {
+      return await clockInMutation.mutateAsync();
+    } finally {
+      // Debounce for 2 seconds to prevent rapid re-submissions
+      clockInTimeoutRef.current = setTimeout(() => {
+        clockInTimeoutRef.current = null;
+      }, 2000);
+    }
+  }, [clockInMutation]);
+
+  const debouncedClockOut = useCallback(async () => {
+    if (clockOutTimeoutRef.current) return; // Already pending
+    try {
+      return await clockOutMutation.mutateAsync();
+    } finally {
+      // Debounce for 2 seconds to prevent rapid re-submissions
+      clockOutTimeoutRef.current = setTimeout(() => {
+        clockOutTimeoutRef.current = null;
+      }, 2000);
+    }
+  }, [clockOutMutation]);
 
   return {
     todayAttendance,
     isLoadingToday,
-    clockIn: clockInMutation.mutateAsync,
+    clockIn: debouncedClockIn,
     isClockingIn: clockInMutation.isPending,
-    clockOut: clockOutMutation.mutateAsync,
+    clockOut: debouncedClockOut,
     isClockingOut: clockOutMutation.isPending,
     clockInError: clockInMutation.error,
     clockOutError: clockOutMutation.error,

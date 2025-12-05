@@ -4,10 +4,11 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { createUserWithRole, getAllUsers, deleteUser, updateUserProfile } from '@/services/authService';
 import { useAuth } from '../contexts/AuthContext';
 import { UserProfile, UserPermissions, UserRole } from '@/types'; // 1. Add 'Key' to imports
-import { Check, X, Plus, UserPlus, Edit, Trash2, Key } from 'lucide-react';
+import { Check, X, Plus, UserPlus, Edit, Trash2, Key, AlertCircle } from 'lucide-react';
 import Spinner from '@/components/ui/Spinner';
 import ConfirmationModal from '@/components/ui/ConfirmationModal';
 import { useToast } from '@/hooks/useToast';
+import { queryKeys } from '@/constants/queryKeys';
 
 const defaultPermissions: UserPermissions = {
   users_manage: false,
@@ -21,14 +22,13 @@ const defaultPermissions: UserPermissions = {
   shipping_view: true,
 };
 
+type ModalMode = 'create' | 'edit' | 'delete' | 'password' | null;
+
 const UserManagementPage: React.FC = () => {
   const { role, permissions } = useAuth();
   const queryClient = useQueryClient();
   const { toast } = useToast();
-  const [isCreateModalOpen, setCreateModalOpen] = useState(false);
-  const [isEditModalOpen, setEditModalOpen] = useState(false);
-  const [isDeleteModalOpen, setDeleteModalOpen] = useState(false);
-  const [isPasswordModalOpen, setPasswordModalOpen] = useState(false);
+  const [modalMode, setModalMode] = useState<ModalMode>(null);
   const [selectedUser, setSelectedUser] = useState<UserProfile | null>(null);
 
   // State for Create Modal
@@ -38,6 +38,7 @@ const UserManagementPage: React.FC = () => {
   const [newUserRole, setNewUserRole] = useState<UserRole>(UserRole.USER);
   const [newUserPermissions, setNewUserPermissions] = useState<UserPermissions>(defaultPermissions);
   const [createdUserInfo, setCreatedUserInfo] = useState<{ email: string; } | null>(null);
+  const [passwordCopied, setPasswordCopied] = useState(false);
 
   // State for Edit Modal
   const [editUserName, setEditUserName] = useState('');
@@ -73,8 +74,8 @@ const UserManagementPage: React.FC = () => {
   const deleteUserMutation = useMutation({
     mutationFn: (userId: string) => deleteUser(userId),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['allUsers'] });
-      setDeleteModalOpen(false);
+      queryClient.invalidateQueries({ queryKey: queryKeys.users.all() });
+      setModalMode(null);
       toast.success("User Deleted", `The user ${selectedUser?.email} has been removed.`);
     },
     onError: (error: Error) => toast.error("Deletion Failed", error.message),
@@ -83,9 +84,8 @@ const UserManagementPage: React.FC = () => {
   const editUserMutation = useMutation({
     mutationFn: (data: { id: string; updates: any }) => updateUserProfile(data.id, data.updates),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['allUsers'] }); // Refetch users after update
-      closeEditModal(); // Use the dedicated close function to reset state
-      closePasswordModal();
+      queryClient.invalidateQueries({ queryKey: queryKeys.users.all() }); // Refetch users after update
+      setModalMode(null);
       toast.success("User Updated", "The user's profile has been saved.");
     },
     onError: (error: Error) => toast.error("Update Failed", error.message),
@@ -124,10 +124,6 @@ const UserManagementPage: React.FC = () => {
         password: resetPassword
       }
     });
-
-    // Close and cleanup
-    setPasswordModalOpen(false);
-    setResetPassword('');
   };
   const handleDeleteUser = () => {
     if (selectedUser) {
@@ -136,14 +132,35 @@ const UserManagementPage: React.FC = () => {
   };
 
   // --- MODAL CONTROLS ---
-  const closeAndResetModal = () => {
-    setCreateModalOpen(false);
+  const closeAllModals = () => {
+    setModalMode(null);
+    setSelectedUser(null);
+    // Reset all form states
     setNewUserEmail('');
     setNewUserName('');
-    setNewUserPassword(''); // Reset password field
+    setNewUserPassword('');
     setNewUserRole(UserRole.USER);
     setCreatedUserInfo(null);
+    setEditUserName('');
+    setEditUserRole(UserRole.USER);
+    setEditUserPermissions(defaultPermissions);
+    setResetPassword('');
+    setNewPassword('');
+    setConfirmPassword('');
+    setPasswordChangeMessage(null);
+    // Reset mutations
     createUserMutation.reset();
+    editUserMutation.reset();
+    deleteUserMutation.reset();
+  };
+
+  const closeAndResetModal = () => closeAllModals();
+  const closeEditModal = () => closeAllModals();
+  const closeDeleteModal = () => closeAllModals();
+
+  const openCreateModal = () => {
+    setModalMode('create');
+    setSelectedUser(null);
   };
 
   const openEditModal = (user: UserProfile) => {
@@ -151,42 +168,27 @@ const UserManagementPage: React.FC = () => {
     setEditUserName(user.full_name || '');
     setEditUserRole(user.role as UserRole);
     setEditUserPermissions(user.permissions || { ...defaultPermissions });
-    setEditModalOpen(true);
-  };
-
-  const closeEditModal = () => {
-    setEditModalOpen(false);
-    setSelectedUser(null);
-    editUserMutation.reset();
+    setModalMode('edit');
   };
 
   const openDeleteModal = (user: UserProfile) => {
     setSelectedUser(user);
-    setDeleteModalOpen(true);
+    setModalMode('delete');
   };
 
-  const closeDeleteModal = () => {
-    setDeleteModalOpen(false);
-    setSelectedUser(null);
-    deleteUserMutation.reset();
-  };
-
-  const openPasswordModalForUser = (user: UserProfile) => {
+  const openPasswordModal = (user: UserProfile) => {
     setSelectedUser(user);
-    setPasswordModalOpen(true);
+    setModalMode('password');
   };
 
-  const closePasswordModal = () => {
-    setPasswordModalOpen(false);
-    setSelectedUser(null);
-    setNewPassword('');
-    setConfirmPassword('');
-    setPasswordChangeMessage(null);
-    changePasswordMutation.reset();
+  const handleCopyPassword = () => {
+    navigator.clipboard.writeText(newUserPassword);
+    setPasswordCopied(true);
+    setTimeout(() => setPasswordCopied(false), 2000);
   };
 
   const { data: users, isLoading, error } = useQuery<UserProfile[], Error>({
-    queryKey: ['allUsers'],
+    queryKey: queryKeys.users.all(),
     queryFn: async () => {
       return await getAllUsers();
     },
@@ -208,7 +210,7 @@ const UserManagementPage: React.FC = () => {
     <div className="max-w-6xl mx-auto p-6 text-slate-200">
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-3xl font-bold">User Management</h1>
-        <button onClick={() => setCreateModalOpen(true)} className="flex items-center gap-2 px-4 py-2 bg-blue-600 rounded-lg text-white hover:bg-blue-700 text-sm font-semibold">
+        <button onClick={openCreateModal} className="flex items-center gap-2 px-4 py-2 bg-blue-600 rounded-lg text-white hover:bg-blue-700 text-sm font-semibold">
           <Plus className="w-4 h-4" /> Create User
         </button>
       </div>
@@ -276,9 +278,9 @@ const UserManagementPage: React.FC = () => {
                         <button onClick={() => openEditModal(user)} className="text-indigo-400 hover:text-indigo-300 flex items-center gap-1">
                           <Edit className="w-4 h-4" /> Edit
                         </button>
-                        {/* --- NEW CHANGE PASSWORD BUTTON --- */}
+                        {/* --- CHANGE PASSWORD BUTTON --- */}
                         <button
-                          onClick={() => { setSelectedUser(user); setPasswordModalOpen(true); }}
+                          onClick={() => openPasswordModal(user)}
                           className="text-amber-400 hover:text-amber-300 flex items-center gap-1"
                         >
                           <Key className="w-4 h-4" /> Pass
@@ -299,7 +301,7 @@ const UserManagementPage: React.FC = () => {
 
       {/* Delete Confirmation Modal */}
       <ConfirmationModal
-        isOpen={isDeleteModalOpen}
+        isOpen={modalMode === 'delete'}
         onClose={closeDeleteModal}
         onConfirm={handleDeleteUser}
         title="Delete User"
@@ -308,7 +310,7 @@ const UserManagementPage: React.FC = () => {
       />
 
       {/* --- CREATE USER MODAL --- */}
-      {isCreateModalOpen && (
+      {modalMode === 'create' && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
           <div className="bg-slate-800 border border-slate-700 rounded-xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
             <div className="p-6 border-b border-slate-700 flex justify-between items-center">
@@ -328,17 +330,43 @@ const UserManagementPage: React.FC = () => {
                   <p className="text-sm text-slate-300">
                     The account for <strong className="text-white">{createdUserInfo.email}</strong> is ready.
                   </p>
-                  <p className="text-sm text-slate-300 mt-2 bg-black/20 p-2 rounded">
-                    Password: <strong className="text-brand-orange">{newUserPassword}</strong>
-                  </p>
-                  <p className="text-xs text-slate-400 mt-2">
-                    Please copy these credentials and send them to the agent via WhatsApp/Slack. They can log in immediately.
+                  
+                  {/* Password Copy Section - Security: Hidden by default, copy to clipboard only */}
+                  <div className="mt-3 p-3 bg-amber-900/30 border border-amber-500/50 rounded-lg">
+                    <p className="text-xs text-amber-200 mb-2 flex items-center gap-1">
+                      <AlertCircle className="w-4 h-4" />
+                      Temporary Password (copy below, not shown)
+                    </p>
+                    <button
+                      type="button"
+                      onClick={handleCopyPassword}
+                      className="w-full py-2 px-3 bg-amber-600 hover:bg-amber-700 text-white text-sm font-semibold rounded transition-colors flex items-center justify-center gap-2"
+                    >
+                      {passwordCopied ? (
+                        <>
+                          <Check className="w-4 h-4" />
+                          Password Copied!
+                        </>
+                      ) : (
+                        <>
+                          📋 Copy Password to Clipboard
+                        </>
+                      )}
+                    </button>
+                  </div>
+
+                  <p className="text-xs text-slate-400 mt-3">
+                    ✓ Click "Copy Password" button above to copy credentials
+                    <br />
+                    ✓ Send email & password to the agent via WhatsApp/Slack
+                    <br />
+                    ✓ Password is not shown for security reasons
                   </p>
                   
                   <button 
                     type="button" 
                     onClick={closeAndResetModal}
-                    className="mt-3 w-full py-2 bg-slate-700 hover:bg-slate-600 rounded-lg text-sm transition-colors"
+                    className="mt-4 w-full py-2 bg-slate-700 hover:bg-slate-600 rounded-lg text-sm transition-colors"
                   >
                     Done
                   </button>
@@ -486,7 +514,7 @@ const UserManagementPage: React.FC = () => {
       )}
 
       {/* --- EDIT USER MODAL --- */}
-      {isEditModalOpen && selectedUser && (
+      {modalMode === 'edit' && selectedUser && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
           <div className="bg-slate-800 border border-slate-700 rounded-xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
             <div className="p-6 border-b border-slate-700 flex justify-between items-center">
@@ -597,12 +625,12 @@ const UserManagementPage: React.FC = () => {
       )}
 
       {/* --- CHANGE PASSWORD MODAL --- */}
-      {isPasswordModalOpen && selectedUser && (
+      {modalMode === 'password' && selectedUser && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
           <div className="bg-slate-800 border border-slate-700 rounded-xl shadow-2xl max-w-md w-full">
             <div className="p-6 border-b border-slate-700 flex justify-between items-center">
               <h3 className="text-xl font-bold text-white">Change Password</h3>
-              <button onClick={() => setPasswordModalOpen(false)} className="text-slate-400 hover:text-white">
+              <button onClick={closeAndResetModal} className="text-slate-400 hover:text-white">
                 <X className="w-6 h-6" />
               </button>
             </div>
@@ -629,7 +657,7 @@ const UserManagementPage: React.FC = () => {
               <div className="flex justify-end gap-3 pt-2">
                 <button
                   type="button"
-                  onClick={() => setPasswordModalOpen(false)}
+                  onClick={closeAndResetModal}
                   className="px-4 py-2 text-slate-300 hover:bg-slate-700 rounded-lg transition-colors"
                 >
                   Cancel

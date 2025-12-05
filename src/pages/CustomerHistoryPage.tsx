@@ -5,6 +5,7 @@ import { format } from 'date-fns';
 import { motion } from 'framer-motion';
 import { supabase } from '../services/supabaseClient';
 import { Order, OrderStatus } from '../types';
+import { queryKeys } from '../constants/queryKeys';
 import Spinner from '../components/ui/Spinner';
 import { mapDbToOrder } from '../services/orderService';
 import StatusBadge from '../components/ui/StatusBadge';
@@ -19,7 +20,7 @@ const CustomerHistoryPage: React.FC = () => {
   console.log('🔍 Looking up customer:', customerId);
 
   const { data: orders, isLoading, error } = useQuery<Order[], Error>({
-    queryKey: ['customer_history', customerId],
+    queryKey: queryKeys.customer.history(customerId),
     queryFn: async () => {
       if (!customerId) {
         console.log('❌ No customer ID provided');
