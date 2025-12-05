@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { SpeedInsights } from '@vercel/speed-insights/react'; // ✅ UPGRADE 2: Performance monitoring
 import { AuthProvider } from './contexts/AuthContext';
 import { ErrorBoundary } from './components/ErrorBoundary'; // <--- 1. IMPORT THIS
+import { performanceMonitor } from './services/performanceMonitor'; // ✅ UPGRADE 8: Performance monitoring
 import App from './App';
 import './index.css';
 
@@ -16,6 +17,12 @@ const queryClient = new QueryClient({
     },
   },
 });
+
+// ✅ UPGRADE 8: Initialize performance monitoring
+if (import.meta.env.DEV) {
+  // Make performanceMonitor available in browser console for debugging
+  (window as any).performanceMonitor = performanceMonitor;
+}
 
 // Create a browser router instance.
 const router = createBrowserRouter([

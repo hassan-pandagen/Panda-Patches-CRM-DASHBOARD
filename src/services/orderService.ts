@@ -5,6 +5,7 @@ import { queryClient } from '../App';
 import { queryKeys } from '../constants/queryKeys';
 import { Order, OrderStatus } from '../types/index';
 import { logger } from './logger'; // ✅ UPGRADE 6: Logger service
+import { performanceMonitor } from './performanceMonitor'; // ✅ UPGRADE 8: Performance monitoring
 
 /**
  * A generic, automated adapter to convert a camelCase object to a snake_case object
@@ -412,6 +413,9 @@ export const updateOrderDetails = async (
   oldOrder: Order, 
   userEmail: string
 ) => {
+  // ✅ UPGRADE 8: Start performance measurement
+  const endMeasure = performanceMonitor.startMeasure('updateOrderDetails', 'api');
+  
   logger.debug('[Order Service] Updates received (camelCase)', updates);
   // ✅ STEP 1: CONVERT DATA (The Fix)
   // ✅ CONVERT TO SNAKE_CASE
@@ -467,5 +471,8 @@ export const updateOrderDetails = async (
 
   await queryClient.invalidateQueries({ queryKey: queryKeys.orders.report('', '') });
 
+  // ✅ UPGRADE 8: End performance measurement
+  endMeasure();
+  
   return newOrder;
 };
