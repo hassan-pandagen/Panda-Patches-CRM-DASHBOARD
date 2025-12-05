@@ -3,6 +3,7 @@ import { usePresence } from '../../hooks/usePresence';
 import { formatDistanceToNow } from 'date-fns';
 import OnlineAgentsModal from './OnlineAgentsModal';
 import { Users, Activity } from 'lucide-react';
+import { logger } from '../../services/logger'; // ✅ UPGRADE 6: Logger service
 
 const OnlineAgents: React.FC = () => {
   const { onlineUsers } = usePresence();
@@ -10,15 +11,15 @@ const OnlineAgents: React.FC = () => {
 
   // Log whenever onlineUsers changes
   useEffect(() => {
-    console.log('🔄 [ONLINE-AGENTS] Users updated:', onlineUsers);
+    logger.debug('[Online Agents] Users updated', onlineUsers);
   }, [onlineUsers]);
 
   const users = useMemo(() => {
-    console.log('📊 [ONLINE-AGENTS] Processing online users:', onlineUsers);
+    logger.debug('[Online Agents] Processing online users', onlineUsers);
     
     const allUsers = Object.entries(onlineUsers)
       .flatMap(([key, presences]) => {
-        console.log(`  - Key: ${key}, Presences:`, presences);
+        logger.debug(`[Online Agents] Key: ${key}`, presences);
         return presences.map(p => ({
           email: p.email,
           fullName: p.full_name,
@@ -39,7 +40,7 @@ const OnlineAgents: React.FC = () => {
       return acc;
     }, [] as typeof allUsers);
 
-    console.log('✅ [ONLINE-AGENTS] Final unique users:', uniqueUsers);
+    logger.debug('[Online Agents] Final unique users', uniqueUsers);
     return uniqueUsers;
   }, [onlineUsers]);
 

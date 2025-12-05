@@ -1,6 +1,7 @@
 
 import { supabase } from './supabaseClient';
 import { UserProfile, UserRole } from '../types';
+import { logger } from './logger'; // ✅ UPGRADE 6: Logger service
 
 /**
  * Fetches the profile for a single user.
@@ -13,7 +14,7 @@ export const getUserProfile = async (userId: string): Promise<UserProfile | null
         .single();
 
     if (error && error.code !== 'PGRST116') { // PGRST116 = no rows found, which is ok
-        console.error('Error fetching user profile:', error);
+        logger.error('[User Service] Error fetching user profile', error);
         return null;
     }
     return data as UserProfile;
@@ -28,7 +29,7 @@ export const getAllUserProfiles = async (): Promise<UserProfile[]> => {
         .select('id, email, role');
 
     if (error) {
-        console.error('Error fetching all user profiles:', error);
+        logger.error('[User Service] Error fetching all user profiles', error);
         throw new Error(error.message);
     }
     return data as UserProfile[];
@@ -46,7 +47,7 @@ export const updateUserProfileRole = async (userId: string, role: UserRole): Pro
         .single();
     
     if (error) {
-        console.error('Error updating user role:', error);
+        logger.error('[User Service] Error updating user role', error);
         throw new Error(error.message);
     }
     return data as UserProfile;

@@ -3,6 +3,7 @@
 import { supabase } from './supabaseClient'; // We ONLY import the public client now
 import { AuthChangeEvent, Session, User } from '@supabase/supabase-js';
 import { UserRole } from '../types';
+import { logger } from './logger'; // ✅ UPGRADE 6: Logger service
 
 // ------------------- AUTH BASICS -------------------
 // These functions are safe and do not need to change.
@@ -49,7 +50,7 @@ export const createUserWithRole = async (
 
     return data;
   } catch (err: any) {
-    console.error('Error invoking create-user function:', err);
+    logger.error('[Auth Service] Error invoking create-user function', err);
     return { error: err.message };
   }
 };

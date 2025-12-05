@@ -4,6 +4,7 @@ import { supabase } from './supabaseClient';
 import { queryClient } from '../App';
 import { queryKeys } from '../constants/queryKeys';
 import { Order, OrderStatus } from '../types/index';
+import { logger } from './logger'; // ✅ UPGRADE 6: Logger service
 
 /**
  * A generic, automated adapter to convert a camelCase object to a snake_case object
@@ -226,7 +227,7 @@ export const triggerStatusEmail = async (order: Order, statusToCheck: string) =>
   const emailData = prepareEmailData(order, statusToCheck);
   const requests: { to: string; template_id: string }[] = [];
 
-  console.log(`📧 [Email Service] Triggering emails for status: ${statusToCheck}`);
+  logger.info(`[Email Service] Triggering emails for status: ${statusToCheck}`);
   
   switch (statusToCheck) {
     case OrderStatus.NEW_ORDER: 
@@ -334,18 +335,18 @@ export const triggerStatusEmail = async (order: Order, statusToCheck: string) =>
   }
 
   if (requests.length === 0) {
-    console.log('⚠️ No email templates configured for this status');
+    logger.warn('[Email Service] No email templates configured for this status');
     return;
   }
 
   await Promise.all(requests.map(async (req) => {
     if (!req.to || !req.template_id) {
-      console.warn(`⚠️ Skipping email: Missing ${!req.to ? 'recipient' : 'template'}`);
+      logger.warn(`[Email Service] Skipping email: Missing ${!req.to ? 'recipient' : 'template'}`);
       return;
     }
     
     try {
-      console.log(`📤 Sending email to: ${req.to} (Template: ${req.template_id})`);
+      logger.info(`[Email Service] Sending email to: ${req.to}`);
       
       const { error } = await supabase.functions.invoke('send-email', {
         body: { 
@@ -366,10 +367,10 @@ export const triggerStatusEmail = async (order: Order, statusToCheck: string) =>
         visibility: 'internal'
       });
 
-      console.log(`✅ Email sent successfully to ${req.to}`);
+      logger.info(`[Email Service] Email sent successfully to ${req.to}`);
 
     } catch (err: any) {
-      console.error(`❌ Failed to send email to ${req.to}:`, err.message || err);
+      logger.error(`[Email Service] Failed to send email to ${req.to}`, err);
     }
   }));
 };
@@ -399,7 +400,7 @@ export const createOrder = async (orderData: any, userEmail: string) => {
   const mappedOrder = mapDbToOrder(data);
 
   triggerStatusEmail(mappedOrder, OrderStatus.NEW_ORDER).catch(err => 
-      console.error("⚠️ Email trigger failed (background):", err)
+      logger.error("[Email Service] Email trigger failed (background)", err)
   );
 
   return mappedOrder;
@@ -411,11 +412,11 @@ export const updateOrderDetails = async (
   oldOrder: Order, 
   userEmail: string
 ) => {
-  console.log('📝 Updates received (camelCase):', updates);
+  logger.debug('[Order Service] Updates received (camelCase)', updates);
   // ✅ STEP 1: CONVERT DATA (The Fix)
   // ✅ CONVERT TO SNAKE_CASE
   const dbPayload = toSnakeCase(updates);
-  console.log('🔄 Converted to snake_case:', dbPayload);
+  logger.debug('[Order Service] Converted to snake_case', dbPayload);
 
   const { data, error } = await supabase
     .from('orders')
@@ -425,7 +426,7 @@ export const updateOrderDetails = async (
     .single();
 
   if (error) {
-    console.error('❌ Database error:', error);
+    logger.error('[Order Service] Database error', error);
     throw error;
   }
 

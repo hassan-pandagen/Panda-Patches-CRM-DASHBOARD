@@ -4,6 +4,7 @@ import React, { createContext, useState, useEffect, useContext, ReactNode } from
 import { supabase } from '../services/supabaseClient';
 import { Session, User } from '@supabase/supabase-js';
 import { UserProfile, GlobalSettings } from '../types';
+import { logger } from '../services/logger'; // ✅ UPGRADE 6: Logger service
 
 interface AuthContextType {
   session: Session | null;
@@ -32,7 +33,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     // 1. SAFETY TIMEOUT: Force stop loading after 2 seconds if Supabase hangs
     const safetyTimer = setTimeout(() => {
       if (mounted && isLoading) {
-        console.warn("⚠️ Auth check timed out. Forcing app to load.");
+        logger.warn("[Auth Context] Auth check timed out. Forcing app to load.");
         setIsLoading(false);
       }
     }, 2000);
@@ -49,12 +50,12 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         if (!mounted) return;
 
         if (error) {
-          console.error('Error fetching settings:', error);
+          logger.error('[Auth Context] Error fetching settings', error);
         } else if (data) {
           setSettings(data);
         }
       } catch (error) {
-        console.error('Unexpected error fetching settings:', error);
+        logger.error('[Auth Context] Unexpected error fetching settings', error);
       }
     };
 
@@ -69,21 +70,21 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         if (!mounted) return;
 
         if (error) {
-          console.error('Error fetching profile:', error);
+          logger.error('[Auth Context] Error fetching profile', error);
           // If DB error, assume no profile
           setProfile(null);
         } else if (data) {
           setProfile(data);
         } else {
           // User exists in Auth but NOT in DB (Orphan). Sign them out to fix state.
-          console.warn('User found in Auth but no Profile in DB. Signing out.');
+          logger.warn('[Auth Context] User found in Auth but no Profile in DB. Signing out.');
           await supabase.auth.signOut();
           setSession(null);
           setUser(null);
           setProfile(null);
         }
       } catch (error) {
-        console.error('Unexpected auth error:', error);
+        logger.error('[Auth Context] Unexpected auth error', error);
       } finally {
         if (mounted) setIsLoading(false);
       }
@@ -104,7 +105,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         setIsLoading(false);
       }
     }).catch(err => {
-      console.error("Session check failed:", err);
+      logger.error("[Auth Context] Session check failed", err);
       if (mounted) setIsLoading(false);
     });
 

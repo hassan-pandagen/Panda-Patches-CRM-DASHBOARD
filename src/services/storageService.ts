@@ -1,4 +1,5 @@
 import { supabase } from './supabaseClient';
+import { logger } from './logger'; // ✅ UPGRADE 6: Logger service
 
 // --- ACTION REQUIRED in Supabase Studio ---
 // 1. Go to Storage > Buckets
@@ -42,7 +43,7 @@ export const deleteFile = async (fileUrl: string): Promise<void> => {
     const url = new URL(fileUrl);
     const pathParts = url.pathname.split(`/storage/v1/object/public/${BUCKET_NAME}/`);
     if (pathParts.length < 2) {
-      console.warn('Invalid file URL format:', fileUrl);
+      logger.warn('[Storage Service] Invalid file URL format', fileUrl);
       return;
     }
     const filePath = pathParts[1];
@@ -54,7 +55,7 @@ export const deleteFile = async (fileUrl: string): Promise<void> => {
     if (deleteError) throw deleteError; // ← FIXED: Use deleteError, not error
 
   } catch (error) {
-    console.error('Error deleting file:', error);
+    logger.error('[Storage Service] Error deleting file', error);
     throw error;
   }
 };

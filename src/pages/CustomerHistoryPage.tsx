@@ -8,6 +8,7 @@ import { Order, OrderStatus } from '../types';
 import { queryKeys } from '../constants/queryKeys';
 import Spinner from '../components/ui/Spinner';
 import { mapDbToOrder } from '../services/orderService';
+import { logger } from '../services/logger'; // ✅ UPGRADE 6: Logger service
 import StatusBadge from '../components/ui/StatusBadge';
 import { ArrowLeft, Mail, Phone, DollarSign, ShoppingBag, Clock, TrendingUp } from 'lucide-react';
 
@@ -17,17 +18,17 @@ const CustomerHistoryPage: React.FC = () => {
   
   const customerId = decodeURIComponent(identifier || '').trim();
 
-  console.log('🔍 Looking up customer:', customerId);
+  logger.debug('[Customer History] Looking up customer', customerId);
 
   const { data: orders, isLoading, error } = useQuery<Order[], Error>({
     queryKey: queryKeys.customer.history(customerId),
     queryFn: async () => {
       if (!customerId) {
-        console.log('❌ No customer ID provided');
+        logger.warn('[Customer History] No customer ID provided');
         return [];
       }
 
-      console.log('🔎 Querying database for:', customerId);
+      logger.debug('[Customer History] Querying database for customer', customerId);
 
       const { data, error, count } = await supabase
         .from('orders')
@@ -35,19 +36,19 @@ const CustomerHistoryPage: React.FC = () => {
         .or(`customer_email.eq.${customerId},customer_phone.eq.${customerId}`)
         .order('created_at', { ascending: false });
 
-      console.log('📊 Query result:', { data, error, count });
+      logger.debug('[Customer History] Query result', { data, error, count });
 
       if (error) {
-        console.error('❌ Database error:', error);
+        logger.error('[Customer History] Database error', error);
         throw error;
       }
 
       if (!data || data.length === 0) {
-        console.log('⚠️ No orders found for this customer');
+        logger.info('[Customer History] No orders found for customer');
         return [];
       }
 
-      console.log('✅ Mapping orders...');
+      logger.debug('[Customer History] Mapping orders...');
       return (data || []).map(mapDbToOrder);
     },
     enabled: !!customerId,
@@ -110,7 +111,7 @@ const CustomerHistoryPage: React.FC = () => {
   }
 
   if (error) {
-    console.error('❌ Error loading customer history:', error);
+    logger.error('[Customer History] Error loading customer history', error);
     return (
       <div className="p-10 text-center flex flex-col items-center justify-center h-[60vh] text-slate-400">
         <h2 className="text-xl font-bold text-white mb-2">Error Loading History</h2>

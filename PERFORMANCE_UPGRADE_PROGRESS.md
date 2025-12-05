@@ -52,13 +52,13 @@
    - Date Completed: December 5, 2025
    - Notes: Added manualChunks to vite.config.ts - vendor chunks (react, query, ui, forms) + feature chunks (orders, reports, admin, settings). Build successful with 9 .js files instead of 1.
 
-- [ ] **Upgrade 6: Clean Up Console Logging for Production**
-  - Status: ❌ NOT STARTED
-  - Effort: 1 hour
-  - Impact: Cleaner code, smaller bundle
-  - Date Started:
-  - Date Completed:
-  - Notes:
+- [x] **Upgrade 6: Clean Up Console Logging for Production**
+   - Status: ✅ COMPLETED
+   - Effort: 1 hour
+   - Impact: Cleaner code, smaller bundle
+   - Date Started: December 5, 2025
+   - Date Completed: December 5, 2025
+   - Notes: Created logger.ts service with info/warn/error/debug methods. Replaced console logs in orderService, storageService, userService, authService, CustomerHistoryPage, AuthContext, OnlineAgents. Debug/info hidden in production, errors always shown.
 
 ### Priority 3 - MEDIUM (Do Third - Optional)
 
