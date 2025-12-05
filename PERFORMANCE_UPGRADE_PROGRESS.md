@@ -26,31 +26,31 @@
   - Date Completed: December 5, 2025
   - Notes: Added SpeedInsights to src/main.tsx. Monitors LCP, FID, CLS metrics. Build successful.
 
-- [ ] **Upgrade 3: Configure React Query Properly**
-  - Status: ❌ NOT STARTED
-  - Effort: 30 minutes
-  - Impact: -20% API calls, better offline UX
-  - Date Started:
-  - Date Completed:
-  - Notes:
+- [x] **Upgrade 3: Configure React Query Properly**
+   - Status: ✅ COMPLETED
+   - Effort: 30 minutes
+   - Impact: -20% API calls, better offline UX
+   - Date Started: December 5, 2025
+   - Date Completed: December 5, 2025
+   - Notes: queryClient configured in App.tsx with staleTime, caching, retry logic
 
 ### Priority 2 - HIGH (Do Second)
 
-- [ ] **Upgrade 4: Add Loading States to Slow Pages**
-  - Status: ❌ NOT STARTED
-  - Effort: 2-3 hours
-  - Impact: Better perceived performance
-  - Date Started:
-  - Date Completed:
-  - Notes:
+- [x] **Upgrade 4: Add Loading States to Slow Pages**
+   - Status: ✅ COMPLETED
+   - Effort: 2-3 hours
+   - Impact: Better perceived performance
+   - Date Started: December 5, 2025
+   - Date Completed: December 5, 2025
+   - Notes: Skeleton/Spinner loading states already implemented on ReportsPage, AllOrdersPage, OrderPage, CustomerHistoryPage
 
-- [ ] **Upgrade 5: Configure Vite for Optimal Chunking**
-  - Status: ❌ NOT STARTED
-  - Effort: 1 hour
-  - Impact: Better caching, faster updates
-  - Date Started:
-  - Date Completed:
-  - Notes:
+- [x] **Upgrade 5: Configure Vite for Optimal Chunking**
+   - Status: ✅ COMPLETED
+   - Effort: 1 hour
+   - Impact: Better caching, faster updates
+   - Date Started: December 5, 2025
+   - Date Completed: December 5, 2025
+   - Notes: Added manualChunks to vite.config.ts - vendor chunks (react, query, ui, forms) + feature chunks (orders, reports, admin, settings). Build successful with 9 .js files instead of 1.
 
 - [ ] **Upgrade 6: Clean Up Console Logging for Production**
   - Status: ❌ NOT STARTED
