@@ -1,22 +1,38 @@
 import React from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
-import { LayoutDashboard, Package, BarChart3, Settings, Users, LogOut, PlusCircle, Clock } from 'lucide-react';
+import { LayoutDashboard, Package, BarChart3, Settings, Users, LogOut, PlusCircle, Clock, Activity } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
-
+import { useQueryPrefetch } from '../../hooks/useQueryPrefetch';
 
 interface SidebarItemProps {
   to: string;
   label: string;
   icon: React.ReactNode;
+  prefetchType?: 'orders' | 'dashboard' | 'reports' | 'clock-in-out' | 'none';
 }
 
-const SidebarItem: React.FC<SidebarItemProps> = ({ to, label, icon }) => {
+const SidebarItem: React.FC<SidebarItemProps> = ({ to, label, icon, prefetchType = 'none' }) => {
   const location = useLocation();
   const isActive = location.pathname === to || (to !== '/' && location.pathname.startsWith(to));
+  const { prefetchOrders, prefetchDashboard, prefetchReports, prefetchClockInOut } = useQueryPrefetch();
+
+  const handleMouseEnter = async () => {
+    if (prefetchType === 'orders') {
+      await prefetchOrders();
+    } else if (prefetchType === 'dashboard') {
+      await prefetchDashboard();
+    } else if (prefetchType === 'reports') {
+      await prefetchReports();
+    } else if (prefetchType === 'clock-in-out') {
+      await prefetchClockInOut();
+    }
+  };
 
   return (
     <NavLink
       to={to}
+      onMouseEnter={handleMouseEnter}
+      onTouchStart={handleMouseEnter}
       className={ `flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-all duration-200 relative ${
           isActive
             ? 'bg-brand-orange text-white shadow-lg shadow-brand-orange/20'
@@ -34,13 +50,13 @@ const SidebarItem: React.FC<SidebarItemProps> = ({ to, label, icon }) => {
 };
 
 const Sidebar: React.FC = () => {
-  const { role, permissions, logout, settings } = useAuth();
+  const { role, permissions, logout, settings, isProfileLoaded } = useAuth();
 
   const navItems = [
-    { to: '/', label: 'Dashboard', icon: <LayoutDashboard className="w-5 h-5" /> },
-    { to: '/orders', label: 'Orders', icon: <Package className="w-5 h-5" /> },
-    { to: '/reports', label: 'Reports', icon: <BarChart3 className="w-5 h-5" /> },
-    { to: '/clock-in-out', label: 'Clock In/Out', icon: <Clock className="w-5 h-5" /> },
+    { to: '/', label: 'Dashboard', icon: <LayoutDashboard className="w-5 h-5" />, prefetchType: 'dashboard' as const },
+    { to: '/orders', label: 'Orders', icon: <Package className="w-5 h-5" />, prefetchType: 'orders' as const },
+    { to: '/reports', label: 'Reports', icon: <BarChart3 className="w-5 h-5" />, prefetchType: 'reports' as const },
+    { to: '/clock-in-out', label: 'Clock In/Out', icon: <Clock className="w-5 h-5" />, prefetchType: 'clock-in-out' as const },
   ];
   return (
     <aside className="w-64 bg-slate-900/70 backdrop-blur-xl border-r border-white/10 p-4 flex flex-col">
@@ -57,7 +73,7 @@ const Sidebar: React.FC = () => {
 
       <nav className="flex-grow space-y-2">
         {navItems.map((item) => (
-          <SidebarItem key={item.to} {...item} />
+          <SidebarItem key={item.to} {...item} prefetchType={item.prefetchType} />
         ))}
 
         {/* --- ADD NEW ORDER BUTTON (PERMISSION-BASED) --- */}
@@ -79,12 +95,19 @@ const Sidebar: React.FC = () => {
           />
         )}
 
-        {role === 'ADMIN' && (
-          <SidebarItem
-            to="/settings"
-            label="Settings"
-            icon={<Settings className="w-5 h-5" />}
-          />
+        {isProfileLoaded && role === 'ADMIN' && (
+          <>
+            <SidebarItem
+              to="/performance-metrics"
+              label="Performance Metrics"
+              icon={<Activity className="w-5 h-5" />}
+            />
+            <SidebarItem
+              to="/settings"
+              label="Settings"
+              icon={<Settings className="w-5 h-5" />}
+            />
+          </>
         )}
       </nav>
 

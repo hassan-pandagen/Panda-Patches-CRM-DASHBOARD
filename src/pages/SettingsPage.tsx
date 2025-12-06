@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../services/supabaseClient';
+import { logger } from '../services/logger';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../hooks/useToast';
 import { queryKeys } from '../constants/queryKeys';
@@ -49,7 +50,7 @@ const SettingsPage: React.FC = () => {
       }
     },
     onError: (error: any) => {
-      console.error('Save error:', error);
+      logger.error('Save error:', error);
       toast.error('Save Failed', error.message || 'Could not save settings');
     },
   });

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { supabase } from '../services/supabaseClient';
+import { logger } from '../services/logger';
 import { useAuth } from '../contexts/AuthContext';
 import Spinner from '../components/ui/Spinner';
 import { Eye, EyeOff, Lock, Mail, ArrowRight } from 'lucide-react';
@@ -56,7 +57,7 @@ const LoginPage: React.FC = () => {
         navigate(from, { replace: true });
       }
     } catch (err: any) {
-      console.error('Login Error:', err);
+      logger.error('Login Error:', err);
       setError('An unexpected error occurred. Please try again.');
     } finally {
       setLoading(false);

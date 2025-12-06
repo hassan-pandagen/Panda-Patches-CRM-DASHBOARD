@@ -112,7 +112,7 @@ const OrdersTable: React.FC<OrdersTableProps> = ({ orders, isLoading = false }) 
                     layout
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
-                    exit={{ opacity: 0 }}
+                    transition={{ duration: 0.1 }}
                     // ✅ THIS IS THE KEY: Add onClick to the ROW
                     onClick={() => handleRowClick(order.orderNumber)}
                     className="border-b border-slate-800 hover:bg-slate-800/60 cursor-pointer transition-colors group"

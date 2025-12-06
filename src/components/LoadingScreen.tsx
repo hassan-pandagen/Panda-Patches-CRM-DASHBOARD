@@ -1,6 +1,7 @@
 // src/components/LoadingScreen.tsx
 import React, { useEffect, useState } from 'react';
 import { supabase } from '../services/supabaseClient';
+import { logger } from '../services/logger';
 
 const LoadingScreen: React.FC = () => {
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
@@ -17,7 +18,7 @@ const LoadingScreen: React.FC = () => {
           .single();
 
         if (error) {
-          console.error('❌ Error fetching logo:', error);
+          logger.error('❌ Error fetching logo:', error);
           setIsLoading(false);
           return;
         }
@@ -29,7 +30,7 @@ const LoadingScreen: React.FC = () => {
           console.warn('⚠️ No logo URL in settings');
         }
       } catch (err) {
-        console.error('❌ Failed to load logo:', err);
+        logger.error('❌ Failed to load logo:', err);
       } finally {
         setIsLoading(false);
       }
@@ -53,7 +54,7 @@ const LoadingScreen: React.FC = () => {
               alt="Company Logo" 
               className="w-32 h-32 object-contain drop-shadow-2xl"
               onError={(e) => {
-                console.error('❌ Logo failed to load');
+                logger.error('❌ Logo failed to load');
                 e.currentTarget.src = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 24 24"%3E%3Cpath fill="%2310b981" d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm-1-13h2v6h-2zm0 8h2v2h-2z"/%3E%3C/svg%3E';
               }}
             />

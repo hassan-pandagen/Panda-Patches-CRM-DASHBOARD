@@ -27,6 +27,7 @@ const SearchResultsPage = lazy(() => import('@/pages/SearchResultsPage'));
 const UserManagementPage = lazy(() => import('@/pages/UserManagementPage'));
 const CustomerHistoryPage = lazy(() => import('@/pages/CustomerHistoryPage'));
 const ClockInOutPage = lazy(() => import('@/pages/ClockInOutPage'));
+const PerformanceMetricsPage = lazy(() => import('@/pages/PerformanceMetricsPage'));
 
 // Your Protection Components
 import ProtectedRoute from './ProtectedRoute'; // Adjust path if needed
@@ -38,16 +39,17 @@ import { ErrorBoundary } from '@/components/ErrorBoundary';
 // ✅ UPGRADE 9: Offline indicator
 import OfflineIndicator from '@/components/OfflineIndicator';
 
-// ✅ UPGRADE 3: Create QueryClient with production-ready config
+// ✅ UPGRADE 3: Create QueryClient with AGGRESSIVE caching config
 export const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      staleTime: 5 * 60 * 1000,              // Keep data fresh for 5min
-      gcTime: 10 * 60 * 1000,                // Hold in memory for 10min
+      staleTime: 10 * 60 * 1000,             // ⬆️ 10min (was 5min) - Keep data fresh longer
+      gcTime: 30 * 60 * 1000,                // ⬆️ 30min (was 10min) - Hold in memory much longer
       retry: (failureCount) => failureCount < 3,
       retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000),
-      refetchOnWindowFocus: 'stale',         // Only refetch if stale
-      refetchOnReconnect: 'stale',           // Smart reconnect
+      refetchOnWindowFocus: false,           // ⬆️ false (was 'stale') - Don't auto-refetch on tab focus
+      refetchOnReconnect: true,              // Only refetch when network reconnects
+      refetchOnMount: false,                 // Don't refetch on component mount if already cached
     },
     mutations: {
       retry: (failureCount) => failureCount < 2,
@@ -95,6 +97,7 @@ const App: React.FC = () => {
                 {/* Admin-only routes with error boundary */}
                 <Route element={<ErrorBoundary><AdminRoute /></ErrorBoundary>}>
                   <Route path="/user-management" element={<UserManagementPage />} />
+                  <Route path="/performance-metrics" element={<PerformanceMetricsPage />} />
                 </Route>
      
                 <Route path="*" element={<Navigate to="/" />} />

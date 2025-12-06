@@ -4,7 +4,10 @@ import { useAuth } from '../contexts/AuthContext';
 import { Order, UserRole, OrderStatus } from '../types/index';
 import Spinner from '../components/ui/Spinner';
 import { LEAD_SOURCE_OPTIONS } from '../constants/index';
-import DateRangeFilter, { DateRange, getDefaultRange } from '../components/ui/DateRangeFilter';
+import DateRangeFilter, {
+  DateRange,
+  getDefaultRange,
+} from "../components/ui/DateRangeFilter";
 import { supabase } from '../services/supabaseClient';
 import { queryKeys } from '../constants/queryKeys';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, LineChart, Line, CartesianGrid, PieChart, Pie, Legend } from 'recharts';
@@ -65,12 +68,16 @@ const SimpleStatCard: FC<{ title: string; value: number | string; prefix?: strin
 );
 
 const CustomTooltip: FC<TooltipProps<ValueType, NameType>> = ({ active, payload, label }) => {
-  if (active && payload && payload.length) {
-    const title = label || payload[0].name;
+  // ✅ DAY 3 FIX: Add array bounds check
+  if (active && payload && payload.length > 0) {
+    const firstItem = payload[0];
+    if (!firstItem) return null;
+    
+    const title = label || firstItem.name || 'Data';
     return (
       <div className="p-4 bg-slate-800/80 backdrop-blur-md border border-white/10 rounded-xl shadow-lg z-50">
         <p className="label text-base font-semibold text-white">{`${title}`}</p>
-        <p className="intro text-sm text-cyan-400">{`${payload[0].name} : ${typeof payload[0].value === 'number' ? payload[0].value.toLocaleString() : payload[0].value}`}</p>
+        <p className="intro text-sm text-cyan-400">{`${firstItem.name || 'Value'} : ${typeof firstItem.value === 'number' ? firstItem.value.toLocaleString() : firstItem.value}`}</p>
       </div>
     );
   }
@@ -138,8 +145,12 @@ const SalesReportComponent: FC<ReportComponentProps> = ({ orders }) => {
 };
 
 const LeadSourceTooltip = ({ active, payload, totalRevenue }: any) => {
-  if (active && payload && payload.length) {
-    const data = payload[0].payload;
+  // ✅ DAY 3 FIX: Add array bounds check
+  if (active && payload && payload.length > 0) {
+    const firstItem = payload[0];
+    if (!firstItem || !firstItem.payload) return null;
+    
+    const data = firstItem.payload;
     const percent = totalRevenue > 0 
       ? ((data.revenue / totalRevenue) * 100).toFixed(1) 
       : '0.0';
@@ -428,15 +439,19 @@ const ReportsPage: React.FC = () => {
         return tabs;
     }, [role, permissions]);
 
-    const activeReport = (searchParams.get('type') as ReportType) || (availableReports.length > 0 ? availableReports[0].key : 'production');
+    // ✅ DAY 3 FIX: Safe array access with bounds check
+    const activeReport = (searchParams.get('type') as ReportType) || (availableReports && availableReports.length > 0 ? availableReports[0]?.key : 'production');
 
     // --- 2. AUTO-REDIRECT SAFETY ---
     // If a user tries to access a tab they don't have, switch them to their first available tab.
     useEffect(() => {
-        if (!isAuthLoading && availableReports.length > 0) {
+        if (!isAuthLoading && availableReports && availableReports.length > 0) {
             const isValidReport = availableReports.find(r => r.key === activeReport);
             if (!isValidReport) {
-                setSearchParams({ type: availableReports[0].key });
+                const firstReport = availableReports[0];
+                if (firstReport) {
+                    setSearchParams({ type: firstReport.key });
+                }
             }
         }
     }, [availableReports, activeReport, isAuthLoading, setSearchParams]);

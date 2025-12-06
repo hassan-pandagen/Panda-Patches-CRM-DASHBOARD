@@ -8,10 +8,24 @@
 
 /* 3. Apply your custom base styles to the 'base' layer */
 @layer base {
+  html {
+    /* Prevent layout shift on first load */
+    scroll-behavior: smooth;
+  }
+
   body {
     font-family: 'Outfit', sans-serif;
     color: #FFFFFF;
     background: linear-gradient(to bottom right, #0f172a, #1e293b);
+    background-attachment: fixed;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    /* Prevent flash of unstyled content */
+    min-height: 100vh;
+  }
+
+  * {
+    /* Ensure smooth rendering */
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
   }
@@ -35,10 +49,19 @@
 
 @keyframes shimmer {
   0% {
-    transform: translateX(-100%);
+    background-position: -1000px 0;
   }
   100% {
-    transform: translateX(100%);
+    background-position: 1000px 0;
+  }
+}
+
+@keyframes skeleton-pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.6;
   }
 }
 
@@ -67,6 +90,23 @@
     animation-delay: 4s;
   }
   
+  /* Enhanced shimmer for skeleton loaders */
+  .animate-shimmer {
+    background: linear-gradient(
+      90deg,
+      rgba(15, 23, 42, 0.4) 0%,
+      rgba(30, 41, 59, 0.6) 50%,
+      rgba(15, 23, 42, 0.4) 100%
+    );
+    background-size: 2000px 100%;
+    animation: shimmer 2s infinite;
+  }
+
+  /* Skeleton pulse animation */
+  .animate-skeleton-pulse {
+    animation: skeleton-pulse 1.5s ease-in-out infinite;
+  }
+  
   .shimmer {
     position: relative;
     overflow: hidden;
@@ -90,6 +130,11 @@
   
   .glow-text {
     text-shadow: 0 0 20px rgba(251, 110, 29, 0.5);
+  }
+
+  /* Smooth page transitions */
+  .page-transition {
+    transition: opacity 0.15s ease-in-out;
   }
 }
 

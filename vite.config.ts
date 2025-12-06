@@ -12,6 +12,10 @@ export default defineConfig({
       "@": path.resolve(__dirname, "./src"),
     },
   },
+  test: {
+    globals: true,
+    environment: 'node',
+  },
   // ✅ UPGRADE 5: Manual chunk configuration for optimal caching
   build: {
     rollupOptions: {

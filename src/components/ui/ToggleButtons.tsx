@@ -1,12 +1,11 @@
 // src/components/ui/ToggleButtons.tsx
-// Updated with Today option
+// Updated with Custom option
 
 import React from 'react';
-import { motion } from 'framer-motion';
 
 interface ToggleButtonsProps {
-  view: 'today' | 'week' | 'month';
-  onViewChange: (view: 'today' | 'week' | 'month') => void;
+  view: 'today' | 'week' | 'month' | 'custom';
+  onViewChange: (view: 'today' | 'week' | 'month' | 'custom') => void;
 }
 
 const ToggleButtons: React.FC<ToggleButtonsProps> = ({ view, onViewChange }) => {
@@ -16,27 +15,13 @@ const ToggleButtons: React.FC<ToggleButtonsProps> = ({ view, onViewChange }) => 
         <button
           key={option}
           onClick={() => onViewChange(option as 'today' | 'week' | 'month')}
-          className="relative px-6 py-2 rounded-lg font-semibold text-sm transition-all capitalize"
+          className={`relative px-6 py-2 rounded-lg font-semibold text-sm transition-all capitalize ${
+            view === option
+              ? 'bg-gradient-to-r from-brand-orange to-orange-600 text-white shadow-lg shadow-brand-orange/20'
+              : 'text-slate-400 hover:text-brand-orange'
+          }`}
         >
-          {/* Active background */}
-          {view === option && (
-            <motion.div
-              layoutId="activeTab"
-              className="absolute inset-0 bg-gradient-to-r from-brand-orange to-orange-600 rounded-lg"
-              transition={{ type: 'spring', stiffness: 300, damping: 30 }}
-            />
-          )}
-          
-          {/* Text */}
-          <span
-            className={`relative z-10 transition-colors ${
-              view === option
-                ? 'text-white'
-                : 'text-slate-400 hover:text-brand-orange'
-            }`}
-          >
-            {option}
-          </span>
+          {option}
         </button>
       ))}
     </div>

@@ -14,25 +14,43 @@ const BUCKET_NAME = 'order-attachments';
  * Uses crypto.randomUUID() for generating unique filenames (built-in, no dependencies).
  */
 export const uploadFile = async (file: File): Promise<string> => {
-  const fileExtension = file.name.split('.').pop();
-  // Use crypto.randomUUID() - a Web Crypto API standard, built into modern browsers & Node.js
-  const fileName = `${crypto.randomUUID()}.${fileExtension}`;
-  const filePath = `${fileName}`; // Keep it simple at the root of the bucket.
+  try {
+    // Validate input
+    if (!file) throw new Error('File is required');
+    if (!(file instanceof File)) throw new Error('Invalid file object');
+    if (file.size === 0) throw new Error('File is empty');
+    if (file.size > 50 * 1024 * 1024) throw new Error('File exceeds 50MB limit');
 
-  const { error: uploadError } = await supabase.storage
-    .from(BUCKET_NAME)
-    .upload(filePath, file, {
-      cacheControl: '3600',
-      upsert: false,
-    });
+    const fileExtension = file.name.split('.').pop() || 'bin';
+    if (!fileExtension) throw new Error('File must have an extension');
 
-  if (uploadError) throw uploadError;
+    // Use crypto.randomUUID() - a Web Crypto API standard, built into modern browsers & Node.js
+    const fileName = `${crypto.randomUUID()}.${fileExtension}`;
+    const filePath = `${fileName}`; // Keep it simple at the root of the bucket.
 
-  const { data: urlData } = supabase.storage
-    .from(BUCKET_NAME)
-    .getPublicUrl(filePath);
+    logger.info(`[Storage Service] Uploading file: ${file.name} (${file.size} bytes)`);
 
-  return urlData.publicUrl;
+    const { error: uploadError } = await supabase.storage
+      .from(BUCKET_NAME)
+      .upload(filePath, file, {
+        cacheControl: '3600',
+        upsert: false,
+      });
+
+    if (uploadError) throw uploadError;
+
+    const { data: urlData } = supabase.storage
+      .from(BUCKET_NAME)
+      .getPublicUrl(filePath);
+
+    if (!urlData?.publicUrl) throw new Error('Failed to get public URL from storage');
+
+    logger.info(`[Storage Service] File uploaded successfully: ${filePath}`);
+    return urlData.publicUrl;
+  } catch (err: any) {
+    logger.error('[Storage Service] uploadFile failed', err);
+    throw err;
+  }
 };
 
 /**

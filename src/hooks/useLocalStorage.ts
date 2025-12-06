@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { logger } from '../services/logger';
 
 export function useLocalStorage<T>(key: string, initialValue: T): [T, (value: T) => void] {
   const [storedValue, setStoredValue] = useState<T>(() => {
@@ -6,7 +7,7 @@ export function useLocalStorage<T>(key: string, initialValue: T): [T, (value: T)
       const item = window.localStorage.getItem(key);
       return item ? JSON.parse(item) : initialValue;
     } catch (error) {
-      console.error(error);
+      logger.error(error);
       return initialValue;
     }
   });

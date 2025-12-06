@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 // --- THIS IS THE CORRECTED IMPORT SECTION ---
 import { createUserWithRole, getAllUsers, deleteUser, updateUserProfile } from '@/services/authService';
+import { logger } from '@/services/logger';
 import { useAuth } from '../contexts/AuthContext';
 import { UserProfile, UserPermissions, UserRole } from '@/types'; // 1. Add 'Key' to imports
 import { Check, X, Plus, UserPlus, Edit, Trash2, Key, AlertCircle } from 'lucide-react';
@@ -65,7 +66,7 @@ const UserManagementPage: React.FC = () => {
       }
     },
     onError: (error: Error) => {
-      console.error(error);
+      logger.error(error);
     },
   });
 

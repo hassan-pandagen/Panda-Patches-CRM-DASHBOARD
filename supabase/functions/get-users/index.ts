@@ -20,10 +20,10 @@ Deno.serve(async (req: Request) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
-    // 4. Fetch Profiles
+    // 4. Fetch Profiles (only needed columns, not heavy data)
     const { data: profiles, error } = await supabaseAdmin
       .from('user_profiles')
-      .select('*')
+      .select('id, email, full_name, role, permissions')
       .order('full_name', { ascending: true });
 
     if (error) throw error;

@@ -64,13 +64,16 @@ const FinancialTooltip = ({ active, payload, label }: any) => {
 
 // --- DONUT TOOLTIP (Counts - Shows "Orders") ---
 const CountTooltip = ({ active, payload }: any) => {
-    if (active && payload && payload.length) {
+    // ✅ DAY 3 FIX: Add array bounds check
+    if (active && payload && payload.length > 0) {
       const data = payload[0];
+      if (!data) return null;
+      
       return (
         <div className="bg-slate-900/95 backdrop-blur-xl border border-white/10 p-3 rounded-xl shadow-2xl z-50">
           <div className="flex items-center justify-between gap-4 text-sm">
-            <span style={{ color: data.fill }} className="font-medium">{data.name}:</span>
-            <span className="text-white font-bold">{data.value} Orders</span>
+            <span style={{ color: data.fill }} className="font-medium">{data.name || 'Value'}:</span>
+            <span className="text-white font-bold">{data.value || 0} Orders</span>
           </div>
         </div>
       );

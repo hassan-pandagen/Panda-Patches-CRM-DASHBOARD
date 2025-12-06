@@ -1,7 +1,24 @@
 // src/components/ui/DateRangeFilter.tsx
-// SIMPLIFIED VERSION - Replace your current file with this
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
+import { Calendar, ChevronLeft, ChevronRight } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import {
+  startOfMonth,
+  endOfMonth,
+  startOfWeek,
+  endOfWeek,
+  addDays,
+  addMonths,
+  subMonths,
+  format,
+  isSameDay,
+  isSameMonth,
+  isToday,
+  isBefore,
+  isAfter,
+  isWithinInterval,
+} from 'date-fns';
 
 export interface DateRange {
   startDate: string;
@@ -11,8 +28,6 @@ export interface DateRange {
 interface DateRangeFilterProps {
   value?: DateRange;
   onChange: (range: DateRange) => void;
-  label?: string;
-  showLabels?: boolean;
 }
 
 export const getDefaultRange = (): DateRange => {
@@ -26,152 +41,267 @@ export const getDefaultRange = (): DateRange => {
   };
 };
 
-const DateRangeFilter: React.FC<DateRangeFilterProps> = ({ 
-  value, 
-  onChange,
-  label,
-  showLabels = true 
-}) => {
-  const defaultRange = getDefaultRange();
-  const [startDate, setStartDate] = useState(value?.startDate || defaultRange.startDate);
-  const [endDate, setEndDate] = useState(value?.endDate || defaultRange.endDate);
-  const [hasChanges, setHasChanges] = useState(false);
+const DateRangeFilter: React.FC<DateRangeFilterProps> = ({ value, onChange }) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const [currentMonth, setCurrentMonth] = useState(new Date());
+  const [startDate, setStartDate] = useState<Date | null>(null);
+  const [endDate, setEndDate] = useState<Date | null>(null);
+  const [hoverDate, setHoverDate] = useState<Date | null>(null);
+  const popoverRef = useRef<HTMLDivElement>(null);
 
-  // Sync with parent value changes
+  // Sync with parent value changes only when calendar is closed
   useEffect(() => {
-    if (value && (value.startDate !== startDate || value.endDate !== endDate)) {
-      setStartDate(value.startDate);
-      setEndDate(value.endDate);
-      setHasChanges(false);
+    if (!isOpen && value) {
+      setCurrentMonth(new Date(value.startDate));
     }
-  }, [value]);
+  }, [value, isOpen]);
 
-  const handleStartChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setStartDate(e.target.value);
-    setHasChanges(true);
-  };
+  // Close on outside click
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (popoverRef.current && !popoverRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    };
 
-  const handleEndChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setEndDate(e.target.value);
-    setHasChanges(true);
+    if (isOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => document.removeEventListener('mousedown', handleClickOutside);
+    }
+  }, [isOpen]);
+
+  const handleDateClick = (date: Date) => {
+    if (!startDate || (startDate && endDate)) {
+      // Start new selection
+      setStartDate(date);
+      setEndDate(null);
+    } else {
+      // Complete selection
+      if (isBefore(date, startDate)) {
+        setEndDate(startDate);
+        setStartDate(date);
+      } else {
+        setEndDate(date);
+      }
+    }
   };
 
   const handleApply = () => {
-    onChange({ startDate, endDate });
-    setHasChanges(false);
+    if (startDate && endDate) {
+      onChange({
+        startDate: format(startDate, 'yyyy-MM-dd'),
+        endDate: format(endDate, 'yyyy-MM-dd'),
+      });
+      setIsOpen(false);
+    }
   };
 
-  return (
-    <div className="flex flex-col gap-3">
-      {label && (
-        <h3 className="text-sm font-semibold text-slate-300">{label}</h3>
-      )}
-      
-      <div className="flex flex-wrap items-end gap-3">
-        {/* Start Date */}
-        <div className="flex flex-col min-w-[150px]">
-          {showLabels && (
-            <label htmlFor="date-range-start" className="text-xs text-slate-400 mb-1.5 font-medium">
-              Start Date
-            </label>
+  const handleCancel = () => {
+    // Reset to clean state
+    setStartDate(null);
+    setEndDate(null);
+    setHoverDate(null);
+    setCurrentMonth(new Date());
+    setIsOpen(false);
+  };
+
+  const handleOpen = () => {
+    // Clear selection when opening
+    setStartDate(null);
+    setEndDate(null);
+    setHoverDate(null);
+    setCurrentMonth(value ? new Date(value.startDate) : new Date());
+    setIsOpen(true);
+  };
+
+  const getDaysInMonth = (date: Date) => {
+    const start = startOfWeek(startOfMonth(date));
+    const end = endOfWeek(endOfMonth(date));
+    const days: Date[] = [];
+    let currentDate = start;
+
+    while (currentDate <= end) {
+      days.push(currentDate);
+      currentDate = addDays(currentDate, 1);
+    }
+
+    return days;
+  };
+
+  const isInRange = (date: Date) => {
+    if (!startDate) return false;
+    
+    const rangeEnd = hoverDate && !endDate ? hoverDate : endDate;
+    if (!rangeEnd) return false;
+
+    const [start, end] = isBefore(startDate, rangeEnd) 
+      ? [startDate, rangeEnd] 
+      : [rangeEnd, startDate];
+
+    return isWithinInterval(date, { start, end });
+  };
+
+  const isRangeStart = (date: Date) => {
+    return startDate && isSameDay(date, startDate);
+  };
+
+  const isRangeEnd = (date: Date) => {
+    return endDate && isSameDay(date, endDate);
+  };
+
+  const isDisabled = (date: Date) => {
+    return isAfter(date, new Date());
+  };
+
+  const renderMonth = (monthDate: Date) => {
+    const days = getDaysInMonth(monthDate);
+    const weekDays = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
+
+    return (
+      <div className="min-w-[280px]">
+        {/* Month Header */}
+        <div className="flex items-center justify-between mb-4 px-2">
+          {monthDate.getTime() === currentMonth.getTime() && (
+            <button
+              onClick={() => setCurrentMonth(subMonths(currentMonth, 1))}
+              className="p-1.5 hover:bg-slate-700/50 rounded-lg transition-colors"
+            >
+              <ChevronLeft className="w-4 h-4 text-slate-300" />
+            </button>
           )}
-          <input
-            id="date-range-start"
-            type="date"
-            value={startDate}
-            onChange={handleStartChange}
-            max={endDate}
-            className="px-4 py-2.5 bg-slate-900/40 backdrop-blur-xl border border-white/10 rounded-xl text-white text-sm focus:outline-none focus:ring-2 focus:ring-brand-orange focus:border-brand-orange transition-all cursor-pointer"
-            style={{ 
-              colorScheme: 'dark',
-              WebkitAppearance: 'none',
-              MozAppearance: 'none',
-              appearance: 'none'
-            }}
-          />
+          {monthDate.getTime() !== currentMonth.getTime() && (
+            <div className="w-7" />
+          )}
+          <div className="flex-1 text-center">
+            <span className="text-white font-bold text-base">
+              {format(monthDate, 'MMMM yyyy')}
+            </span>
+          </div>
+          {monthDate.getTime() === addMonths(currentMonth, 1).getTime() && (
+            <button
+              onClick={() => setCurrentMonth(addMonths(currentMonth, 1))}
+              className="p-1.5 hover:bg-slate-700/50 rounded-lg transition-colors"
+            >
+              <ChevronRight className="w-4 h-4 text-slate-300" />
+            </button>
+          )}
+          {monthDate.getTime() !== addMonths(currentMonth, 1).getTime() && (
+            <div className="w-7" />
+          )}
         </div>
 
-        {/* End Date */}
-        <div className="flex flex-col min-w-[150px]">
-          {showLabels && (
-            <label htmlFor="date-range-end" className="text-xs text-slate-400 mb-1.5 font-medium">
-              End Date
-            </label>
-          )}
-          <input
-            id="date-range-end"
-            type="date"
-            value={endDate}
-            onChange={handleEndChange}
-            min={startDate}
-            className="px-4 py-2.5 bg-slate-900/40 backdrop-blur-xl border border-white/10 rounded-xl text-white text-sm focus:outline-none focus:ring-2 focus:ring-brand-orange focus:border-brand-orange transition-all cursor-pointer"
-            style={{ 
-              colorScheme: 'dark',
-              WebkitAppearance: 'none',
-              MozAppearance: 'none',
-              appearance: 'none'
-            }}
-          />
+        {/* Week Days */}
+        <div className="grid grid-cols-7 gap-1 mb-2">
+          {weekDays.map((day) => (
+            <div
+              key={day}
+              className="h-9 flex items-center justify-center text-slate-400 text-xs font-semibold"
+            >
+              {day}
+            </div>
+          ))}
         </div>
 
-        {/* Apply Button - Always show for now to debug */}
-        <button
-          onClick={handleApply}
-          disabled={!hasChanges}
-          className={`px-6 py-2.5 rounded-xl text-white text-sm font-semibold transition-all whitespace-nowrap shadow-lg ${
-            hasChanges 
-              ? 'bg-gradient-to-r from-brand-orange to-orange-600 hover:from-orange-600 hover:to-brand-orange shadow-brand-orange/20 hover:shadow-brand-orange/40' 
-              : 'bg-slate-700 opacity-50 cursor-not-allowed'
-          }`}
-        >
-          Apply {hasChanges ? '✓' : ''}
-        </button>
+        {/* Days Grid */}
+        <div className="grid grid-cols-7 gap-1">
+          {days.map((day, idx) => {
+            const isCurrentMonth = isSameMonth(day, monthDate);
+            const isSelected = isRangeStart(day) || isRangeEnd(day);
+            const inRange = isInRange(day);
+            const disabled = isDisabled(day);
+            const todayDate = isToday(day);
+            const rangeStart = isRangeStart(day);
+            const rangeEnd = isRangeEnd(day);
+
+            return (
+              <button
+                key={idx}
+                onClick={() => !disabled && handleDateClick(day)}
+                onMouseEnter={() => !disabled && setHoverDate(day)}
+                onMouseLeave={() => setHoverDate(null)}
+                disabled={disabled}
+                className={`
+                  h-9 w-9 flex items-center justify-center text-sm font-medium transition-all relative
+                  ${!isCurrentMonth ? 'text-slate-600 opacity-40' : 'text-slate-200'}
+                  ${disabled ? 'text-slate-600 cursor-not-allowed opacity-30' : 'cursor-pointer'}
+                  ${isSelected ? 'bg-orange-600 text-white font-bold shadow-lg shadow-orange-600/30 z-10 scale-105' : ''}
+                  ${inRange && !isSelected ? 'bg-orange-600/20 text-slate-100' : ''}
+                  ${!disabled && !isSelected && !inRange && isCurrentMonth ? 'hover:bg-slate-700 hover:scale-105' : ''}
+                  ${todayDate && !isSelected ? 'ring-2 ring-orange-500 ring-inset font-bold' : ''}
+                  ${rangeStart && rangeEnd ? 'rounded-lg' : ''}
+                  ${rangeStart && !rangeEnd ? 'rounded-l-lg rounded-r-none' : ''}
+                  ${rangeEnd && !rangeStart ? 'rounded-r-lg rounded-l-none' : ''}
+                  ${!rangeStart && !rangeEnd ? 'rounded-lg' : ''}
+                `}
+              >
+                {format(day, 'd')}
+              </button>
+            );
+          })}
+        </div>
       </div>
+    );
+  };
 
-      {/* Calendar Icon Styles */}
-      <style>{`
-        /* Make date inputs clickable everywhere */
-        input[type="date"] {
-          position: relative;
-          color-scheme: dark;
-          cursor: pointer;
-        }
+  const displayText =
+    value?.startDate && value?.endDate
+      ? `${format(new Date(value.startDate), 'MM/dd/yyyy')} - ${format(new Date(value.endDate), 'MM/dd/yyyy')}`
+      : 'Select Date Range';
 
-        /* Make calendar icon visible and clickable */
-        input[type="date"]::-webkit-calendar-picker-indicator {
-          position: absolute;
-          top: 0;
-          left: 0;
-          right: 0;
-          bottom: 0;
-          width: auto;
-          height: auto;
-          color: transparent;
-          background: transparent;
-          filter: invert(1) brightness(1.2);
-          cursor: pointer;
-          transition: filter 0.2s ease;
-        }
+  return (
+    <div className="relative" ref={popoverRef}>
+      {/* Trigger Button */}
+      <button
+        onClick={handleOpen}
+        className="flex items-center gap-2 px-4 py-2.5 bg-slate-900/40 backdrop-blur-xl border border-white/10 rounded-xl text-white text-sm hover:border-white/20 focus:outline-none focus:ring-2 focus:ring-slate-500 transition-all"
+      >
+        <Calendar className="w-4 h-4 text-slate-400" />
+        <span className="hidden sm:inline text-xs font-medium">{displayText}</span>
+      </button>
 
-        input[type="date"]::-webkit-calendar-picker-indicator:hover {
-          filter: invert(0.7) sepia(1) saturate(5) hue-rotate(0deg) brightness(1.2);
-        }
+      {/* Calendar Popover */}
+      <AnimatePresence>
+        {isOpen && (
+          <motion.div
+            initial={{ opacity: 0, y: -10, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -10, scale: 0.95 }}
+            transition={{ duration: 0.2 }}
+            className="absolute top-full right-0 mt-2 z-50 bg-slate-950 border border-white/10 rounded-2xl shadow-2xl p-6"
+          >
+            <div className="space-y-4">
+              {/* Calendar */}
+              <div className="flex gap-8 bg-slate-900/60 rounded-xl p-6 backdrop-blur-sm">
+                {renderMonth(currentMonth)}
+                {renderMonth(addMonths(currentMonth, 1))}
+              </div>
 
-        /* Firefox */
-        input[type="date"]::-moz-calendar-picker-indicator {
-          cursor: pointer;
-        }
-
-        /* Ensure the entire input is clickable */
-        input[type="date"]::-webkit-inner-spin-button,
-        input[type="date"]::-webkit-clear-button {
-          display: none;
-        }
-
-        input[type="date"]::-webkit-datetime-edit {
-          cursor: pointer;
-        }
-      `}</style>
+              {/* Action Buttons */}
+              <div className="flex gap-3">
+                <button
+                  onClick={handleCancel}
+                  className="flex-1 px-5 py-2.5 text-sm font-medium text-slate-300 bg-slate-800/50 hover:bg-slate-800 rounded-xl transition-all"
+                >
+                  Cancel
+                </button>
+                <motion.button
+                  onClick={handleApply}
+                  disabled={!startDate || !endDate}
+                  whileHover={{ scale: startDate && endDate ? 1.02 : 1 }}
+                  whileTap={{ scale: startDate && endDate ? 0.98 : 1 }}
+                  className={`flex-1 px-5 py-2.5 text-sm font-bold rounded-xl transition-all ${
+                    startDate && endDate
+                      ? 'bg-gradient-to-r from-orange-600 to-orange-500 text-white hover:shadow-lg hover:shadow-orange-600/30'
+                      : 'bg-slate-700/50 text-slate-500 cursor-not-allowed'
+                  }`}
+                >
+                  Apply Range
+                </motion.button>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };

@@ -32,8 +32,21 @@ self.addEventListener('fetch', (event: any) => {
   // Skip API calls - always go to network
   if (event.request.url.includes('/rest/v1/') || event.request.url.includes('supabase')) {
     event.respondWith(
-      fetch(event.request)
-        .catch(() => {
+      (async () => {
+        try {
+          // ✅ DAY 2 FIX: Add timeout to API fetch calls (30 seconds)
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 30000);
+
+          try {
+            const response = await fetch(event.request, { signal: controller.signal });
+            clearTimeout(timeoutId);
+            return response;
+          } catch (fetchErr: any) {
+            clearTimeout(timeoutId);
+            throw fetchErr;
+          }
+        } catch (err) {
           // Return offline response for failed API calls
           return new Response(
             JSON.stringify({ error: 'offline' }),
@@ -45,7 +58,8 @@ self.addEventListener('fetch', (event: any) => {
               }),
             }
           );
-        })
+        }
+      })()
     );
     return;
   }
@@ -57,21 +71,38 @@ self.addEventListener('fetch', (event: any) => {
         return response;
       }
 
-      return fetch(event.request).then((response) => {
-        // Don't cache non-successful responses
-        if (!response || response.status !== 200 || response.type === 'error') {
-          return response;
+      return (async () => {
+        try {
+          // ✅ DAY 2 FIX: Add timeout to asset fetch (20 seconds)
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 20000);
+
+          try {
+            const response = await fetch(event.request, { signal: controller.signal });
+            clearTimeout(timeoutId);
+
+            // Don't cache non-successful responses
+            if (!response || response.status !== 200 || response.type === 'error') {
+              return response;
+            }
+
+            // Clone the response
+            const responseToCache = response.clone();
+
+            caches.open(CACHE_NAME).then((cache) => {
+              cache.put(event.request, responseToCache);
+            });
+
+            return response;
+          } catch (fetchErr: any) {
+            clearTimeout(timeoutId);
+            throw fetchErr;
+          }
+        } catch (err) {
+          // Fallback to offline page if asset fetch fails
+          return caches.match('/index.html') || new Response('Offline');
         }
-
-        // Clone the response
-        const responseToCache = response.clone();
-
-        caches.open(CACHE_NAME).then((cache) => {
-          cache.put(event.request, responseToCache);
-        });
-
-        return response;
-      });
+      })();
     })
   );
 });

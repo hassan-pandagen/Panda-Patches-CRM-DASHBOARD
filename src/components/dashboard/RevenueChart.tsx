@@ -8,12 +8,16 @@ interface RevenueChartProps {
 }
 
 const CustomTooltip = ({ active, payload, label }: any) => {
-  if (active && payload && payload.length) {
+  // ✅ DAY 3 FIX: Add array bounds check
+  if (active && payload && payload.length > 0) {
+    const firstItem = payload[0];
+    if (!firstItem || typeof firstItem.value !== 'number') return null;
+    
     return (
       <div className="bg-slate-800 border border-slate-700 p-3 rounded-lg shadow-xl">
-        <p className="text-slate-300 text-xs mb-1">{label}</p>
+        <p className="text-slate-300 text-xs mb-1">{label || 'Date'}</p>
         <p className="text-brand-orange font-bold text-lg">
-          ${payload[0].value.toLocaleString()}
+          ${firstItem.value.toLocaleString()}
         </p>
         <p className="text-xs text-slate-500 mt-1">Click to view orders</p>
       </div>
@@ -27,8 +31,12 @@ const RevenueChart: React.FC<RevenueChartProps> = ({ data }) => {
 
   // Handler for clicking a data point
   const handleChartClick = (data: any) => {
+    // ✅ DAY 3 FIX: Add array bounds check
     if (data && data.activePayload && data.activePayload.length > 0) {
-      const clickedDateStr = data.activePayload[0].payload.date; // This is likely "Nov 14" or similar from your data formatting
+      const firstItem = data.activePayload[0];
+      if (!firstItem || !firstItem.payload) return;
+      
+      const clickedDateStr = firstItem.payload.date; // This is likely "Nov 14" or similar from your data formatting
       
       // We need to convert "Nov 14" back to a real date string for the filter "2025-11-14"
       // Assuming the chart data comes from current year:

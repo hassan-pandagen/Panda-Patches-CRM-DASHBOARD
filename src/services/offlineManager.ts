@@ -112,22 +112,47 @@ class OfflineManager {
   };
 
   /**
-   * Check connection by fetching small resource
+   * Check connection by fetching small resource with timeout
    */
   private checkConnection = async () => {
     try {
-      const response = await fetch('/index.html', {
-        method: 'HEAD',
-        cache: 'no-store',
-      });
+      // ✅ DAY 2 FIX: Add timeout to fetch call (10 seconds)
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000);
 
-      const wasOnline = this.isOnline;
-      this.isOnline = response.ok;
+      try {
+        const response = await fetch('/index.html', {
+          method: 'HEAD',
+          cache: 'no-store',
+          signal: controller.signal,
+        });
 
-      if (wasOnline !== this.isOnline) {
-        this.notifyListeners();
+        clearTimeout(timeoutId);
+
+        const wasOnline = this.isOnline;
+        this.isOnline = response.ok;
+
+        if (wasOnline !== this.isOnline) {
+          this.notifyListeners();
+        }
+      } catch (fetchErr: any) {
+        clearTimeout(timeoutId);
+        
+        if (fetchErr instanceof DOMException && fetchErr.name === 'AbortError') {
+          logger.warn('[Offline Manager] Connection check timeout (10s)');
+        } else {
+          logger.debug('[Offline Manager] Connection check failed', fetchErr);
+        }
+
+        const wasOnline = this.isOnline;
+        this.isOnline = false;
+
+        if (wasOnline !== this.isOnline) {
+          this.notifyListeners();
+        }
       }
-    } catch {
+    } catch (err) {
+      logger.error('[Offline Manager] Unexpected error in checkConnection', err);
       const wasOnline = this.isOnline;
       this.isOnline = false;
 

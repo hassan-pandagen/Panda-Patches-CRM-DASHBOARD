@@ -10,6 +10,7 @@ import OrderForm, { SaveData } from '../components/orders/OrderForm';
 import { useWarnIfUnsaved } from "../hooks";
 import UnsavedChangesModal from "../components/ui/UnsavedChangesModal";
 import { useAuth } from "../contexts/AuthContext";
+import { logger } from "../services/logger";
 import { Copy } from "lucide-react";
 
 const NewOrderPage: React.FC = () => {
@@ -120,7 +121,7 @@ const NewOrderPage: React.FC = () => {
       setNavigateTo(`/order/${newOrder.orderNumber}/edit`);
       
     } catch (err: any) {
-      console.error('Failed to create order', err);
+      logger.error('Failed to create order', err);
       // ✅ FIX: Properly handle different error shapes.
       // Supabase errors are objects with a 'message' property. Other errors might be strings or standard Error objects.
       const errorMessage = err?.message || (typeof err === 'string' ? err : 'An unknown error occurred. Check the console for details.');
@@ -134,12 +135,12 @@ const NewOrderPage: React.FC = () => {
   };
 
   const onFormChange = useCallback(() => {
-    if (isSaving) return; // 🛡️ SHIELD: If we are saving, ignore changes.
-    if (!isDirty) {
-      setIsDirty(true);
-      setAllowNavigation(false); // Re-engage the shield if user makes more changes
-    }
-  }, [isDirty, isSaving]);
+    console.log('[NewOrderPage] onFormChange called, isSaving:', isSaving);
+    if (isSaving) return;
+    setIsDirty(true);
+    setAllowNavigation(false);
+    console.log('[NewOrderPage] Form became dirty');
+  }, [isSaving]);
 
   return (
     <div className="p-6 max-w-7xl mx-auto">

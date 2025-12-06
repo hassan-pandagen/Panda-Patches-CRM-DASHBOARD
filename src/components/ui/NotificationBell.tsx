@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { Bell, AlertCircle, Clock, Check, CheckCircle2 } from "lucide-react";
 import { supabase } from "../../services/supabaseClient";
+import { logger } from "../../services/logger";
 
 interface Notification {
   id: string;
@@ -17,24 +18,39 @@ export default function NotificationBell() {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   // State to track IDs of notifications the user has "dismissed"
   const [dismissedIds, setDismissedIds] = useState<string[]>(() => {
-    const saved = localStorage.getItem('dismissed_notifications');
-    return saved ? JSON.parse(saved) : [];
+    try {
+      const saved = localStorage.getItem('dismissed_notifications');
+      return saved ? JSON.parse(saved) : [];
+    } catch (err) {
+      logger.warn('[NotificationBell] Failed to load dismissed notifications', err);
+      return [];
+    }
   });
   
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  // Helper to save dismissed IDs
+  // Helper to save dismissed IDs with error handling
   const markAsRead = (id: string) => {
-    const newDismissed = [...dismissedIds, id];
-    setDismissedIds(newDismissed);
-    localStorage.setItem('dismissed_notifications', JSON.stringify(newDismissed));
+    try {
+      const newDismissed = [...dismissedIds, id];
+      setDismissedIds(newDismissed);
+      localStorage.setItem('dismissed_notifications', JSON.stringify(newDismissed));
+    } catch (err) {
+      logger.error('[NotificationBell] Failed to save dismissed notification', err);
+      // Silently fail - notification will reappear on refresh
+    }
   };
 
   const markAllRead = () => {
-    const allIds = notifications.map(n => n.id);
-    const combined = [...new Set([...dismissedIds, ...allIds])]; // Unique IDs
-    setDismissedIds(combined);
-    localStorage.setItem('dismissed_notifications', JSON.stringify(combined));
+    try {
+      const allIds = notifications.map(n => n.id);
+      const combined = [...new Set([...dismissedIds, ...allIds])]; // Unique IDs
+      setDismissedIds(combined);
+      localStorage.setItem('dismissed_notifications', JSON.stringify(combined));
+    } catch (err) {
+      logger.error('[NotificationBell] Failed to mark all notifications as read', err);
+      // Silently fail - notifications will reappear on refresh
+    }
   };
 
   // Fetch initial state
@@ -46,7 +62,7 @@ export default function NotificationBell() {
       .order('created_at', { ascending: false });
 
     if (error) {
-      console.error("Error fetching notifications:", error);
+      logger.error("[NotificationBell] Error fetching notifications", error);
       return [];
     }
 

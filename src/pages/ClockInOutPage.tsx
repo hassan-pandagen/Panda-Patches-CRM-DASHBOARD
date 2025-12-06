@@ -42,7 +42,7 @@ const cardVariants = {
 const ClockInOutPage: React.FC = () => {
   const { user, role, permissions } = useAuth();
 
-  const [dateRange, setDateRange] = useState<DateRange>(getDefaultRange());
+  const [dateRange, setDateRange] = useState<DateRange>(() => getDefaultRange());
   const [currentTime, setCurrentTime] = useState(new Date());
   const [selectedUser, setSelectedUser] = useState<string>('');
   const [activeTab, setActiveTab] = useState<'clock' | 'admin'>('clock');
@@ -231,8 +231,13 @@ const ClockInOutPage: React.FC = () => {
       };
     });
 
-    if (!exportData.length) return;
-    const headers = Object.keys(exportData[0]).join(',');
+    if (!exportData || exportData.length === 0) return;
+    
+    // ✅ DAY 3 FIX: Add array bounds check
+    const firstRow = exportData[0];
+    if (!firstRow) return;
+    
+    const headers = Object.keys(firstRow).join(',');
     const rows = exportData.map(row => Object.values(row).join(','));
     const csv = [headers, ...rows].join('\n');
     const blob = new Blob([csv], { type: 'text/csv' });
@@ -255,8 +260,13 @@ const ClockInOutPage: React.FC = () => {
       'Absent/Incomplete': stat.incompleteDays,
     }));
 
-    if (!exportData.length) return;
-    const headers = Object.keys(exportData[0]).join(',');
+    if (!exportData || exportData.length === 0) return;
+    
+    // ✅ DAY 3 FIX: Add array bounds check
+    const firstRow = exportData[0];
+    if (!firstRow) return;
+    
+    const headers = Object.keys(firstRow).join(',');
     const rows = exportData.map(row => Object.values(row).join(','));
     const csv = [headers, ...rows].join('\n');
     const blob = new Blob([csv], { type: 'text/csv' });

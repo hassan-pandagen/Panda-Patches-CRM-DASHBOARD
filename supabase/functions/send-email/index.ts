@@ -31,21 +31,37 @@ const fetchFile = async (url: string) => {
         return null;
     }
 
-    // B. Download
-    const response = await fetch(url);
-    if (!response.ok) return null;
+    // ✅ DAY 2 FIX: Add timeout to file download (30 seconds)
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 30000);
 
-    // C. Size Check (Limit to 10MB to prevent SendGrid 400 Error)
-    const size = Number(response.headers.get('content-length'));
-    if (size && size > 10 * 1024 * 1024) {
-        console.warn(`Skipping large file (>10MB): ${url}`);
-        return null;
+    try {
+      // B. Download with timeout
+      const response = await fetch(url, { signal: controller.signal });
+      clearTimeout(timeoutId);
+
+      if (!response.ok) return null;
+
+      // C. Size Check (Limit to 10MB to prevent SendGrid 400 Error)
+      const size = Number(response.headers.get('content-length'));
+      if (size && size > 10 * 1024 * 1024) {
+          console.warn(`Skipping large file (>10MB): ${url}`);
+          return null;
+      }
+
+      const arrayBuffer = await response.arrayBuffer();
+      const base64 = encode(new Uint8Array(arrayBuffer));
+      
+      return { content: base64, type, isImage, filename: getFileName(url) };
+    } catch (fetchErr: any) {
+      clearTimeout(timeoutId);
+      if (fetchErr instanceof DOMException && fetchErr.name === 'AbortError') {
+        console.warn(`File download timeout (30s): ${url}`);
+      } else {
+        console.error(`File download error: ${url}`, fetchErr);
+      }
+      return null;
     }
-
-    const arrayBuffer = await response.arrayBuffer();
-    const base64 = encode(new Uint8Array(arrayBuffer));
-    
-    return { content: base64, type, isImage, filename: getFileName(url) };
   } catch (e) { return null; }
 };
 
@@ -113,27 +129,43 @@ serve(async (req) => {
     }
 
     // --- C. SEND TO SENDGRID ---
-    const response = await fetch('https://api.sendgrid.com/v3/mail/send', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${Deno.env.get('SENDGRID_API_KEY')}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        personalizations: [{
-            to: [{ email: to }],
-            dynamic_template_data: processedData
-        }],
-        from: { email: 'hello@pandapatches.com', name: 'Panda Patches' },
-        template_id: template_id,
-        attachments: attachments,
-      }),
-    });
+    // ✅ DAY 2 FIX: Add timeout to SendGrid API call (60 seconds)
+    const sgController = new AbortController();
+    const sgTimeoutId = setTimeout(() => sgController.abort(), 60000);
 
-    if (!response.ok) {
-        const errText = await response.text();
-        console.error("SendGrid Error:", errText);
-        throw new Error(errText);
+    try {
+      const response = await fetch('https://api.sendgrid.com/v3/mail/send', {
+        method: 'POST',
+        signal: sgController.signal,
+        headers: {
+          'Authorization': `Bearer ${Deno.env.get('SENDGRID_API_KEY')}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          personalizations: [{
+              to: [{ email: to }],
+              dynamic_template_data: processedData
+          }],
+          from: { email: 'hello@pandapatches.com', name: 'Panda Patches' },
+          template_id: template_id,
+          attachments: attachments,
+        }),
+      });
+
+      clearTimeout(sgTimeoutId);
+
+      if (!response.ok) {
+          const errText = await response.text();
+          console.error("SendGrid Error:", errText);
+          throw new Error(errText);
+      }
+    } catch (sgErr: any) {
+      clearTimeout(sgTimeoutId);
+      if (sgErr instanceof DOMException && sgErr.name === 'AbortError') {
+        console.error('SendGrid request timeout (60s)');
+        throw new Error('SendGrid request timed out');
+      }
+      throw sgErr;
     }
 
     return new Response(JSON.stringify({ success: true }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 });

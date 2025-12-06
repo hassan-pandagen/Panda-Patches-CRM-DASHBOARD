@@ -14,6 +14,7 @@ interface AuthContextType {
   permissions: any | null;
   settings: GlobalSettings | null;
   isLoading: boolean;
+  isProfileLoaded: boolean;
   isAuthenticated: boolean;
   signOut: () => Promise<void>;
 }
@@ -26,6 +27,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [settings, setSettings] = useState<GlobalSettings | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isProfileLoaded, setIsProfileLoaded] = useState(false);
 
   useEffect(() => {
     let mounted = true;
@@ -86,7 +88,10 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       } catch (error) {
         logger.error('[Auth Context] Unexpected auth error', error);
       } finally {
-        if (mounted) setIsLoading(false);
+        if (mounted) {
+          setIsLoading(false);
+          setIsProfileLoaded(true);
+        }
       }
     };
 
@@ -148,6 +153,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     permissions: profile?.permissions || null,
     settings,
     isLoading,
+    isProfileLoaded,
     isAuthenticated: !!user,
     signOut,
   };

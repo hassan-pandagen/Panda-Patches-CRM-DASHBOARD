@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { cva, type VariantProps } from 'class-variance-authority';
 import { Loader2 } from 'lucide-react';
 import { useRipple } from '../../hooks/useRipple'; // <--- Using your hook
+import { logger } from '../../services/logger';
 
 const buttonVariants = cva(
   'relative inline-flex items-center justify-center overflow-hidden rounded-lg font-semibold tracking-wide transition-all duration-300 ease-in-out focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-slate-900 disabled:opacity-50 disabled:cursor-not-allowed',
@@ -79,7 +80,7 @@ const Button = forwardRef<HTMLButtonElement, ButtonProps>(
             setIsSuccess(true);
             setTimeout(() => setIsSuccess(false), 2000);
           } catch (error) {
-            console.error("Button async onClick error:", error);
+            logger.error("Button async onClick error:", error);
           } finally {
             setInternalLoading(false);
           }

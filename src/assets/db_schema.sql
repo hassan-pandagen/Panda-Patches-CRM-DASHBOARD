@@ -179,6 +179,18 @@ UPDATE storage.buckets SET allowed_mime_types = NULL, public = true, file_size_l
 CREATE INDEX IF NOT EXISTS idx_orders_status ON public.orders(status);
 CREATE INDEX IF NOT EXISTS idx_orders_customer_email ON public.orders(customer_email);
 CREATE INDEX IF NOT EXISTS idx_orders_sales_agent ON public.orders(sales_agent);
+CREATE INDEX IF NOT EXISTS idx_orders_customer_phone ON public.orders(customer_phone);
+CREATE INDEX IF NOT EXISTS idx_orders_created_at ON public.orders(created_at);
+
+-- Indexes for Order History
+CREATE INDEX IF NOT EXISTS idx_order_history_order_id 
+ON public.order_history(order_id);
+CREATE INDEX IF NOT EXISTS idx_order_history_order_user 
+ON public.order_history(order_id, user_email);
+
+-- Indexes for Order Communications
+CREATE INDEX IF NOT EXISTS idx_order_communications_order_id 
+ON public.order_communications(order_id);
 
 -- ============================================================================
 -- CREATE INDEXES FOR PERFORMANCE

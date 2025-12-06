@@ -1,6 +1,7 @@
 // src/hooks/useClockInOut.ts
 import { useCallback, useRef } from 'react';
 import { supabase } from '../services/supabaseClient';
+import { logger } from '../services/logger';
 import { useAuth } from '../contexts/AuthContext';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { queryKeys } from '../constants/queryKeys';
@@ -145,29 +146,38 @@ export const useClockInOut = () => {
   });
 
   // ✅ NEW: Debounced clock in/out to prevent double submissions
+  // ✅ DAY 4 FIX: Add comprehensive error handling
   const debouncedClockIn = useCallback(async () => {
     if (clockInTimeoutRef.current) return; // Already pending
     try {
+      if (!user) throw new Error('User not authenticated');
       return await clockInMutation.mutateAsync();
+    } catch (err: any) {
+      logger.error('[Clock In] Error:', err.message);
+      throw err;
     } finally {
       // Debounce for 2 seconds to prevent rapid re-submissions
       clockInTimeoutRef.current = setTimeout(() => {
         clockInTimeoutRef.current = null;
       }, 2000);
     }
-  }, [clockInMutation]);
+  }, [clockInMutation, user]);
 
   const debouncedClockOut = useCallback(async () => {
     if (clockOutTimeoutRef.current) return; // Already pending
     try {
+      if (!todayAttendance) throw new Error('Not clocked in');
       return await clockOutMutation.mutateAsync();
+    } catch (err: any) {
+      logger.error('[Clock Out] Error:', err.message);
+      throw err;
     } finally {
       // Debounce for 2 seconds to prevent rapid re-submissions
       clockOutTimeoutRef.current = setTimeout(() => {
         clockOutTimeoutRef.current = null;
       }, 2000);
     }
-  }, [clockOutMutation]);
+  }, [clockOutMutation, todayAttendance]);
 
   return {
     todayAttendance,

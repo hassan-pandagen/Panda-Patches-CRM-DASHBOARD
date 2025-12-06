@@ -86,17 +86,20 @@ const CancellationChart: React.FC<CancellationChartProps> = ({ orders }) => {
 
   // 3. Rich Tooltip (Matches your Revenue Chart style)
   const CustomTooltip = ({ active, payload }: any) => {
-    if (active && payload && payload.length) {
+    // ✅ DAY 3 FIX: Add array bounds check
+    if (active && payload && payload.length > 0) {
       const data = payload[0];
+      if (!data) return null;
+      
       return (
         <div className="bg-slate-900/95 backdrop-blur-xl border border-white/10 p-4 rounded-xl shadow-2xl min-w-[200px] animate-in fade-in zoom-in-95 duration-200">
           <div className="flex items-center gap-2 mb-2 pb-2 border-b border-white/10">
             <span className="w-3 h-3 rounded-full" style={{ backgroundColor: data.fill }}></span>
-            <p className="font-bold text-white text-sm">{data.name}</p>
+            <p className="font-bold text-white text-sm">{data.name || 'Value'}</p>
           </div>
           <div className="flex justify-between items-center text-sm">
             <span className="text-slate-400">Count:</span>
-            <span className="text-white font-bold">{data.value} Orders</span>
+            <span className="text-white font-bold">{data.value || 0} Orders</span>
           </div>
         </div>
       );

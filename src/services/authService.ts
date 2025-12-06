@@ -1,53 +1,67 @@
-// src/services/authService.ts - FINAL SECURE VERSION
+// src/services/authService.ts - FINAL SECURE VERSION WITH ERROR HANDLING
 
-import { supabase } from './supabaseClient'; // We ONLY import the public client now
+import { supabase } from './supabaseClient';
 import { AuthChangeEvent, Session, User } from '@supabase/supabase-js';
 import { UserRole } from '../types';
-import { logger } from './logger'; // ✅ UPGRADE 6: Logger service
+import { logger } from './logger';
+import { performanceMonitor } from './performanceMonitor';
 
 // ------------------- AUTH BASICS -------------------
-// These functions are safe and do not need to change.
 
 export const signInUser = async (email: string, password: string) => {
-  return supabase.auth.signInWithPassword({ email: email.trim(), password });
+  try {
+    return await supabase.auth.signInWithPassword({ email: email.trim(), password });
+  } catch (err: any) {
+    logger.error('[Auth Service] Sign in failed', err);
+    throw err;
+  }
 };
 
 export const signOutUser = async () => {
-  return supabase.auth.signOut();
+  const end = performanceMonitor.startMeasure('signOutUser', 'api');
+  try {
+    const result = await supabase.auth.signOut();
+    end();
+    return result;
+  } catch (err: any) {
+    end();
+    logger.error('[Auth Service] Sign out failed', err);
+    throw err;
+  }
 };
 
-// Add this function to allow users to change their own password
 export const updateMyPassword = async (newPassword: string) => {
-  const { data, error } = await supabase.auth.updateUser({ 
-    password: newPassword 
-  });
-  
-  return { data, error };
+  try {
+    const { data, error } = await supabase.auth.updateUser({ 
+      password: newPassword 
+    });
+    
+    if (error) throw error;
+    return { data, error: null };
+  } catch (err: any) {
+    logger.error('[Auth Service] Password update failed', err);
+    return { data: null, error: err };
+  }
 };
-
-// ... (other non-admin functions like getSession, onAuthStateChange, etc. can stay)
-
 
 // ------------------- ADMIN ACTIONS -------------------
 
-// --- THIS IS THE NEW, SECURE VERSION OF THE FUNCTION ---
 export const createUserWithRole = async (
   email: string,
   role: UserRole,
   access: Record<string, boolean>,
   fullName: string,
-  password: string // <--- Add this argument
+  password: string
 ): Promise<{ user?: User; temporaryPassword?: string; error?: string }> => {
   try {
-    // Securely call the 'create-user' Edge Function
     const { data, error: invokeError } = await supabase.functions.invoke('create-user', {
-      // Send password to the edge function
       body: { email, role, fullName, access, password },
     });
 
     if (invokeError) throw new Error(invokeError.message);
-    if (data.error) throw new Error(data.error);
+    if (data?.error) throw new Error(data.error);
 
+    logger.info(`[Auth Service] User created: ${email}`);
     return data;
   } catch (err: any) {
     logger.error('[Auth Service] Error invoking create-user function', err);
@@ -55,35 +69,65 @@ export const createUserWithRole = async (
   }
 };
 
-// --- The following admin functions are now commented out. ---
-// --- They will be re-enabled one-by-one as you create Edge Functions for them. ---
-
 export const getAllUsers = async () => {
-  const { data, error } = await supabase.functions.invoke('get-users');
-  if (error) throw new Error(error.message);
-  // The function returns { users: [...] }
-  return data.users; 
+  const end = performanceMonitor.startMeasure('getAllUsers', 'api');
+  try {
+    const { data, error } = await supabase.functions.invoke('get-users');
+    
+    if (error) throw new Error(error.message);
+    if (!data?.users) throw new Error('Invalid response from get-users function');
+    
+    logger.info('[Auth Service] Retrieved all users');
+    end();
+    return data.users;
+  } catch (err: any) {
+    end();
+    logger.error('[Auth Service] Error fetching all users', err);
+    throw err;
+  }
 };
 
 export const deleteUser = async (userId: string) => {
-  const { data, error } = await supabase.functions.invoke('delete-user', {
-    body: { user_id: userId }
-  });
-  if (error) throw new Error(error.message);
-  if (data.error) throw new Error(data.error);
-  return data;
+  const end = performanceMonitor.startMeasure('deleteUser', 'api');
+  try {
+    if (!userId) throw new Error('User ID is required');
+    
+    const { data, error } = await supabase.functions.invoke('delete-user', {
+      body: { user_id: userId }
+    });
+    
+    if (error) throw new Error(error.message);
+    if (data?.error) throw new Error(data.error);
+    
+    logger.info(`[Auth Service] User deleted: ${userId}`);
+    end();
+    return data;
+  } catch (err: any) {
+    end();
+    logger.error('[Auth Service] Error deleting user', err);
+    throw err;
+  }
 };
 
 export const updateUserProfile = async (userId: string, updates: any) => {
-  const { data, error } = await supabase.functions.invoke('update-user', {
-    body: { user_id: userId, ...updates }
-  });
-  if (error) throw new Error(error.message);
-  if (data.error) throw new Error(data.error);
-  return data;
+  const end = performanceMonitor.startMeasure('updateUserProfile', 'api');
+  try {
+    if (!userId) throw new Error('User ID is required');
+    if (!updates || Object.keys(updates).length === 0) throw new Error('No updates provided');
+    
+    const { data, error } = await supabase.functions.invoke('update-user', {
+      body: { user_id: userId, ...updates }
+    });
+    
+    if (error) throw new Error(error.message);
+    if (data?.error) throw new Error(data.error);
+    
+    logger.info(`[Auth Service] User profile updated: ${userId}`);
+    end();
+    return data;
+  } catch (err: any) {
+    end();
+    logger.error('[Auth Service] Error updating user profile', err);
+    throw err;
+  }
 };
-/*
-export const updateUserPasswordById = async (userId: string, newPassword: string) => {
-  // TODO: Create an 'update-user-password' Edge Function
-};
-*/

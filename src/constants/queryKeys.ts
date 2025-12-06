@@ -7,16 +7,10 @@
 export const queryKeys = {
   // Dashboard queries
   dashboard: {
-    metrics: (startDate: string, endDate: string) => [
-      'dashboard-metrics',
-      startDate,
-      endDate,
-    ],
-    table: (startDate: string, endDate: string) => [
-      'dashboard-table',
-      startDate,
-      endDate,
-    ],
+    metrics: (startDate: string, endDate: string) => ['dashboard', 'metrics', startDate, endDate],
+    table: (startDate: string, endDate: string) => ['dashboard', 'table', startDate, endDate],
+    // NEW: Unified query for both metrics and table
+    unified: (startDate: string, endDate: string) => ['dashboard', 'unified', startDate, endDate],
   },
 
   // Orders queries

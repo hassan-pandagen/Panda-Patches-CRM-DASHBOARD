@@ -11,6 +11,7 @@ import FileUploadSection from './FileUpload';
 import Textarea from '../ui/Textarea'; 
 import { LEAD_SOURCE_OPTIONS } from '../../constants';
 import { supabase } from '../../services/supabaseClient';
+import { logger } from '../../services/logger';
 import { History, UserCheck, ExternalLink } from 'lucide-react';
 
 const CANCELLATION_REASONS = [
@@ -79,6 +80,7 @@ interface OrderFormProps {
   isSaving?: boolean;
   showFinancials?: boolean;
   isNewOrder?: boolean; // Add this prop
+  onFormChange?: () => void; // Callback when form data changes
 }
 
 interface ExistingCustomerInfo {
@@ -108,7 +110,8 @@ const OrderForm: React.FC<OrderFormProps> = ({
   onSave, 
   initialData, 
   showFinancials: showFinancialsProp,
-  isNewOrder = false
+  isNewOrder = false,
+  onFormChange
 }) => {
   const { role, permissions } = useAuth();
   
@@ -131,6 +134,13 @@ const OrderForm: React.FC<OrderFormProps> = ({
   useEffect(() => {
     reset(transformOrderToFormData(initialData));
   }, [initialData, reset]);
+
+  // ✅ Track form changes and notify parent (only call when explicitly user-modified, not on reset)
+  useEffect(() => {
+    if (isDirty && onFormChange) {
+      onFormChange();
+    }
+  }, [isDirty, onFormChange]);
 
   // --- LIVE CUSTOMER CHECK ---
   const watchEmail = watch('customerEmail');
@@ -162,12 +172,12 @@ const OrderForm: React.FC<OrderFormProps> = ({
           setExistingCustomer(null);
         }
       } catch (err) {
-        console.error("Error checking customer:", err);
+        logger.error("Error checking customer:", err);
         setExistingCustomer(null);
       } finally {
         setIsCheckingCustomer(false);
       }
-    };
+      };
 
     const handler = setTimeout(() => {
       const identifier = watchEmail || watchPhone;
@@ -190,13 +200,13 @@ const OrderForm: React.FC<OrderFormProps> = ({
       // ✅ FIX: Use the destructured success method
       success('Order saved successfully!');
     } catch (error: any) {
-      console.error("💥 Save Error:", error);
+      logger.error("💥 Save Error:", error);
       // ✅ FIX: Use the destructured showError method
       showError(error.message || 'Failed to save order. Please try again.');
     } finally {
       setIsSaving(false);
     }
-  };
+    };
 
   // Determine if the user can edit financials.
   // This is used for the Edit Order page. The New Order page controls this with the `showFinancials` prop.
@@ -371,9 +381,10 @@ const OrderForm: React.FC<OrderFormProps> = ({
           <div className="md:col-span-2">
             <FileUploadSection
               title="Mockups / Proofs"
-              bucketName={BUCKET_NAME} // <--- FIX: Uses correct bucket
+              bucketName={BUCKET_NAME}
               folderPath={`mockups/${orderNum}`}
               urls={watch('mockupUrls') || []}
+              onUrlsChange={(urls) => setValue('mockupUrls', urls)}
             />
           </div>
 
@@ -381,9 +392,10 @@ const OrderForm: React.FC<OrderFormProps> = ({
           <div className="md:col-span-2">
             <FileUploadSection
               title="Production Files (DST, EMB, PDF)"
-              bucketName={BUCKET_NAME} // <--- FIX
+              bucketName={BUCKET_NAME}
               folderPath={`production-files/${orderNum}`}
               urls={watch('productionFileUrls') || []}
+              onUrlsChange={(urls) => setValue('productionFileUrls', urls)}
             />
           </div>
 
@@ -391,9 +403,10 @@ const OrderForm: React.FC<OrderFormProps> = ({
           <div>
             <FileUploadSection
               title="Customer References"
-              bucketName={BUCKET_NAME} // <--- FIX
+              bucketName={BUCKET_NAME}
               folderPath={`customer-refs/${orderNum}`}
               urls={watch('customerAttachmentUrls') || []}
+              onUrlsChange={(urls) => setValue('customerAttachmentUrls', urls)}
             />
           </div>
           
@@ -401,9 +414,10 @@ const OrderForm: React.FC<OrderFormProps> = ({
           <div>
             <FileUploadSection
               title="Shipping Attachments / Labels"
-              bucketName={BUCKET_NAME} // <--- FIX
+              bucketName={BUCKET_NAME}
               folderPath={`shipping-docs/${orderNum}`}
               urls={watch('shippingAttachmentUrls') || []}
+              onUrlsChange={(urls) => setValue('shippingAttachmentUrls', urls)}
             />
           </div>
 

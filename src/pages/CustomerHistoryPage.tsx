@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { format } from 'date-fns';
 import { motion } from 'framer-motion';
 import { supabase } from '../services/supabaseClient';
+import { logger } from '../services/logger';
 import { Order, OrderStatus } from '../types';
 import { queryKeys } from '../constants/queryKeys';
 import Spinner from '../components/ui/Spinner';

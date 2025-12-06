@@ -87,6 +87,11 @@ const getFileName = (url: string): string => {
   }
 };
 
+const isValidEmail = (email: string): boolean => {
+  if (!email || typeof email !== 'string') return false;
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
+};
+
 export const mapDbToOrder = (data: any): Order => {
   // If no data is provided, return null to avoid errors downstream.
   if (!data) return null as any;
@@ -340,12 +345,23 @@ export const triggerStatusEmail = async (order: Order, statusToCheck: string) =>
     return;
   }
 
-  await Promise.all(requests.map(async (req) => {
+  // ✅ OPTIMIZATION: Batch insert communication records instead of individual inserts
+  // Reduces database round-trips from N to 1 (where N = number of emails)
+  const validRequests = requests.filter(req => {
     if (!req.to || !req.template_id) {
       logger.warn(`[Email Service] Skipping email: Missing ${!req.to ? 'recipient' : 'template'}`);
-      return;
+      return false;
     }
-    
+    if (!isValidEmail(req.to)) {
+      logger.error(`[Email Service] Invalid email format: ${req.to}`);
+      return false;
+    }
+    return true;
+  });
+
+  // Send emails in parallel
+  const emailPromises = validRequests.map(async (req) => {
+    const end = performanceMonitor.startMeasure(`sendEmail-${req.to}`, 'api');
     try {
       logger.info(`[Email Service] Sending email to: ${req.to}`);
       
@@ -358,22 +374,38 @@ export const triggerStatusEmail = async (order: Order, statusToCheck: string) =>
       });
       
       if (error) throw error;
-
-      await supabase.from('order_communications').insert({
+      end();
+      logger.info(`[Email Service] Email sent successfully to ${req.to}`);
+      
+      // Return data for batch insert
+      return {
         order_id: order.id,
         recipient_email: req.to,
         template_id: req.template_id,
         subject: `Auto-Trigger: ${statusToCheck}`,
         body: `Template Sent: ${req.template_id}`,
         visibility: 'internal'
-      });
-
-      logger.info(`[Email Service] Email sent successfully to ${req.to}`);
-
+      };
     } catch (err: any) {
+      end();
       logger.error(`[Email Service] Failed to send email to ${req.to}`, err);
+      return null;
     }
-  }));
+  });
+
+  // Execute email sends in parallel
+  const emailResults = await Promise.all(emailPromises);
+  const successfulEmails = emailResults.filter(Boolean);
+
+  // ✅ Batch insert all successful communication records in ONE query (not N queries)
+  if (successfulEmails.length > 0) {
+    try {
+      await supabase.from('order_communications').insert(successfulEmails);
+      logger.info(`[Email Service] Batch inserted ${successfulEmails.length} communication records`);
+    } catch (err: any) {
+      logger.error(`[Email Service] Failed to batch insert communications`, err);
+    }
+  }
 };
 
 // =====================================================================
@@ -381,30 +413,50 @@ export const triggerStatusEmail = async (order: Order, statusToCheck: string) =>
 // =====================================================================
 
 export const createOrder = async (orderData: any, userEmail: string) => {
-  const payload = toSnakeCase({ ...orderData, salesAgent: userEmail });
+  const end = performanceMonitor.startMeasure('createOrder', 'api');
+  try {
+    // Validate input
+    if (!orderData) throw new Error('Order data is required');
+    if (!userEmail) throw new Error('User email is required');
+    if (!isValidEmail(userEmail)) throw new Error('Invalid user email format');
 
-  const { data, error } = await supabase
-    .from('orders')
-    .insert([payload])
-    .select()
-    .single();
+    const payload = toSnakeCase({ ...orderData, salesAgent: userEmail });
 
-  if (error) throw error;
+    const { data, error } = await supabase
+      .from('orders')
+      .insert([payload])
+      .select()
+      .single();
 
-  await supabase.from('order_history').insert({
-    order_id: data.id,
-    user_email: userEmail,
-    field_changed: 'ORDER_CREATED',
-    new_value: 'Order Created'
-  });
+    if (error) throw error;
+    if (!data) throw new Error('Failed to create order: no data returned');
 
-  const mappedOrder = mapDbToOrder(data);
+    logger.info(`[Order Service] Order created: ${data.order_number}`);
 
-  triggerStatusEmail(mappedOrder, OrderStatus.NEW_ORDER).catch(err => 
+    // Log history
+    await supabase.from('order_history').insert({
+      order_id: data.id,
+      user_email: userEmail,
+      field_changed: 'ORDER_CREATED',
+      new_value: 'Order Created'
+    }).then(({ error: historyError }) => {
+      if (historyError) logger.warn('[Order Service] Failed to log order creation history', historyError);
+    });
+
+    const mappedOrder = mapDbToOrder(data);
+
+    // Trigger email (background, don't block)
+    triggerStatusEmail(mappedOrder, OrderStatus.NEW_ORDER).catch(err => 
       logger.error("[Email Service] Email trigger failed (background)", err)
-  );
+    );
 
-  return mappedOrder;
+    end();
+    return mappedOrder;
+  } catch (err: any) {
+    end();
+    logger.error('[Order Service] Create order failed', err);
+    throw err;
+  }
 };
 
 export const updateOrderDetails = async (
@@ -465,7 +517,7 @@ export const updateOrderDetails = async (
   // Trigger emails if status changed
   if (updates.status && updates.status !== oldOrder.status) {
     triggerStatusEmail(newOrder, updates.status).catch(err => 
-       console.error("⚠️ Email trigger failed (background):", err)
+       logger.error("⚠️ Email trigger failed (background):", err)
     );
   }
 

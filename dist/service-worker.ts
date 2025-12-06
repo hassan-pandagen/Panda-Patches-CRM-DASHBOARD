@@ -1,7 +1,10 @@
 // src/service-worker.ts
-// ✅ UPGRADE 9: Service Worker for offline support
+// ✅ UPGRADE 9: Service Worker for offline support + Image Optimization Caching
 
-const CACHE_NAME = 'panda-patches-v1';
+const CACHE_NAME = 'panda-patches-v2';
+const IMAGE_CACHE_NAME = 'panda-patches-images-v1';
+const RUNTIME_CACHE_NAME = 'panda-patches-runtime-v1';
+
 const urlsToCache = [
   '/',
   '/index.html',
@@ -29,22 +32,71 @@ self.addEventListener('fetch', (event: any) => {
     return;
   }
 
-  // Skip API calls - always go to network
-  if (event.request.url.includes('/rest/v1/') || event.request.url.includes('supabase')) {
+  const url = event.request.url;
+
+  // ✅ NEW: Handle image requests with aggressive caching
+  if (url.includes('/storage/v1/object') || url.includes('supabase.co') && (url.endsWith('.jpg') || url.endsWith('.jpeg') || url.endsWith('.png') || url.endsWith('.gif') || url.endsWith('.webp'))) {
     event.respondWith(
-      fetch(event.request)
-        .catch(() => {
-          // Return offline response for failed API calls
+      caches.match(event.request).then((response) => {
+        if (response) {
+          return response;
+        }
+
+        return fetch(event.request).then((response) => {
+          // Cache successful image responses
+          if (response && response.status === 200) {
+            const responseToCache = response.clone();
+            caches.open(IMAGE_CACHE_NAME).then((cache) => {
+              cache.put(event.request, responseToCache);
+            });
+          }
+          return response;
+        }).catch(() => {
+          // Return a placeholder if offline
           return new Response(
-            JSON.stringify({ error: 'offline' }),
+            'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="200" height="200"%3E%3Crect fill="%23333" width="200" height="200"/%3E%3Ctext fill="%23999" x="50%" y="50%" text-anchor="middle" dominant-baseline="middle"%3EOffline%3C/text%3E%3C/svg%3E',
             {
-              status: 503,
-              statusText: 'Service Unavailable',
-              headers: new Headers({
-                'Content-Type': 'application/json',
-              }),
+              status: 200,
+              headers: { 'Content-Type': 'image/svg+xml' },
             }
           );
+        });
+      })
+    );
+    return;
+  }
+
+  // Skip API calls - always go to network but cache successful responses
+  if (url.includes('/rest/v1/') || url.includes('supabase.co/functions')) {
+    event.respondWith(
+      fetch(event.request)
+        .then((response) => {
+          // Cache successful API responses
+          if (response && response.status === 200) {
+            const responseToCache = response.clone();
+            caches.open(RUNTIME_CACHE_NAME).then((cache) => {
+              cache.put(event.request, responseToCache);
+            });
+          }
+          return response;
+        })
+        .catch(() => {
+          // Return offline response for failed API calls
+          return caches.match(event.request).then((response) => {
+            if (response) {
+              return response;
+            }
+            return new Response(
+              JSON.stringify({ error: 'offline' }),
+              {
+                status: 503,
+                statusText: 'Service Unavailable',
+                headers: new Headers({
+                  'Content-Type': 'application/json',
+                }),
+              }
+            );
+          });
         })
     );
     return;
@@ -82,7 +134,8 @@ self.addEventListener('activate', (event: any) => {
     caches.keys().then((cacheNames) => {
       return Promise.all(
         cacheNames.map((cacheName) => {
-          if (cacheName !== CACHE_NAME) {
+          const validCaches = [CACHE_NAME, IMAGE_CACHE_NAME, RUNTIME_CACHE_NAME];
+          if (!validCaches.includes(cacheName)) {
             console.log('[Service Worker] Deleting old cache:', cacheName);
             return caches.delete(cacheName);
           }
@@ -98,5 +151,12 @@ self.addEventListener('activate', (event: any) => {
 self.addEventListener('message', (event: any) => {
   if (event.data && event.data.type === 'SKIP_WAITING') {
     (self as any).skipWaiting();
+  }
+  
+  // ✅ NEW: Handle cache clearing from app
+  if (event.data && event.data.type === 'CLEAR_CACHE') {
+    caches.delete(IMAGE_CACHE_NAME).then(() => {
+      console.log('[Service Worker] Image cache cleared');
+    });
   }
 });
