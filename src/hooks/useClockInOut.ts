@@ -86,7 +86,8 @@ export const useClockInOut = () => {
         .maybeSingle();
       
       if (fetchError) throw fetchError;
-      if (existing) throw new Error('You have already clocked in today. Please clock out first.');
+      // Allow clock in if not currently clocked in (even if they clocked out earlier)
+      if (existing && !existing.clock_out_time) throw new Error('You are already clocked in. Please clock out first.');
 
       const now = new Date();
       const todayDate = getTodayDate();

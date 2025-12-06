@@ -249,6 +249,36 @@ const ClockInOutPage: React.FC = () => {
     window.URL.revokeObjectURL(url);
   };
 
+  const handleForceClockOut = async (recordId: string, userEmail: string) => {
+    if (!confirm(`Force clock out for ${userEmail}?`)) return;
+    
+    try {
+      const record = allAttendance.find(r => r.id === recordId);
+      if (!record) return;
+      
+      const clockOutTime = new Date().toISOString();
+      const hoursWorked = (new Date(clockOutTime).getTime() - new Date(record.clock_in_time).getTime()) / (60 * 60 * 1000);
+      
+      const { error } = await supabase
+        .from('attendance_logs')
+        .update({ 
+          clock_out_time: clockOutTime,
+          shift_hours: hoursWorked
+        })
+        .eq('id', recordId);
+      
+      if (error) throw error;
+      
+      // Refetch data
+      const queryKey = queryKeys.attendance.all(dateRange, selectedUser);
+      queryClient.invalidateQueries({ queryKey });
+      
+      alert(`Forced clock out for ${userEmail}`);
+    } catch (error: any) {
+      alert(`Error: ${error.message}`);
+    }
+  };
+
   const handleExportMonthly = () => {
     const exportData = monthlyStats.map((stat) => ({
       'Employee Name': stat.name,
@@ -617,22 +647,42 @@ const ClockInOutPage: React.FC = () => {
 
                                 <td className="p-4">
                                   <p className="text-white font-semibold">
-                                    {record.shift_hours.toFixed(2)}h
+                                    {(() => {
+                                      const hours = record.clock_out_time 
+                                        ? record.shift_hours
+                                        : (new Date().getTime() - new Date(record.clock_in_time).getTime()) / (60 * 60 * 1000);
+                                      
+                                      if (hours < 1) {
+                                        const minutes = Math.round(hours * 60);
+                                        return `${minutes}m`;
+                                      }
+                                      return `${hours.toFixed(2)}h`;
+                                    })()}
                                   </p>
                                 </td>
 
-                                <td className="p-4">
-                                  {(() => {
-                                    // Map old "LATE" status to correct status
-                                    let correctedStatus = record.status;
-                                    if (record.status === 'LATE') {
-                                      if (record.shift_hours === 0) correctedStatus = 'INCOMPLETE';
-                                      else if (record.shift_hours >= SHIFT_CONFIG.OVERTIME_THRESHOLD) correctedStatus = 'OVERTIME';
-                                      else if (record.shift_hours < SHIFT_CONFIG.UNDERTIME_THRESHOLD) correctedStatus = 'UNDERTIME';
-                                      else correctedStatus = 'COMPLETED';
-                                    }
-                                    return <StatusBadge status={correctedStatus} />;
-                                  })()}
+                                <td className="p-4 flex items-center gap-2">
+                                  <div>
+                                    {(() => {
+                                      // Map old "LATE" status to correct status
+                                      let correctedStatus = record.status;
+                                      if (record.status === 'LATE') {
+                                        if (record.shift_hours === 0) correctedStatus = 'INCOMPLETE';
+                                        else if (record.shift_hours >= SHIFT_CONFIG.OVERTIME_THRESHOLD) correctedStatus = 'OVERTIME';
+                                        else if (record.shift_hours < SHIFT_CONFIG.UNDERTIME_THRESHOLD) correctedStatus = 'UNDERTIME';
+                                        else correctedStatus = 'COMPLETED';
+                                      }
+                                      return <StatusBadge status={correctedStatus} />;
+                                    })()}
+                                  </div>
+                                  {!record.clock_out_time && (
+                                    <button
+                                      onClick={() => handleForceClockOut(record.id, record.user_email)}
+                                      className="px-2 py-1 bg-red-600 hover:bg-red-700 text-white text-xs font-semibold rounded transition-colors whitespace-nowrap"
+                                    >
+                                      Force Out
+                                    </button>
+                                  )}
                                 </td>
                               </motion.tr>
                             ))
