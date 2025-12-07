@@ -1,62 +1,70 @@
 import React from 'react';
 import { AlertTriangle, RefreshCw, Home } from 'lucide-react';
-import { logger } from '../services/logger';
 import * as Sentry from "@sentry/react";
+import { logger } from '../services/logger';
 
-interface ErrorBoundaryState {
-  hasError: boolean;
+interface ChunkErrorBoundaryState {
+  hasChunkError: boolean;
   error: Error | null;
-  errorInfo: React.ErrorInfo | null;
+  retryCount: number;
 }
 
-class ErrorBoundary extends React.Component<
+class ChunkErrorBoundary extends React.Component<
   { children: React.ReactNode },
-  ErrorBoundaryState
+  ChunkErrorBoundaryState
 > {
   constructor(props: { children: React.ReactNode }) {
     super(props);
     this.state = { 
-      hasError: false, 
+      hasChunkError: false, 
       error: null,
-      errorInfo: null
+      retryCount: 0
     };
   }
 
-  static getDerivedStateFromError(error: Error): Partial<ErrorBoundaryState> {
-    return { hasError: true, error };
+  static getDerivedStateFromError(error: Error): Partial<ChunkErrorBoundaryState> {
+    // Check if it's a chunk loading error
+    if (error.message?.includes('dynamically imported module') || 
+        error.message?.includes('Failed to load chunk')) {
+      return { hasChunkError: true, error };
+    }
+    // Let other errors bubble up
+    throw error;
   }
 
   componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
-    logger.error('Error caught by boundary:', error, {
-      componentStack: errorInfo.componentStack
-    });
-    
-    // Send to Sentry
-    Sentry.captureException(error, {
-      contexts: {
-        react: {
-          componentStack: errorInfo.componentStack,
+    if (this.state.hasChunkError) {
+      logger.error('Chunk loading error:', error, errorInfo);
+      // Send to Sentry
+      Sentry.captureException(error, {
+        contexts: {
+          chunkError: {
+            message: error.message,
+            componentStack: errorInfo.componentStack,
+            retryCount: this.state.retryCount,
+          }
         }
-      }
-    });
-    
-    this.setState({
-      errorInfo: errorInfo
-    });
+      });
+    }
   }
 
-  handleReset = () => {
-    this.setState({ hasError: false, error: null, errorInfo: null });
-    // Optional: Navigate to home if using a router outside this boundary
-    window.location.href = '/'; 
+  handleRetry = () => {
+    this.setState(prev => ({ 
+      hasChunkError: false, 
+      error: null,
+      retryCount: prev.retryCount + 1
+    }));
+    // Hard reload to clear all caches
+    window.location.href = '/';
   };
 
-  handleReload = () => {
-    window.location.reload();
+  handleGoHome = () => {
+    this.setState({ hasChunkError: false, error: null });
+    window.location.href = '/';
   };
 
   render() {
-    if (this.state.hasError) {
+    if (this.state.hasChunkError) {
       return (
         <div className="min-h-screen bg-slate-900 flex items-center justify-center p-4 relative overflow-hidden">
           
@@ -67,44 +75,44 @@ class ErrorBoundary extends React.Component<
           <div className="relative bg-slate-900/60 backdrop-blur-xl border border-white/10 rounded-2xl p-8 max-w-lg w-full shadow-2xl">
             
             <div className="flex flex-col items-center text-center mb-6">
-              <div className="p-4 bg-red-500/10 rounded-full mb-4">
-                <AlertTriangle className="w-12 h-12 text-red-500" />
+              <div className="p-4 bg-orange-500/10 rounded-full mb-4">
+                <AlertTriangle className="w-12 h-12 text-orange-500" />
               </div>
-              <h2 className="text-2xl font-bold text-white">Something went wrong</h2>
+              <h2 className="text-2xl font-bold text-white">Loading Error</h2>
               <p className="text-slate-400 mt-2 text-sm">
-                We encountered an unexpected error. Our team has been notified.
+                Failed to load a required page module. This might be due to:
               </p>
+              <ul className="text-slate-400 mt-3 text-xs text-left list-disc list-inside space-y-1">
+                <li>Network connectivity issues</li>
+                <li>Browser cache problems</li>
+                <li>Server-side file issues</li>
+              </ul>
             </div>
             
             {/* Error Details Box */}
             <div className="bg-slate-950/50 border border-slate-800 rounded-xl p-4 mb-8 text-left overflow-hidden">
-              <p className="text-red-300 font-mono text-xs mb-2 break-words">
+              <p className="text-orange-300 font-mono text-xs break-words">
                 {this.state.error?.message || 'Unknown Error'}
               </p>
-              {process.env.NODE_ENV === 'development' && this.state.errorInfo && (
-                <details className="text-[10px] text-slate-500 cursor-pointer">
-                  <summary className="hover:text-slate-300 transition-colors">View Stack Trace</summary>
-                  <pre className="mt-2 whitespace-pre-wrap overflow-auto max-h-32 custom-scrollbar">
-                    {this.state.errorInfo.componentStack}
-                  </pre>
-                </details>
-              )}
+              <p className="text-slate-500 text-xs mt-2">
+                Retry count: {this.state.retryCount}
+              </p>
             </div>
 
             <div className="flex gap-4">
               <button 
-                onClick={this.handleReset}
+                onClick={this.handleGoHome}
                 className="flex-1 flex items-center justify-center gap-2 bg-slate-800 hover:bg-slate-700 text-white py-3 px-4 rounded-xl transition-all border border-slate-600 hover:border-slate-500 font-medium"
               >
                 <Home className="w-4 h-4" />
                 Go Home
               </button>
               <button 
-                onClick={this.handleReload}
+                onClick={this.handleRetry}
                 className="flex-1 flex items-center justify-center gap-2 bg-brand-orange hover:bg-orange-600 text-white py-3 px-4 rounded-xl transition-all shadow-lg shadow-brand-orange/20 font-bold"
               >
                 <RefreshCw className="w-4 h-4" />
-                Reload Page
+                Retry Load
               </button>
             </div>
           </div>
@@ -116,4 +124,4 @@ class ErrorBoundary extends React.Component<
   }
 }
 
-export { ErrorBoundary };
+export { ChunkErrorBoundary };

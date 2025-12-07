@@ -35,6 +35,7 @@ import AdminRoute from './AdminRoute'; // Adjust path if needed
 
 // ✅ NEW: Import ErrorBoundary for error handling
 import { ErrorBoundary } from '@/components/ErrorBoundary';
+import { ChunkErrorBoundary } from '@/components/ChunkErrorBoundary';
 
 // ✅ UPGRADE 9: Offline indicator
 import OfflineIndicator from '@/components/OfflineIndicator';
@@ -62,11 +63,13 @@ const App: React.FC = () => {
   return (
     // ✅ NEW: Wrap everything in QueryClientProvider
     <QueryClientProvider client={queryClient}>
-      {/* ✅ UPGRADE 9: Offline indicator */}
-      <OfflineIndicator />
-      <ToastProvider>
-        {/* ✅ UPGRADE 1: Suspense boundary for lazy-loaded routes */}
-        <Suspense fallback={<LazyLoadingFallback />}>
+      {/* ✅ FIX: Wrap in ChunkErrorBoundary to catch dynamic import failures */}
+      <ChunkErrorBoundary>
+        {/* ✅ UPGRADE 9: Offline indicator */}
+        <OfflineIndicator />
+        <ToastProvider>
+          {/* ✅ UPGRADE 1: Suspense boundary for lazy-loaded routes */}
+          <Suspense fallback={<LazyLoadingFallback />}>
           <Routes>
             {/* Public Route: Anyone can access the login page. */}
             <Route path="/login" element={<ErrorBoundary><LoginPage /></ErrorBoundary>} />
@@ -106,6 +109,7 @@ const App: React.FC = () => {
           </Routes>
         </Suspense>
       </ToastProvider>
+      </ChunkErrorBoundary>
     </QueryClientProvider>
   );
 };

@@ -1,7 +1,11 @@
 {
   "rewrites": [
     {
-      "source": "/(.*)",
+      "source": "/api/sentry-proxy",
+      "destination": "/api/sentry-proxy.ts"
+    },
+    {
+      "source": "^(?!/assets/).*",
       "destination": "/index.html"
     }
   ],

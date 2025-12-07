@@ -27,6 +27,38 @@ Sentry.init({
 // Make Sentry available in console for testing
 (window as any).Sentry = Sentry;
 
+// ✅ FIX: Catch chunk loading errors (dynamic import failures)
+window.addEventListener('error', (event) => {
+  // Check if this is a chunk loading error
+  if (event.filename?.includes('assets/') && event.filename?.includes('.js')) {
+    const error = new Error(`Failed to load chunk: ${event.filename}`);
+    Sentry.captureException(error, {
+      contexts: {
+        chunkError: {
+          filename: event.filename,
+          message: event.message,
+        }
+      }
+    });
+    console.error('Chunk loading error caught and sent to Sentry:', event);
+  }
+});
+
+// ✅ FIX: Also catch via unhandledrejection for promise-based dynamic imports
+window.addEventListener('unhandledrejection', (event) => {
+  if (event.reason?.message?.includes('dynamically imported module')) {
+    Sentry.captureException(event.reason, {
+      contexts: {
+        dynamicImportError: {
+          message: event.reason.message,
+          reason: String(event.reason),
+        }
+      }
+    });
+    console.error('Dynamic import error caught and sent to Sentry:', event.reason);
+  }
+});
+
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
