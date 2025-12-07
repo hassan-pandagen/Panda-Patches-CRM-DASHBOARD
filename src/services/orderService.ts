@@ -230,6 +230,12 @@ export const prepareEmailData = (order: Order, triggerStatus: string) => {
 // =====================================================================
 
 export const triggerStatusEmail = async (order: Order, statusToCheck: string) => {
+  // ✅ VALIDATION: Check if customer email exists
+  if (!order.customerEmail || !isValidEmail(order.customerEmail)) {
+    logger.warn(`[Email Service] Skipping email trigger - invalid customer email: ${order.customerEmail}`);
+    return;
+  }
+
   const emailData = prepareEmailData(order, statusToCheck);
   const requests: { to: string; template_id: string }[] = [];
 
@@ -363,9 +369,9 @@ export const triggerStatusEmail = async (order: Order, statusToCheck: string) =>
   const emailPromises = validRequests.map(async (req) => {
     const end = performanceMonitor.startMeasure(`sendEmail-${req.to}`, 'api');
     try {
-      logger.info(`[Email Service] Sending email to: ${req.to}`);
+      logger.info(`[Email Service] Sending email to: ${req.to}`, { template_id: req.template_id });
       
-      const { error } = await supabase.functions.invoke('send-email', {
+      const response = await supabase.functions.invoke('send-email', {
         body: { 
           to: req.to, 
           template_id: req.template_id, 
@@ -373,9 +379,15 @@ export const triggerStatusEmail = async (order: Order, statusToCheck: string) =>
         }
       });
       
-      if (error) throw error;
+      console.log('[Email Service] Function response:', response);
+      
+      if (response.error) {
+        logger.error(`[Email Service] Function returned error:`, response.error);
+        throw response.error;
+      }
+      
       end();
-      logger.info(`[Email Service] Email sent successfully to ${req.to}`);
+      logger.info(`[Email Service] Email sent successfully to ${req.to}`, { response: response.data });
       
       // Return data for batch insert
       return {
@@ -403,7 +415,9 @@ export const triggerStatusEmail = async (order: Order, statusToCheck: string) =>
       await supabase.from('order_communications').insert(successfulEmails);
       logger.info(`[Email Service] Batch inserted ${successfulEmails.length} communication records`);
     } catch (err: any) {
-      logger.error(`[Email Service] Failed to batch insert communications`, err);
+      // Don't block email sending if communication logging fails
+      // This could be due to missing table or RLS policy issues
+      logger.warn(`[Email Service] Skipping communication logging (table may not exist)`, err);
     }
   }
 };
@@ -446,9 +460,17 @@ export const createOrder = async (orderData: any, userEmail: string) => {
     const mappedOrder = mapDbToOrder(data);
 
     // Trigger email (background, don't block)
-    triggerStatusEmail(mappedOrder, OrderStatus.NEW_ORDER).catch(err => 
-      logger.error("[Email Service] Email trigger failed (background)", err)
-    );
+    // ✅ FIX: Ensure email errors are logged with context
+    triggerStatusEmail(mappedOrder, OrderStatus.NEW_ORDER).catch(err => {
+      const errorContext = {
+        orderId: data.id,
+        orderNumber: data.order_number,
+        customerEmail: mappedOrder.customerEmail,
+        status: OrderStatus.NEW_ORDER,
+        errorMessage: err?.message || String(err)
+      };
+      logger.error("[Email Service] Email trigger failed (background)", err, errorContext);
+    });
 
     end();
     return mappedOrder;

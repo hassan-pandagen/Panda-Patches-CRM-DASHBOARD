@@ -12,6 +12,7 @@ import { queryKeys } from "../constants/queryKeys";
 import { updateOrderDetails, mapDbToOrder } from "../services/orderService";
 import { useWarnIfUnsaved } from "../hooks";
 import UnsavedChangesModal from "../components/ui/UnsavedChangesModal";
+import { logger } from "../services/logger";
 
 import OrderForm, { SaveData } from "../components/orders/OrderForm";
 import Spinner from "../components/ui/Spinner";
@@ -83,24 +84,21 @@ const EditOrderPage: React.FC = () => {
 
       success(`Order ${updatedOrder.orderNumber} updated successfully!`);
 
+      // ✅ CRITICAL: Reset dirty state BEFORE navigation to prevent unsaved changes modal
+      setIsDirty(false);
+      setAllowNavigation(true);
+
       // Refresh cache
       await queryClient.invalidateQueries({
         queryKey: queryKeys.orders.single(orderNumber),
       });
       await queryClient.invalidateQueries({ queryKey: queryKeys.orders.all() });
 
-      // ✅ Allow navigation and navigate to order detail page
-      setAllowNavigation(true);
-      setIsDirty(false);
-      
-      // Use a small timeout to ensure state updates before navigation
-      setTimeout(() => {
-        navigate(`/order/${updatedOrder.orderNumber}`);
-      }, 100);
+      // ✅ Navigate to order detail page
+      navigate(`/order/${updatedOrder.orderNumber}`);
     } catch (err: any) {
       logger.error("💥 Save failed:", err);
       showError(err.message || "An unknown error occurred while saving.");
-    } finally {
       setIsSaving(false);
     }
   };

@@ -69,6 +69,12 @@ serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
 
   try {
+    // ✅ CHECK: Verify SendGrid API key is configured
+    if (!Deno.env.get('SENDGRID_API_KEY')) {
+      console.error('❌ CRITICAL: SENDGRID_API_KEY is not set in Supabase secrets');
+      throw new Error('SendGrid API key not configured in Supabase secrets');
+    }
+
     const { to, template_id, dynamic_data } = await req.json();
     const attachments = [];
 
