@@ -72,10 +72,17 @@ export interface SaveData {
   // ✅ Add these
   reasonCategory: string;
   reasonDetails: string;
+  internalNote?: string;
+}
+
+export interface ChangeDetail {
+  field: keyof SaveData;
+  oldValue: any;
+  newValue: any;
 }
 
 interface OrderFormProps {
-  onSave: (formData: SaveData) => void;
+  onSave: (data: { current: SaveData, isNew: boolean, changes: ChangeDetail[] }) => void;
   initialData?: Order | null;
   isSaving?: boolean;
   showFinancials?: boolean;
@@ -103,6 +110,7 @@ const transformOrderToFormData = (order: Order | null | undefined): SaveData => 
     // ✅ Initialize new fields
     reasonCategory: order.reasonCategory || '',
     reasonDetails: order.reasonDetails || '',
+    internalNote: order.internalNote || '',
   };
 };
 
@@ -196,9 +204,30 @@ const OrderForm: React.FC<OrderFormProps> = ({
     try {
       // This will now always succeed because of Step 1,
       // unless the Database itself is down.
-      await onSave(data);
+      const changes: ChangeDetail[] = [];
+      if (!isNewOrder && initialData) {
+        // Compare current form data with the initial data to find what changed.
+        for (const key in data) {
+          const typedKey = key as keyof SaveData;
+          // Using JSON.stringify to reliably compare values, including arrays.
+          if (JSON.stringify(formDefaultValues[typedKey]) !== JSON.stringify(data[typedKey])) {
+            changes.push({
+              field: typedKey,
+              oldValue: formDefaultValues[typedKey],
+              newValue: data[typedKey],
+            });
+          }
+        }
+      }
+
+      await onSave({
+        current: data,
+        isNew: isNewOrder,
+        changes,
+      });
       // ✅ FIX: Use the destructured success method
       success('Order saved successfully!');
+      reset(data); // <-- CRITICAL FIX: Reset form state to prevent "unsaved changes" warning.
     } catch (error: any) {
       logger.error("💥 Save Error:", error);
       // ✅ FIX: Use the destructured showError method
@@ -482,6 +511,19 @@ const OrderForm: React.FC<OrderFormProps> = ({
               <span className="text-sm font-bold text-slate-200">Mark as Urgent</span>
             </label>
           </div>
+        </div>
+        
+        {/* ✅ NEW: Internal Note for Admins */}
+        <div className="mt-10">
+          <label className="block text-sm font-medium text-slate-300">
+            Internal Note (Visible to Admins Only)
+          </label>
+          <Textarea
+            {...register('internalNote')}
+            rows={3}
+            className="w-full mt-1"
+            placeholder="e.g., 'Approved by Jane Doe on 10/26/2023 - customer confirmed via phone.'"
+          />
         </div>
 
         {/* ✅ NEW: CONDITIONAL REASON BLOCK */}

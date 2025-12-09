@@ -337,18 +337,29 @@ GRANT SELECT ON auth.users TO postgres;
 
 GRANT INSERT ON public.user_profiles TO postgres;
 
+-- This function is now callable and can create a profile for any user ID.
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS TRIGGER AS $$
+DECLARE
+    user_email text;
+    user_full_name text;
 BEGIN
-    IF new.email ILIKE 'hello@pandapatches.com' THEN
+    -- Get user details from auth.users
+    SELECT email, raw_user_meta_data->>'full_name'
+    INTO user_email, user_full_name
+    FROM auth.users
+    WHERE id = NEW.id;
+
+    -- Check if the new user is an admin based on their email
+    IF user_email ILIKE 'hello@pandapatches.com' THEN
         INSERT INTO public.user_profiles (id, email, full_name, role, permissions)
-        VALUES (new.id, new.email, new.raw_user_meta_data->>'full_name', 'ADMIN',
+        VALUES (NEW.id, user_email, user_full_name, 'ADMIN',
             '{"users_manage": true, "orders_create": true, "orders_view_all": true, "orders_change_status": true, "orders_edit_financials": true, "orders_edit_production": true, "orders_delete": true, "reports_view_financials": true, "shipping_view": true}'::jsonb);
     ELSE
         INSERT INTO public.user_profiles (id, email, full_name, role, permissions)
-        VALUES (new.id, new.email, new.raw_user_meta_data->>'full_name', 'USER', '{"users_manage": false, "orders_create": true, "orders_view_all": false, "orders_change_status": true, "orders_edit_financials": false, "orders_edit_production": false, "orders_delete": false, "reports_view_financials": false, "shipping_view": true}'::jsonb);
+        VALUES (NEW.id, user_email, user_full_name, 'USER', '{"users_manage": false, "orders_create": true, "orders_view_all": false, "orders_change_status": true, "orders_edit_financials": false, "orders_edit_production": false, "orders_delete": false, "reports_view_financials": false, "shipping_view": true}'::jsonb);
     END IF;
-    RETURN new;
+    RETURN NEW;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
@@ -656,6 +667,25 @@ BEGIN
             permissions = admin_permissions;
     END IF;
 END $$;
+
+-- This block will find any users in `auth.users` who are missing a profile
+-- in `public.user_profiles` and create one for them. This is a one-time fix.
+DO $$
+DECLARE
+    r record;
+BEGIN
+    FOR r IN (SELECT id, email, raw_user_meta_data FROM auth.users WHERE id NOT IN (SELECT id FROM public.user_profiles))
+    LOOP
+        IF r.email ILIKE 'hello@pandapatches.com' THEN
+            INSERT INTO public.user_profiles (id, email, full_name, role, permissions)
+            VALUES (r.id, r.email, r.raw_user_meta_data->>'full_name', 'ADMIN', '{"users_manage": true, "orders_create": true, "orders_view_all": true, "orders_change_status": true, "orders_edit_financials": true, "orders_edit_production": true, "orders_delete": true, "reports_view_financials": true, "shipping_view": true}'::jsonb);
+        ELSE
+            INSERT INTO public.user_profiles (id, email, full_name, role, permissions)
+            VALUES (r.id, r.email, r.raw_user_meta_data->>'full_name', 'USER', '{"users_manage": false, "orders_create": true, "orders_view_all": false, "orders_change_status": true, "orders_edit_financials": false, "orders_edit_production": false, "orders_delete": false, "reports_view_financials": false, "shipping_view": true}'::jsonb);
+        END IF;
+    END LOOP;
+END $$;
+
 
 -- SECTION 10: SETTINGS TABLE (FINAL FIX)
 -- -----------------------------------------------------------------
