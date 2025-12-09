@@ -142,6 +142,17 @@ export interface OrderHistoryEntry {
   changedAt: string; // ISO string
 }
 
+export interface AttendanceSession {
+  id: string;
+  user_id: string;
+  user_email: string;
+  user_name: string;
+  clock_in_time: string; // ISO 8601 timestamp
+  clock_out_time: string | null; // ISO 8601 timestamp or null
+  duration_hours: number;
+  work_date: string; // YYYY-MM-DD
+}
+
 export interface OrderSummary {
   id: number;
   orderNumber: string;

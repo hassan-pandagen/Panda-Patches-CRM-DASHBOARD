@@ -1,41 +1,59 @@
+// api/sentry-proxy.ts
 import { VercelRequest, VercelResponse } from '@vercel/node';
+import fetch from 'node-fetch';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  // Only allow POST requests
-  if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method not allowed' });
-  }
-
   try {
-    // Extract the original Sentry ingest URL from environment
-    const sentryIngestUrl = 'https://1d30e386f4968460dc23045cb808978d@o4510487337762816.ingest.us.sentry.io/4510487352639488';
+    const envelope = req.body;
+    const piece = envelope.split('\n')[0];
+    const header = JSON.parse(piece);
+    const dsn = new URL(header.dsn);
 
-    console.log('[Sentry Proxy] Forwarding error event to Sentry');
-    console.log('[Sentry Proxy] Body preview:', JSON.stringify(req.body).substring(0, 200));
+    // You can add your own logic here to filter events
+    // if you want to.
+    // For example, you can deny events from certain IPs, etc.
+    // if (shouldBeBlocked(req)) {
+    //   return res.status(403).send('Forbidden');
+    // }
 
-    // Forward the request to Sentry with proper headers
-    const response = await fetch(sentryIngestUrl, {
+    const projectId = dsn.pathname.substring(1);
+    const sentryHost = dsn.hostname;
+
+    // Use environment variables for security and flexibility
+    const SENTRY_PROJECT_ID = process.env.SENTRY_PROJECT_ID;
+    const SENTRY_HOST = process.env.SENTRY_HOST;
+
+    if (!SENTRY_PROJECT_ID || !SENTRY_HOST) {
+      console.error('Sentry environment variables SENTRY_PROJECT_ID and SENTRY_HOST must be set.');
+      return res.status(500).send('Proxy configuration error.');
+    }
+
+    if (sentryHost !== SENTRY_HOST) {
+      console.error(`Invalid Sentry host: ${sentryHost}`);
+      return res.status(400).send('Invalid Sentry host.');
+    }
+
+    if (projectId !== SENTRY_PROJECT_ID) {
+      console.error(`Invalid Sentry project ID: ${projectId}`);
+      return res.status(400).send('Invalid Sentry project ID.');
+    }
+
+    const url = `https://${sentryHost}/api/${projectId}/envelope/`;
+
+    const response = await fetch(url, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'User-Agent': req.headers['user-agent'] || 'Sentry Client',
-      },
-      body: JSON.stringify(req.body),
+      body: envelope,
     });
 
-    console.log('[Sentry Proxy] Sentry response status:', response.status);
+    response.headers.forEach((value, key) => {
+      // Sentry returns headers that we need to forward to the client.
+      // For example, it can tell the client to back off if it's sending too many events.
+      res.setHeader(key, value);
+    });
 
-    // Return success response to client (always 200 to prevent client retries)
-    res.status(200).json({ 
-      success: response.ok,
-      sentryStatus: response.status
-    });
-  } catch (error) {
-    console.error('[Sentry Proxy] Error forwarding to Sentry:', error);
-    // Still return 200 so client doesn't retry
-    res.status(200).json({ 
-      success: false, 
-      error: error instanceof Error ? error.message : 'Proxy error' 
-    });
+    return res.status(response.status).send(response.body);
+  } catch (e) {
+    console.error('Error in Sentry proxy:', e);
+    return res.status(500).send('Error proxying to Sentry');
   }
 }

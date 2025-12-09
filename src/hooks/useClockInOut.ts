@@ -1,196 +1,119 @@
 // src/hooks/useClockInOut.ts
-import { useCallback, useRef } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { startOfDay, endOfDay } from 'date-fns';
 import { supabase } from '../services/supabaseClient';
-import { logger } from '../services/logger';
 import { useAuth } from '../contexts/AuthContext';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { queryKeys } from '../constants/queryKeys';
-
-export interface AttendanceRecord {
-  id: string;
-  user_id: string;
-  user_email: string;
-  user_name: string;
-  work_date: string;
-  clock_in_time: string;
-  clock_out_time: string | null;
-  shift_hours: number;
-  status: 'ON_TIME' | 'LATE' | 'INCOMPLETE' | 'COMPLETED' | 'UNDERTIME' | 'OVERTIME';
-  notes: string | null;
-  created_at: string;
-  updated_at: string;
-}
+import { AttendanceSession } from '../types'; // Assuming you'll add this type
 
 export const SHIFT_CONFIG = {
-  SHIFT_START: '00:00', // 24/7 - anytime
-  SHIFT_END: '23:59',   // 24/7 - anytime
   REQUIRED_HOURS: 8,
   OVERTIME_THRESHOLD: 8.5,
   UNDERTIME_THRESHOLD: 7.5,
-  // Note: Late tracking disabled (24/7 operation)
+};
+
+/**
+ * Fetches all attendance sessions for the current user for today.
+ */
+const fetchTodayAttendance = async (userId: string): Promise<AttendanceSession[]> => {
+  const todayStart = startOfDay(new Date()).toISOString();
+  const todayEnd = endOfDay(new Date()).toISOString();
+
+  const { data, error } = await supabase
+    .from('attendance_sessions')
+    .select('*')
+    .eq('user_id', userId)
+    .gte('clock_in_time', todayStart)
+    .lte('clock_in_time', todayEnd)
+    .order('clock_in_time', { ascending: true });
+
+  if (error) throw error;
+  return data || [];
+};
+
+/**
+ * Finds the currently active (not clocked out) session for the user.
+ */
+const findActiveSession = async (userId: string): Promise<AttendanceSession | null> => {
+  const { data, error } = await supabase
+    .from('attendance_sessions')
+    .select('*')
+    .eq('user_id', userId)
+    .is('clock_out_time', null)
+    .single();
+
+  if (error && error.code !== 'PGRST116') { // PGRST116 = no rows returned
+    throw error;
+  }
+  return data;
 };
 
 export const useClockInOut = () => {
-   const { user } = useAuth();
-   const queryClient = useQueryClient();
-   
-   // ✅ NEW: Debounce refs to prevent double submissions
-   const clockInTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-   const clockOutTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
 
-  const getTodayDate = useCallback((): string => {
-    const now = new Date();
-    const pakistanTime = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Karachi' }));
-    return pakistanTime.toISOString().split('T')[0];
-  }, []);
-
-  // ✅ REMOVED: isLateArrival - 24/7 operation means no late tracking
-
-  const determineStatus = useCallback((hoursWorked: number): AttendanceRecord['status'] => {
-    if (hoursWorked === 0) return 'INCOMPLETE';
-    if (hoursWorked >= SHIFT_CONFIG.OVERTIME_THRESHOLD) return 'OVERTIME';
-    if (hoursWorked < SHIFT_CONFIG.UNDERTIME_THRESHOLD) return 'UNDERTIME';
-    return 'COMPLETED';
-  }, []);
-
-  // --- DATA FETCHING with React Query ---
-  const { data: todayAttendance, isLoading: isLoadingToday } = useQuery<AttendanceRecord | null>({
+  const { data: todaySessions = [], isLoading: isLoadingToday } = useQuery({
     queryKey: queryKeys.attendance.today(user?.id),
-    queryFn: async () => {
-      if (!user) return null;
-      const today = getTodayDate();
-      const { data, error } = await supabase
-        .from('attendance_logs')
-        .select('*')
-        .eq('user_id', user.id)
-        .eq('work_date', today)
-        .maybeSingle();
-      if (error) throw error;
-      return data;
-    },
+    queryFn: () => fetchTodayAttendance(user!.id),
     enabled: !!user,
   });
 
-  // --- MUTATIONS with React Query ---
+  const activeSession = todaySessions.find(s => s.clock_out_time === null);
+  const isClockedIn = !!activeSession;
+
+  const invalidateQueries = () => {
+    queryClient.invalidateQueries({ queryKey: queryKeys.attendance.today(user?.id) });
+    // Also invalidate the admin query if it's being used
+    queryClient.invalidateQueries({ queryKey: ['attendance', 'all'] });
+  };
+
   const clockInMutation = useMutation({
     mutationFn: async () => {
-      if (!user) throw new Error('User not authenticated.');
-      
-      // Fetch fresh attendance record to avoid race conditions
-      const today = getTodayDate();
-      const { data: existing, error: fetchError } = await supabase
-        .from('attendance_logs')
-        .select('*')
-        .eq('user_id', user.id)
-        .eq('work_date', today)
-        .maybeSingle();
-      
-      if (fetchError) throw fetchError;
-      // Allow clock in if not currently clocked in (even if they clocked out earlier)
-      if (existing && !existing.clock_out_time) throw new Error('You are already clocked in. Please clock out first.');
-
-      const now = new Date();
-      const todayDate = getTodayDate();
+      if (!user) throw new Error('User not authenticated');
+      if (isClockedIn) throw new Error('You are already clocked in.');
 
       const { data, error } = await supabase
-        .from('attendance_logs')
+        .from('attendance_sessions')
         .insert({
           user_id: user.id,
-          user_email: user.email,
-          user_name: user.user_metadata?.full_name || user.email.split('@')[0],
-          work_date: todayDate,
-          clock_in_time: now.toISOString(),
-          status: 'ON_TIME', // 24/7 operation - no late tracking
-        })
-        .select()
-        .single();
+          user_email: user.email!,
+          user_name: user.user_metadata.full_name || user.email,
+          clock_in_time: new Date().toISOString(),
+          work_date: new Date().toISOString().split('T')[0],
+        });
 
-      if (error) {
-        if (error.message.includes('duplicate key')) {
-          throw new Error('You have already clocked in today. Please clock out first.');
-        }
-        throw error;
-      }
-      return data;
+      if (error) throw error;
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.attendance.today(user?.id) });
-    },
+    onSuccess: invalidateQueries,
   });
 
   const clockOutMutation = useMutation({
     mutationFn: async () => {
-      if (!todayAttendance) throw new Error('Not clocked in.');
-
-      const now = new Date();
-      const clockInTime = new Date(todayAttendance.clock_in_time);
-      const hoursWorked = (now.getTime() - clockInTime.getTime()) / 1000 / 60 / 60;
-      const status = determineStatus(hoursWorked);
+      if (!user) throw new Error('User not authenticated');
+      const sessionToClockOut = await findActiveSession(user.id);
+      if (!sessionToClockOut) throw new Error('No active session to clock out from.');
 
       const { data, error } = await supabase
-        .from('attendance_logs')
-        .update({
-          clock_out_time: now.toISOString(),
-          shift_hours: Math.round(hoursWorked * 100) / 100,
-          status,
-        })
-        .eq('id', todayAttendance.id)
-        .select()
-        .single();
+        .from('attendance_sessions')
+        .update({ clock_out_time: new Date().toISOString() })
+        .eq('id', sessionToClockOut.id);
 
       if (error) throw error;
-      return data;
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.attendance.today(user?.id) });
-    },
+    onSuccess: invalidateQueries,
   });
 
-  // ✅ NEW: Debounced clock in/out to prevent double submissions
-  // ✅ DAY 4 FIX: Add comprehensive error handling
-  const debouncedClockIn = useCallback(async () => {
-    if (clockInTimeoutRef.current) return; // Already pending
-    try {
-      if (!user) throw new Error('User not authenticated');
-      return await clockInMutation.mutateAsync();
-    } catch (err: any) {
-      logger.error('[Clock In] Error:', err.message);
-      throw err;
-    } finally {
-      // Debounce for 2 seconds to prevent rapid re-submissions
-      clockInTimeoutRef.current = setTimeout(() => {
-        clockInTimeoutRef.current = null;
-      }, 2000);
-    }
-  }, [clockInMutation, user]);
-
-  const debouncedClockOut = useCallback(async () => {
-    if (clockOutTimeoutRef.current) return; // Already pending
-    try {
-      if (!todayAttendance) throw new Error('Not clocked in');
-      return await clockOutMutation.mutateAsync();
-    } catch (err: any) {
-      logger.error('[Clock Out] Error:', err.message);
-      throw err;
-    } finally {
-      // Debounce for 2 seconds to prevent rapid re-submissions
-      clockOutTimeoutRef.current = setTimeout(() => {
-        clockOutTimeoutRef.current = null;
-      }, 2000);
-    }
-  }, [clockOutMutation, todayAttendance]);
-
   return {
-    todayAttendance,
+    todaySessions,
+    activeSession,
+    isClockedIn,
     isLoadingToday,
-    clockIn: debouncedClockIn,
+    clockIn: clockInMutation.mutate,
     isClockingIn: clockInMutation.isPending,
-    clockOut: debouncedClockOut,
-    isClockingOut: clockOutMutation.isPending,
     clockInError: clockInMutation.error,
+    clockOut: clockOutMutation.mutate,
+    isClockingOut: clockOutMutation.isPending,
     clockOutError: clockOutMutation.error,
     SHIFT_CONFIG,
   };
 };
-
-export default useClockInOut;

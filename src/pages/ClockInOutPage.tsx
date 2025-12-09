@@ -53,7 +53,9 @@ const ClockInOutPage: React.FC = () => {
 
   // --- NEW: Refactored hook usage ---
   const {
-    todayAttendance,
+    todaySessions,
+    activeSession,
+    isClockedIn,
     isLoadingToday,
     clockIn,
     isClockingIn,
@@ -64,7 +66,6 @@ const ClockInOutPage: React.FC = () => {
     SHIFT_CONFIG,
   } = useClockInOut();
 
-  const isLoading = isLoadingToday || isClockingIn || isClockingOut;
   const error = clockInError?.message || clockOutError?.message;
 
   // --- NEW: Admin-specific data fetching ---
@@ -72,7 +73,7 @@ const ClockInOutPage: React.FC = () => {
     queryKey: queryKeys.attendance.all(dateRange, selectedUser),
     queryFn: async () => {
       let query = supabase
-        .from('attendance_logs')
+        .from('attendance_sessions')
         .select('*')
         .gte('work_date', dateRange.startDate)
         .lte('work_date', dateRange.endDate)
@@ -103,12 +104,17 @@ const ClockInOutPage: React.FC = () => {
 
   // Calculate current shift time remaining
   const getTimeRemaining = (): string => {
-    if (!todayAttendance?.clock_in_time) return 'N/A';
+    if (!isClockedIn) return 'N/A';
 
-    const clockInTime = new Date(todayAttendance.clock_in_time);
+    const totalMsWorkedToday = todaySessions.reduce((total, session) => {
+      const start = new Date(session.clock_in_time).getTime();
+      // If session is ongoing, count up to now. Otherwise, use clock_out_time.
+      const end = session.clock_out_time ? new Date(session.clock_out_time).getTime() : currentTime.getTime();
+      return total + (end - start);
+    }, 0);
+
     const requiredMs = SHIFT_CONFIG.REQUIRED_HOURS * 60 * 60 * 1000;
-    const elapsed = currentTime.getTime() - clockInTime.getTime();
-    const remaining = Math.max(0, requiredMs - elapsed);
+    const remaining = Math.max(0, requiredMs - totalMsWorkedToday);
 
     const hours = Math.floor(remaining / (60 * 60 * 1000));
     const minutes = Math.floor((remaining % (60 * 60 * 1000)) / (60 * 1000));
@@ -116,20 +122,13 @@ const ClockInOutPage: React.FC = () => {
     return `${hours}h ${minutes}m`;
   };
 
-  // Calculate hours worked
-  const getHoursWorked = (): number => {
-    if (!todayAttendance?.clock_in_time) return 0;
-
-    const clockInTime = new Date(todayAttendance.clock_in_time);
-    const endTime = todayAttendance.clock_out_time
-      ? new Date(todayAttendance.clock_out_time)
-      : currentTime;
-
-    return (endTime.getTime() - clockInTime.getTime()) / (60 * 60 * 1000);
-  };
-
-  const hoursWorked = getHoursWorked();
-  const isClockedIn = !!todayAttendance?.clock_in_time && !todayAttendance?.clock_out_time;
+  const totalHoursWorked = useMemo(() => {
+    return todaySessions.reduce((total, session) => {
+      const start = new Date(session.clock_in_time);
+      const end = session.clock_out_time ? new Date(session.clock_out_time) : currentTime;
+      return total + (end.getTime() - start.getTime()) / (3600 * 1000);
+    }, 0);
+  }, [todaySessions, currentTime]);
 
   // ✅ FIX: Calculate unique users directly in the component using useMemo
   const uniqueUsers = useMemo(() => {
@@ -166,23 +165,21 @@ const ClockInOutPage: React.FC = () => {
       }
       const stats = userStats.get(record.user_email);
       stats.totalDays += 1;
-      stats.totalHours += record.shift_hours;
+      stats.totalHours += record.duration_hours;
 
       // ✅ Map old "LATE" status to correct status (24/7 operation)
-      let correctedStatus = record.status;
-      if (record.status === 'LATE') {
-        if (record.shift_hours === 0) correctedStatus = 'INCOMPLETE';
-        else if (record.shift_hours >= SHIFT_CONFIG.OVERTIME_THRESHOLD) correctedStatus = 'OVERTIME';
-        else if (record.shift_hours < SHIFT_CONFIG.UNDERTIME_THRESHOLD) correctedStatus = 'UNDERTIME';
-        else correctedStatus = 'COMPLETED';
-      }
+      let correctedStatus;
+      if (record.duration_hours === 0) correctedStatus = 'INCOMPLETE';
+      else if (record.duration_hours >= SHIFT_CONFIG.OVERTIME_THRESHOLD) correctedStatus = 'OVERTIME';
+      else if (record.duration_hours < SHIFT_CONFIG.UNDERTIME_THRESHOLD) correctedStatus = 'UNDERTIME';
+      else correctedStatus = 'COMPLETED';
 
       if (correctedStatus === 'INCOMPLETE') stats.incompleteDays += 1;
       if (correctedStatus === 'OVERTIME') {
-        stats.overtimeHours += Math.max(0, record.shift_hours - SHIFT_CONFIG.REQUIRED_HOURS);
+        stats.overtimeHours += Math.max(0, record.duration_hours - SHIFT_CONFIG.REQUIRED_HOURS);
       }
       if (correctedStatus === 'UNDERTIME') {
-        stats.undertimeHours += Math.max(0, SHIFT_CONFIG.REQUIRED_HOURS - record.shift_hours);
+        stats.undertimeHours += Math.max(0, SHIFT_CONFIG.REQUIRED_HOURS - record.duration_hours);
       }
     });
     return Array.from(userStats.values());
@@ -212,13 +209,12 @@ const ClockInOutPage: React.FC = () => {
   const handleExportDaily = () => {
     const exportData = allAttendance.map((record) => {
       // Map old "LATE" status to correct status based on hours (24/7 no late tracking)
-      let correctedStatus = record.status;
-      if (record.status === 'LATE') {
-        if (record.shift_hours === 0) correctedStatus = 'INCOMPLETE';
-        else if (record.shift_hours >= SHIFT_CONFIG.OVERTIME_THRESHOLD) correctedStatus = 'OVERTIME';
-        else if (record.shift_hours < SHIFT_CONFIG.UNDERTIME_THRESHOLD) correctedStatus = 'UNDERTIME';
-        else correctedStatus = 'COMPLETED';
-      }
+      let correctedStatus;
+      if (record.duration_hours === 0) correctedStatus = 'INCOMPLETE';
+      else if (record.duration_hours >= SHIFT_CONFIG.OVERTIME_THRESHOLD) correctedStatus = 'OVERTIME';
+      else if (record.duration_hours < SHIFT_CONFIG.UNDERTIME_THRESHOLD) correctedStatus = 'UNDERTIME';
+      else correctedStatus = 'COMPLETED';
+      
 
       return {
         'Employee Name': record.user_name,
@@ -226,7 +222,7 @@ const ClockInOutPage: React.FC = () => {
         'Date': format(parseISO(record.work_date), 'MMM dd, yyyy'),
         'Clock In': format(parseISO(record.clock_in_time), 'h:mm:ss a'), // 12-hour with AM/PM
         'Clock Out': record.clock_out_time ? format(parseISO(record.clock_out_time), 'h:mm:ss a') : '—',
-        'Hours Worked': record.shift_hours.toFixed(2),
+        'Hours Worked': record.duration_hours.toFixed(2),
         'Status': correctedStatus,
       };
     });
@@ -260,10 +256,9 @@ const ClockInOutPage: React.FC = () => {
       const hoursWorked = (new Date(clockOutTime).getTime() - new Date(record.clock_in_time).getTime()) / (60 * 60 * 1000);
       
       const { error } = await supabase
-        .from('attendance_logs')
+        .from('attendance_sessions')
         .update({ 
           clock_out_time: clockOutTime,
-          shift_hours: hoursWorked
         })
         .eq('id', recordId);
       
@@ -375,30 +370,30 @@ const ClockInOutPage: React.FC = () => {
                   </p>
                 </div>
 
-                {todayAttendance?.clock_in_time && (
-                  <div className="space-y-3 mb-8 bg-slate-800/30 rounded-xl p-4">
-                    <div className="flex justify-between items-center">
-                      <span className="text-slate-400">Clock In Time:</span>
-                      <span className="text-white font-semibold">
-                        {format(parseISO(todayAttendance.clock_in_time), 'h:mm:ss a')}
-                      </span>
-                    </div>
-                    {todayAttendance.clock_out_time && (
-                      <div className="flex justify-between items-center">
-                        <span className="text-slate-400">Clock Out Time:</span>
-                        <span className="text-white font-semibold">
-                          {format(parseISO(todayAttendance.clock_out_time), 'h:mm:ss a')}
+                {todaySessions.length > 0 && (
+                  <div className="space-y-4 mb-8 bg-slate-800/30 rounded-xl p-4">
+                    {/* Session List */}
+                    {todaySessions.map(session => (
+                      <div key={session.id} className="flex justify-between items-center text-sm">
+                        <span className="text-slate-400">
+                          {format(parseISO(session.clock_in_time), 'h:mm a')} → {session.clock_out_time ? format(parseISO(session.clock_out_time), 'h:mm a') : 'Now'}
+                        </span>
+                        <span className="text-white font-mono">
+                          {session.clock_out_time
+                            ? `${session.duration_hours.toFixed(2)}h`
+                            : '...'}
                         </span>
                       </div>
-                    )}
+                    ))}
+                    {/* Total Hours */}
                     <div className="flex justify-between items-center">
-                      <span className="text-slate-400">Hours Worked:</span>
+                      <span className="text-slate-400 font-bold">Total Hours:</span>
                       <span className="text-brand-orange font-bold text-lg">
-                        {hoursWorked.toFixed(2)}h
+                        {totalHoursWorked.toFixed(2)}h
                       </span>
                     </div>
                     {isClockedIn && (
-                      <div className="flex justify-between items-center">
+                      <div className="flex justify-between items-center pt-2 border-t border-slate-700">
                         <span className="text-slate-400">Time Remaining:</span>
                         <span className="text-blue-400 font-bold">
                           {getTimeRemaining()}
@@ -411,7 +406,7 @@ const ClockInOutPage: React.FC = () => {
                 <div className="flex gap-4">
                   <button
                     onClick={clockIn}
-                    disabled={isClockedIn || isLoading}
+                    disabled={isClockedIn || isClockingIn}
                     className={`flex-1 py-4 px-6 rounded-xl font-bold text-lg transition-all flex items-center justify-center gap-2 ${
                       isClockedIn
                         ? 'bg-slate-700 text-slate-400 cursor-not-allowed'
@@ -424,7 +419,7 @@ const ClockInOutPage: React.FC = () => {
 
                   <button
                     onClick={clockOut}
-                    disabled={!isClockedIn || isLoading}
+                    disabled={!isClockedIn || isClockingOut}
                     className={`flex-1 py-4 px-6 rounded-xl font-bold text-lg transition-all flex items-center justify-center gap-2 ${
                       !isClockedIn
                         ? 'bg-slate-700 text-slate-400 cursor-not-allowed'
@@ -450,12 +445,12 @@ const ClockInOutPage: React.FC = () => {
                   <h3 className="text-sm font-semibold text-slate-400 uppercase">Status</h3>
                 </div>
                 <p className="text-2xl font-bold text-white mb-2">
-                  {todayAttendance?.status || 'No Data'}
+                  {isClockedIn ? 'Clocked In' : 'Clocked Out'}
                 </p>
                 <p className="text-xs text-slate-500">
-                  {todayAttendance
-                    ? `Updated: ${format(parseISO(todayAttendance.updated_at), 'HH:mm')}`
-                    : 'Not started'}
+                  {activeSession
+                    ? `Since: ${format(parseISO(activeSession.clock_in_time), 'h:mm a')}`
+                    : 'Ready to clock in'}
                 </p>
               </div>
             </div>
@@ -469,13 +464,13 @@ const ClockInOutPage: React.FC = () => {
                   <h3 className="text-sm font-semibold text-slate-400 uppercase">Hours</h3>
                 </div>
                 <p className="text-2xl font-bold text-white">
-                  {hoursWorked.toFixed(1)}h / {SHIFT_CONFIG.REQUIRED_HOURS}h
+                  {totalHoursWorked.toFixed(1)}h / {SHIFT_CONFIG.REQUIRED_HOURS}h
                 </p>
                 <div className="w-full bg-slate-700 rounded-full h-2 mt-3 overflow-hidden">
                   <div
                     className="bg-gradient-to-r from-brand-orange to-orange-600 h-full transition-all"
                     style={{
-                      width: `${Math.min((hoursWorked / SHIFT_CONFIG.REQUIRED_HOURS) * 100, 100)}%`,
+                      width: `${Math.min((totalHoursWorked / SHIFT_CONFIG.REQUIRED_HOURS) * 100, 100)}%`,
                     }}
                   />
                 </div>
@@ -648,10 +643,10 @@ const ClockInOutPage: React.FC = () => {
                                 <td className="p-4">
                                   <p className="text-white font-semibold">
                                     {(() => {
-                                      const hours = record.clock_out_time 
-                                        ? record.shift_hours
+                                      let hours = record.clock_out_time 
+                                        ? record.duration_hours
                                         : (new Date().getTime() - new Date(record.clock_in_time).getTime()) / (60 * 60 * 1000);
-                                      
+                                      if (!hours) hours = 0;
                                       if (hours < 1) {
                                         const minutes = Math.round(hours * 60);
                                         return `${minutes}m`;
@@ -665,13 +660,12 @@ const ClockInOutPage: React.FC = () => {
                                   <div>
                                     {(() => {
                                       // Map old "LATE" status to correct status
-                                      let correctedStatus = record.status;
-                                      if (record.status === 'LATE') {
-                                        if (record.shift_hours === 0) correctedStatus = 'INCOMPLETE';
-                                        else if (record.shift_hours >= SHIFT_CONFIG.OVERTIME_THRESHOLD) correctedStatus = 'OVERTIME';
-                                        else if (record.shift_hours < SHIFT_CONFIG.UNDERTIME_THRESHOLD) correctedStatus = 'UNDERTIME';
-                                        else correctedStatus = 'COMPLETED';
-                                      }
+                                      let correctedStatus;
+                                      if (record.duration_hours === 0) correctedStatus = 'INCOMPLETE';
+                                      else if (record.duration_hours >= SHIFT_CONFIG.OVERTIME_THRESHOLD) correctedStatus = 'OVERTIME';
+                                      else if (record.duration_hours < SHIFT_CONFIG.UNDERTIME_THRESHOLD) correctedStatus = 'UNDERTIME';
+                                      else correctedStatus = 'COMPLETED';
+                                      
                                       return <StatusBadge status={correctedStatus} />;
                                     })()}
                                   </div>

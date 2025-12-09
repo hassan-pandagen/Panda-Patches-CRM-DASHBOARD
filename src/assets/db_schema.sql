@@ -114,28 +114,29 @@ CREATE TABLE public.email_templates (
 
 -- ============================================================================
 -- ATTENDANCE LOGS TABLE - For Clock In/Out System
+-- NEW: attendance_sessions for multiple clock-ins per day
 -- ============================================================================
 DROP TABLE IF EXISTS public.attendance_logs CASCADE;
+DROP TABLE IF EXISTS public.attendance_sessions CASCADE;
 
-CREATE TABLE public.attendance_logs (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+CREATE TABLE public.attendance_sessions (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  user_id uuid NULL,
   user_email text NOT NULL,
-  user_name text NOT NULL,
-  work_date date NOT NULL,
+  user_name text NULL,
   clock_in_time timestamptz NOT NULL,
-  clock_out_time timestamptz,
-  shift_hours numeric(5, 2) DEFAULT 0,
-  status text DEFAULT 'INCOMPLETE', -- 'ON_TIME' | 'LATE' | 'INCOMPLETE' | 'COMPLETED' | 'UNDERTIME' | 'OVERTIME'
-  notes text,
-  created_at timestamptz DEFAULT now(),
-  updated_at timestamptz DEFAULT now()
+  clock_out_time timestamptz NULL,
+  duration_hours numeric GENERATED ALWAYS AS (
+    CASE
+      WHEN clock_out_time IS NOT NULL THEN EXTRACT(epoch FROM (clock_out_time - clock_in_time)) / 3600
+      ELSE 0
+    END
+  ) STORED,
+  work_date date NOT NULL,
+  CONSTRAINT attendance_sessions_pkey PRIMARY KEY (id)
 );
 
--- Add unique constraint AFTER table creation
-ALTER TABLE public.attendance_logs 
-ADD CONSTRAINT attendance_logs_user_work_date_unique 
-UNIQUE (user_id, work_date);
+ALTER TABLE public.attendance_sessions ENABLE ROW LEVEL SECURITY;
 
 -- ============================================================================
 -- ATTENDANCE_SUMMARY TABLE - For Monthly/Payroll Reports
@@ -176,11 +177,11 @@ UPDATE storage.buckets SET allowed_mime_types = NULL, public = true, file_size_l
 
 -- SECTION 4: INDEXES
 -- -----------------------------------------------------------------
-CREATE INDEX IF NOT EXISTS idx_orders_status ON public.orders(status);
-CREATE INDEX IF NOT EXISTS idx_orders_customer_email ON public.orders(customer_email);
-CREATE INDEX IF NOT EXISTS idx_orders_sales_agent ON public.orders(sales_agent);
-CREATE INDEX IF NOT EXISTS idx_orders_customer_phone ON public.orders(customer_phone);
-CREATE INDEX IF NOT EXISTS idx_orders_created_at ON public.orders(created_at);
+CREATE INDEX IF NOT EXISTS idx_orders_status ON public.orders(status text_ops);
+CREATE INDEX IF NOT EXISTS idx_orders_customer_email ON public.orders(customer_email text_ops);
+CREATE INDEX IF NOT EXISTS idx_orders_sales_agent ON public.orders(sales_agent text_ops);
+CREATE INDEX IF NOT EXISTS idx_orders_customer_phone ON public.orders(customer_phone text_ops);
+CREATE INDEX IF NOT EXISTS idx_orders_created_at ON public.orders(created_at timestamptz_ops);
 
 -- Indexes for Order History
 CREATE INDEX IF NOT EXISTS idx_order_history_order_id 
@@ -195,10 +196,10 @@ ON public.order_communications(order_id);
 -- ============================================================================
 -- CREATE INDEXES FOR PERFORMANCE
 -- ============================================================================
-CREATE INDEX IF NOT EXISTS idx_attendance_logs_user_email ON public.attendance_logs(user_email);
-CREATE INDEX IF NOT EXISTS idx_attendance_logs_date ON public.attendance_logs(work_date);
-CREATE INDEX IF NOT EXISTS idx_attendance_logs_user_id ON public.attendance_logs(user_id);
-CREATE INDEX IF NOT EXISTS idx_attendance_logs_status ON public.attendance_logs(status);
+CREATE INDEX IF NOT EXISTS idx_attendance_sessions_user_email ON public.attendance_sessions(user_email);
+CREATE INDEX IF NOT EXISTS idx_attendance_sessions_date ON public.attendance_sessions(work_date);
+CREATE INDEX IF NOT EXISTS idx_attendance_sessions_user_id ON public.attendance_sessions(user_id);
+
 CREATE INDEX IF NOT EXISTS idx_attendance_summary_user_email ON public.attendance_summary(user_email);
 CREATE INDEX IF NOT EXISTS idx_attendance_summary_month ON public.attendance_summary(month);
 CREATE INDEX IF NOT EXISTS idx_attendance_summary_user_id ON public.attendance_summary(user_id);
@@ -445,26 +446,24 @@ ALTER TABLE public.monthly_costs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.order_communications ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.email_templates ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.attendance_summary ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.attendance_logs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.attendance_sessions ENABLE ROW LEVEL SECURITY;
 ALTER VIEW public.sales_agent_reports OWNER TO postgres;
 
 -- Policies (Profiles)
 DROP POLICY IF EXISTS "users_read_own" ON public.user_profiles;
 CREATE POLICY "users_read_own" ON public.user_profiles FOR SELECT USING (auth.uid() = id);
 DROP POLICY IF EXISTS "admins_manage_all" ON public.user_profiles;
-CREATE POLICY "admins_manage_all" ON public.user_profiles FOR ALL USING (public.has_permission('users_manage'));
+CREATE POLICY "admins_manage_all" ON public.user_profiles FOR ALL USING ((SELECT role FROM public.user_profiles WHERE id = auth.uid()) = 'ADMIN');
 
 -- Policies (Orders)
 -- STEP 2: Fix RLS Policies - Sales agents see ONLY their orders
 -- -----------------------------------------------------------------
 
 -- 🔥 DROP OLD POLICIES
-DROP POLICY IF EXISTS "orders_select_policy" ON public.orders;
-DROP POLICY IF EXISTS "orders_insert_policy" ON public.orders;
-DROP POLICY IF EXISTS "orders_update_admin" ON public.orders;
-DROP POLICY IF EXISTS "orders_update_sales_agent" ON public.orders;
-DROP POLICY IF EXISTS "orders_update_production" ON public.orders;
-DROP POLICY IF EXISTS "users_delete_orders" ON public.orders;
+DROP POLICY IF EXISTS "orders_select_policy" ON public.orders CASCADE;
+DROP POLICY IF EXISTS "orders_insert_policy" ON public.orders CASCADE;
+DROP POLICY IF EXISTS "orders_update_policy" ON public.orders CASCADE;
+DROP POLICY IF EXISTS "users_delete_orders" ON public.orders CASCADE;
 
 -- ✅ SELECT POLICY: 
 -- - ADMINS: See everything
@@ -496,37 +495,17 @@ WITH CHECK (
     (SELECT (permissions->>'orders_create')::boolean FROM public.user_profiles WHERE id = auth.uid()) = true
 );
 
--- ✅ UPDATE POLICY - ADMINS: Full access
-CREATE POLICY "orders_update_admin" 
+-- ✅ UPDATE POLICY:
+-- - ADMINS: Can update all
+-- - PRODUCTION: Can update all (trigger restricts fields)
+-- - SALES AGENTS: Can only update their own
+CREATE POLICY "orders_update_policy"
 ON public.orders 
 FOR UPDATE 
 USING (
     (SELECT role FROM public.user_profiles WHERE id = auth.uid()) = 'ADMIN'
-) 
-WITH CHECK (true);
-
--- ✅ UPDATE POLICY - PRODUCTION: Can update ALL orders (but trigger will block status/financials)
-CREATE POLICY "orders_update_production" 
-ON public.orders 
-FOR UPDATE 
-USING (
-    (SELECT (permissions->>'orders_edit_production')::boolean FROM public.user_profiles WHERE id = auth.uid()) = true
-) 
-WITH CHECK (true);
-
--- ✅ UPDATE POLICY - SALES AGENTS: Can ONLY update their own orders
-CREATE POLICY "orders_update_sales_agent" 
-ON public.orders 
-FOR UPDATE 
-USING (
-    sales_agent = (SELECT email FROM public.user_profiles WHERE id = auth.uid())
-    AND
-    -- Must NOT have orders_view_all (that's for production)
-    (SELECT (permissions->>'orders_view_all')::boolean FROM public.user_profiles WHERE id = auth.uid()) IS NOT TRUE
-) 
-WITH CHECK (
-    -- Prevent reassigning orders to someone else
-    sales_agent = (SELECT email FROM public.user_profiles WHERE id = auth.uid())
+    OR (SELECT (permissions->>'orders_edit_production')::boolean FROM public.user_profiles WHERE id = auth.uid()) = true
+    OR (sales_agent = (SELECT email FROM public.user_profiles WHERE id = auth.uid()))
 );
 
 -- ✅ DELETE POLICY: Only users with orders_delete permission
@@ -547,25 +526,12 @@ CREATE POLICY "team_manage_comms" ON public.order_communications FOR ALL TO auth
 -- ============================================================================
 -- ROW LEVEL SECURITY (RLS) POLICIES
 -- ============================================================================
--- Attendance Logs Policies
-DROP POLICY IF EXISTS "Users can view own attendance" ON public.attendance_logs;
-CREATE POLICY "Users can view own attendance"
-  ON public.attendance_logs FOR SELECT
-  USING (auth.uid() = user_id OR EXISTS (
-    SELECT 1 FROM public.user_profiles WHERE id = auth.uid() AND role = 'ADMIN'
-  ));
-
-DROP POLICY IF EXISTS "Users can insert own attendance" ON public.attendance_logs;
-CREATE POLICY "Users can insert own attendance"
-  ON public.attendance_logs FOR INSERT
-  WITH CHECK (auth.uid() = user_id);
-
-DROP POLICY IF EXISTS "Users can update own attendance" ON public.attendance_logs;
-CREATE POLICY "Users can update own attendance"
-  ON public.attendance_logs FOR UPDATE
-  USING (auth.uid() = user_id OR EXISTS (
-    SELECT 1 FROM public.user_profiles WHERE id = auth.uid() AND role = 'ADMIN'
-  ));
+-- Attendance Sessions Policies
+DROP POLICY IF EXISTS "Allow individual user access to their own sessions" ON public.attendance_sessions;
+CREATE POLICY "Allow individual user access to their own sessions"
+ON public.attendance_sessions
+FOR ALL
+USING (auth.uid() = user_id);
 
 -- Attendance Summary Policies
 DROP POLICY IF EXISTS "Users can view own summary" ON public.attendance_summary;
@@ -581,7 +547,6 @@ CREATE POLICY "Only admins can modify summary"
   USING (EXISTS (
     SELECT 1 FROM public.user_profiles WHERE id = auth.uid() AND role = 'ADMIN'
   ));
-DROP POLICY IF EXISTS "users_insert_own_attendance" ON public.attendance_logs;
 
 -- Policies (Storage - CRITICAL FIX)
 DROP POLICY IF EXISTS "Allow authenticated uploads to logos" ON storage.objects;
