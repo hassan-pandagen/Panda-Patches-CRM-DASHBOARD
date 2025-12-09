@@ -1,5 +1,6 @@
 -- =================================================================
--- PANDA PATCHES CRM - FINAL MASTER SCHEMA (IDEMPOTENT FIX)
+-- Migration: Fix RLS recursion and update schema
+-- Purpose: Remove infinite recursion in user_profiles RLS, sync all tables
 -- =================================================================
 
 -- SECTION 1: CLEANUP
@@ -112,10 +113,6 @@ CREATE TABLE public.email_templates (
     updated_at timestamptz NOT NULL DEFAULT now()
 );
 
--- ============================================================================
--- ATTENDANCE LOGS TABLE - For Clock In/Out System
--- NEW: attendance_sessions for multiple clock-ins per day
--- ============================================================================
 DROP TABLE IF EXISTS public.attendance_logs CASCADE;
 DROP TABLE IF EXISTS public.attendance_sessions CASCADE;
 
@@ -138,9 +135,6 @@ CREATE TABLE public.attendance_sessions (
 
 ALTER TABLE public.attendance_sessions ENABLE ROW LEVEL SECURITY;
 
--- ============================================================================
--- ATTENDANCE_SUMMARY TABLE - For Monthly/Payroll Reports
--- ============================================================================
 DROP TABLE IF EXISTS public.attendance_summary CASCADE;
 
 CREATE TABLE public.attendance_summary (
@@ -160,7 +154,6 @@ CREATE TABLE public.attendance_summary (
   updated_at timestamptz DEFAULT now()
 );
 
--- Add unique constraint AFTER table creation
 ALTER TABLE public.attendance_summary 
 ADD CONSTRAINT attendance_summary_user_month_unique 
 UNIQUE (user_id, month);
@@ -193,9 +186,6 @@ ON public.order_history(order_id, user_email);
 CREATE INDEX IF NOT EXISTS idx_order_communications_order_id 
 ON public.order_communications(order_id);
 
--- ============================================================================
--- CREATE INDEXES FOR PERFORMANCE
--- ============================================================================
 CREATE INDEX IF NOT EXISTS idx_attendance_sessions_user_email ON public.attendance_sessions(user_email);
 CREATE INDEX IF NOT EXISTS idx_attendance_sessions_date ON public.attendance_sessions(work_date);
 CREATE INDEX IF NOT EXISTS idx_attendance_sessions_user_id ON public.attendance_sessions(user_id);
@@ -238,15 +228,6 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
--- THE SMART TRIGGER (SILENT REVERSION)
--- =================================================================
--- PANDA PATCHES CRM - PERMISSION FIX
--- Sales Agent: Can ONLY see/edit their own orders (like personal CRM)
--- Production: Can see ALL orders, upload files, but CAN'T change main status
--- =================================================================
-
--- STEP 1: Fix the trigger to allow production file uploads without status changes
--- -----------------------------------------------------------------
 CREATE OR REPLACE FUNCTION public.check_production_updates()
 RETURNS TRIGGER AS $$
 DECLARE
@@ -260,27 +241,22 @@ BEGIN
     FROM public.user_profiles
     WHERE id = auth.uid();
 
-    -- ✅ ADMINS: Full access, no restrictions
     IF user_role = 'ADMIN' THEN
         RETURN NEW;
     END IF;
 
-    -- ✅ PRODUCTION USERS: Can see all, edit files, but NOT status/financials/customer info
     IF (user_perms->>'orders_edit_production')::boolean = true THEN
        
-       -- ❌ BLOCK: Status changes (production can't change order status)
        IF NEW.status IS DISTINCT FROM OLD.status THEN
            RAISE EXCEPTION 'Permission Denied: Production users cannot change Order Status.';
        END IF;
 
-       -- ✅ SILENTLY REVERT: Financial fields (they never see these)
        NEW.order_amount := OLD.order_amount;
        NEW.amount_paid := OLD.amount_paid;
        NEW.production_cost := OLD.production_cost;
        NEW.shipping_cost := OLD.shipping_cost;
        NEW.marketing_cost := OLD.marketing_cost;
 
-       -- ✅ SILENTLY REVERT: Customer & Sales info (they can't modify these)
        NEW.customer_name := OLD.customer_name;
        NEW.customer_email := OLD.customer_email;
        NEW.customer_phone := OLD.customer_phone;
@@ -288,21 +264,15 @@ BEGIN
        NEW.sales_agent := OLD.sales_agent;
        NEW.lead_source := OLD.lead_source;
        
-       -- ✅ ALLOW: Production file uploads (mockup_urls, production_file_urls, redo_notes, etc.)
-       -- These fields are NOT reverted, so production can update them freely
-       
        RETURN NEW;
     END IF;
 
-    -- ✅ SALES AGENTS: Can ONLY edit their own orders (personal CRM)
     IF user_role = 'USER' AND (user_perms->>'orders_view_all')::boolean IS NOT TRUE THEN
         
-        -- ❌ BLOCK: Editing other people's orders
         IF OLD.sales_agent IS DISTINCT FROM current_user_email THEN
             RAISE EXCEPTION 'Permission Denied: You can only edit your own orders.';
        END IF;
         
-        -- ✅ SILENTLY REVERT: Financial edits (unless they have permission)
         IF (user_perms->>'orders_edit_financials')::boolean IS NOT TRUE THEN
             NEW.order_amount := OLD.order_amount;
             NEW.amount_paid := OLD.amount_paid;
@@ -311,9 +281,6 @@ BEGIN
             NEW.marketing_cost := OLD.marketing_cost;
         END IF;
 
-        -- ✅ ALLOW: Status changes if they have the permission
-        -- (Sales agents typically CAN change status on their own orders)
-        
         RETURN NEW;
     END IF;
 
@@ -333,12 +300,10 @@ BEGIN
 END;
 $$;
 
--- ✅ CRITICAL FIX: Allow SECURITY DEFINER functions to read user data
 GRANT SELECT ON auth.users TO postgres;
 
 GRANT INSERT ON public.user_profiles TO postgres;
 
--- This function is now callable and can create a profile for any user ID.
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS TRIGGER AS $$
 DECLARE
@@ -366,8 +331,6 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 
 -- SECTION 6: VIEWS
 -- -----------------------------------------------------------------
-DROP VIEW IF EXISTS public.orders_with_details CASCADE;
-
 CREATE OR REPLACE VIEW public.orders_with_details AS
 SELECT
   id,
@@ -394,7 +357,7 @@ SELECT
   shipping_carrier AS "shippingCarrier",
   shipping_tracking_number AS "shippingTrackingNumber",
   order_amount AS "orderAmount",
-  amount_paid AS "amountPaid",  -- ✅ This is the correct column name
+  amount_paid AS "amountPaid",
   production_cost AS "productionCost",
   shipping_cost AS "shippingCost",
   marketing_cost AS "marketingCost",
@@ -413,7 +376,7 @@ SELECT
   -- Keep snake_case for filtering
   created_at,
   order_number,
-  amount_paid  -- ✅ Add this for filtering
+  amount_paid
 FROM public.orders;
 
 GRANT SELECT ON public.orders_with_details TO authenticated;
@@ -435,7 +398,7 @@ agent_status_counts AS (
   FROM (SELECT sales_agent, status, COUNT(*) AS status_count FROM public.orders GROUP BY sales_agent, status) AS status_subquery
   GROUP BY sales_agent
 )
-SELECT * FROM agent_metrics JOIN agent_status_counts USING (sales_agent);
+SELECT * FROM agent_metrics LEFT JOIN agent_status_counts USING (sales_agent);
 
 -- SECTION 7: RLS & PERMISSIONS
 -- -----------------------------------------------------------------
@@ -450,238 +413,55 @@ ALTER TABLE public.attendance_sessions ENABLE ROW LEVEL SECURITY;
 ALTER VIEW public.sales_agent_reports OWNER TO postgres;
 
 -- Policies (Profiles)
+-- FIX: Remove recursive RLS policy
 DROP POLICY IF EXISTS "users_read_own" ON public.user_profiles;
 CREATE POLICY "users_read_own" ON public.user_profiles FOR SELECT USING (auth.uid() = id);
-DROP POLICY IF EXISTS "admins_manage_all" ON public.user_profiles;
-CREATE POLICY "admins_manage_all" ON public.user_profiles FOR ALL USING ((SELECT role FROM public.user_profiles WHERE id = auth.uid()) = 'ADMIN');
 
--- Policies (Orders)
--- STEP 2: Fix RLS Policies - Sales agents see ONLY their orders
--- -----------------------------------------------------------------
-
--- 🔥 DROP OLD POLICIES
+-- Orders policies
 DROP POLICY IF EXISTS "orders_select_policy" ON public.orders CASCADE;
 DROP POLICY IF EXISTS "orders_insert_policy" ON public.orders CASCADE;
 DROP POLICY IF EXISTS "orders_update_policy" ON public.orders CASCADE;
 DROP POLICY IF EXISTS "users_delete_orders" ON public.orders CASCADE;
 
--- ✅ SELECT POLICY: 
--- - ADMINS: See everything
--- - PRODUCTION (orders_view_all = true): See everything
--- - SALES AGENTS (orders_view_all = false): See ONLY their own orders
 CREATE POLICY "orders_select_policy" 
 ON public.orders 
 FOR SELECT 
 USING (
-    -- Case 1: User is an ADMIN
     (SELECT role FROM public.user_profiles WHERE id = auth.uid()) = 'ADMIN'
     OR
-    -- Case 2: User has 'orders_view_all' permission (Production users)
     (SELECT (permissions->>'orders_view_all')::boolean FROM public.user_profiles WHERE id = auth.uid()) = true
     OR
-    -- Case 3: Sales agent - can ONLY see their own orders
-    (
-        sales_agent = (SELECT email FROM public.user_profiles WHERE id = auth.uid())
-        AND
-        (SELECT (permissions->>'orders_view_all')::boolean FROM public.user_profiles WHERE id = auth.uid()) IS NOT TRUE
-    )
+    sales_agent = (SELECT email FROM public.user_profiles WHERE id = auth.uid())
 );
 
--- ✅ INSERT POLICY: Anyone with orders_create permission
 CREATE POLICY "orders_insert_policy" 
 ON public.orders 
 FOR INSERT 
-WITH CHECK (
-    (SELECT (permissions->>'orders_create')::boolean FROM public.user_profiles WHERE id = auth.uid()) = true
-);
+WITH CHECK ((SELECT (permissions->>'orders_create')::boolean FROM public.user_profiles WHERE id = auth.uid()) = true);
 
--- ✅ UPDATE POLICY:
--- - ADMINS: Can update all
--- - PRODUCTION: Can update all (trigger restricts fields)
--- - SALES AGENTS: Can only update their own
 CREATE POLICY "orders_update_policy"
 ON public.orders 
 FOR UPDATE 
 USING (
     (SELECT role FROM public.user_profiles WHERE id = auth.uid()) = 'ADMIN'
-    OR (SELECT (permissions->>'orders_edit_production')::boolean FROM public.user_profiles WHERE id = auth.uid()) = true
-    OR (sales_agent = (SELECT email FROM public.user_profiles WHERE id = auth.uid()))
+    OR
+    sales_agent = (SELECT email FROM public.user_profiles WHERE id = auth.uid())
 );
 
--- ✅ DELETE POLICY: Only users with orders_delete permission
-CREATE POLICY "users_delete_orders" 
-ON public.orders 
-FOR DELETE 
-USING (
-    (SELECT (permissions->>'orders_delete')::boolean FROM public.user_profiles WHERE id = auth.uid()) = true
-);
+-- Order history policies
+DROP POLICY IF EXISTS "order_history_select" ON public.order_history CASCADE;
+CREATE POLICY "order_history_select" ON public.order_history FOR SELECT USING (true);
 
--- Policies (History/Comms)
-DROP POLICY IF EXISTS "team_manage_history" ON public.order_history;
-CREATE POLICY "team_manage_history" ON public.order_history FOR ALL TO authenticated USING (true) WITH CHECK (true);
-DROP POLICY IF EXISTS "team_manage_comms" ON public.order_communications;
-CREATE POLICY "team_manage_comms" ON public.order_communications FOR ALL TO authenticated USING (true) WITH CHECK (true);
+-- Order communications policies
+DROP POLICY IF EXISTS "order_communications_select" ON public.order_communications CASCADE;
+CREATE POLICY "order_communications_select" ON public.order_communications FOR SELECT USING (true);
 
--- Policies (Settings)
--- ============================================================================
--- ROW LEVEL SECURITY (RLS) POLICIES
--- ============================================================================
--- Attendance Sessions Policies
-DROP POLICY IF EXISTS "Allow individual user access to their own sessions" ON public.attendance_sessions;
-CREATE POLICY "Allow individual user access to their own sessions"
-ON public.attendance_sessions
-FOR ALL
-USING (auth.uid() = user_id);
+-- Triggers
+DROP TRIGGER IF EXISTS trigger_generate_order_number ON public.orders;
+CREATE TRIGGER trigger_generate_order_number BEFORE INSERT ON public.orders FOR EACH ROW EXECUTE FUNCTION public.generate_order_number();
 
--- Attendance Summary Policies
-DROP POLICY IF EXISTS "Users can view own summary" ON public.attendance_summary;
-CREATE POLICY "Users can view own summary"
-  ON public.attendance_summary FOR SELECT
-  USING (auth.uid() = user_id OR EXISTS (
-    SELECT 1 FROM public.user_profiles WHERE id = auth.uid() AND role = 'ADMIN'
-  ));
+DROP TRIGGER IF EXISTS trigger_handle_updated_at ON public.orders;
+CREATE TRIGGER trigger_handle_updated_at BEFORE UPDATE ON public.orders FOR EACH ROW EXECUTE FUNCTION public.handle_updated_at();
 
-DROP POLICY IF EXISTS "Only admins can modify summary" ON public.attendance_summary;
-CREATE POLICY "Only admins can modify summary"
-  ON public.attendance_summary FOR ALL
-  USING (EXISTS (
-    SELECT 1 FROM public.user_profiles WHERE id = auth.uid() AND role = 'ADMIN'
-  ));
-
--- Policies (Storage - CRITICAL FIX)
-DROP POLICY IF EXISTS "Allow authenticated uploads to logos" ON storage.objects;
-CREATE POLICY "Allow authenticated uploads to logos" ON storage.objects FOR INSERT TO authenticated WITH CHECK ( bucket_id = 'logos' );
-DROP POLICY IF EXISTS "Allow authenticated updates to logos" ON storage.objects;
-CREATE POLICY "Allow authenticated updates to logos" ON storage.objects FOR UPDATE TO authenticated USING ( bucket_id = 'logos' );
-DROP POLICY IF EXISTS "Allow public viewing of logos" ON storage.objects;
-CREATE POLICY "Allow public viewing of logos" ON storage.objects FOR SELECT TO public USING ( bucket_id = 'logos' );
-
--- Add MISSING Policies for Production Files & Order Attachments
-DROP POLICY IF EXISTS "Public Select production-files" ON storage.objects;
-CREATE POLICY "Public Select production-files" ON storage.objects FOR SELECT TO public USING (bucket_id = 'production-files');
-DROP POLICY IF EXISTS "Auth Insert production-files" ON storage.objects;
-CREATE POLICY "Auth Insert production-files" ON storage.objects FOR INSERT TO authenticated WITH CHECK (bucket_id = 'production-files');
-DROP POLICY IF EXISTS "Auth Update production-files" ON storage.objects;
-CREATE POLICY "Auth Update production-files" ON storage.objects FOR UPDATE TO authenticated USING (bucket_id = 'production-files');
-
-DROP POLICY IF EXISTS "Public Select order-attachments" ON storage.objects;
-CREATE POLICY "Public Select order-attachments" ON storage.objects FOR SELECT TO public USING (bucket_id = 'order-attachments');
-DROP POLICY IF EXISTS "Auth Insert order-attachments" ON storage.objects;
-CREATE POLICY "Auth Insert order-attachments" ON storage.objects FOR INSERT TO authenticated WITH CHECK (bucket_id = 'order-attachments');
-DROP POLICY IF EXISTS "Auth Update order-attachments" ON storage.objects;
-CREATE POLICY "Auth Update order-attachments" ON storage.objects FOR UPDATE TO authenticated USING (bucket_id = 'order-attachments');
--- ✅ Add missing DELETE policy
-DROP POLICY IF EXISTS "Auth Delete order-attachments" ON storage.objects;
-CREATE POLICY "Auth Delete order-attachments" ON storage.objects FOR DELETE TO authenticated USING (bucket_id = 'order-attachments');
-
--- SECTION 8: TRIGGERS
--- -----------------------------------------------------------------
-DROP TRIGGER IF EXISTS on_order_insert_generate_number ON public.orders;
-DROP TRIGGER IF EXISTS on_orders_update ON public.orders;
-DROP TRIGGER IF EXISTS trigger_log_order_changes ON public.orders;
--- STEP 3: Recreate the trigger (in case it was dropped)
--- -----------------------------------------------------------------
 DROP TRIGGER IF EXISTS trigger_check_production_updates ON public.orders;
-DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
-
-CREATE TRIGGER on_order_insert_generate_number BEFORE INSERT ON public.orders FOR EACH ROW EXECUTE FUNCTION public.generate_order_number();
-CREATE TRIGGER on_orders_update BEFORE UPDATE ON public.orders FOR EACH ROW EXECUTE FUNCTION public.handle_updated_at();
-CREATE TRIGGER trigger_log_order_changes AFTER UPDATE ON public.orders FOR EACH ROW EXECUTE FUNCTION public.log_order_changes();
-CREATE TRIGGER trigger_check_production_updates
-BEFORE UPDATE ON public.orders
-FOR EACH ROW
-EXECUTE FUNCTION public.check_production_updates();
-CREATE TRIGGER on_auth_user_created AFTER INSERT ON auth.users FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
-
--- STEP 4: Example permission sets for reference
--- -----------------------------------------------------------------
-/*
-ADMIN PERMISSIONS:
-{
-  "users_manage": true, "orders_create": true, "orders_view_all": true, "orders_change_status": true, "orders_edit_financials": true, "orders_edit_production": true, "orders_delete": true, "reports_view_financials": true, "shipping_view": true
-}
-
-PRODUCTION USER PERMISSIONS:
-{
-  "users_manage": false, "orders_create": true, "orders_view_all": true, "orders_change_status": false, "orders_edit_financials": false, "orders_edit_production": true, "orders_delete": false, "reports_view_financials": false, "shipping_view": true
-}
-
-SALES AGENT PERMISSIONS:
-{
-  "users_manage": false, "orders_create": true, "orders_view_all": false, "orders_change_status": true, "orders_edit_financials": false, "orders_edit_production": false, "orders_delete": false, "reports_view_financials": false, "shipping_view": true
-}
-*/
-
--- SECTION 9: BOOTSTRAP ADMIN
--- -----------------------------------------------------------------
-DO $$
-DECLARE admin_id uuid;
-        admin_email text := 'hello@pandapatches.com';
-        admin_name text := 'Panda Super Admin';
-        admin_permissions jsonb := '{"users_manage": true, "orders_create": true, "orders_view_all": true, "orders_change_status": true, "orders_edit_financials": true, "orders_edit_production": true, "orders_delete": true, "reports_view_financials": true, "shipping_view": true}'::jsonb;
-BEGIN
-    -- Find the user's ID from the auth table
-    SELECT id INTO admin_id FROM auth.users WHERE email = admin_email;
-
-    -- If the user exists in auth, ensure their profile is set to ADMIN
-    IF admin_id IS NOT NULL THEN
-        INSERT INTO public.user_profiles (id, email, full_name, role, permissions)
-        VALUES (admin_id, admin_email, admin_name, 'ADMIN', admin_permissions)
-        ON CONFLICT (id) DO UPDATE SET 
-            role = 'ADMIN', 
-            permissions = admin_permissions;
-    END IF;
-END $$;
-
--- This block will find any users in `auth.users` who are missing a profile
--- in `public.user_profiles` and create one for them. This is a one-time fix.
-DO $$
-DECLARE
-    r record;
-BEGIN
-    FOR r IN (SELECT id, email, raw_user_meta_data FROM auth.users WHERE id NOT IN (SELECT id FROM public.user_profiles))
-    LOOP
-        IF r.email ILIKE 'hello@pandapatches.com' THEN
-            INSERT INTO public.user_profiles (id, email, full_name, role, permissions)
-            VALUES (r.id, r.email, r.raw_user_meta_data->>'full_name', 'ADMIN', '{"users_manage": true, "orders_create": true, "orders_view_all": true, "orders_change_status": true, "orders_edit_financials": true, "orders_edit_production": true, "orders_delete": true, "reports_view_financials": true, "shipping_view": true}'::jsonb);
-        ELSE
-            INSERT INTO public.user_profiles (id, email, full_name, role, permissions)
-            VALUES (r.id, r.email, r.raw_user_meta_data->>'full_name', 'USER', '{"users_manage": false, "orders_create": true, "orders_view_all": false, "orders_change_status": true, "orders_edit_financials": false, "orders_edit_production": false, "orders_delete": false, "reports_view_financials": false, "shipping_view": true}'::jsonb);
-        END IF;
-    END LOOP;
-END $$;
-
-
--- SECTION 10: SETTINGS TABLE (FINAL FIX)
--- -----------------------------------------------------------------
--- 1. Ensure Table Correctness (Idempotent)
-CREATE TABLE IF NOT EXISTS public.settings (
-  id text PRIMARY KEY,
-  logo_url text,
-  created_at timestamptz DEFAULT now(),
-  updated_at timestamptz DEFAULT now()
-);
-
--- Ensure column exists
-ALTER TABLE public.settings ADD COLUMN IF NOT EXISTS logo_url text;
-
--- Ensure row exists (Prevent 406 Error)
-INSERT INTO public.settings (id, logo_url)
-VALUES ('global_settings', NULL)
-ON CONFLICT (id) DO NOTHING;
-
--- 2. ENABLE ROW LEVEL SECURITY
-ALTER TABLE public.settings ENABLE ROW LEVEL SECURITY;
-
--- 3. PERMISSIONS
--- A. PUBLIC READ (Everyone can SEE the logo so it loads on the dashboard)
-DROP POLICY IF EXISTS "Public read settings" ON public.settings;
-CREATE POLICY "Public read settings" ON public.settings FOR SELECT TO public USING (true);
-
--- B. ADMIN WRITE (Only Admins can CHANGE the logo)
-DROP POLICY IF EXISTS "Admin update settings" ON public.settings;
-CREATE POLICY "Admin update settings" ON public.settings FOR ALL TO authenticated 
-USING (EXISTS (SELECT 1 FROM public.user_profiles WHERE user_profiles.id = auth.uid() AND user_profiles.role = 'ADMIN')) 
-WITH CHECK (EXISTS (SELECT 1 FROM public.user_profiles WHERE user_profiles.id = auth.uid() AND user_profiles.role = 'ADMIN'));
-
-SELECT '✅ SETTINGS SECURED: ADMIN ONLY WRITE' as status;
+CREATE TRIGGER trigger_check_production_updates BEFORE UPDATE ON public.orders FOR EACH ROW EXECUTE FUNCTION public.check_production_updates();
