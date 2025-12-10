@@ -16,7 +16,7 @@ import {
   reactRouterV6BrowserTracingIntegration,
 } from '@sentry/react';
 import { AuthProvider } from './contexts/AuthContext';
-import { ChunkLoadErrorBoundary } from './components/ChunkLoadErrorBoundary';
+import { ChunkErrorBoundary } from './components/ChunkErrorBoundary';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { offlineManager } from './services/offlineManager';
 import { logger } from './services/logger';
@@ -122,13 +122,13 @@ if (!rootElement) {
 ReactDOM.createRoot(rootElement).render(
   <React.StrictMode>
     <ErrorBoundary>
-      <ChunkLoadErrorBoundary>
+      <ChunkErrorBoundary>
         <QueryClientProvider client={queryClient}>
           <AuthProvider>
             <SentryRouterProvider router={router} />
           </AuthProvider>
         </QueryClientProvider>
-      </ChunkLoadErrorBoundary>
+      </ChunkErrorBoundary>
       <SpeedInsights />
     </ErrorBoundary>
   </React.StrictMode>

@@ -1,0 +1,1 @@
+import{r as o,af as r}from"./index-Cs2py4Ie.js";const a=()=>{const s=o.useContext(r);if(!s)throw new Error("useToast must be used within a ToastProvider");return{success:t=>{s.addToast({type:"success",message:t})},error:t=>{s.addToast({type:"error",message:t})},warning:t=>{s.addToast({type:"warning",message:t})},info:t=>{s.addToast({type:"info",message:t})}}};export{a as u};
