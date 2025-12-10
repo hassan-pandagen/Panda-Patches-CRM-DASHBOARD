@@ -42,7 +42,12 @@ const findActiveSession = async (userId: string): Promise<AttendanceSession | nu
     .is('clock_out_time', null)
     .single();
 
-  if (error && error.code !== 'PGRST116') { // PGRST116 = no rows returned
+  // If no rows are returned, data will be null, and error.code might be 'PGRST116'.
+  // We only throw if it's an actual error, not just no results.
+  if (error && data === null) {
+    return null;
+  }
+  if (error) {
     throw error;
   }
   return data;

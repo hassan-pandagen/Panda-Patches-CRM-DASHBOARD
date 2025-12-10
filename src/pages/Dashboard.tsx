@@ -1,6 +1,6 @@
 // src/pages/Dashboard.tsx - SMOOTH LOADING (SIMPLIFIED)
 
-import React, { useState, useMemo, type FC, type ReactNode, type KeyboardEvent } from "react";
+import React, { useState, useMemo, type KeyboardEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -22,6 +22,7 @@ import CardSkeleton from "../components/CardSkeleton";
 import DashboardRecentOrdersTable from "../components/dashboard/DashboardRecentOrdersTable";
 import ProductionProgress from "../components/dashboard/ProductionProgress";
 import ToggleButtons from "../components/ui/ToggleButtons";
+import StatCard from "../components/ui/StatCard"; // Import the shared StatCard
 import DateRangeFilter, {
   DateRange,
   getDefaultRange,
@@ -42,55 +43,6 @@ const cardVariants = {
     transition: { duration: 0.3 },
   },
 };
-
-const StatCard: React.FC<{
-  title: string;
-  value: string | number;
-  prefix?: string;
-  icon: React.ReactNode;
-  gradient: string;
-  onClick?: () => void;
-  isLoading?: boolean;
-}> = ({
-  title,
-  value,
-  prefix = "",
-  icon,
-  gradient,
-  onClick,
-  isLoading = false,
-}) => (
-  <motion.div variants={cardVariants}>
-    <div
-      className={`group relative ${onClick ? "cursor-pointer" : ""}`}
-      onClick={onClick}
-    >
-      <div
-        className={`absolute -inset-0.5 ${gradient} rounded-2xl opacity-0 group-hover:opacity-50 blur transition duration-500`}
-      />
-      <div className="relative bg-slate-900/40 backdrop-blur-xl border border-white/10 rounded-2xl p-6 transform group-hover:scale-[1.02] transition-all duration-300 shadow-xl group-hover:shadow-2xl">
-        <div className="flex items-center justify-between">
-          <div className="flex-1">
-            <p className="text-sm font-medium text-slate-400 mb-1 uppercase tracking-wider">
-              {title}
-            </p>
-            {isLoading ? (
-              <div className="h-9 w-32 bg-slate-700/50 rounded animate-pulse" />
-            ) : (
-              <p className="text-3xl font-bold text-white">
-                {prefix}
-                {typeof value === "number" ? value.toLocaleString() : value}
-              </p>
-            )}
-          </div>
-          <div className="p-3 bg-gradient-to-br from-white/10 to-white/5 rounded-xl">
-            {icon}
-          </div>
-        </div>
-      </div>
-    </div>
-  </motion.div>
-);
 
 export default function Dashboard() {
   const navigate = useNavigate();
