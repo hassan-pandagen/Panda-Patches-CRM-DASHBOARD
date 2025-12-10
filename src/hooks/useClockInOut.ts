@@ -52,20 +52,25 @@ export const useClockInOut = () => {
   const { user } = useAuth();
   const queryClient = useQueryClient();
 
-  const { data: todaySessions = [], isLoading: isLoadingToday } = useQuery({
+  const { data: todaySessions = [], isLoading: isLoadingToday, refetch } = useQuery({
     queryKey: queryKeys.attendance.today(user?.id),
     queryFn: () => fetchTodayAttendance(user!.id),
     enabled: !!user,
+    staleTime: 10 * 1000, // 10 seconds - data becomes stale quickly
+    gcTime: 5 * 60 * 1000, // 5 minutes - keep in memory
+    refetchOnMount: true, // Always refetch when component mounts
+    refetchOnWindowFocus: true, // Refetch when tab regains focus
   });
 
   const activeSession = todaySessions.find(s => s.clock_out_time === null);
   const isClockedIn = !!activeSession;
 
-  const invalidateQueries = () => {
-    // Invalidate today's attendance to refetch immediately after clock in/out
-    queryClient.invalidateQueries({ queryKey: queryKeys.attendance.today(user?.id) });
+  const invalidateQueries = async () => {
+    // Invalidate and immediately refetch to ensure data is fresh
+    await queryClient.invalidateQueries({ queryKey: queryKeys.attendance.today(user?.id) });
+    await refetch(); // Force immediate refetch
     // Also invalidate the full attendance list if admin is viewing
-    queryClient.invalidateQueries({ queryKey: queryKeys.attendance.all() });
+    await queryClient.invalidateQueries({ queryKey: queryKeys.attendance.all() });
   };
 
   const clockInMutation = useMutation({
