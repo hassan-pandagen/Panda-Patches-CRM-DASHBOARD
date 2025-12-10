@@ -52,26 +52,18 @@ export const useClockInOut = () => {
   const { user } = useAuth();
   const queryClient = useQueryClient();
 
-  const { data: todaySessions = [], isLoading: isLoadingToday, refetch } = useQuery({
+  const { data: todaySessions = [], isLoading: isLoadingToday } = useQuery({
     queryKey: queryKeys.attendance.today(user?.id),
     queryFn: () => fetchTodayAttendance(user!.id),
     enabled: !!user,
-    staleTime: 10 * 1000, // 10 seconds - data becomes stale quickly
-    gcTime: 5 * 60 * 1000, // 5 minutes - keep in memory
-    refetchOnMount: true, // Always refetch when component mounts
-    refetchOnWindowFocus: true, // Refetch when tab regains focus
+    // Aggressive refetching to ensure data is always fresh on navigation/focus
+    staleTime: 10 * 1000, // Data is considered stale after 10 seconds
+    refetchOnMount: true,
+    refetchOnWindowFocus: true,
   });
 
   const activeSession = todaySessions.find(s => s.clock_out_time === null);
   const isClockedIn = !!activeSession;
-
-  const invalidateQueries = async () => {
-    // Invalidate and immediately refetch to ensure data is fresh
-    await queryClient.invalidateQueries({ queryKey: queryKeys.attendance.today(user?.id) });
-    await refetch(); // Force immediate refetch
-    // Also invalidate the full attendance list if admin is viewing
-    await queryClient.invalidateQueries({ queryKey: queryKeys.attendance.all() });
-  };
 
   const clockInMutation = useMutation({
     mutationFn: async () => {
@@ -90,23 +82,29 @@ export const useClockInOut = () => {
 
       if (error) throw error;
     },
-    onSuccess: invalidateQueries,
+    onSuccess: () => {
+      // Invalidate both the user's specific 'today' query and the general admin list
+      return queryClient.invalidateQueries({ queryKey: queryKeys.attendance.all() });
+    },
   });
 
   const clockOutMutation = useMutation({
     mutationFn: async () => {
       if (!user) throw new Error('User not authenticated');
-      // Use the cached activeSession instead of querying DB again
-      if (!activeSession) throw new Error('No active session to clock out from.');
+      const sessionToClockOut = await findActiveSession(user.id);
+      if (!sessionToClockOut) throw new Error('No active session to clock out from.');
 
       const { data, error } = await supabase
         .from('attendance_sessions')
         .update({ clock_out_time: new Date().toISOString() })
-        .eq('id', activeSession.id);
+        .eq('id', sessionToClockOut.id);
 
       if (error) throw error;
     },
-    onSuccess: invalidateQueries,
+    onSuccess: () => {
+      // Invalidate both the user's specific 'today' query and the general admin list
+      return queryClient.invalidateQueries({ queryKey: queryKeys.attendance.all() });
+    },
   });
 
   return {
