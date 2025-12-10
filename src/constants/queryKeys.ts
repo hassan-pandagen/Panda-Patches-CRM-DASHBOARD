@@ -1,63 +1,73 @@
 /**
- * Centralized React Query Keys
- * This file defines all query keys used throughout the application
- * Using this pattern ensures consistency and makes refactoring easier
+ * Centralized query keys for TanStack Query.
+ * This helps maintain consistency and avoid typos.
+ *
+ * See: https://tanstack.com/query/v4/docs/react/guides/query-keys
  */
-
 export const queryKeys = {
-  // Dashboard queries
-  dashboard: {
-    metrics: (startDate: string, endDate: string) => ['dashboard', 'metrics', startDate, endDate],
-    table: (startDate: string, endDate: string) => ['dashboard', 'table', startDate, endDate],
-    // NEW: Unified query for both metrics and table
-    unified: (startDate: string, endDate: string) => ['dashboard', 'unified', startDate, endDate],
-  },
-
-  // Orders queries
+  // All keys related to orders
   orders: {
-    all: () => ['allOrders'],
-    urgent: () => ['orders', 'urgent'],
-    single: (orderNumber: string) => ['order', orderNumber],
-    report: (startDate: string, endDate: string) => [
-      'allOrdersReport',
-      startDate,
-      endDate,
-    ],
-    communications: (orderId: string) => ['orderCommunications', orderId],
+    all: () => ['orders'] as const,
+    lists: () => [...queryKeys.orders.all(), 'list'] as const,
+    list: (filters: string) => [...queryKeys.orders.lists(), { filters }] as const,
+    details: () => [...queryKeys.orders.all(), 'single'] as const, // Renamed from 'detail'
+    single: (id: number) => [...queryKeys.orders.details(), id] as const, // Renamed from 'detail'
+    history: (id: number) => [...queryKeys.orders.all(), 'history', id] as const,
+    urgent: () => [...queryKeys.orders.all(), 'urgent'] as const,
+    // Keys for reports
+    reports: () => [...queryKeys.orders.all(), 'reports'] as const,
+    report: (filters: object) => [...queryKeys.orders.reports(), filters] as const,
   },
 
-  // Users queries
-  users: {
-    all: () => ['allUsers'],
+  // All keys related to order communications
+  communications: {
+    all: () => ['communications'] as const,
+    byOrderId: (orderId: number) => [...queryKeys.communications.all(), orderId] as const,
   },
 
-  // Settings queries
-  settings: {
-    all: () => ['app_settings'],
-  },
-
-  // User profile/auth queries
-  user: {
-    profile: () => ['user'],
-  },
-
-  // Search queries
-  search: {
-    results: (query: string) => ['searchResults', query],
-  },
-
-  // Attendance/Clock In-Out queries
+  // All keys related to attendance
   attendance: {
-    today: (userId?: string) => ['todayAttendance', userId],
-    all: (dateRange?: { startDate: string; endDate: string }, userId?: string) => [
-      'allAttendance',
-      dateRange,
-      userId,
-    ],
+    all: () => ['attendance'] as const,
+    lists: () => [...queryKeys.attendance.all(), 'list'] as const,
+    list: (filters: object) => [...queryKeys.attendance.lists(), filters] as const,
+    today: (userId?: string) => [...queryKeys.attendance.lists(), 'today', { userId }] as const,
   },
 
-  // Customer queries
+  // All keys related to the main dashboard
+  dashboard: {
+    all: () => ['dashboard'] as const,
+    unified: (startDate: string, endDate: string) => 
+      [...queryKeys.dashboard.all(), { startDate, endDate }] as const,
+    metrics: (startDate: string, endDate: string) =>
+      [...queryKeys.dashboard.all(), 'metrics', { startDate, endDate }] as const,
+    table: (startDate: string, endDate: string) =>
+      [...queryKeys.dashboard.all(), 'table', { startDate, endDate }] as const,
+  },
+
+  // All keys related to users/profiles
+  users: {
+    all: () => ['users'] as const,
+    lists: () => [...queryKeys.users.all(), 'list'] as const,
+  },
+
+  // All keys related to user profiles (single user)
+  user: {
+    profile: () => ['user', 'profile'] as const,
+  },
+
+  // All keys related to search
+  search: {
+    all: () => ['search'] as const,
+    results: (query: string) => [...queryKeys.search.all(), { query }] as const,
+  },
+
+  // All keys related to settings
+  settings: {
+    all: () => ['settings'] as const,
+  },
+
+  // All keys related to customers
   customer: {
-    history: (customerId: string) => ['customer_history', customerId],
+    history: (customerId: string) => ['customer', 'history', customerId] as const,
   },
 };

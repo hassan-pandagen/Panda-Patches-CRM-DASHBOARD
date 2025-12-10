@@ -1,4 +1,4 @@
-import React, { useMemo, FC, useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Order } from '../../types';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend, CartesianGrid, BarChart, Bar } from 'recharts';
 import { DollarSign, TrendingUp, TrendingDown, Percent, Activity, AlertTriangle, ArrowRight, CheckCircle, ChevronLeft, ChevronRight } from 'lucide-react';
@@ -17,7 +17,7 @@ const cardVariants: Variants = {
 };
 
 // --- UI COMPONENTS ---
-const StatCardWrapper: FC<{ children: React.ReactNode; gradient: string; className?: string }> = ({ children, gradient, className = '' }) => (
+const StatCardWrapper: React.FC<{ children: React.ReactNode; gradient: string; className?: string }> = ({ children, gradient, className = '' }) => (
   <motion.div variants={cardVariants} className={className}>
     <div className="group relative">
       <div className={`absolute -inset-0.5 ${gradient} rounded-2xl opacity-0 group-hover:opacity-50 blur transition duration-500`} />
@@ -28,7 +28,7 @@ const StatCardWrapper: FC<{ children: React.ReactNode; gradient: string; classNa
   </motion.div>
 );
 
-const SimpleStatCard: FC<{ title: string; value: number | string; subValue?: string; prefix?: string; suffix?: string; icon: React.ReactNode }> = ({ title, value, subValue, prefix = '', suffix = '', icon }) => (
+const SimpleStatCard: React.FC<{ title: string; value: number | string; subValue?: string; prefix?: string; suffix?: string; icon: React.ReactNode }> = ({ title, value, subValue, prefix = '', suffix = '', icon }) => (
   <div className="flex items-center justify-between">
     <div className="flex-1">
       <p className="text-sm font-medium text-slate-400 mb-1">{title}</p>
@@ -81,7 +81,7 @@ const CountTooltip = ({ active, payload }: any) => {
     return null;
   };
 
-const ProfitLossReportComponent: FC<ReportComponentProps> = ({ orders }) => {
+const ProfitLossReportComponent: React.FC<ReportComponentProps> = ({ orders }) => {
     const [lossPage, setLossPage] = useState(1);
     const LOSS_ITEMS_PER_PAGE = 5;
 

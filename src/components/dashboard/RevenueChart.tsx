@@ -26,7 +26,7 @@ const CustomTooltip = ({ active, payload, label }: any) => {
   return null;
 };
 
-const RevenueChart: React.FC<RevenueChartProps> = ({ data }) => {
+const RevenueChart = ({ data }: RevenueChartProps) => {
   const navigate = useNavigate();
 
   // Handler for clicking a data point

@@ -1,11 +1,13 @@
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { Link } from "react-router-dom";
-import { Bell, AlertCircle, Clock, Check, CheckCircle2 } from "lucide-react";
+import { Bell, AlertCircle, Clock, Check, CheckCircle2, Package, PackageCheck, ShoppingCart } from "lucide-react";
 import { supabase } from "../../services/supabaseClient";
 import { logger } from "../../services/logger";
+import { OrderStatus } from "../../types";
 
 interface Notification {
   id: string;
+  orderId: number;
   orderNumber: string;
   customerName: string;
   type: 'URGENT' | 'REVISION';
@@ -14,10 +16,10 @@ interface Notification {
 }
 
 export default function NotificationBell() {
-  const [open, setOpen] = useState(false);
-  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [open, setOpen] = React.useState(false);
+  const [notifications, setNotifications] = React.useState<Notification[]>([]);
   // State to track IDs of notifications the user has "dismissed"
-  const [dismissedIds, setDismissedIds] = useState<string[]>(() => {
+  const [dismissedIds, setDismissedIds] = React.useState<string[]>(() => {
     try {
       const saved = localStorage.getItem('dismissed_notifications');
       return saved ? JSON.parse(saved) : [];
@@ -27,7 +29,7 @@ export default function NotificationBell() {
     }
   });
   
-  const dropdownRef = useRef<HTMLDivElement>(null);
+  const dropdownRef = React.useRef<HTMLDivElement>(null);
 
   // Helper to save dismissed IDs with error handling
   const markAsRead = (id: string) => {
@@ -55,31 +57,68 @@ export default function NotificationBell() {
 
   // Fetch initial state
   const fetchNotifications = async () => {
-    const { data, error } = await supabase
-      .from("orders")
-      .select("order_number, customer_name, created_at, is_urgent, is_urgent_approved, status")
-      .or('and(is_urgent.eq.true,is_urgent_approved.eq.false),status.eq.REVISION_REQUESTED')
+    // We now fetch from two sources and combine them:
+    // 1. Urgent orders needing approval (from `orders` table)
+    // 2. Important status changes (from `order_history` table)
+
+    const notifiableStatuses = [
+      OrderStatus.NEW_ORDER,
+      OrderStatus.SHIPPED,
+      OrderStatus.DELIVERED,
+      OrderStatus.REVISION_REQUESTED,
+      OrderStatus.CANCELLED,
+      OrderStatus.REFUNDED,
+    ];
+
+    const historyPromise = supabase
+      .from('order_history')
+      .select('id, order_id, user_email, field_changed, new_value, changed_at, orders(order_number, customer_name)')
+      .eq('field_changed', 'status')
+      .in('new_value', notifiableStatuses)
+      .order('changed_at', { ascending: false })
+      .limit(20);
+
+    const urgentPromise = supabase
+      .from('orders')
+      .select('id, order_number, customer_name, created_at, is_urgent, is_urgent_approved')
+      .eq('is_urgent', true)
+      .eq('is_urgent_approved', false)
       .order('created_at', { ascending: false });
 
-    if (error) {
-      logger.error("[NotificationBell] Error fetching notifications", error);
+    const [{ data: historyData, error: historyError }, { data: urgentData, error: urgentError }] = await Promise.all([historyPromise, urgentPromise]);
+
+    if (historyError) logger.error("[NotificationBell] Error fetching history notifications", historyError);
+    if (urgentError) logger.error("[NotificationBell] Error fetching urgent notifications", urgentError);
+
+    if (!historyData && !urgentData) {
       return [];
     }
 
-    return (data || []).map((order: any) => ({
-      // Use composite ID to handle cases where an order might have both issues over time
-      id: `${order.order_number}-${order.status}`, 
+    const historyNotifications = (historyData || []).map((item: any) => ({
+      id: `hist-${item.id}`,
+      orderId: item.order_id,
+      orderNumber: item.orders.order_number,
+      customerName: item.orders.customer_name,
+      timestamp: item.changed_at,
+      type: item.new_value, // The status is the type
+      message: <span><strong>{item.new_value.replace(/_/g, ' ')}</strong> for order <strong>{item.orders.order_number}</strong> by {item.user_email}</span>,
+    }));
+
+    const urgentNotifications = (urgentData || []).map((order: any) => ({
+      id: `urgent-${order.id}`,
+      orderId: order.id,
       orderNumber: order.order_number,
       customerName: order.customer_name,
       timestamp: order.created_at,
-      type: order.status === 'REVISION_REQUESTED' ? 'REVISION' : 'URGENT',
-      message: order.status === 'REVISION_REQUESTED' 
-        ? <span>Revision requested for <strong>{order.order_number}</strong></span>
-        : <span>Urgent approval needed for <strong>{order.order_number}</strong></span>
+      type: 'URGENT',
+      message: <span>Urgent approval needed for <strong>{order.order_number}</strong></span>,
     }));
+
+    // Combine, sort by date, and return
+    return [...historyNotifications, ...urgentNotifications].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
   };
 
-  useEffect(() => {
+  React.useEffect(() => {
     let isMounted = true;
 
     const loadInitial = async () => {
@@ -93,7 +132,7 @@ export default function NotificationBell() {
       .channel("global_notifications")
       .on(
         "postgres_changes",
-        { event: "*", schema: "public", table: "orders" },
+        { event: "*", schema: "public", table: "order_history" },
         () => {
           loadInitial();
         }
@@ -164,7 +203,7 @@ export default function NotificationBell() {
                 {activeNotifications.map((n) => (
                   <li key={n.id} className="relative group bg-transparent hover:bg-white/5 transition-colors">
                     <div className="flex items-start pr-10"> {/* Padding right for the dismiss button */}
-                        <Link 
+                        <Link
                             to={`/order/${n.orderNumber}`} 
                             onClick={() => setOpen(false)}
                             className="flex-1 p-4 block"
@@ -172,6 +211,12 @@ export default function NotificationBell() {
                             <div className="flex items-start gap-3">
                                 <div className={`mt-0.5 p-1.5 rounded-full shrink-0 ${n.type === 'URGENT' ? 'bg-red-500/10 text-red-400' : 'bg-amber-500/10 text-amber-400'}`}>
                                 {n.type === 'URGENT' ? <AlertCircle className="w-4 h-4" /> : <Clock className="w-4 h-4" />}
+                                {n.type === OrderStatus.NEW_ORDER ? <ShoppingCart className="w-4 h-4" /> : null}
+                                {n.type === OrderStatus.SHIPPED ? <Package className="w-4 h-4" /> : null}
+                                {n.type === OrderStatus.DELIVERED ? <PackageCheck className="w-4 h-4" /> : null}
+                                {n.type === OrderStatus.REVISION_REQUESTED ? <Clock className="w-4 h-4" /> : null}
+                                {n.type === OrderStatus.CANCELLED ? <AlertCircle className="w-4 h-4" /> : null}
+                                {n.type === OrderStatus.REFUNDED ? <AlertCircle className="w-4 h-4" /> : null}
                                 </div>
                                 <div>
                                     <p className="text-sm text-slate-200 leading-snug mb-1">

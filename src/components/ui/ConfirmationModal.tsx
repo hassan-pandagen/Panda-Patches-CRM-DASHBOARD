@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Spinner from './Spinner';
 
 interface ConfirmationModalProps {
@@ -20,9 +20,9 @@ const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
   confirmButtonText = 'Confirm',
   isConfirming = false,
 }) => {
-  const [isVisible, setIsVisible] = useState(false);
+  const [isVisible, setIsVisible] = React.useState(false);
 
-  useEffect(() => {
+  React.useEffect(() => {
     if (isOpen) {
       // Small delay to trigger animation
       setTimeout(() => setIsVisible(true), 10);

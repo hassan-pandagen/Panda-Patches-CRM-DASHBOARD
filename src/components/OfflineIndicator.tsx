@@ -1,7 +1,7 @@
 // src/components/OfflineIndicator.tsx
 // ✅ UPGRADE 9: Shows when app is offline
 
-import React, { useEffect, useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { WifiOff, Wifi } from 'lucide-react';
 import { offlineManager } from '../services/offlineManager';
 

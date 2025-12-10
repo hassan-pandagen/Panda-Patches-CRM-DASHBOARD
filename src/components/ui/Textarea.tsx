@@ -1,4 +1,4 @@
-import React, { useState, useId, forwardRef } from 'react';
+import React, { useState, useId } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { AlertCircle } from 'lucide-react';
 
@@ -9,25 +9,25 @@ interface TextareaProps extends React.TextareaHTMLAttributes<HTMLTextAreaElement
   maxLength?: number;
 }
 
-const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(
-  (
-    {
-      label,
-      error,
-      success,
-      maxLength,
-      value,
-      className,
-      ...props
-    },
-    ref
-  ) => {
-    const id = useId();
-    const hasValue = !!value;
-    const isError = !!error;
-    const isSuccess = success && !isError;
+const Textarea = React.forwardRef<HTMLTextAreaElement, TextareaProps>(
+   (
+     {
+       label,
+       error,
+       success,
+       maxLength,
+       value,
+       className,
+       ...props
+     },
+     ref
+   ) => {
+     const id = React.useId();
+     const hasValue = !!value;
+     const isError = !!error;
+     const isSuccess = success && !isError;
 
-    const [isFocused, setIsFocused] = useState(false);
+     const [isFocused, setIsFocused] = React.useState(false);
 
     const labelVariants = {
       inactive: {

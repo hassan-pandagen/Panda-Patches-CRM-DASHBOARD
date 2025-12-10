@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { usePresence } from '../../hooks/usePresence';
 import { formatDistanceToNow } from 'date-fns';
 import OnlineAgentsModal from './OnlineAgentsModal';

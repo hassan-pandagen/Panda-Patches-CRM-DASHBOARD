@@ -58,10 +58,10 @@ const OrderPage: React.FC = () => {
   const { user, role, permissions } = useAuth(); 
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = React.useState(false);
   const { toast } = useToast(); // <--- INITIALIZE TOAST
-  const [isInvoiceModalOpen, setIsInvoiceModalOpen] = useState(false);
-  const [isProcessing, setIsProcessing] = useState(false);
+  const [isInvoiceModalOpen, setIsInvoiceModalOpen] = React.useState(false);
+  const [isProcessing, setIsProcessing] = React.useState(false);
 
   // --- PERMISSION CHECKS ---
   const isAdmin = role === UserRole.ADMIN;

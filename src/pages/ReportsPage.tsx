@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo, useEffect, FC } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '../contexts/AuthContext';
 import { Order, UserRole, OrderStatus } from '../types/index';
@@ -46,7 +46,7 @@ interface ReportComponentProps {
 
 // --- UI COMPONENTS ---
 
-const StatCardWrapper: FC<{ children: React.ReactNode; gradient: string; className?: string; onClick?: () => void }> = ({ children, gradient, className = '', onClick }) => (
+const StatCardWrapper: React.FC<{ children: React.ReactNode; gradient: string; className?: string; onClick?: () => void }> = ({ children, gradient, className = '', onClick }) => (
   <motion.div variants={cardVariants} className={className}>
     <div className={`group relative ${onClick ? 'cursor-pointer' : ''}`} onClick={onClick}>
       <div className={`absolute -inset-0.5 ${gradient} rounded-2xl opacity-0 group-hover:opacity-50 blur transition duration-500`} />
@@ -57,7 +57,7 @@ const StatCardWrapper: FC<{ children: React.ReactNode; gradient: string; classNa
   </motion.div>
 );
 
-const SimpleStatCard: FC<{ title: string; value: number | string; prefix?: string; suffix?: string; icon: React.ReactNode }> = ({ title, value, prefix = '', suffix = '', icon }) => (
+const SimpleStatCard: React.FC<{ title: string; value: number | string; prefix?: string; suffix?: string; icon: React.ReactNode }> = ({ title, value, prefix = '', suffix = '', icon }) => (
   <div className="flex items-center justify-between">
     <div className="flex-1">
       <p className="text-sm font-medium text-slate-400 mb-1">{title}</p>
@@ -67,7 +67,7 @@ const SimpleStatCard: FC<{ title: string; value: number | string; prefix?: strin
   </div>
 );
 
-const CustomTooltip: FC<TooltipProps<ValueType, NameType>> = ({ active, payload, label }) => {
+const CustomTooltip: React.FC<TooltipProps<ValueType, NameType>> = ({ active, payload, label }) => {
   // ✅ DAY 3 FIX: Add array bounds check
   if (active && payload && payload.length > 0) {
     const firstItem = payload[0];
@@ -85,7 +85,7 @@ const CustomTooltip: FC<TooltipProps<ValueType, NameType>> = ({ active, payload,
 };
 
 // --- 1. SALES REPORT (Visible to Admin & Sales Agent) ---
-const SalesReportComponent: FC<ReportComponentProps> = ({ orders }) => {
+const SalesReportComponent: React.FC<ReportComponentProps> = ({ orders }) => {
     const navigate = useNavigate();
     
     // SAFEGUARDS: If DB sends NULL (masked), treat as 0
@@ -182,7 +182,7 @@ const LeadSourceTooltip = ({ active, payload, totalRevenue }: any) => {
   return null;
 };
 
-const LeadSourceReportComponent: FC<ReportComponentProps> = ({ orders }) => {
+const LeadSourceReportComponent: React.FC<ReportComponentProps> = ({ orders }) => {
     const navigate = useNavigate();
     
     const totalRevenue = useMemo(() => orders.reduce((sum, order) => sum + (order.orderAmount || 0), 0), [orders]);
@@ -303,7 +303,7 @@ const LeadSourceReportComponent: FC<ReportComponentProps> = ({ orders }) => {
 };
 
 
-const ProductionReportComponent: FC<ReportComponentProps> = ({ orders }) => {
+const ProductionReportComponent: React.FC<ReportComponentProps> = ({ orders }) => {
     const navigate = useNavigate();
     const inProductionCount = useMemo(() => orders.filter(o => o.status === OrderStatus.IN_PRODUCTION).length, [orders]);
     const revisionCount = useMemo(() => orders.filter(o => o.status === OrderStatus.REVISION_REQUESTED).length, [orders]);
@@ -405,7 +405,7 @@ const ReportsPage: React.FC = () => {
     const { user, role, permissions, isLoading: isAuthLoading } = useAuth();
     
     const [searchParams, setSearchParams] = useSearchParams();
-    const [dateRange, setDateRange] = useState<DateRange>(getDefaultRange);
+    const [dateRange, setDateRange] = React.useState<DateRange>(getDefaultRange);
 
     // --- 1. DYNAMIC TAB GENERATION (The Clean UI Fix) ---
     const availableReports = useMemo(() => {
@@ -440,11 +440,11 @@ const ReportsPage: React.FC = () => {
     }, [role, permissions]);
 
     // ✅ DAY 3 FIX: Safe array access with bounds check
-    const activeReport = (searchParams.get('type') as ReportType) || (availableReports && availableReports.length > 0 ? availableReports[0]?.key : 'production');
+     const activeReport = (searchParams.get('type') as ReportType) || (availableReports && availableReports.length > 0 ? availableReports[0]?.key : 'production');
 
-    // --- 2. AUTO-REDIRECT SAFETY ---
-    // If a user tries to access a tab they don't have, switch them to their first available tab.
-    useEffect(() => {
+     // --- 2. AUTO-REDIRECT SAFETY ---
+     // If a user tries to access a tab they don't have, switch them to their first available tab.
+     useEffect(() => {
         if (!isAuthLoading && availableReports && availableReports.length > 0) {
             const isValidReport = availableReports.find(r => r.key === activeReport);
             if (!isValidReport) {

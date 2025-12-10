@@ -1,6 +1,6 @@
 // src/pages/NewOrderPage.tsx - UPDATED FOR DUPLICATION
 
-import React, { useState, useCallback, useMemo, useEffect } from "react";
+import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { useNavigate, useLocation } from "react-router-dom"; // Added useLocation
 import { useQueryClient } from "@tanstack/react-query";
 import { createOrder } from '../services/orderService';
@@ -14,11 +14,11 @@ import { logger } from "../services/logger";
 import { Copy } from "lucide-react";
 
 const NewOrderPage: React.FC = () => {
-  const [isSaving, setIsSaving] = useState<boolean>(false);
-  const [error, setError] = useState<string | null>(null);
-  const [isDirty, setIsDirty] = useState(false);
-  const [navigateTo, setNavigateTo] = useState<string | null>(null); // NEW: For synchronized navigation
-  const [allowNavigation, setAllowNavigation] = useState(false); // NEW: For navigation shield
+  const [isSaving, setIsSaving] = React.useState<boolean>(false);
+  const [error, setError] = React.useState<string | null>(null);
+  const [isDirty, setIsDirty] = React.useState(false);
+  const [navigateTo, setNavigateTo] = React.useState<string | null>(null); // NEW: For synchronized navigation
+  const [allowNavigation, setAllowNavigation] = React.useState(false); // NEW: For navigation shield
   
   const navigate = useNavigate();
   const location = useLocation(); // Hook to get the passed data
@@ -28,7 +28,7 @@ const NewOrderPage: React.FC = () => {
   const { showModal, confirmLeave, cancelLeave } = useWarnIfUnsaved(isDirty, allowNavigation);
 
   // This effect ensures navigation only happens after the state is clean.
-  useEffect(() => {
+  React.useEffect(() => {
     if (navigateTo && allowNavigation) {
       navigate(navigateTo);
     }
@@ -39,7 +39,7 @@ const NewOrderPage: React.FC = () => {
   // Check if we were sent here with an order to duplicate
   const sourceOrder = location.state?.duplicateOrder as Order | undefined;
 
-  const initialData = useMemo(() => {
+  const initialData = React.useMemo(() => {
     if (!sourceOrder) return null;
 
     // We strip out unique identifiers so it creates a NEW entry
@@ -134,7 +134,7 @@ const NewOrderPage: React.FC = () => {
     }
   };
 
-  const onFormChange = useCallback(() => {
+  const onFormChange = React.useCallback(() => {
     console.log('[NewOrderPage] onFormChange called, isSaving:', isSaving);
     if (isSaving) return;
     setIsDirty(true);

@@ -16,7 +16,7 @@ import { performanceMonitor } from './performanceMonitor'; // ✅ UPGRADE 8: Per
 const toSnakeCase = (data: any): any => {
   // These fields are computed or managed by the database and should never be sent in an update.
   const readOnlyFields = new Set([
-    'id', 'orderNumber', 'createdAt', 'updatedAt', 'createdBy', 'profit', 'amountRemaining'
+    'id', 'orderNumber', 'createdAt', 'updatedAt', 'createdBy', 'profit', 'amountRemaining', 'changes'
   ]);
 
   const snakeCaseObject: { [key: string]: any } = {};

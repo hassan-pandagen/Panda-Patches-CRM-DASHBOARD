@@ -1,18 +1,14 @@
 // pages/EditOrderPage.tsx - FIXED TOAST USAGE
 
-import React, { useState, useCallback, useEffect } from "react";
-import { useParams, useNavigate, Link } from "react-router-dom";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import React, { useState, useEffect } from 'react';
+import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from "../services/supabaseClient";
 import { Order, UserRole } from "../types";
 import { useAuth } from "../contexts/AuthContext";
 import { useToast } from "../hooks/useToast";
 import { queryKeys } from "../constants/queryKeys";
-// ✅ IMPORT THE ADAPTER
-import { updateOrderDetails, mapDbToOrder } from "../services/orderService";
-import { useWarnIfUnsaved } from "../hooks";
-import UnsavedChangesModal from "../components/ui/UnsavedChangesModal";
-import { logger } from "../services/logger";
+import { mapDbToOrder } from "../services/orderService";
 
 import OrderForm, { SaveData } from "../components/orders/OrderForm";
 import Spinner from "../components/ui/Spinner";
@@ -25,14 +21,7 @@ const EditOrderPage: React.FC = () => {
   const { user, role, permissions } = useAuth();
 
   const { success, error: showError } = useToast();
-  const [isSaving, setIsSaving] = useState(false);
-  const [isDirty, setIsDirty] = useState(false);
-  const [allowNavigation, setAllowNavigation] = useState(false);
-
-  const { showModal, confirmLeave, cancelLeave } = useWarnIfUnsaved(
-    isDirty,
-    allowNavigation
-  );
+  const [hasUnsavedChanges, setHasUnsavedChanges] = React.useState(false);
 
   // --- DATA FETCHING (The Standard Pattern) ---
   const {
@@ -40,15 +29,15 @@ const EditOrderPage: React.FC = () => {
     isLoading,
     error,
   } = useQuery<Order, Error>({
-    queryKey: queryKeys.orders.single(orderNumber),
+    queryKey: queryKeys.orders.single(Number(orderNumber)),
     queryFn: async () => {
       if (!orderNumber) throw new Error("No order number provided.");
 
       // ✅ 1. QUERY THE RAW TABLE (Snake Case)
       const { data, error } = await supabase
-        .from("orders") // Table, not View
+        .from("orders_with_details")
         .select("*")
-        .eq("order_number", orderNumber) // snake_case column
+        .eq("orderNumber", orderNumber) // ✅ FIX: Use the camelCase column name from the view
         .single();
 
       if (error) throw error;
@@ -59,59 +48,156 @@ const EditOrderPage: React.FC = () => {
     enabled: !!orderNumber,
   });
 
+  // Fetch activity log (order history)
+  const { data: activityLog } = useQuery({
+    queryKey: queryKeys.orders.history(Number(orderNumber)),
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('order_history')
+        .select('*')
+        .eq('order_id', initialOrder?.id) // ✅ FIX: Use the actual order ID (bigint)
+        .order('changed_at', { ascending: false });
+
+      if (error) throw error;
+      
+      console.log('📊 Activity Log Fetched:', {
+        timestamp: new Date().toISOString(),
+        count: data?.length,
+        latest: data?.[0]
+      });
+      
+      return data;
+    },
+    enabled: !!initialOrder?.id, // ✅ FIX: Fetch only when the initial order ID is available
+    // ✅ CRITICAL: Always refetch on mount and window focus
+    refetchOnMount: 'always',
+    refetchOnWindowFocus: true,
+    staleTime: 0, // Consider data immediately stale
+  });
+
+  // Update order mutation
+  const updateOrderMutation = useMutation({
+    mutationFn: async (updateData: Partial<Order>) => {
+      console.log('💾 Saving order with data:', updateData);
+      
+      const { error } = await supabase
+        .from('orders')
+        .update(updateData)
+        .eq('id', initialOrder?.id); // ✅ FIX: Use the actual order ID (bigint)
+
+      if (error) throw error;
+    },
+    onSuccess: async () => {
+      console.log('✅ Save successful, invalidating queries...');
+      
+      // ✅ FIX 1: Invalidate all related queries
+      await Promise.all([
+        queryClient.invalidateQueries({ 
+          queryKey: queryKeys.orders.single(initialOrder!.id) 
+        }),
+        queryClient.invalidateQueries({ 
+          queryKey: queryKeys.orders.history(initialOrder!.id) 
+        }),
+        queryClient.invalidateQueries({ 
+          queryKey: queryKeys.orders.lists() 
+        }),
+      ]);
+
+      // ✅ FIX 2: Force immediate refetch of activity log
+      console.log('🔄 Force refetching activity log...');
+      await queryClient.refetchQueries({ 
+        queryKey: queryKeys.orders.history(initialOrder!.id),
+        type: 'active'
+      });
+
+      // ✅ FIX 3: Small delay to ensure database trigger has completed
+      setTimeout(async () => {
+        console.log('🔄 Second refetch after delay...');
+        await queryClient.refetchQueries({ 
+          queryKey: queryKeys.orders.history(initialOrder!.id)
+        });
+      }, 500);
+
+      setHasUnsavedChanges(false);
+      success('Order updated successfully!');
+
+      // ✅ FIX: Navigate back to the order details page after a successful save.
+      navigate(`/order/${orderNumber}`);
+    },
+    onError: (error: any) => {
+      console.error('❌ Save failed:', error);
+      showError(error.message || 'Failed to update order');
+    },
+  });
+
   // --- PERMISSION CHECKS ---
   // Matches the "Green Tick" logic from User Management
   const canEditFinancials =
     role === UserRole.ADMIN || permissions?.orders_edit_financials === true;
 
   // --- SAVE HANDLER ---
-  const handleSave = async (formData: SaveData) => {
-    if (!initialOrder || !user?.email) {
-      showError("Cannot save order without initial data or user session.");
-      return;
-    }
-
-    setIsSaving(true);
+  const handleSave = async (data: { current: any; isNew: boolean }) => {
+    console.log('📝 handleSave called with:', data);
 
     try {
-      // ✅ 3. SEND UPDATE (The Service handles Camel -> Snake conversion)
-      const updatedOrder = await updateOrderDetails(
-        initialOrder.id,
-        formData,
-        initialOrder,
-        user.email
-      );
+      // Convert camelCase to snake_case for database
+      const dbData = {
+        customer_name: data.current.customerName,
+        customer_email: data.current.customerEmail,
+        customer_phone: data.current.customerPhone,
+        customer_profile_url: data.current.customerProfileUrl,
+        shipping_address: data.current.shippingAddress,
+        design_name: data.current.designName,
+        patches_quantity: data.current.patchesQuantity,
+        patches_type: data.current.patchesType,
+        design_size: data.current.designSize,
+        design_backing: data.current.designBacking,
+        instructions: data.current.instructions,
+        order_amount: data.current.orderAmount,
+        amount_paid: data.current.amountPaid,
+        production_cost: data.current.productionCost,
+        shipping_cost: data.current.shippingCost,
+        marketing_cost: data.current.marketingCost, // ✅ This is the field you're changing
+        status: data.current.status,
+        is_urgent: data.current.isUrgent,
+        lead_source: data.current.leadSource,
+        shipping_carrier: data.current.shippingCarrier,
+        shipping_tracking_number: data.current.shippingTrackingNumber,
+        mockup_urls: data.current.mockupUrls,
+        production_file_urls: data.current.productionFileUrls,
+        shipping_attachment_urls: data.current.shippingAttachmentUrls,
+        customer_attachment_urls: data.current.customerAttachmentUrls,
+        reason_category: data.current.reasonCategory,
+        reason_details: data.current.reasonDetails,
+      };
 
-      success(`Order ${updatedOrder.orderNumber} updated successfully!`);
-
-      // ✅ CRITICAL: Reset dirty state BEFORE navigation to prevent unsaved changes modal
-      setIsDirty(false);
-      setAllowNavigation(true);
-
-      // Refresh cache
-      await queryClient.invalidateQueries({
-        queryKey: queryKeys.orders.single(orderNumber),
-      });
-      await queryClient.invalidateQueries({ queryKey: queryKeys.orders.all() });
-
-      // ✅ Navigate to order detail page
-      navigate(`/order/${updatedOrder.orderNumber}`);
-    } catch (err: any) {
-      logger.error("💥 Save failed:", err);
-      showError(err.message || "An unknown error occurred while saving.");
-      setIsSaving(false);
+      console.log('🗄️ Database payload:', dbData);
+      
+      await updateOrderMutation.mutateAsync(dbData);
+    } catch (error) {
+      console.error('💥 Save error:', error);
+      throw error;
     }
   };
 
-  const onFormChange = useCallback(() => {
-    console.log('[EditOrderPage] onFormChange called, isSaving:', isSaving, 'isDirty:', isDirty);
-    if (isSaving) return; // If saving, ignore form changes
-    if (!isDirty) { // Only set dirty once
-      setIsDirty(true); // Mark form as dirty
-      setAllowNavigation(false); // Prevent navigation
-      console.log('[EditOrderPage] Form became dirty');
-    }
-  }, [isDirty, isSaving]);
+  // Handle form changes
+  const handleFormChange = () => {
+    console.log('📝 Form changed, marking as unsaved');
+    setHasUnsavedChanges(true);
+  };
+
+  // Warn on navigation if unsaved changes
+  React.useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (hasUnsavedChanges) {
+        e.preventDefault();
+        e.returnValue = '';
+      }
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [hasUnsavedChanges]);
 
   if (isLoading) {
     return (
@@ -145,12 +231,6 @@ const EditOrderPage: React.FC = () => {
 
   return (
     <div className="p-6 max-w-7xl mx-auto animate-fadeIn">
-      <UnsavedChangesModal
-        show={showModal}
-        onConfirm={confirmLeave}
-        onCancel={cancelLeave}
-      />
-
       <Link
         to={`/order/${orderNumber}`}
         className="flex items-center gap-2 text-sm text-slate-400 hover:text-white transition-colors mb-6"
@@ -166,10 +246,49 @@ const EditOrderPage: React.FC = () => {
       <OrderForm
         onSave={handleSave}
         initialData={initialOrder}
-        isSaving={isSaving}
+        isSaving={updateOrderMutation.isPending}
         showFinancials={canEditFinancials}
-        onFormChange={onFormChange}
+        onFormChange={handleFormChange}
       />
+
+      {/* Activity Log Section */}
+      <div className="bg-slate-900/40 backdrop-blur-xl border border-white/10 rounded-2xl shadow-xl p-10">
+        <h3 className="text-lg font-semibold text-white mb-6">Activity Log</h3>
+        
+        {/* ✅ Debug Info */}
+        <div className="text-xs text-slate-500 mb-4">
+          Last Updated: {new Date().toLocaleTimeString()}
+          {' | '}
+          Total Changes: {activityLog?.length || 0}
+        </div>
+
+        <div className="space-y-3">
+          {activityLog?.map((entry: any) => (
+            <div 
+              key={entry.id} 
+              className="flex items-start gap-4 p-4 bg-slate-800/50 rounded-lg border border-slate-700/50"
+            >
+              <div className="flex-1">
+                <p className="text-sm font-medium text-white">
+                  Field Updated: {entry.field_changed}
+                </p>
+                <p className="text-xs text-slate-400 mt-1">
+                  Changed from <span className="text-red-400">"{entry.old_value}"</span>
+                  {' to '}
+                  <span className="text-green-400">"{entry.new_value}"</span>
+                </p>
+                <p className="text-xs text-slate-500 mt-2">
+                  By {entry.user_email} • {new Date(entry.changed_at).toLocaleString()}
+                </p>
+              </div>
+            </div>
+          ))}
+
+          {(!activityLog || activityLog.length === 0) && (
+            <p className="text-sm text-slate-400">No activity yet</p>
+          )}
+        </div>
+      </div>
     </div>
   );
 };

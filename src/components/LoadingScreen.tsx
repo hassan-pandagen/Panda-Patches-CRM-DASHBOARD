@@ -1,5 +1,5 @@
 // src/components/LoadingScreen.tsx
-import React, { useEffect, useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { supabase } from '../services/supabaseClient';
 import { logger } from '../services/logger';
 

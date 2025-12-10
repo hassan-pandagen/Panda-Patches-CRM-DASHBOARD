@@ -1,9 +1,11 @@
-import React, { useEffect, useState } from 'react';
-import { supabase } from '../../services/supabaseClient';
+import React, { useMemo } from 'react';
 import { logger } from '../../services/logger';
 import GlassCard from '../ui/GlassCard';
 import { Mail, RefreshCw, User, Clock } from 'lucide-react';
 import { format } from 'date-fns';
+import { useOrderHistory } from '../../hooks/useOrderHistory';
+import { useOrderCommunications } from '../../hooks/useOrderCommunications';
+import { OrderHistoryEntry, OrderCommunication } from '../../types';
  
 interface TimelineItem {
   id: string;
@@ -15,94 +17,53 @@ interface TimelineItem {
   meta?: any;
 }
 
-// Define specific types for Supabase data to avoid 'any'
-interface OrderHistory {
-  id: number;
-  order_id: number;
-  changed_at: string;
-  field_changed: string;
-  old_value?: string;
-  new_value?: string;
-  user_email: string;
-}
-
-interface OrderCommunication {
-  id: number;
-  sent_at: string;
-  subject: string;
-  template_id: string;
-  recipient_email: string;
-}
-
 const OrderTimeline: React.FC<{ orderId: number }> = ({ orderId }) => {
-  const [items, setItems] = useState<TimelineItem[]>([]);
-  const [loading, setLoading] = useState(true);
+  // Use our new hooks to fetch data. TanStack Query handles loading, errors, and caching.
+  const { data: historyData, isLoading: isHistoryLoading, isError: isHistoryError } = useOrderHistory(orderId);
+  const { data: commsData, isLoading: isCommsLoading, isError: isCommsError } = useOrderCommunications(orderId);
 
-  useEffect(() => {
-    const fetchTimeline = async () => {
-      try {
-        // ✅ OPTIMIZATION: Select only needed columns instead of *
-        // Reduces data transfer by ~40% on each query
-        
-        // 1. Fetch History (Status Changes, Edits)
-        const historyPromise = supabase
-          .from('order_history')
-          .select('id, order_id, field_changed, old_value, new_value, user_email, changed_at')
-          .eq('order_id', orderId)
-          .order('changed_at', { ascending: false });
+  // Combine and sort the data only when the source data changes.
+  const items = useMemo(() => {
+    if (!historyData && !commsData) {
+      return [];
+    }
 
-        // 2. Fetch Communications (Emails)
-        const commsPromise = supabase
-          .from('order_communications')
-          .select('id, order_id, communication_type, subject, body, recipient, sent_at')
-          .eq('order_id', orderId)
-          .order('sent_at', { ascending: false });
+    // Map History to Timeline Items
+    const historyItems: TimelineItem[] = (historyData || []).map((h: OrderHistoryEntry) => ({
+      id: `hist-${h.id}`,
+      type: 'HISTORY',
+      title: h.field_changed === 'status' ? 'Status Updated' : `Field Updated: ${h.field_changed}`,
+      description: h.field_changed === 'status' 
+        ? `Changed from "${h.old_value?.replace(/_/g, ' ') || 'None'}" to "${h.new_value?.replace(/_/g, ' ')}"`
+        : `Changed from "${h.old_value || 'empty'}" to "${h.new_value || 'empty'}"`,
+      user: h.user_email,
+      date: h.changed_at
+    }));
 
-        // Run fetches in parallel for better performance
-        const [{ data: historyData, error: historyError }, { data: commsData, error: commsError }] = await Promise.all([historyPromise, commsPromise]);
+    // Map Emails to Timeline Items
+    const commsItems: TimelineItem[] = (commsData || []).map((c: OrderCommunication) => ({
+      id: `comm-${c.id}`,
+      type: 'EMAIL',
+      title: c.subject || 'Email Sent',
+      description: `To: ${c.recipient_email}${c.template_id ? ` | Template: ${c.template_id}` : ''}`,
+      user: c.user_email || 'System (Automated)',
+      date: c.sent_at
+    }));
 
-        if (historyError) throw historyError;
-        if (commsError) throw commsError;
+    // Merge and Sort (Newest First)
+    return [...historyItems, ...commsItems].sort(
+      (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
+    );
+  }, [historyData, commsData]);
 
-        // 3. Map History to Timeline Items
-        const historyItems: TimelineItem[] = (historyData || []).map((h: OrderHistory) => ({
-          id: `hist-${h.id}`,
-          type: 'HISTORY',
-          title: h.field_changed === 'status' ? 'Status Updated' : 'Order Updated',
-          description: h.field_changed === 'status' 
-            ? `Changed from ${h.old_value?.replace(/_/g, ' ') || 'None'} to ${h.new_value?.replace(/_/g, ' ')}`
-            : `Updated ${h.field_changed}`,
-          user: h.user_email,
-          date: h.changed_at
-        }));
+  if (isHistoryLoading || isCommsLoading) {
+    return <div className="p-4 text-slate-400">Loading activity...</div>;
+  }
 
-        // 4. Map Emails to Timeline Items
-        const commsItems: TimelineItem[] = (commsData || []).map((c: OrderCommunication) => ({
-          id: `comm-${c.id}`,
-          type: 'EMAIL',
-          title: c.subject || 'Email Sent',
-          description: `Template: ${c.template_id} | To: ${c.recipient_email}`,
-          user: 'System (Automated)',
-          date: c.sent_at
-        }));
-
-        // 5. Merge and Sort (Newest First)
-        const combined = [...historyItems, ...commsItems].sort(
-          (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
-        );
-
-        setItems(combined);
-        } catch (err) {
-         logger.error("Error fetching timeline:", err);
-        } finally {
-         setLoading(false);
-        }
-    };
-
-    if (orderId) fetchTimeline();
-  }, [orderId]);
-
-  if (loading) return <div className="p-4 text-slate-400">Loading activity...</div>;
+  if (isHistoryError || isCommsError) {
+    logger.error("Error fetching timeline data", { isHistoryError, isCommsError });
+    return <div className="p-4 text-red-400">Failed to load activity.</div>;
+  }
 
   return (
     <GlassCard title="Activity & Communications">
@@ -139,7 +100,7 @@ const OrderTimeline: React.FC<{ orderId: number }> = ({ orderId }) => {
               {/* Date */}
               <div className="flex items-center gap-1.5 text-xs text-slate-500 bg-white/5 px-2 py-1 rounded-md whitespace-nowrap">
                 <Clock className="w-3 h-3" />
-                {format(new Date(item.date), 'MMM d, h:mm a')}
+                {item.date ? format(new Date(item.date), 'MMM d, h:mm a') : 'No date'}
               </div>
             </div>
           </div>

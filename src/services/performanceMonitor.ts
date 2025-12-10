@@ -1,6 +1,6 @@
 // src/services/performanceMonitor.ts
-// ✅ UPGRADE 8: Performance monitoring service
 
+import { supabase } from './supabaseClient';
 import { logger } from './logger';
 
 interface PerformanceMetric {
@@ -8,143 +8,85 @@ interface PerformanceMetric {
   duration: number;
   timestamp: number;
   type: 'api' | 'operation' | 'render';
+  userId?: string;
+  userEmail?: string;
 }
 
 class PerformanceMonitor {
+  private pendingMetrics: Map<string, number> = new Map();
   private metrics: PerformanceMetric[] = [];
-  private maxMetrics = 100; // Keep last 100 metrics
+  private isEnabled: boolean = false;
 
-  /**
-   * Start measuring an operation and return a function to end it
-   * Usage:
-   * const end = performanceMonitor.startMeasure('fetchOrders', 'api');
-   * const data = await fetchOrders();
-   * end();
-   */
-  startMeasure = (name: string, type: 'api' | 'operation' | 'render' = 'operation') => {
-    const startMark = `${name}-start-${Date.now()}`;
-    const endMark = `${name}-end-${Date.now()}`;
+  constructor() {
+    // In a real app, you might have a global state or local storage
+    // to enable/disable this for certain users or sessions.
+    this.isEnabled = import.meta.env.DEV; // Only run in development mode by default
+  }
 
-    performance.mark(startMark);
+  public start(name: string): void {
+    if (!this.isEnabled) return;
+    this.pendingMetrics.set(name, performance.now());
+  }
 
-    return () => {
-      performance.mark(endMark);
-      
-      try {
-        const measure = performance.measure(name, startMark, endMark);
-        const metric: PerformanceMetric = {
-          name,
-          duration: measure.duration,
-          timestamp: Date.now(),
-          type,
-        };
+  public startMeasure(name: string, type: 'api' | 'operation' | 'render' = 'operation'): () => void {
+    this.start(name);
+    return () => this.end(name, type);
+  }
 
-        this.recordMetric(metric);
-        
-        // Log slow operations (>1000ms)
-        if (measure.duration > 1000) {
-          logger.warn(
-            `[Performance] Slow ${type}: ${name} took ${measure.duration.toFixed(2)}ms`
-          );
-        } else {
-          logger.debug(
-            `[Performance] ${type}: ${name} took ${measure.duration.toFixed(2)}ms`
-          );
-        }
+  public end(name: string, type: 'api' | 'operation' | 'render'): void {
+    if (!this.isEnabled || !this.pendingMetrics.has(name)) return;
 
-        // Cleanup marks
-        performance.clearMarks(startMark);
-        performance.clearMarks(endMark);
-        performance.clearMeasures(name);
+    const startTime = this.pendingMetrics.get(name)!;
+    const endTime = performance.now();
+    const duration = endTime - startTime;
 
-        return metric;
-      } catch (error) {
-        logger.error('[Performance] Failed to measure', error);
-        return null;
-      }
+    this.pendingMetrics.delete(name);
+
+    const metric: PerformanceMetric = {
+      name,
+      duration,
+      timestamp: Date.now(),
+      type,
     };
-  };
 
-  /**
-   * Record a metric manually
-   */
-  private recordMetric = (metric: PerformanceMetric) => {
+    // Also keep a local copy for the local view if needed
     this.metrics.push(metric);
-    
-    // Keep only last N metrics to avoid memory bloat
-    if (this.metrics.length > this.maxMetrics) {
-      this.metrics = this.metrics.slice(-this.maxMetrics);
-    }
-  };
-
-  /**
-   * Get average duration for a specific operation type
-   */
-  getAverageDuration = (name?: string, type?: string): number => {
-    let filtered = this.metrics;
-
-    if (name) {
-      filtered = filtered.filter(m => m.name === name);
-    }
-    if (type) {
-      filtered = filtered.filter(m => m.type === type);
+    if (this.metrics.length > 200) {
+      this.metrics.shift(); // Keep the local array from growing too large
     }
 
-    if (filtered.length === 0) return 0;
-    
-    const sum = filtered.reduce((acc, m) => acc + m.duration, 0);
-    return sum / filtered.length;
-  };
+    // Fire-and-forget the insert to the database
+    this.logToDatabase(metric);
+  }
 
-  /**
-   * Get all metrics (for debugging)
-   */
-  getAllMetrics = (): PerformanceMetric[] => {
-    return [...this.metrics];
-  };
+  private async logToDatabase(metric: Omit<PerformanceMetric, 'userId' | 'userEmail'>) {
+    const { data: { user } } = await supabase.auth.getUser();
 
-  /**
-   * Get metrics summary
-   */
-  getSummary = () => {
-    const apiMetrics = this.metrics.filter(m => m.type === 'api');
-    const operationMetrics = this.metrics.filter(m => m.type === 'operation');
-    const renderMetrics = this.metrics.filter(m => m.type === 'render');
+    if (!user) {
+      // Don't log if there's no user context
+      return;
+    }
 
-    return {
-      totalMetrics: this.metrics.length,
-      api: {
-        count: apiMetrics.length,
-        avgDuration: this.getAverageDuration(undefined, 'api'),
-        slowest: apiMetrics.length > 0 
-          ? Math.max(...apiMetrics.map(m => m.duration))
-          : 0,
-      },
-      operations: {
-        count: operationMetrics.length,
-        avgDuration: this.getAverageDuration(undefined, 'operation'),
-        slowest: operationMetrics.length > 0
-          ? Math.max(...operationMetrics.map(m => m.duration))
-          : 0,
-      },
-      renders: {
-        count: renderMetrics.length,
-        avgDuration: this.getAverageDuration(undefined, 'render'),
-        slowest: renderMetrics.length > 0
-          ? Math.max(...renderMetrics.map(m => m.duration))
-          : 0,
-      },
-    };
-  };
+    const { error } = await supabase.from('performance_metrics').insert({
+      user_id: user.id,
+      user_email: user.email,
+      metric_name: metric.name,
+      metric_type: metric.type,
+      duration_ms: metric.duration,
+    });
 
-  /**
-   * Reset all metrics
-   */
-  reset = () => {
+    if (error) {
+      logger.error('Failed to log performance metric to DB', {
+        metricName: metric.name,
+        error,
+      });
+    }
+  }
+
+  public reset(): void {
     this.metrics = [];
-    logger.info('[Performance] Metrics cleared');
-  };
+    this.pendingMetrics.clear();
+  }
 }
 
-// Export singleton instance
 export const performanceMonitor = new PerformanceMonitor();

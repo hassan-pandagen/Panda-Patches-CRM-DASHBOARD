@@ -1,6 +1,6 @@
 // src/components/ui/DateRangeFilter.tsx
 
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Calendar, ChevronLeft, ChevronRight } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -42,22 +42,22 @@ export const getDefaultRange = (): DateRange => {
 };
 
 const DateRangeFilter: React.FC<DateRangeFilterProps> = ({ value, onChange }) => {
-  const [isOpen, setIsOpen] = useState(false);
-  const [currentMonth, setCurrentMonth] = useState(new Date());
-  const [startDate, setStartDate] = useState<Date | null>(null);
-  const [endDate, setEndDate] = useState<Date | null>(null);
-  const [hoverDate, setHoverDate] = useState<Date | null>(null);
-  const popoverRef = useRef<HTMLDivElement>(null);
+   const [isOpen, setIsOpen] = React.useState(false);
+   const [currentMonth, setCurrentMonth] = React.useState(new Date());
+   const [startDate, setStartDate] = React.useState<Date | null>(null);
+   const [endDate, setEndDate] = React.useState<Date | null>(null);
+   const [hoverDate, setHoverDate] = React.useState<Date | null>(null);
+   const popoverRef = React.useRef<HTMLDivElement>(null);
 
-  // Sync with parent value changes only when calendar is closed
-  useEffect(() => {
-    if (!isOpen && value) {
-      setCurrentMonth(new Date(value.startDate));
-    }
-  }, [value, isOpen]);
+   // Sync with parent value changes only when calendar is closed
+   React.useEffect(() => {
+     if (!isOpen && value) {
+       setCurrentMonth(new Date(value.startDate));
+     }
+   }, [value, isOpen]);
 
-  // Close on outside click
-  useEffect(() => {
+   // Close on outside click
+   React.useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (popoverRef.current && !popoverRef.current.contains(event.target as Node)) {
         setIsOpen(false);

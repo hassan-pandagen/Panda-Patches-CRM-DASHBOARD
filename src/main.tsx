@@ -1,24 +1,44 @@
+// src/main.tsx - FIXED VERSION
 import React from 'react';
-import ReactDOM from 'react-dom/client';
-import { createBrowserRouter, RouterProvider } from 'react-router-dom';
+import * as ReactDOM from 'react-dom/client';
+import {
+  createBrowserRouter,
+  RouterProvider,
+  createRoutesFromChildren,
+  matchRoutes,
+  useLocation,
+  useNavigation,
+} from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { SpeedInsights } from '@vercel/speed-insights/react';
-import * as Sentry from "@sentry/react";
-import { browserTracingIntegration } from "@sentry/react";
+import * as Sentry from '@sentry/react';
+import {
+  reactRouterV6BrowserTracingIntegration,
+} from '@sentry/react';
 import { AuthProvider } from './contexts/AuthContext';
 import { ErrorBoundary } from './components/ErrorBoundary';
-import { performanceMonitor } from './services/performanceMonitor';
 import { offlineManager } from './services/offlineManager';
 import { logger } from './services/logger';
 import App from './App';
+import { initializeSupabaseClient } from './services/supabaseClient';
 import './index.css';
 
 // ✅ UPGRADE 10: Initialize Sentry error tracking with tunnel to bypass ad blockers
 Sentry.init({
-  dsn: "https://1d30e386f4968460dc23045cb808978d@o4510487337762816.ingest.us.sentry.io/4510487352639488",
-  tunnel: "/api/sentry-proxy", // Proxy through own domain to bypass ad blockers
+  dsn: 'https://1d30e386f4968460dc23045cb808978d@o4510487337762816.ingest.us.sentry.io/4510487352639488',
+  tunnel: '/api/sentry-proxy', // Proxy through own domain to bypass ad blockers
   integrations: [
-    browserTracingIntegration(),
+    // Use the specific React Router v6 integration
+    reactRouterV6BrowserTracingIntegration({
+      // The `useEffect` hook is used to instrument the router once it's available.
+      // This is the recommended way to handle async router setup.
+      useEffect: React.useEffect, // React namespace used intentionally here (from module import)
+      // Pass the hooks and helpers from react-router-dom
+      useLocation,
+      useNavigation,
+      createRoutesFromChildren,
+      matchRoutes,
+    }),
   ],
   tracesSampleRate: 1.0,
   environment: import.meta.env.MODE,
@@ -68,11 +88,8 @@ const queryClient = new QueryClient({
   },
 });
 
-// ✅ UPGRADE 8: Initialize performance monitoring
-if (import.meta.env.DEV) {
-  // Make performanceMonitor available in browser console for debugging
-  (window as any).performanceMonitor = performanceMonitor;
-}
+// ✅ FIX: Initialize Supabase client with queryClient to break circular dependencies
+initializeSupabaseClient(queryClient);
 
 // ✅ UPGRADE 9: Initialize offline support
 offlineManager.registerServiceWorker();
@@ -86,8 +103,10 @@ const router = createBrowserRouter([
   },
 ]);
 
-// ✅ Wrap router with Sentry
-const SentryRoutes = Sentry.withSentryRouting(router);
+// The Sentry.withSentryReactRouterV6Routing HOC will automatically
+// instrument the router passed to RouterProvider.
+const SentryRouterProvider = Sentry.withSentryReactRouterV6Routing(RouterProvider);
+
 
 // ✅ DAY 1 FIX: Safely get root element with proper error handling
 const rootElement = document.getElementById('root');
@@ -104,7 +123,7 @@ ReactDOM.createRoot(rootElement).render(
     <ErrorBoundary>
       <QueryClientProvider client={queryClient}>
         <AuthProvider>
-          <RouterProvider router={SentryRoutes} />
+          <SentryRouterProvider router={router} />
         </AuthProvider>
       </QueryClientProvider>
       <SpeedInsights />

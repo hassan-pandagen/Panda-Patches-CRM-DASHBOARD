@@ -1,6 +1,6 @@
 // src/hooks/useWarnIfUnsaved.ts - FIXED VERSION
 
-import { useCallback, useEffect, useState, useSyncExternalStore, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback, useSyncExternalStore } from "react";
 import { useBlocker } from "react-router-dom";
 
 /**
@@ -29,26 +29,26 @@ const dirtyStore = {
  * @param forceAllow - Set to true after successful save to bypass blocking
  */
 export function useWarnIfUnsaved(isDirty: boolean, forceAllow: boolean = false) {
-  const [showModal, setShowModal] = useState(false);  
-  const [componentKey] = useState(() => Symbol());
-  const shouldBlockRef = useRef(false);
+  const [showModal, setShowModal] = React.useState(false);  
+  const [componentKey] = React.useState(() => Symbol());
+  const shouldBlockRef = React.useRef(false);
 
   // Update ref whenever blocking condition changes
-  useEffect(() => {
+  React.useEffect(() => {
     shouldBlockRef.current = isDirty && !forceAllow;
   }, [isDirty, forceAllow]);
 
   // 🧭 Handle internal navigation - only block if dirty AND not force allowed
   const blocker = useBlocker(isDirty && !forceAllow);
 
-  useEffect(() => {
+  React.useEffect(() => {
     if (blocker.state === "blocked") {
       setShowModal(true);
     }
   }, [blocker.state]);
   
   // 🌐 Track this component's dirty state in the global store
-  useEffect(() => {
+  React.useEffect(() => {
     if (isDirty && !forceAllow) {
       dirtyStore.add(componentKey);
       console.log(`[useWarnIfUnsaved] Component added to dirty store. isDirty: ${isDirty}, forceAllow: ${forceAllow}`);
@@ -64,14 +64,14 @@ export function useWarnIfUnsaved(isDirty: boolean, forceAllow: boolean = false) 
   }, [isDirty, forceAllow, componentKey]);
 
   // Subscribe to global dirty state
-  const isAnyDirty = useSyncExternalStore(
+  const isAnyDirty = React.useSyncExternalStore(
     dirtyStore.subscribe, 
     dirtyStore.getSnapshot, 
     () => false
   );
 
   // 🚪 Handle browser/tab close - native browser dialog
-  useEffect(() => {
+  React.useEffect(() => {
     const handleBeforeUnload = (event: BeforeUnloadEvent) => {
       // Check the ref for most current state
       if (shouldBlockRef.current) {
@@ -89,7 +89,7 @@ export function useWarnIfUnsaved(isDirty: boolean, forceAllow: boolean = false) 
   }, []); // Empty deps - use ref instead
 
   // 🔙 Handle browser back/forward buttons
-  useEffect(() => {
+  React.useEffect(() => {
     let isModalShowing = false;
 
     const handlePopState = (event: PopStateEvent) => {
@@ -112,7 +112,7 @@ export function useWarnIfUnsaved(isDirty: boolean, forceAllow: boolean = false) 
     };
   }, []); // Empty deps - use ref instead
 
-  const confirmLeave = useCallback(() => {
+  const confirmLeave = React.useCallback(() => {
     setShowModal(false);
     // Clear the blocking state
     shouldBlockRef.current = false;
@@ -126,7 +126,7 @@ export function useWarnIfUnsaved(isDirty: boolean, forceAllow: boolean = false) 
     }
   }, [blocker]);
 
-  const cancelLeave = useCallback(() => {
+  const cancelLeave = React.useCallback(() => {
     setShowModal(false);
     blocker.reset?.();
   }, [blocker]);

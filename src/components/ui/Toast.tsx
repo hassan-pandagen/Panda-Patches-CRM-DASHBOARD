@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { X, CheckCircle, XCircle, AlertTriangle, Info } from 'lucide-react';
 import { ToastMessage, ToastType } from '../../contexts/ToastContext';
@@ -24,10 +24,10 @@ const Toast: React.FC<ToastProps> = ({
   onDismiss,
   index,
 }) => {
-  const [isPaused, setIsPaused] = useState(false);
+  const [isPaused, setIsPaused] = React.useState(false);
   const { icon: Icon, color } = toastConfig[type];
 
-  useEffect(() => {
+  React.useEffect(() => {
     if (isPaused) return;
 
     const timer = setTimeout(() => {

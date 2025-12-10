@@ -1,5 +1,5 @@
 // src/pages/ClockInOutPage.tsx - CLOCK IN/OUT ATTENDANCE
-import React, { useState, useEffect, useMemo, FC } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   LogIn,
   LogOut,
@@ -18,8 +18,9 @@ import { useAuth } from '../contexts/AuthContext';
 import { Navigate } from 'react-router-dom';
 import { useClockInOut } from '../hooks/useClockInOut';
 import DateRangeFilter, { DateRange, getDefaultRange } from '../components/ui/DateRangeFilter';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../services/supabaseClient';
+import { performanceMonitor } from '../services/performanceMonitor';
 import { queryKeys } from '../constants/queryKeys';
 
 const containerVariants = {
@@ -41,12 +42,13 @@ const cardVariants = {
 
 const ClockInOutPage: React.FC = () => {
   const { user, role, permissions } = useAuth();
+  const queryClient = useQueryClient();
 
   const [dateRange, setDateRange] = useState<DateRange>(() => getDefaultRange());
   const [currentTime, setCurrentTime] = useState(new Date());
   const [selectedUser, setSelectedUser] = useState<string>('');
   const [activeTab, setActiveTab] = useState<'clock' | 'admin'>('clock');
-  const [showMonthly, setShowMonthly] = useState(false);
+  const [adminTab, setAdminTab] = useState<'daily' | 'monthly' | 'performance'>('daily');
   const [selectedMonth, setSelectedMonth] = useState(
     new Date().toISOString().slice(0, 7) // YYYY-MM
   );
@@ -70,7 +72,7 @@ const ClockInOutPage: React.FC = () => {
 
   // --- NEW: Admin-specific data fetching ---
   const { data: allAttendance = [], isLoading: isLoadingAll } = useQuery({
-    queryKey: queryKeys.attendance.all(dateRange, selectedUser),
+    queryKey: queryKeys.attendance.list({ dateRange, selectedUser }),
     queryFn: async () => {
       let query = supabase
         .from('attendance_sessions')
@@ -122,6 +124,19 @@ const ClockInOutPage: React.FC = () => {
     return `${hours}h ${minutes}m`;
   };
 
+  // ✅ FIX: Create wrapper functions to handle cache invalidation for the admin view
+  const handleClockIn = async () => {
+    await clockIn();
+    // After clocking in, invalidate all attendance queries to refresh the view
+    queryClient.invalidateQueries({ queryKey: queryKeys.attendance.all() });
+  };
+
+  const handleClockOut = async () => {
+    await clockOut();
+    // After clocking out, invalidate all attendance queries to refresh the view
+    queryClient.invalidateQueries({ queryKey: queryKeys.attendance.all() });
+  };
+
   const totalHoursWorked = useMemo(() => {
     return todaySessions.reduce((total, session) => {
       const start = new Date(session.clock_in_time);
@@ -146,9 +161,13 @@ const ClockInOutPage: React.FC = () => {
   }, [allAttendance]);
 
   const monthlyStats = useMemo(() => {
-    if (!showMonthly) return [];
+    performanceMonitor.start('calculate-monthly-stats');
 
-    const monthData = allAttendance.filter(r => r.work_date.startsWith(selectedMonth));
+    if (adminTab !== 'monthly') {
+      performanceMonitor.end('calculate-monthly-stats', 'operation');
+      return [];
+    }
+    const monthData = allAttendance.filter((r) => r.work_date.startsWith(selectedMonth));
     const userStats = new Map<string, any>();
 
     monthData.forEach((record) => {
@@ -182,8 +201,9 @@ const ClockInOutPage: React.FC = () => {
         stats.undertimeHours += Math.max(0, SHIFT_CONFIG.REQUIRED_HOURS - record.duration_hours);
       }
     });
+    performanceMonitor.end('calculate-monthly-stats', 'operation');
     return Array.from(userStats.values());
-  }, [allAttendance, showMonthly, selectedMonth, SHIFT_CONFIG.REQUIRED_HOURS]);
+  }, [allAttendance, adminTab, selectedMonth, SHIFT_CONFIG.REQUIRED_HOURS]);
 
   // ✅ NEW: Quick filter functions
   const filterToday = () => {
@@ -203,6 +223,16 @@ const ClockInOutPage: React.FC = () => {
       startDate: weekStart.toISOString().split('T')[0],
       endDate: weekEnd.toISOString().split('T')[0],
     });
+  };
+
+  // ✅ Helper function to properly escape CSV values
+  const escapeCSV = (value: any) => {
+    if (value === null || value === undefined) return '';
+    const str = String(value);
+    if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+      return `"${str.replace(/"/g, '""')}"`;
+    }
+    return str;
   };
 
   // ✅ NEW: Export daily records to CSV (12-hour format with AM/PM)
@@ -233,10 +263,12 @@ const ClockInOutPage: React.FC = () => {
     const firstRow = exportData[0];
     if (!firstRow) return;
     
-    const headers = Object.keys(firstRow).join(',');
-    const rows = exportData.map(row => Object.values(row).join(','));
+    const headers = Object.keys(firstRow).map(escapeCSV).join(',');
+    const rows = exportData.map(row => Object.values(row).map(escapeCSV).join(','));
     const csv = [headers, ...rows].join('\n');
-    const blob = new Blob([csv], { type: 'text/csv' });
+    // ✅ Add UTF-8 BOM so Excel opens with correct encoding
+    const BOM = '\uFEFF';
+    const blob = new Blob([BOM + csv], { type: 'text/csv;charset=utf-8;' });
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
@@ -265,8 +297,7 @@ const ClockInOutPage: React.FC = () => {
       if (error) throw error;
       
       // Refetch data
-      const queryKey = queryKeys.attendance.all(dateRange, selectedUser);
-      queryClient.invalidateQueries({ queryKey });
+      queryClient.invalidateQueries({ queryKey: queryKeys.attendance.list({ dateRange, selectedUser }) });
       
       alert(`Forced clock out for ${userEmail}`);
     } catch (error: any) {
@@ -291,10 +322,12 @@ const ClockInOutPage: React.FC = () => {
     const firstRow = exportData[0];
     if (!firstRow) return;
     
-    const headers = Object.keys(firstRow).join(',');
-    const rows = exportData.map(row => Object.values(row).join(','));
+    const headers = Object.keys(firstRow).map(escapeCSV).join(',');
+    const rows = exportData.map(row => Object.values(row).map(escapeCSV).join(','));
     const csv = [headers, ...rows].join('\n');
-    const blob = new Blob([csv], { type: 'text/csv' });
+    // ✅ Add UTF-8 BOM so Excel opens with correct encoding
+    const BOM = '\uFEFF';
+    const blob = new Blob([BOM + csv], { type: 'text/csv;charset=utf-8;' });
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
@@ -405,7 +438,7 @@ const ClockInOutPage: React.FC = () => {
 
                 <div className="flex gap-4">
                   <button
-                    onClick={clockIn}
+                    onClick={handleClockIn}
                     disabled={isClockedIn || isClockingIn}
                     className={`flex-1 py-4 px-6 rounded-xl font-bold text-lg transition-all flex items-center justify-center gap-2 ${
                       isClockedIn
@@ -418,7 +451,7 @@ const ClockInOutPage: React.FC = () => {
                   </button>
 
                   <button
-                    onClick={clockOut}
+                    onClick={handleClockOut}
                     disabled={!isClockedIn || isClockingOut}
                     className={`flex-1 py-4 px-6 rounded-xl font-bold text-lg transition-all flex items-center justify-center gap-2 ${
                       !isClockedIn
@@ -485,9 +518,9 @@ const ClockInOutPage: React.FC = () => {
             {/* Tabs */}
             <div className="flex gap-2 border-b border-white/10">
               <button
-                onClick={() => setActiveTab('clock')}
+                onClick={() => setAdminTab('daily')}
                 className={`px-4 py-3 font-semibold transition-all ${
-                  activeTab === 'clock'
+                  adminTab === 'daily'
                     ? 'text-brand-orange border-b-2 border-brand-orange'
                     : 'text-slate-400 hover:text-white'
                 }`}
@@ -497,9 +530,9 @@ const ClockInOutPage: React.FC = () => {
               </button>
 
               <button
-                onClick={() => setActiveTab('admin')}
+                onClick={() => setAdminTab('monthly')}
                 className={`px-4 py-3 font-semibold transition-all ${
-                  activeTab === 'admin'
+                  adminTab === 'monthly'
                     ? 'text-brand-orange border-b-2 border-brand-orange'
                     : 'text-slate-400 hover:text-white'
                 }`}
@@ -510,7 +543,7 @@ const ClockInOutPage: React.FC = () => {
             </div>
 
             {/* Daily Records Tab */}
-            {activeTab === 'clock' && (
+            {adminTab === 'daily' && (
               <motion.div
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
@@ -690,7 +723,7 @@ const ClockInOutPage: React.FC = () => {
             )}
 
             {/* Monthly Report Tab */}
-            {activeTab === 'admin' && (
+            {adminTab === 'monthly' && (
               <motion.div
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
@@ -830,7 +863,7 @@ const ClockInOutPage: React.FC = () => {
 // ============================================================================
 // STATUS BADGE COMPONENT
 // ============================================================================
-const StatusBadge: FC<{ status: string }> = ({ status }) => {
+const StatusBadge: React.FC<{ status: string }> = ({ status }) => {
   const getColors = (status: string) => {
     switch (status) {
       case 'ON_TIME':

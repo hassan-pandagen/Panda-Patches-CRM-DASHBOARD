@@ -1,6 +1,6 @@
 // src/pages/Dashboard.tsx - SMOOTH LOADING (SIMPLIFIED)
 
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, type FC, type ReactNode, type KeyboardEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -191,7 +191,7 @@ export default function Dashboard() {
     });
   }, [orders, searchTerm]);
 
-  const handleSearchEnter = (e: React.KeyboardEvent<HTMLInputElement>) => {
+  const handleSearchEnter = (e: KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter" && searchTerm) {
       navigate(`/search?q=${encodeURIComponent(searchTerm)}`);
     }

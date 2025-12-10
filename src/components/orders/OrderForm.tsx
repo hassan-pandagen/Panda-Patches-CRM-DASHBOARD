@@ -1,6 +1,6 @@
 // src/components/orders/OrderForm.tsx
 
-import React, { useEffect, useMemo, FC, useState } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useForm } from 'react-hook-form';
 import { useAuth } from '../../contexts/AuthContext';
 import { Order, OrderStatus, UserRole } from '../../types';
@@ -32,7 +32,7 @@ const REFUND_REASONS = [
   "Other"
 ];
 
-const FormSectionWrapper: FC<{ title: string; children: React.ReactNode }> = ({ title, children }) => (
+const FormSectionWrapper: React.FC<{ title: string; children: React.ReactNode }> = ({ title, children }) => (
   <div className="group relative bg-slate-900/40 backdrop-blur-xl border border-white/10 rounded-2xl shadow-xl p-10">
     <h3 className="relative text-lg font-semibold text-white pb-2 mb-10">
       {title}
@@ -72,7 +72,6 @@ export interface SaveData {
   // ✅ Add these
   reasonCategory: string;
   reasonDetails: string;
-  internalNote?: string;
 }
 
 export interface ChangeDetail {
@@ -110,7 +109,6 @@ const transformOrderToFormData = (order: Order | null | undefined): SaveData => 
     // ✅ Initialize new fields
     reasonCategory: order.reasonCategory || '',
     reasonDetails: order.reasonDetails || '',
-    internalNote: order.internalNote || '',
   };
 };
 
@@ -202,40 +200,22 @@ const OrderForm: React.FC<OrderFormProps> = ({
     setIsSaving(true); // Start Spinner
 
     try {
-      // This will now always succeed because of Step 1,
-      // unless the Database itself is down.
-      const changes: ChangeDetail[] = [];
-      if (!isNewOrder && initialData) {
-        // Compare current form data with the initial data to find what changed.
-        for (const key in data) {
-          const typedKey = key as keyof SaveData;
-          // Using JSON.stringify to reliably compare values, including arrays.
-          if (JSON.stringify(formDefaultValues[typedKey]) !== JSON.stringify(data[typedKey])) {
-            changes.push({
-              field: typedKey,
-              oldValue: formDefaultValues[typedKey],
-              newValue: data[typedKey],
-            });
-          }
-        }
-      }
-
-      await onSave({
-        current: data,
-        isNew: isNewOrder,
-        changes,
-      });
-      // ✅ FIX: Use the destructured success method
-      success('Order saved successfully!');
-      reset(data); // <-- CRITICAL FIX: Reset form state to prevent "unsaved changes" warning.
-    } catch (error: any) {
-      logger.error("💥 Save Error:", error);
-      // ✅ FIX: Use the destructured showError method
-      showError(error.message || 'Failed to save order. Please try again.');
+      // The onSave function in the parent page handles saving the order.
+      // The database trigger `log_order_changes` will automatically record the history.
+      // The `data` object from the form contains all fields. We must ensure that only the fields
+      // that exist in the 'orders' table are sent to the onSave function.
+      // The `changes` array is no longer needed as the DB trigger handles history.
+      const saveData = { ...data };
+      await onSave({ current: saveData, isNew: isNewOrder, changes: [] });
+    } catch (err: any) {
+      logger.error("💥 Save Error:", err);
+      showError(err.message || 'Failed to save order. Please try again.');
     } finally {
       setIsSaving(false);
+      // Reset the form with the new data to mark it as "not dirty"
+      reset(data);
     }
-    };
+  };
 
   // Determine if the user can edit financials.
   // This is used for the Edit Order page. The New Order page controls this with the `showFinancials` prop.
@@ -513,19 +493,6 @@ const OrderForm: React.FC<OrderFormProps> = ({
           </div>
         </div>
         
-        {/* ✅ NEW: Internal Note for Admins */}
-        <div className="mt-10">
-          <label className="block text-sm font-medium text-slate-300">
-            Internal Note (Visible to Admins Only)
-          </label>
-          <Textarea
-            {...register('internalNote')}
-            rows={3}
-            className="w-full mt-1"
-            placeholder="e.g., 'Approved by Jane Doe on 10/26/2023 - customer confirmed via phone.'"
-          />
-        </div>
-
         {/* ✅ NEW: CONDITIONAL REASON BLOCK */}
         {(watchedStatus === 'CANCELLED' || watchedStatus === 'REFUNDED') && (
           <div className="mt-10 p-8 rounded-lg animate-fadeIn bg-red-500/10 border border-red-500/30">

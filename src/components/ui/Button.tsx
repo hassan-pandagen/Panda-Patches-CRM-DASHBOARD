@@ -1,4 +1,10 @@
-import React, { useState, forwardRef } from 'react';
+import React, {
+  useState,
+  forwardRef,
+  type MouseEvent,
+  type ButtonHTMLAttributes,
+  type ReactNode,
+} from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { cva, type VariantProps } from 'class-variance-authority';
 import { Loader2 } from 'lucide-react';
@@ -29,14 +35,14 @@ const buttonVariants = cva(
   }
 );
 
-type HTMLButtonProps = Omit<React.ButtonHTMLAttributes<HTMLButtonElement>, 'onClick' | 'onDrag' | 'onDragStart' | 'onDragEnd' | 'onAnimationStart'>;
+type HTMLButtonProps = Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'onClick' | 'onDrag' | 'onDragStart' | 'onDragEnd' | 'onAnimationStart'>;
 
 export interface ButtonProps extends HTMLButtonProps, VariantProps<typeof buttonVariants> {
   isLoading?: boolean;
-  icon?: React.ReactNode;
+  icon?: ReactNode;
   iconPosition?: 'left' | 'right';
   fullWidth?: boolean;
-  onClick?: (event: React.MouseEvent<HTMLButtonElement>) => void | Promise<void>;
+  onClick?: (event: MouseEvent<HTMLButtonElement>) => void | Promise<void>;
 }
 
 const Button = forwardRef<HTMLButtonElement, ButtonProps>(
@@ -63,7 +69,7 @@ const Button = forwardRef<HTMLButtonElement, ButtonProps>(
 
     const isLoading = propsIsLoading || internalLoading;
 
-    const handleClick = async (event: React.MouseEvent<HTMLButtonElement>) => {
+    const handleClick = async (event: MouseEvent<HTMLButtonElement>) => {
       if (isLoading || isSuccess) return;
 
       // 2. Trigger the ripple via hook

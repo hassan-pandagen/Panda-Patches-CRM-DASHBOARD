@@ -9,6 +9,7 @@ import FileUploadSection from '../components/orders/FileUpload';
 import Button from '../components/ui/Button';
 import GlassCard from '../components/ui/GlassCard';
 import { ChangePasswordForm } from '../components/settings/ChangePasswordForm';
+import Spinner from '../components/ui/Spinner';
 
 // ✅ FIX: Use upsert() instead of update()
 const updateSettings = async (updates: { logo_url: string }) => {
@@ -91,7 +92,6 @@ const SettingsPage: React.FC = () => {
               folderPath="public"
               urls={logoUrl ? [logoUrl] : []}
               onUrlsChange={handleLogoUpload}
-              allowMultiple={false}
             />
 
             <div className="mt-8 pt-6 border-t border-slate-700/50 flex justify-end">

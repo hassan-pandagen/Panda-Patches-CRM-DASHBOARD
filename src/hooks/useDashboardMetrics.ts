@@ -1,6 +1,6 @@
 // src/hooks/useDashboardMetrics.ts - FINAL, ROBUST VERSION 2.0
 
-import { useMemo } from 'react';
+import React, { useMemo } from 'react';
 import { Order, OrderStatus } from '../types';
 
 export const useDashboardMetrics = (orders: Order[]) => {

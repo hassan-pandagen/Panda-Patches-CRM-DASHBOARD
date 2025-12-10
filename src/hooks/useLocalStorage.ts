@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { logger } from '../services/logger';
 
 export function useLocalStorage<T>(key: string, initialValue: T): [T, (value: T) => void] {

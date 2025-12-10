@@ -11,34 +11,13 @@ export default defineConfig({
     alias: {
       "@": path.resolve(__dirname, "./src"),
     },
+    dedupe: ['react', 'react-dom'],
   },
-  test: {
-    globals: true,
-    environment: 'node',
+  optimizeDeps: {
+    include: ['react', 'react-dom'],
   },
-  // ✅ UPGRADE 5: Manual chunk configuration for optimal caching
-  build: {
-    rollupOptions: {
-      output: {
-        manualChunks: {
-          // Vendor chunks (split major dependencies)
-          'vendor-react': ['react', 'react-dom', 'react-router-dom'],
-          'vendor-query': ['@tanstack/react-query'],
-          'vendor-ui': ['recharts', 'framer-motion', 'lucide-react'],
-          'vendor-forms': ['react-hook-form'],
-          
-          // Feature chunks (group pages by feature)
-          'orders': [
-            'src/pages/AllOrdersPage.tsx',
-            'src/pages/OrderPage.tsx',
-            'src/pages/NewOrderPage.tsx',
-            'src/pages/EditOrderPage.tsx',
-          ],
-          'reports': ['src/pages/ReportsPage.tsx'],
-          'admin': ['src/pages/UserManagementPage.tsx'],
-          'settings': ['src/pages/SettingsPage.tsx'],
-        },
-      },
-    },
+  server: {
+    port: 5173,
+    strictPort: false,
   },
 })

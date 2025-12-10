@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import { Upload, X, FileText, Image as ImageIcon, ArrowDownCircle, Eye } from 'lucide-react';
 import { supabase } from '../../services/supabaseClient';
 import { logger } from '../../services/logger';
@@ -10,6 +10,7 @@ interface FileUploadSectionProps {
   folderPath: string;
   urls: string[];
   onUrlsChange: (urls: string[]) => void;
+  allowMultiple?: boolean;
   
   // ✅ NEW PROP: Function to handle moving file to another list
   onMoveFile?: (url: string) => void;

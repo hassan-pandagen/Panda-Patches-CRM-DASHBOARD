@@ -1,4 +1,4 @@
-import React, { useMemo, FC } from 'react';
+import React, { useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Order, OrderStatus } from '../../types';
 import { Zap, AlertCircle, CheckCircle, ChevronRight, Clock } from 'lucide-react';
@@ -26,7 +26,7 @@ const itemVariants: Variants = {
   visible: { opacity: 1, x: 0, transition: { type: "spring", stiffness: 100 } },
 };
 
-export const ProductionProgress: FC<ProductionProgressProps> = ({ orders }) => {
+export const ProductionProgress: React.FC<ProductionProgressProps> = ({ orders }) => {
   const navigate = useNavigate();
 
   const { statusCounts, urgentCount } = useMemo(() => {

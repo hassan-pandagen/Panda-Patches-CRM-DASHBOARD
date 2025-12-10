@@ -1,10 +1,16 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Activity, RotateCcw, TrendingUp, Clock, Zap } from 'lucide-react';
-import { performanceMonitor } from '../services/performanceMonitor';
 import Button from '../components/ui/Button';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { supabase } from '../services/supabaseClient';
+import { useAuth } from '../contexts/AuthContext';
+import { useToast } from '../hooks/useToast';
 
 interface PerformanceMetric {
   name: string;
+  metric_name: string;
+  metric_type: 'api' | 'operation' | 'render';
+  duration_ms: number;
   duration: number;
   timestamp: number;
   type: 'api' | 'operation' | 'render';
@@ -18,30 +24,68 @@ interface Summary {
 }
 
 const PerformanceMetricsPage: React.FC = () => {
-  const [summary, setSummary] = useState<Summary | null>(null);
-  const [metrics, setMetrics] = useState<PerformanceMetric[]>([]);
+  const { role } = useAuth();
+  const queryClient = useQueryClient();
+  const { success, error } = useToast();
   const [filterType, setFilterType] = useState<'all' | 'api' | 'operation' | 'render'>('all');
   const [sortBy, setSortBy] = useState<'duration' | 'recent'>('recent');
 
-  const refreshMetrics = () => {
-    setSummary(performanceMonitor.getSummary());
-    setMetrics(performanceMonitor.getAllMetrics());
-  };
+  const { data: metrics = [], isLoading, refetch } = useQuery({
+    queryKey: ['performance-metrics'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('performance_metrics')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(500); // Limit to last 500 metrics to keep it snappy
+      if (error) throw error;
+      return data;
+    },
+    enabled: role === 'ADMIN',
+    refetchInterval: 5000, // Auto-refresh every 5 seconds
+  });
+
+  const clearMetricsMutation = useMutation({
+    mutationFn: async () => {
+      const { error } = await supabase.from('performance_metrics').delete().gt('id', 0);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['performance-metrics'] });
+      success('All performance metrics have been cleared.');
+    },
+    onError: (err: any) => {
+      error('Failed to clear metrics', err.message);
+    },
+  });
 
   const handleClearMetrics = () => {
-    if (window.confirm('Clear all performance metrics?')) {
-      performanceMonitor.reset();
-      refreshMetrics();
+    if (window.confirm('Are you sure you want to delete all performance metrics from the database? This cannot be undone.')) {
+      clearMetricsMutation.mutate();
     }
   };
 
-  useEffect(() => {
-    refreshMetrics();
-    const interval = setInterval(refreshMetrics, 2000); // Auto-refresh every 2 seconds
-    return () => clearInterval(interval);
-  }, []);
+  const summary = useMemo<Summary | null>(() => {
+    if (!metrics || metrics.length === 0) return null;
 
-  const filteredMetrics = metrics
+    const calculateStats = (type: string) => {
+      const filtered = metrics.filter(m => m.metric_type === type);
+      const count = filtered.length;
+      const totalDuration = filtered.reduce((sum, m) => sum + m.duration_ms, 0);
+      const avgDuration = count > 0 ? totalDuration / count : 0;
+      const slowest = filtered.reduce((max, m) => Math.max(max, m.duration_ms), 0);
+      return { count, avgDuration, slowest };
+    };
+
+    return {
+      totalMetrics: metrics.length,
+      api: calculateStats('api'),
+      operations: calculateStats('operation'),
+      renders: calculateStats('render'),
+    };
+  }, [metrics]);
+
+  const filteredMetrics = (metrics || [])
     .filter(m => filterType === 'all' || m.type === filterType)
     .sort((a, b) => {
       if (sortBy === 'duration') {
@@ -51,13 +95,13 @@ const PerformanceMetricsPage: React.FC = () => {
     });
 
   const getMetricColor = (duration: number) => {
-    if (duration > 1000) return 'text-red-400';
-    if (duration > 500) return 'text-yellow-400';
+    if (duration > 1000) return 'text-red-400'; // Slower than 1s
+    if (duration > 500) return 'text-yellow-400'; // Slower than 500ms
     return 'text-green-400';
   };
 
   const getMetricBgColor = (duration: number) => {
-    if (duration > 1000) return 'bg-red-500/10 border border-red-500/30';
+    if (duration > 1000) return 'bg-red-500/10 border border-red-500/30'; // Slower than 1s
     if (duration > 500) return 'bg-yellow-500/10 border border-yellow-500/30';
     return 'bg-green-500/10 border border-green-500/30';
   };
@@ -84,11 +128,11 @@ const PerformanceMetricsPage: React.FC = () => {
           <p className="text-slate-400 mt-1">Real-time monitoring of application performance</p>
         </div>
         <div className="flex gap-2">
-          <Button onClick={refreshMetrics} variant="secondary" size="sm">
+          <Button onClick={() => refetch()} variant="secondary" size="sm" disabled={isLoading}>
             <Activity className="w-4 h-4 mr-2" />
-            Refresh
+            {isLoading ? 'Refreshing...' : 'Refresh'}
           </Button>
-          <Button onClick={handleClearMetrics} variant="destructive" size="sm">
+          <Button onClick={handleClearMetrics} variant="destructive" size="sm" disabled={clearMetricsMutation.isPending}>
             <RotateCcw className="w-4 h-4 mr-2" />
             Clear
           </Button>
@@ -205,21 +249,21 @@ const PerformanceMetricsPage: React.FC = () => {
           ) : (
             filteredMetrics.map((metric, idx) => (
               <div
-                key={`${metric.name}-${metric.timestamp}-${idx}`}
-                className={`p-3 rounded-lg flex items-center justify-between ${getMetricBgColor(metric.duration)}`}
+                key={`${metric.metric_name}-${metric.created_at}-${idx}`}
+                className={`p-3 rounded-lg flex items-center justify-between ${getMetricBgColor(metric.duration_ms)}`}
               >
                 <div className="flex items-center gap-3 flex-1">
-                  <div className="text-slate-300">{getTypeIcon(metric.type)}</div>
+                  <div className="text-slate-300">{getTypeIcon(metric.metric_type)}</div>
                   <div className="flex-1">
-                    <p className="text-sm font-medium text-white">{metric.name}</p>
+                    <p className="text-sm font-medium text-white">{metric.metric_name}</p>
                     <p className="text-xs text-slate-500">
-                      {new Date(metric.timestamp).toLocaleTimeString()}
+                      {new Date(metric.created_at).toLocaleTimeString()}
                     </p>
                   </div>
                 </div>
-                <div className={`text-right ${getMetricColor(metric.duration)}`}>
-                  <p className="text-sm font-semibold">{metric.duration.toFixed(2)}ms</p>
-                  <p className="text-xs text-slate-400">{metric.type}</p>
+                <div className={`text-right ${getMetricColor(metric.duration_ms)}`}>
+                  <p className="text-sm font-semibold">{metric.duration_ms.toFixed(2)}ms</p>
+                  <p className="text-xs text-slate-400">{metric.metric_type}</p>
                 </div>
               </div>
             ))

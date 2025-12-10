@@ -1,6 +1,6 @@
 // src/pages/AllOrdersPage.tsx - ADDED ALL PIPELINE TABS
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useSearchParams, Link, useNavigate } from 'react-router-dom';
 import { supabase } from '../services/supabaseClient';
@@ -141,13 +141,13 @@ const AllOrdersPage: React.FC = () => {
   const canViewFinancials = role === UserRole.ADMIN || permissions?.view_financials;
 
   // --- URL AUTO-FILTER ---
-  useEffect(() => {
+  React.useEffect(() => {
     const filterParam = searchParams.get('filter');
     if (filterParam) {
       setActiveFilter(filterParam);
       setCurrentPage(1);
     }
-  }, [searchParams]);
+  }, [searchParams], React.useEffect);
 
   // --- DATA FETCHING ---
   const { data: orders = [], isLoading, error } = useQuery({
@@ -169,7 +169,7 @@ const AllOrdersPage: React.FC = () => {
   });
 
   // --- OVERDUE LOGIC ---
-  const tenDaysAgo = useMemo(() => {
+  const tenDaysAgo = React.useMemo(() => {
     const date = new Date();
     date.setDate(date.getDate() - 10);
     return date;

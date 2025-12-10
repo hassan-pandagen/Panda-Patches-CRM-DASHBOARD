@@ -1,39 +1,45 @@
-import React, { useState, useId, forwardRef } from 'react';
+import React, {
+  useState,
+  useId,
+  forwardRef,
+  type InputHTMLAttributes,
+  type ReactNode,
+} from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, CheckCircle, AlertCircle } from 'lucide-react';
 
-interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
+interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
   label: string;
   error?: string;
   success?: boolean;
-  icon?: React.ReactNode;
-  rightIcon?: React.ReactNode;
+  icon?: ReactNode;
+  rightIcon?: ReactNode;
   onClear?: () => void;
 }
 
 const Input = forwardRef<HTMLInputElement, InputProps>(
-  (
-    {
-      label,
-      type = 'text',
-      error,
-      success,
-      icon,
-      rightIcon,
-      maxLength,
-      value,
-      onClear,
-      className,
-      ...props
-    },
-    ref
-  ) => {
-    const id = useId();
-    const hasValue = !!value;
-    const isError = !!error;
-    const isSuccess = success && !isError;
+   (
+     {
+       label,
+       type = 'text',
+       error,
+       success,
+       icon,
+       rightIcon,
+       maxLength,
+       value,
+       onClear,
+       className,
+       ...props
+     },
+     ref
+   ) => {
+     const id = useId();
+     const hasValue = !!value;
+     const isError = !!error;
+     const isSuccess = success && !isError;
 
-    const [isFocused, setIsFocused] = useState(false);
+     const [isFocused, setIsFocused] = useState(false);
 
     const labelVariants = {
       inactive: {

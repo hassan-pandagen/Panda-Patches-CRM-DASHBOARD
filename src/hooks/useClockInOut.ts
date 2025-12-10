@@ -62,9 +62,10 @@ export const useClockInOut = () => {
   const isClockedIn = !!activeSession;
 
   const invalidateQueries = () => {
+    // Invalidate today's attendance to refetch immediately after clock in/out
     queryClient.invalidateQueries({ queryKey: queryKeys.attendance.today(user?.id) });
-    // Also invalidate the admin query if it's being used
-    queryClient.invalidateQueries({ queryKey: ['attendance', 'all'] });
+    // Also invalidate the full attendance list if admin is viewing
+    queryClient.invalidateQueries({ queryKey: queryKeys.attendance.all() });
   };
 
   const clockInMutation = useMutation({
@@ -90,13 +91,13 @@ export const useClockInOut = () => {
   const clockOutMutation = useMutation({
     mutationFn: async () => {
       if (!user) throw new Error('User not authenticated');
-      const sessionToClockOut = await findActiveSession(user.id);
-      if (!sessionToClockOut) throw new Error('No active session to clock out from.');
+      // Use the cached activeSession instead of querying DB again
+      if (!activeSession) throw new Error('No active session to clock out from.');
 
       const { data, error } = await supabase
         .from('attendance_sessions')
         .update({ clock_out_time: new Date().toISOString() })
-        .eq('id', sessionToClockOut.id);
+        .eq('id', activeSession.id);
 
       if (error) throw error;
     },

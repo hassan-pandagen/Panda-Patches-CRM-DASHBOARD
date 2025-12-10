@@ -1,4 +1,4 @@
-// src/App.tsx - Code Splitting Implementation
+// src/App.tsx - Standard Imports Version
 
 import React, { lazy, Suspense } from 'react';
 
@@ -30,8 +30,8 @@ const ClockInOutPage = lazy(() => import('@/pages/ClockInOutPage'));
 const PerformanceMetricsPage = lazy(() => import('@/pages/PerformanceMetricsPage'));
 
 // Your Protection Components
-import ProtectedRoute from './ProtectedRoute'; // Adjust path if needed
-import AdminRoute from './AdminRoute'; // Adjust path if needed
+import ProtectedRoute from './ProtectedRoute';
+import AdminRoute from './AdminRoute';
 
 // ✅ NEW: Import ErrorBoundary for error handling
 import { ErrorBoundary } from '@/components/ErrorBoundary';

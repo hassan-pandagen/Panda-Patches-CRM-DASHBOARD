@@ -7,6 +7,8 @@ import {
   Edit,
   Truck,
   Sparkles,
+  ShieldCheck,
+  MessageSquare,
   LucideProps,
 } from 'lucide-react';
 import { OrderStatus } from '../types';
@@ -43,6 +45,11 @@ export const STATUS_INFO_MAP: Record<OrderStatus, StatusInfo> = {
     icon: Loader,
     color: 'text-blue-400 bg-blue-500/10 border-blue-500/20',
   },
+  [OrderStatus.QUALITY_ASSURANCE]: {
+    label: 'QA',
+    icon: ShieldCheck,
+    color: 'text-yellow-400 bg-yellow-500/10 border-yellow-500/20',
+  },
   [OrderStatus.COMPLETED]: {
     label: 'Completed',
     icon: CheckCircle,
@@ -61,6 +68,11 @@ export const STATUS_INFO_MAP: Record<OrderStatus, StatusInfo> = {
   // Add other statuses if they exist in your OrderStatus enum
   [OrderStatus.DELIVERED]: { label: 'Delivered', icon: CheckCircle, color: 'text-lime-400 bg-lime-500/10 border-lime-500/20' },
   [OrderStatus.REFUNDED]: { label: 'Refunded', icon: XCircle, color: 'text-gray-400 bg-gray-500/10 border-gray-500/20' },
+  [OrderStatus.FEEDBACK]: {
+    label: 'Feedback',
+    icon: MessageSquare,
+    color: 'text-gray-400 bg-gray-500/10 border-gray-500/20',
+  },
 };
 
 export const getStatusInfo = (status: OrderStatus | string): StatusInfo => {
