@@ -10,17 +10,17 @@ export const useToast = () => {
   }
 
   return {
-    success: (message: string) => {
-      context.addToast({ type: 'success', message });
+    success: (message: string, subtitle?: string) => {
+      context.addToast({ type: 'success', message: subtitle ? `${message}: ${subtitle}` : message });
     },
-    error: (message: string) => {
-      context.addToast({ type: 'error', message });
+    error: (message: string, subtitle?: string) => {
+      context.addToast({ type: 'error', message: subtitle ? `${message}: ${subtitle}` : message });
     },
-    warning: (message: string) => {
-      context.addToast({ type: 'warning', message });
+    warning: (message: string, subtitle?: string) => {
+      context.addToast({ type: 'warning', message: subtitle ? `${message}: ${subtitle}` : message });
     },
-    info: (message: string) => {
-      context.addToast({ type: 'info', message });
+    info: (message: string, subtitle?: string) => {
+      context.addToast({ type: 'info', message: subtitle ? `${message}: ${subtitle}` : message });
     },
   };
 };

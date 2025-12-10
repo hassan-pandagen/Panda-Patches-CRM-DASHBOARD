@@ -1,11 +1,12 @@
-// src/main.tsx - FIXED VERSION
+// src/main.tsx - FIXED VERSION (Consistent Imports)
 import React from 'react';
-import * as ReactDOM from 'react-dom/client';
+import ReactDOM from 'react-dom/client';
 import {
   createBrowserRouter,
   RouterProvider,
 } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { ToastProvider } from './constants/ToastContext';
 import { SpeedInsights } from '@vercel/speed-insights/react';
 import { AuthProvider } from './contexts/AuthContext';
 import { ChunkErrorBoundary } from './components/ChunkErrorBoundary';
@@ -164,6 +165,8 @@ const queryClient = new QueryClient({
 initializeSupabaseClient(queryClient);
 
 // ✅ Initialize offline support
+// Just call this. 
+// The manager itself will decide to run (Production) or do nothing (Dev).
 offlineManager.registerServiceWorker();
 (window as any).offlineManager = offlineManager;
 
@@ -227,7 +230,9 @@ ReactDOM.createRoot(rootElement).render(
       <ChunkErrorBoundary>
         <QueryClientProvider client={queryClient}>
           <AuthProvider>
-            <SentryRouterProvider router={router} />
+            <ToastProvider>
+              <SentryRouterProvider router={router} />
+            </ToastProvider>
           </AuthProvider>
         </QueryClientProvider>
       </ChunkErrorBoundary>

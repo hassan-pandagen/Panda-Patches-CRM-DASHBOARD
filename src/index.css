@@ -1,10 +1,13 @@
 /* 1. Import the Google Font */
 @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@100..900&display=swap');
 
-/* 2. Import Tailwind's base, components, and utilities */
-@import "tailwindcss/base";
-@import "tailwindcss/components";
-@import "tailwindcss/utilities";
+/* 2. ✅ THE FIX: Use Tailwind Directives instead of imports */
+/* This fixes the loading issue with Vite */
+/* stylelint-disable at-rule-no-unknown */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+/* stylelint-enable at-rule-no-unknown */
 
 /* 3. Apply your custom base styles to the 'base' layer */
 @layer base {

@@ -1,5 +1,3 @@
-// .vscode/settings.json - FINAL RECOMMENDED VERSION
-
 {
   "deno.enable": true,
   "deno.lint": true,
@@ -10,5 +8,14 @@
   },
   "[javascript]": {
     "editor.defaultFormatter": "denoland.vscode-deno"
-  }
+  },
+  
+  "//": "--- TAILWIND CSS SETTINGS BELOW ---",
+  "files.associations": {
+    "*.css": "tailwindcss"
+  },
+  "editor.quickSuggestions": {
+    "strings": true
+  },
+  "css.validate": false
 }

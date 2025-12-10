@@ -92,7 +92,16 @@ const UserManagementPage: React.FC = () => {
     onError: (error: Error) => toast.error("Update Failed", error.message),
   });
 
-  const changePasswordMutation = { isPending: false };
+  // ✅ FIX: Create a dedicated mutation for changing the password
+  const changePasswordMutation = useMutation({
+    mutationFn: (data: { id: string; updates: any }) => updateUserProfile(data.id, data.updates),
+    onSuccess: () => {
+      setModalMode(null);
+      // Use a specific success message for password changes
+      toast.success("Password Updated", `The password for ${selectedUser?.email} has been changed.`);
+    },
+    onError: (error: Error) => toast.error("Password Update Failed", error.message),
+  });
 
   // --- EVENT HANDLERS ---
   const handleCreateUser = (e: React.FormEvent) => {
@@ -118,8 +127,8 @@ const UserManagementPage: React.FC = () => {
     e.preventDefault();
     if (!selectedUser || !resetPassword) return;
 
-    // We reuse the existing mutation but only send the password field
-    editUserMutation.mutate({
+    // Use the new, dedicated mutation for password changes
+    changePasswordMutation.mutate({
       id: selectedUser.id,
       updates: {
         password: resetPassword
@@ -152,6 +161,7 @@ const UserManagementPage: React.FC = () => {
     // Reset mutations
     createUserMutation.reset();
     editUserMutation.reset();
+    changePasswordMutation.reset();
     deleteUserMutation.reset();
   };
 
@@ -665,10 +675,10 @@ const UserManagementPage: React.FC = () => {
                 </button>
                 <button
                   type="submit"
-                  disabled={editUserMutation.isPending}
+                  disabled={changePasswordMutation.isPending}
                   className="px-4 py-2 bg-amber-600 hover:bg-amber-500 text-white rounded-lg font-medium transition-colors flex items-center gap-2"
                 >
-                  {editUserMutation.isPending ? <Spinner size="sm" /> : <Key className="w-4 h-4" />}
+                  {changePasswordMutation.isPending ? <Spinner size="sm" /> : <Key className="w-4 h-4" />}
                   Update Password
                 </button>
               </div>

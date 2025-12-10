@@ -11,7 +11,7 @@ export const ChangePasswordForm: React.FC = () => {
   const [isSaving, setIsSaving] = useState(false);
   
   // Use your toast hook if available, otherwise fallback to local error state
-  const { toast } = useToast(); 
+  const toast = useToast(); 
 
   const handlePasswordChange = async (e: React.FormEvent) => {
     e.preventDefault();

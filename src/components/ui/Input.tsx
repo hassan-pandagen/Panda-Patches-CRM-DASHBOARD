@@ -86,7 +86,7 @@ const Input = forwardRef<HTMLInputElement, InputProps>(
         <div className="relative flex items-center bg-slate-900/40 backdrop-blur-sm rounded-lg">
           {icon && <span className="pl-4 text-slate-500">{icon}</span>}
 
-          <div className="relative flex-grow">
+          <div className="relative grow">
             <input
               ref={ref}
               id={id}

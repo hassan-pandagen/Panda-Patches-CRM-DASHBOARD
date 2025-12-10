@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../services/supabaseClient';
 import { logger } from '../services/logger';
 import { useAuth } from '../contexts/AuthContext';
@@ -25,20 +25,32 @@ const updateSettings = async (updates: { logo_url: string }) => {
 
 const SettingsPage: React.FC = () => {
   const queryClient = useQueryClient();
-  const { toast } = useToast(); // ✅ FIX: Destructure the toast object
-  const { role, settings } = useAuth();
+  const toast = useToast();
+  const { role } = useAuth();
   
   const [logoUrl, setLogoUrl] = useState<string>('');
   const [isDirty, setIsDirty] = useState(false);
 
-  // ✅ Load initial logo URL from context
+  // ✅ Fetch initial settings data using react-query
+  const { data: settings, isLoading: isLoadingSettings } = useQuery({
+    queryKey: queryKeys.settings.all(),
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('settings')
+        .select('*')
+        .eq('id', 'global_settings')
+        .single();
+      if (error && error.code !== 'PGRST116') throw error; // Ignore "not found" errors
+      return data;
+    },
+  });
+
   useEffect(() => {
     if (settings?.logo_url) {
       setLogoUrl(settings.logo_url);
     }
   }, [settings]);
 
-  // ✅ FIX: Proper mutation with YOUR custom toast system
   const { mutate: saveSettings, isLoading: isSaving } = useMutation({
     mutationFn: updateSettings,
     onSuccess: (updatedData) => {
@@ -78,7 +90,7 @@ const SettingsPage: React.FC = () => {
         <p className="text-slate-400 mt-2">Manage application preferences.</p>
       </div>
 
-      {role === 'ADMIN' && (
+      {isLoadingSettings ? <Spinner /> : role === 'ADMIN' && (
         <GlassCard>
           <div className="p-6">
             <h3 className="text-xl font-semibold text-slate-100 mb-4">Branding</h3>

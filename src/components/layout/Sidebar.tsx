@@ -50,7 +50,7 @@ const SidebarItem: React.FC<SidebarItemProps> = ({ to, label, icon, prefetchType
 };
 
 const Sidebar: React.FC = () => {
-  const { role, permissions, logout, settings, isProfileLoaded } = useAuth();
+  const { role, signOut, isLoading, settings, permissions } = useAuth();
 
   const navItems = [
     { to: '/', label: 'Dashboard', icon: <LayoutDashboard className="w-5 h-5" />, prefetchType: 'dashboard' as const },
@@ -71,13 +71,24 @@ const Sidebar: React.FC = () => {
         )}
       </div>
 
-      <nav className="flex-grow space-y-2">
+      <nav className="grow space-y-2">
         {navItems.map((item) => (
           <SidebarItem key={item.to} {...item} prefetchType={item.prefetchType} />
         ))}
+        {/* ✅ FIX: Filter nav items based on permissions */}
+        {navItems
+          .filter(item => {
+            if (item.label === 'Dashboard') return permissions?.orders_create; // Only show dashboard to sales/admins
+            if (item.label === 'Reports') return permissions?.reports_view_financials || role === 'ADMIN';
+            if (item.label === 'Orders') return permissions?.orders_view_all;
+            return true; // Show other items like Clock In/Out by default
+          })
+          .map((item) => (
+            <SidebarItem key={item.to} {...item} prefetchType={item.prefetchType} />
+          ))}
 
         {/* --- ADD NEW ORDER BUTTON (PERMISSION-BASED) --- */}
-        {/* Only show if user has 'orders_create' permission */}
+        {/* ✅ FIX: Only show if user has 'orders_create' permission */}
         {permissions?.orders_create && (
           <SidebarItem
             to="/new-order"
@@ -85,18 +96,15 @@ const Sidebar: React.FC = () => {
             icon={<PlusCircle className="w-5 h-5" />}
           />
         )}
-        {/* --- PERMISSION-BASED NAVIGATION --- */}
-        {/* Only show if Admin OR has explicit permission */}
-        {(role === 'ADMIN' || permissions?.users_manage) && (
-          <SidebarItem
-            to="/user-management"
-            label="User Management"
-            icon={<Users className="w-5 h-5" />}
-          />
-        )}
 
-        {isProfileLoaded && role === 'ADMIN' && (
+        {/* --- ADMIN-ONLY NAVIGATION --- */}
+        {role === 'ADMIN' && (
           <>
+            <SidebarItem
+              to="/user-management"
+              label="User Management"
+              icon={<Users className="w-5 h-5" />}
+            />
             <SidebarItem
               to="/performance-metrics"
               label="Performance Metrics"
@@ -113,7 +121,7 @@ const Sidebar: React.FC = () => {
 
       <div className="mt-auto">
         <button
-          onClick={logout}
+          onClick={signOut}
           className="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium text-slate-400 hover:bg-red-500/20 hover:text-red-300 transition-all duration-200"
         >
           <LogOut className="w-5 h-5" />

@@ -1,4 +1,4 @@
-// src/pages/OrderPage.tsx - FINAL WITH APPROVAL WORKFLOW
+// src/pages/OrderPage.tsx - FINAL WITH APPROVAL WORKFLOW + INLINE PRODUCTION EDITING
 
 import React, { useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
@@ -6,10 +6,11 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../services/supabaseClient';
 import { Order, UserRole, OrderStatus } from '../types';
 import { useAuth } from '../contexts/AuthContext';
-import { useToast } from '../hooks/useToast'; // Check your path
+import { useToast } from '../hooks/useToast';
 import { queryKeys } from '../constants/queryKeys';
 import InvoiceModal from '../components/invoices/InvoiceModal';
 import { mapDbToOrder } from '../services/orderService';
+import FileUploadSection from '../components/orders/FileUpload';
 
 // UI Components
 import Spinner from '../components/ui/Spinner';
@@ -18,7 +19,7 @@ import GlassCard from '../components/ui/GlassCard';
 import StatusBadge from '../components/ui/StatusBadge';
 
 // Icons
-import { Edit, Trash2, ShieldAlert, ArrowLeft, Lock, MapPin, Smartphone, Maximize, Check, XCircle, AlertTriangle, Copy, FileText } from 'lucide-react';
+import { Edit, Trash2, ShieldAlert, ArrowLeft, Lock, MapPin, Smartphone, Maximize, Check, XCircle, AlertTriangle, Copy, FileText, Upload } from 'lucide-react';
 
 // 1. Import the new component
 import OrderTimeline from '../components/orders/OrderTimeline';
@@ -59,9 +60,11 @@ const OrderPage: React.FC = () => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [isDeleteModalOpen, setIsDeleteModalOpen] = React.useState(false);
-  const { toast } = useToast(); // <--- INITIALIZE TOAST
+  const { toast } = useToast();
   const [isInvoiceModalOpen, setIsInvoiceModalOpen] = React.useState(false);
   const [isProcessing, setIsProcessing] = React.useState(false);
+  const [productionFiles, setProductionFiles] = React.useState<string[]>([]);
+  const [isEditingProduction, setIsEditingProduction] = React.useState(false);
 
   // --- PERMISSION CHECKS ---
   const isAdmin = role === UserRole.ADMIN;
@@ -105,6 +108,42 @@ const OrderPage: React.FC = () => {
       return mapDbToOrder(data);
     },
     enabled: !!orderNumber,
+  });
+
+  // Populate production files when order loads
+  React.useEffect(() => {
+    if (order?.productionFileUrls) {
+      setProductionFiles(order.productionFileUrls);
+    }
+  }, [order?.id]);
+
+  // --- PRODUCTION FILE UPDATE MUTATION ---
+  const updateProductionFilesMutation = useMutation({
+    mutationFn: async (files: string[]) => {
+      const { error } = await supabase
+        .from('orders')
+        .update({ production_file_urls: files })
+        .eq('id', order?.id);
+      
+      if (error) throw error;
+
+      // Add audit log
+      await supabase.from('order_history').insert({
+        order_id: order?.id,
+        user_email: user?.email || 'unknown',
+        field_changed: 'production_file_urls',
+        old_value: 'Files updated',
+        new_value: 'Files updated'
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.orders.single(orderNumber) });
+      toast.success('Production Files Saved', 'Files have been updated successfully.');
+      setIsEditingProduction(false);
+    },
+    onError: (err) => {
+      toast.error('Save Failed', err.message);
+    }
   });
 
   // --- APPROVAL MUTATIONS ---
@@ -231,11 +270,22 @@ const OrderPage: React.FC = () => {
                     </Button>
                     {/* ----------------------------- */}
 
-                    {/* ✅ UPDATED CONDITION */}
-                    {canEdit && (
+                    {/* ✅ FIXED: Show Edit for Admin or users with financials/status perms (not production-only) */}
+                    {canEdit && (isAdmin || permissions?.orders_edit_financials || permissions?.orders_change_status) && (
                       <Link to={`/order/${order.orderNumber}/edit`}>
                           <Button variant="secondary" size="md"><Edit size={16} /> Edit Order</Button>
                       </Link>
+                    )}
+
+                    {/* ✅ NEW: Production Edit toggle for production users */}
+                    {canViewProduction && !isAdmin && (
+                      <Button 
+                        variant={isEditingProduction ? "primary" : "secondary"} 
+                        size="md"
+                        onClick={() => setIsEditingProduction(!isEditingProduction)}
+                      >
+                        <Upload size={16} /> {isEditingProduction ? 'Done Editing' : 'Edit Production'}
+                      </Button>
                     )}
 
                 </div>
@@ -281,44 +331,46 @@ const OrderPage: React.FC = () => {
           {/* --- LEFT COLUMN --- */}
           <div className="lg:col-span-2 space-y-6">
             
-            {/* CUSTOMER INFO (Secured) */}
-            <GlassCard>
-              <div className="flex justify-between items-start mb-6">
-                <h3 className="text-lg font-semibold text-white flex items-center gap-2">
-                    Customer Information
-                </h3>
-                {!canViewShipping && <Lock className="w-4 h-4 text-slate-500" />}
-              </div>
-              
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-                <div>
-                  <p className="text-xs font-medium text-slate-400 uppercase mb-1">Customer Name</p>
-                  <p className="font-medium text-white text-base">{order.customerName}</p>
+            {/* CUSTOMER INFO - Only show to non-production users or admins */}
+            {!(canViewProduction && !isAdmin) && (
+              <GlassCard>
+                <div className="flex justify-between items-start mb-6">
+                  <h3 className="text-lg font-semibold text-white flex items-center gap-2">
+                      Customer Information
+                  </h3>
+                  {!canViewShipping && <Lock className="w-4 h-4 text-slate-500" />}
                 </div>
-                <div>
-                  <p className="text-xs font-medium text-slate-400 uppercase mb-1">Email Address</p>
-                  <p className="font-medium text-white break-all">
-                    {canViewShipping ? order.customerEmail : '•••••••• (Hidden)'}
-                  </p>
+                
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                  <div>
+                    <p className="text-xs font-medium text-slate-400 uppercase mb-1">Customer Name</p>
+                    <p className="font-medium text-white text-base">{order.customerName}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs font-medium text-slate-400 uppercase mb-1">Email Address</p>
+                    <p className="font-medium text-white break-all">
+                      {canViewShipping ? order.customerEmail : '•••••••• (Hidden)'}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-xs font-medium text-slate-400 uppercase mb-1 flex items-center gap-1">
+                      <Smartphone className="w-3 h-3" /> Phone / Mobile
+                    </p>
+                    <p className="font-medium text-white">
+                      {canViewShipping ? (order.customerPhone || 'N/A') : '•••••••• (Hidden)'}
+                    </p>
+                  </div>
+                  <div>
+                     <p className="text-xs font-medium text-slate-400 uppercase mb-1 flex items-center gap-1">
+                       <MapPin className="w-3 h-3" /> Shipping Address
+                     </p>
+                     <p className="font-medium text-white text-sm leading-relaxed">
+                       {canViewShipping ? (order.shippingAddress || 'No address provided') : '•••••••• (Hidden)'}
+                     </p>
+                  </div>
                 </div>
-                <div>
-                  <p className="text-xs font-medium text-slate-400 uppercase mb-1 flex items-center gap-1">
-                    <Smartphone className="w-3 h-3" /> Phone / Mobile
-                  </p>
-                  <p className="font-medium text-white">
-                    {canViewShipping ? (order.customerPhone || 'N/A') : '•••••••• (Hidden)'}
-                  </p>
-                </div>
-                <div>
-                   <p className="text-xs font-medium text-slate-400 uppercase mb-1 flex items-center gap-1">
-                     <MapPin className="w-3 h-3" /> Shipping Address
-                   </p>
-                   <p className="font-medium text-white text-sm leading-relaxed">
-                     {canViewShipping ? (order.shippingAddress || 'No address provided') : '•••••••• (Hidden)'}
-                   </p>
-                </div>
-              </div>
-            </GlassCard>
+              </GlassCard>
+            )}
 
             {/* DESIGN & PRODUCTION INFO */}
             {canViewProduction ? (
@@ -350,17 +402,124 @@ const OrderPage: React.FC = () => {
                       <p className="text-xs font-medium text-slate-400 uppercase mb-1">Backing</p>
                       <p className="font-medium text-white">{order.designBacking || 'N/A'}</p>
                   </div>
-                </div>
+                  </div>
+
+                  {/* Special Instructions for Production */}
+                  {order.instructions && (
+                  <div className="mt-6 pt-6 border-t border-slate-700/50">
+                    <p className="text-xs font-medium text-slate-400 uppercase mb-2">Special Instructions</p>
+                    <p className="text-white text-sm leading-relaxed bg-slate-900/50 p-3 rounded-lg border border-slate-700/50">{order.instructions}</p>
+                  </div>
+                  )}
+                  
+                  {/* Reference Images - Mockups or Customer Attachments */}
+                  {(order.mockupUrls?.length || 0) > 0 || (order.customerAttachmentUrls?.length || 0) > 0 ? (
+                    <div className="mt-6 pt-6 border-t border-slate-700/50">
+                      <p className="text-xs font-medium text-slate-400 uppercase mb-4">Reference Images</p>
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+                        {/* Mockup Images */}
+                        {order.mockupUrls?.map((url, idx) => (
+                          <a 
+                            key={`mockup-${idx}`}
+                            href={url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="relative group overflow-hidden rounded-lg border border-slate-600 hover:border-brand-orange transition-all"
+                          >
+                            <img 
+                              src={url} 
+                              alt={`Mockup ${idx + 1}`}
+                              className="w-full h-32 object-cover group-hover:scale-110 transition-transform duration-300"
+                              onError={(e) => {
+                                (e.target as HTMLImageElement).src = 'data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 fill=%22%23334155%22 viewBox=%220 0 24 24%22%3E%3Cpath d=%22M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V5h14v14zm-5.04-6.71l-2.75-3.54L6 17h12l-3.96-5.29z%22/%3E%3C/svg%3E';
+                              }}
+                            />
+                            <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors" />
+                          </a>
+                        ))}
+                        
+                        {/* Customer Reference Images */}
+                        {order.customerAttachmentUrls?.map((url, idx) => (
+                          <a 
+                            key={`customer-${idx}`}
+                            href={url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="relative group overflow-hidden rounded-lg border border-slate-600 hover:border-brand-orange transition-all"
+                          >
+                            <img 
+                              src={url} 
+                              alt={`Customer Reference ${idx + 1}`}
+                              className="w-full h-32 object-cover group-hover:scale-110 transition-transform duration-300"
+                              onError={(e) => {
+                                (e.target as HTMLImageElement).src = 'data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 fill=%22%23334155%22 viewBox=%220 0 24 24%22%3E%3Cpath d=%22M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V5h14v14zm-5.04-6.71l-2.75-3.54L6 17h12l-3.96-5.29z%22/%3E%3C/svg%3E';
+                              }}
+                            />
+                            <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors" />
+                          </a>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
+
+                {/* Production Files - Inline Editing for Production Users */}
+                {isEditingProduction && !isAdmin && (
+                  <div className="mt-6 pt-6 border-t border-slate-700/50">
+                    <FileUploadSection
+                      title="Production Files"
+                      bucketName="production-files"
+                      folderPath={`orders/${order.id}`}
+                      urls={productionFiles}
+                      onUrlsChange={setProductionFiles}
+                    />
+                    <div className="mt-4 flex justify-end gap-3">
+                      <Button 
+                        variant="secondary"
+                        onClick={() => {
+                          setProductionFiles(order.productionFileUrls || []);
+                          setIsEditingProduction(false);
+                        }}
+                      >
+                        Cancel
+                      </Button>
+                      <Button 
+                        onClick={() => updateProductionFilesMutation.mutate(productionFiles)}
+                        disabled={updateProductionFilesMutation.isPending}
+                      >
+                        {updateProductionFilesMutation.isPending ? <Spinner size="sm" /> : 'Save Files'}
+                      </Button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Display files when not editing */}
+                {!isEditingProduction && productionFiles.length > 0 && (
+                  <div className="mt-6 pt-6 border-t border-slate-700/50">
+                    <p className="text-xs font-medium text-slate-400 uppercase mb-3">Production Files</p>
+                    <div className="space-y-2">
+                      {productionFiles.map((url, idx) => (
+                        <a 
+                          key={idx}
+                          href={url} 
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                          className="text-blue-400 hover:text-blue-300 text-sm truncate flex items-center gap-2"
+                        >
+                          <FileText size={14} />
+                          {url.split('/').pop() || 'File'}
+                        </a>
+                      ))}
+                    </div>
+                  </div>
+                )}
                 
-                {/* File Downloads would go here */}
-                
-              </GlassCard>
-            ) : (
-              <div className="p-8 rounded-xl border border-slate-700/50 bg-slate-800/20 flex flex-col items-center justify-center gap-3 text-slate-500 text-center">
+                </GlassCard>
+                ) : (
+                <div className="p-8 rounded-xl border border-slate-700/50 bg-slate-800/20 flex flex-col items-center justify-center gap-3 text-slate-500 text-center">
                 <Lock className="w-8 h-8 opacity-50" />
                 <span className="font-medium">Production details are restricted for your role.</span>
-              </div>
-            )}
+                </div>
+                )}
           </div>
 
           {/* --- RIGHT COLUMN --- */}

@@ -40,9 +40,6 @@ import { ChunkErrorBoundary } from '@/components/ChunkErrorBoundary';
 // ✅ UPGRADE 9: Offline indicator
 import OfflineIndicator from '@/components/OfflineIndicator';
 
-// ✅ Update notification banner
-import { UpdateBanner } from '@/components/UpdateBanner';
-
 // ✅ UPGRADE 3: Create QueryClient with AGGRESSIVE caching config
 export const queryClient = new QueryClient({
   defaultOptions: {
@@ -66,8 +63,6 @@ const App: React.FC = () => {
   return (
     // ✅ NEW: Wrap everything in QueryClientProvider
     <QueryClientProvider client={queryClient}>
-      {/* ✅ Update banner for notifying users of new versions */}
-      <UpdateBanner />
       {/* ✅ FIX: Wrap in ChunkErrorBoundary to catch dynamic import failures */}
       <ChunkErrorBoundary>
         {/* ✅ UPGRADE 9: Offline indicator */}

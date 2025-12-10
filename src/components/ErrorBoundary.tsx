@@ -1,9 +1,10 @@
-import React, { useCallback } from 'react';
+import React from 'react';
 import { ErrorBoundary as ReactErrorBoundary, FallbackProps } from 'react-error-boundary';
 import { AlertTriangle, RefreshCw, Home } from 'lucide-react';
 import { logger } from '../services/logger';
 import { captureException } from '../services/sentryLoader';
 
+// Defined outside to avoid hook dependency issues
 const handleReload = () => {
     window.location.reload();
 };
@@ -11,9 +12,10 @@ const handleReload = () => {
 function ErrorFallback({ error, resetErrorBoundary }: FallbackProps) {
   return (
     <div className="min-h-screen bg-slate-900 flex items-center justify-center p-4 relative overflow-hidden">
-      {/* Background Ambience (Blobs) */}
+      {/* Background Ambience (Blobs) - KEPT EXACTLY AS YOURS */}
       <div className="absolute top-0 left-1/4 w-96 h-96 bg-brand-orange/10 rounded-full blur-3xl animate-blob" />
       <div className="absolute bottom-0 right-1/4 w-96 h-96 bg-blue-500/10 rounded-full blur-3xl animate-blob animation-delay-2000" />
+      
       <div className="relative bg-slate-900/60 backdrop-blur-xl border border-white/10 rounded-2xl p-8 max-w-lg w-full shadow-2xl">
         <div className="flex flex-col items-center text-center mb-6">
           <div className="p-4 bg-red-500/10 rounded-full mb-4">
@@ -24,6 +26,7 @@ function ErrorFallback({ error, resetErrorBoundary }: FallbackProps) {
             We encountered an unexpected error. Our team has been notified.
           </p>
         </div>
+        
         {/* Error Details Box */}
         <div className="bg-slate-950/50 border border-slate-800 rounded-xl p-4 mb-8 text-left overflow-hidden">
           <p className="text-red-300 font-mono text-xs mb-2 break-words">
@@ -38,6 +41,7 @@ function ErrorFallback({ error, resetErrorBoundary }: FallbackProps) {
             </details>
           )}
         </div>
+
         <div className="flex gap-4">
           <button
             onClick={resetErrorBoundary}
@@ -70,20 +74,16 @@ const onError = (error: Error, info: { componentStack: string }) => {
   });
 };
 
+// FIX: Removed useCallback here. It caused the crash.
+// The hard redirect to '/' is safer for a full reset anyway.
 const ErrorBoundary: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  // By wrapping the onReset logic in useCallback, we ensure it has a stable identity
-  // across re-renders, which is a best practice for event handlers passed to components.
-  const handleReset = useCallback(() => {
-    // For a hard reset, we navigate to the home page.
-    // This is often safer than trying to re-render a broken component tree.
-    window.location.href = '/';
-  }, []);
-
   return (
     <ReactErrorBoundary
       FallbackComponent={ErrorFallback}
       onError={onError}
-      onReset={handleReset}
+      onReset={() => {
+        window.location.href = '/';
+      }}
     >
       {children}
     </ReactErrorBoundary>

@@ -1,4 +1,5 @@
-import React from 'react';
+// src/ProtectedRoute.tsx - FIXED VERSION
+import * as React from 'react';
 import { Navigate, Outlet, useLocation } from 'react-router-dom';
 import { useAuth } from './contexts/AuthContext';
 import AppLoader from './components/ui/AppLoader';

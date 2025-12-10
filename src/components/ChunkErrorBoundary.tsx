@@ -12,6 +12,17 @@ interface ChunkErrorBoundaryState {
 // Global flag to prevent multiple reloads
 let isReloading = false;
 
+// Utility function to check for chunk loading errors
+const isChunkLoadError = (error: any): boolean => {
+  const errorMessage = typeof error === 'string' ? error : error?.message || '';
+  return (
+    errorMessage.includes('dynamically imported module') ||
+    errorMessage.includes('Failed to fetch dynamically imported module') ||
+    errorMessage.includes('Failed to load chunk') ||
+    errorMessage.includes('Loading chunk') ||
+    errorMessage.includes('Importing a module script failed')
+  );
+};
 class ChunkErrorBoundary extends React.Component<
   { children: React.ReactNode },
   ChunkErrorBoundaryState
@@ -27,13 +38,7 @@ class ChunkErrorBoundary extends React.Component<
 
   static getDerivedStateFromError(error: Error): Partial<ChunkErrorBoundaryState> {
     // Check if it's a chunk loading error
-    if (
-      error.message?.includes('dynamically imported module') || 
-      error.message?.includes('Failed to fetch dynamically imported module') ||
-      error.message?.includes('Failed to load chunk') ||
-      error.message?.includes('Loading chunk') ||
-      error.message?.includes('Importing a module script failed')
-    ) {
+    if (isChunkLoadError(error)) {
       return { hasChunkError: true, error };
     }
     // Let other errors bubble up to the parent error boundary
@@ -121,7 +126,7 @@ class ChunkErrorBoundary extends React.Component<
             
             {/* Error Details Box */}
             <div className="bg-slate-950/50 border border-slate-800 rounded-xl p-4 mb-8 text-left overflow-hidden">
-              <p className="text-orange-300 font-mono text-xs break-words">
+              <p className="text-orange-300 font-mono text-xs wrap-break-word">
                 {this.state.error?.message || 'Unknown Error'}
               </p>
               <p className="text-slate-500 text-xs mt-2">
@@ -168,17 +173,10 @@ const ChunkErrorHandler: React.FC<{ children: React.ReactNode }> = ({ children }
     // Handle errors from dynamic imports that happen outside React
     const handleError = (event: ErrorEvent) => {
       const error = event.error || event.message;
-      const errorMessage = typeof error === 'string' ? error : error?.message || '';
       
-      if (
-        errorMessage.includes('dynamically imported module') ||
-        errorMessage.includes('Failed to fetch dynamically imported module') ||
-        errorMessage.includes('Failed to load chunk') ||
-        errorMessage.includes('Loading chunk') ||
-        errorMessage.includes('Importing a module script failed')
-      ) {
+      if (isChunkLoadError(error)) {
         event.preventDefault();
-        logger.error('Global chunk loading error:', errorMessage);
+        logger.error('Global chunk loading error:', error);
         
         captureException(error, {
           errorType: 'chunk_loading_error_global'
@@ -199,17 +197,10 @@ const ChunkErrorHandler: React.FC<{ children: React.ReactNode }> = ({ children }
     // Handle unhandled promise rejections from dynamic imports
     const handleUnhandledRejection = (event: PromiseRejectionEvent) => {
       const error = event.reason;
-      const errorMessage = error?.message || String(error);
       
-      if (
-        errorMessage.includes('dynamically imported module') ||
-        errorMessage.includes('Failed to fetch dynamically imported module') ||
-        errorMessage.includes('Failed to load chunk') ||
-        errorMessage.includes('Loading chunk') ||
-        errorMessage.includes('Importing a module script failed')
-      ) {
+      if (isChunkLoadError(error)) {
         event.preventDefault();
-        logger.error('Unhandled chunk loading rejection:', errorMessage);
+        logger.error('Unhandled chunk loading rejection:', error);
         
         captureException(error, {
           errorType: 'chunk_loading_rejection'

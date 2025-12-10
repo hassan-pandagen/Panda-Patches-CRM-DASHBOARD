@@ -1,114 +1,27 @@
 // src/service-worker.ts
-// ✅ UPGRADE 9: Service Worker for offline support
 
-const CACHE_NAME = 'panda-patches-v1';
-const urlsToCache = [
+const CACHE_NAME = 'panda-crm-v2'; // Bumped version to force refresh
+const STATIC_ASSETS = [
   '/',
   '/index.html',
+  '/manifest.json'
 ];
 
-// Install event: cache assets
+// 1. INSTALL: Cache basic static assets
 self.addEventListener('install', (event: any) => {
+  console.log('[Service Worker] Installing...');
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
-      console.log('[Service Worker] Opened cache');
-      return cache.addAll(urlsToCache).catch((error) => {
-        console.log('[Service Worker] Cache addAll error:', error);
-        // Don't fail installation if caching fails
-      });
+      return cache.addAll(STATIC_ASSETS);
     })
   );
-  // Skip waiting - activate immediately
+  // Force this SW to become the active one immediately
   (self as any).skipWaiting();
 });
 
-// Fetch event: serve from cache, fallback to network
-self.addEventListener('fetch', (event: any) => {
-  // Skip non-GET requests
-  if (event.request.method !== 'GET') {
-    return;
-  }
-
-  // Skip API calls - always go to network
-  if (event.request.url.includes('/rest/v1/') || event.request.url.includes('supabase')) {
-    event.respondWith(
-      (async () => {
-        try {
-          // ✅ DAY 2 FIX: Add timeout to API fetch calls (30 seconds)
-          const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), 30000);
-
-          try {
-            const response = await fetch(event.request, { signal: controller.signal });
-            clearTimeout(timeoutId);
-            return response;
-          } catch (fetchErr: any) {
-            clearTimeout(timeoutId);
-            throw fetchErr;
-          }
-        } catch (err) {
-          // Return offline response for failed API calls
-          return new Response(
-            JSON.stringify({ error: 'offline' }),
-            {
-              status: 503,
-              statusText: 'Service Unavailable',
-              headers: new Headers({
-                'Content-Type': 'application/json',
-              }),
-            }
-          );
-        }
-      })()
-    );
-    return;
-  }
-
-  // For regular assets, use cache-first strategy
-  event.respondWith(
-    caches.match(event.request).then((response) => {
-      if (response) {
-        return response;
-      }
-
-      return (async () => {
-        try {
-          // ✅ DAY 2 FIX: Add timeout to asset fetch (20 seconds)
-          const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), 20000);
-
-          try {
-            const response = await fetch(event.request, { signal: controller.signal });
-            clearTimeout(timeoutId);
-
-            // Don't cache non-successful responses
-            if (!response || response.status !== 200 || response.type === 'error') {
-              return response;
-            }
-
-            // Clone the response
-            const responseToCache = response.clone();
-
-            caches.open(CACHE_NAME).then((cache) => {
-              cache.put(event.request, responseToCache);
-            });
-
-            return response;
-          } catch (fetchErr: any) {
-            clearTimeout(timeoutId);
-            throw fetchErr;
-          }
-        } catch (err) {
-          // Fallback to offline page if asset fetch fails
-          return caches.match('/index.html') || new Response('Offline');
-        }
-      })();
-    })
-  );
-});
-
-// Activate event: clean up old caches
+// 2. ACTIVATE: Clean up old caches
 self.addEventListener('activate', (event: any) => {
+  console.log('[Service Worker] Activating...');
   event.waitUntil(
     caches.keys().then((cacheNames) => {
       return Promise.all(
@@ -121,11 +34,65 @@ self.addEventListener('activate', (event: any) => {
       );
     })
   );
-  // Claim clients immediately
+  // Take control of all open tabs immediately
   (self as any).clients.claim();
 });
 
-// Handle messages from the main app
+// 3. FETCH: The smart logic
+self.addEventListener('fetch', (event: any) => {
+  const request = event.request;
+  const url = new URL(request.url);
+
+  // 🛑 CRITICAL FIX: Ignore chrome-extensions, basic auth, and non-http schemes
+  if (!url.protocol.startsWith('http')) {
+    return;
+  }
+
+  // 🛑 Ignore POST/PUT/DELETE requests (never cache these)
+  if (request.method !== 'GET') {
+    return;
+  }
+
+  // 🔄 API STRATEGY: Network Only (with Offline Fallback)
+  // We NEVER cache Supabase API responses because CRM data changes constantly.
+  if (url.pathname.includes('/rest/v1/') || url.hostname.includes('supabase')) {
+    event.respondWith(
+      fetch(request).catch(() => {
+        // If network fails, return a JSON error
+        return new Response(
+            JSON.stringify({ error: 'offline_mode', message: 'You are currently offline.' }),
+            { 
+              status: 503, 
+              headers: { 'Content-Type': 'application/json' } 
+            }
+        );
+      })
+    );
+    return;
+  }
+
+  // 🖼️ ASSET STRATEGY: Stale-While-Revalidate
+  // Serve from cache immediately, but update cache in background
+  event.respondWith(
+    caches.match(request).then((cachedResponse) => {
+      const fetchPromise = fetch(request).then((networkResponse) => {
+        // Check if valid response
+        if (networkResponse && networkResponse.status === 200 && networkResponse.type === 'basic') {
+          const responseToCache = networkResponse.clone();
+          caches.open(CACHE_NAME).then((cache) => {
+            cache.put(request, responseToCache);
+          });
+        }
+        return networkResponse;
+      });
+
+      // Return cached response if found, otherwise wait for network
+      return cachedResponse || fetchPromise;
+    })
+  );
+});
+
+// 4. MESSAGE: Handle skip waiting manually if needed
 self.addEventListener('message', (event: any) => {
   if (event.data && event.data.type === 'SKIP_WAITING') {
     (self as any).skipWaiting();
