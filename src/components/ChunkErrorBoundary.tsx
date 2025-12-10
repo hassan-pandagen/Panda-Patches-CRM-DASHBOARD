@@ -1,6 +1,6 @@
 import React, { useEffect } from 'react';
 import { AlertTriangle, RefreshCw, Home } from 'lucide-react';
-import * as Sentry from "@sentry/react";
+import { captureException } from '../services/sentryLoader';
 import { logger } from '../services/logger';
 
 interface ChunkErrorBoundaryState {
@@ -44,20 +44,13 @@ class ChunkErrorBoundary extends React.Component<
     if (this.state.hasChunkError) {
       logger.error('Chunk loading error:', error, errorInfo);
       
-      // Send to Sentry with more context
-      Sentry.captureException(error, {
-        tags: {
-          errorType: 'chunk_loading_error'
-        },
-        contexts: {
-          chunkError: {
-            message: error.message,
-            componentStack: errorInfo.componentStack,
-            retryCount: this.state.retryCount,
-            userAgent: navigator.userAgent,
-            timestamp: new Date().toISOString()
-          }
-        }
+      // Send to Sentry with more context (async)
+      captureException(error, {
+        errorType: 'chunk_loading_error',
+        componentStack: errorInfo.componentStack,
+        retryCount: this.state.retryCount,
+        userAgent: navigator.userAgent,
+        timestamp: new Date().toISOString()
       });
 
       // Auto-reload after first error (with delay to show message)
@@ -187,8 +180,10 @@ const ChunkErrorHandler: React.FC<{ children: React.ReactNode }> = ({ children }
         event.preventDefault();
         logger.error('Global chunk loading error:', errorMessage);
         
-        Sentry.captureException(error, {
-          tags: { errorType: 'chunk_loading_error_global' }
+        captureException(error, {
+          errorType: 'chunk_loading_error_global'
+        }).catch(() => {
+          // Sentry not ready, that's ok
         });
 
         if (!isReloading) {
@@ -216,8 +211,10 @@ const ChunkErrorHandler: React.FC<{ children: React.ReactNode }> = ({ children }
         event.preventDefault();
         logger.error('Unhandled chunk loading rejection:', errorMessage);
         
-        Sentry.captureException(error, {
-          tags: { errorType: 'chunk_loading_rejection' }
+        captureException(error, {
+          errorType: 'chunk_loading_rejection'
+        }).catch(() => {
+          // Sentry not ready, that's ok
         });
 
         if (!isReloading) {

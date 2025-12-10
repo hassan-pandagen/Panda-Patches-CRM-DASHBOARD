@@ -1,13 +1,13 @@
 // src/services/logger.ts
 // ✅ UPGRADE 6: Production-ready logging service
 
-import * as Sentry from "@sentry/react";
+import { captureException } from './sentryLoader';
 
 /**
  * Logger service that:
  * - Only logs in development mode (console.log/warn hidden in production)
  * - Always logs errors (even in production - for debugging)
- * - Sends errors to Sentry in production
+ * - Sends errors to Sentry in production (async, lazy-loaded)
  */
 export const logger = {
   /**
@@ -30,19 +30,19 @@ export const logger = {
 
   /**
    * Error logs (ALWAYS shown, even in production)
-   * Sends errors to Sentry in production
+   * Sends errors to Sentry in production (async)
    */
   error: (message: string, error?: any, context?: Record<string, any>) => {
     console.error(`[ERROR] ${message}`, error ? error : '');
     
-    // Send to Sentry in production
+    // Send to Sentry in production (non-blocking)
     if (import.meta.env.PROD) {
       const sentryError = error instanceof Error ? error : new Error(message);
-      Sentry.captureException(sentryError, { 
-        extra: { 
-          originalMessage: message,
-          ...context 
-        } 
+      captureException(sentryError, { 
+        originalMessage: message,
+        ...context 
+      }).catch(() => {
+        // Sentry not ready yet, that's ok
       });
     }
   },

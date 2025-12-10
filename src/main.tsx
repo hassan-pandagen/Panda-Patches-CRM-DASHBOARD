@@ -4,61 +4,25 @@ import * as ReactDOM from 'react-dom/client';
 import {
   createBrowserRouter,
   RouterProvider,
-  createRoutesFromChildren,
-  matchRoutes,
-  useLocation,
-  useNavigation,
 } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { SpeedInsights } from '@vercel/speed-insights/react';
-import * as Sentry from '@sentry/react';
-import {
-  reactRouterV6BrowserTracingIntegration,
-} from '@sentry/react';
 import { AuthProvider } from './contexts/AuthContext';
 import { ChunkErrorBoundary } from './components/ChunkErrorBoundary';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { offlineManager } from './services/offlineManager';
 import { logger } from './services/logger';
 import { versionChecker } from './services/versionChecker';
+import { initSentryAsync, captureMessage } from './services/sentryLoader';
 import App from './App';
 import { initializeSupabaseClient } from './services/supabaseClient';
 import './index.css';
 
-// ✅ UPGRADE 10: Initialize Sentry error tracking with tunnel to bypass ad blockers
-Sentry.init({
-  dsn: 'https://1d30e386f4968460dc23045cb808978d@o4510487337762816.ingest.us.sentry.io/4510487352639488',
-  tunnel: '/api/sentry-proxy', // Proxy through own domain to bypass ad blockers
-  integrations: [
-    // Use the specific React Router v6 integration
-    reactRouterV6BrowserTracingIntegration({
-      useEffect: React.useEffect,
-      useLocation,
-      useNavigation,
-      createRoutesFromChildren,
-      matchRoutes,
-    }),
-  ],
-  tracesSampleRate: 1.0,
-  environment: import.meta.env.MODE,
-  beforeSend(event, hint) {
-    // Filter out chunk loading errors from being sent multiple times
-    const error = hint.originalException;
-    if (error && typeof error === 'object' && 'message' in error) {
-      const message = String(error.message);
-      if (message.includes('dynamically imported module') || 
-          message.includes('Failed to fetch dynamically imported module')) {
-        // Only log these, don't send to Sentry (handled by ChunkErrorBoundary)
-        console.warn('Chunk error intercepted:', message);
-        return null; // Don't send to Sentry
-      }
-    }
-    return event;
-  },
+// ✅ UPGRADE 11: Lazy-load Sentry to reduce initial bundle from 1.9MB to ~1.2MB
+// Sentry will be initialized asynchronously after app is interactive
+initSentryAsync().catch((error) => {
+  console.warn('Failed to initialize Sentry:', error);
 });
-
-// Make Sentry available in console for testing
-(window as any).Sentry = Sentry;
 
 // ✅ Initialize version checker FIRST (before other initialization)
 versionChecker.init();
@@ -102,17 +66,14 @@ const handleChunkLoadingError = (errorMessage: string, source: string) => {
   });
 
   // Log to Sentry for tracking (but don't send duplicate events)
-  Sentry.captureMessage('Chunk loading error - auto reload', {
-    level: 'warning',
-    tags: {
-      errorType: 'chunk_loading',
-      source,
-    },
-    extra: {
-      errorMessage,
-      userAgent: navigator.userAgent,
-      timestamp: new Date().toISOString(),
-    },
+  captureMessage('Chunk loading error - auto reload', 'warning', {
+    errorType: 'chunk_loading',
+    source,
+    errorMessage,
+    userAgent: navigator.userAgent,
+    timestamp: new Date().toISOString(),
+  }).catch(() => {
+    // Sentry not ready yet, that's ok
   });
 
   // Show user-friendly message
@@ -214,8 +175,8 @@ const router = createBrowserRouter([
   },
 ]);
 
-// Wrap router with Sentry
-const SentryRouterProvider = Sentry.withSentryReactRouterV6Routing(RouterProvider);
+// Use regular RouterProvider (Sentry wrapping happens in ErrorBoundary after initialization)
+const SentryRouterProvider = RouterProvider;
 
 // ✅ Safely get root element
 const rootElement = document.getElementById('root');

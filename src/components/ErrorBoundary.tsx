@@ -2,7 +2,7 @@ import React, { useCallback } from 'react';
 import { ErrorBoundary as ReactErrorBoundary, FallbackProps } from 'react-error-boundary';
 import { AlertTriangle, RefreshCw, Home } from 'lucide-react';
 import { logger } from '../services/logger';
-import * as Sentry from "@sentry/react";
+import { captureException } from '../services/sentryLoader';
 
 const handleReload = () => {
     window.location.reload();
@@ -63,8 +63,10 @@ const onError = (error: Error, info: { componentStack: string }) => {
   logger.error('Error caught by boundary:', error, {
     componentStack: info.componentStack
   });
-  Sentry.captureException(error, {
-    contexts: { react: { componentStack: info.componentStack } }
+  captureException(error, {
+    componentStack: info.componentStack
+  }).catch(() => {
+    // Sentry not ready, that's ok
   });
 };
 
