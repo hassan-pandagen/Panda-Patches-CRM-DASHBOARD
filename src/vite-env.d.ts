@@ -1,19 +1,27 @@
 /// <reference types="vite/client" />
-/// <reference types="vitest/globals" />
 
-// This triple-slash directive loads Vite's client types, which includes the definition for `import.meta.env`.
+/**
+ * Vite-injected global constants from vite.config.ts
+ */
+declare const __APP_VERSION__: string;
+declare const __BUILD_TIME__: string;
 
-interface ImportMetaEnv {
-  readonly VITE_SUPABASE_URL: string;
-  readonly VITE_SUPABASE_ANON_KEY: string;
-  readonly VITE_SUPABASE_SERVICE_ROLE_KEY: string; // This should NOT be exposed to the client.
-  readonly VITE_CRM_BASE_URL?: string; // Keep if used for CRM base URL
-  readonly VITE_SENDGRID_API_KEY?: string;
-  readonly VITE_TWILIO_ACCOUNT_SID?: string;
-  readonly VITE_TWILIO_AUTH_TOKEN?: string;
-  readonly VITE_TWILIO_PHONE_NUMBER?: string;
+/**
+ * Custom events fired by the version checker and app
+ */
+interface WindowEventMap {
+  'app:update-available': CustomEvent<{ version: string }>;
 }
 
-interface ImportMeta {
-  readonly env: ImportMetaEnv;
+declare global {
+  interface Window {
+    addEventListener<K extends keyof WindowEventMap>(
+      type: K,
+      listener: (this: Window, ev: WindowEventMap[K]) => void,
+    ): void;
+    removeEventListener<K extends keyof WindowEventMap>(
+      type: K,
+      listener: (this: Window, ev: WindowEventMap[K]) => void,
+    ): void;
+  }
 }

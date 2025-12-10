@@ -20,6 +20,7 @@ import { ChunkErrorBoundary } from './components/ChunkErrorBoundary';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { offlineManager } from './services/offlineManager';
 import { logger } from './services/logger';
+import { versionChecker } from './services/versionChecker';
 import App from './App';
 import { initializeSupabaseClient } from './services/supabaseClient';
 import './index.css';
@@ -31,10 +32,7 @@ Sentry.init({
   integrations: [
     // Use the specific React Router v6 integration
     reactRouterV6BrowserTracingIntegration({
-      // The `useEffect` hook is used to instrument the router once it's available.
-      // This is the recommended way to handle async router setup.
-      useEffect: React.useEffect, // React namespace used intentionally here (from module import)
-      // Pass the hooks and helpers from react-router-dom
+      useEffect: React.useEffect,
       useLocation,
       useNavigation,
       createRoutesFromChildren,
@@ -43,60 +41,172 @@ Sentry.init({
   ],
   tracesSampleRate: 1.0,
   environment: import.meta.env.MODE,
+  beforeSend(event, hint) {
+    // Filter out chunk loading errors from being sent multiple times
+    const error = hint.originalException;
+    if (error && typeof error === 'object' && 'message' in error) {
+      const message = String(error.message);
+      if (message.includes('dynamically imported module') || 
+          message.includes('Failed to fetch dynamically imported module')) {
+        // Only log these, don't send to Sentry (handled by ChunkErrorBoundary)
+        console.warn('Chunk error intercepted:', message);
+        return null; // Don't send to Sentry
+      }
+    }
+    return event;
+  },
 });
 
 // Make Sentry available in console for testing
 (window as any).Sentry = Sentry;
 
-// ✅ FIX: Catch chunk loading errors (dynamic import failures)
+// ✅ Initialize version checker FIRST (before other initialization)
+versionChecker.init();
+
+// ✅ Log version info for debugging
+console.log('%c🐼 Panda Patches CRM', 'color: #ff6b35; font-weight: bold; font-size: 16px;');
+console.log('Version:', versionChecker.getVersionInfo());
+
+// Global flag to prevent multiple reloads
+let isHandlingChunkError = false;
+
+/**
+ * ✅ IMPROVED: Comprehensive chunk loading error handler
+ * Handles both runtime errors and promise rejections
+ */
+const handleChunkLoadingError = (errorMessage: string, source: string) => {
+  // Check if this is actually a chunk loading error
+  const isChunkError = 
+    errorMessage.includes('dynamically imported module') ||
+    errorMessage.includes('Failed to fetch dynamically imported module') ||
+    errorMessage.includes('Failed to load chunk') ||
+    errorMessage.includes('Loading chunk') ||
+    errorMessage.includes('Importing a module script failed') ||
+    (source === 'filename' && errorMessage.includes('assets/') && errorMessage.includes('.js'));
+
+  if (!isChunkError) {
+    return false; // Not a chunk error
+  }
+
+  // Prevent multiple simultaneous reloads
+  if (isHandlingChunkError) {
+    console.log('Already handling chunk error, ignoring duplicate');
+    return true;
+  }
+
+  isHandlingChunkError = true;
+  
+  logger.warn('🔄 Chunk loading error detected - app will reload', {
+    message: errorMessage,
+    source,
+  });
+
+  // Log to Sentry for tracking (but don't send duplicate events)
+  Sentry.captureMessage('Chunk loading error - auto reload', {
+    level: 'warning',
+    tags: {
+      errorType: 'chunk_loading',
+      source,
+    },
+    extra: {
+      errorMessage,
+      userAgent: navigator.userAgent,
+      timestamp: new Date().toISOString(),
+    },
+  });
+
+  // Show user-friendly message
+  console.log('%c⚠️ Loading new version...', 'color: #ff6b35; font-weight: bold;');
+
+  // Reload after a short delay to allow logging
+  setTimeout(() => {
+    window.location.reload();
+  }, 500);
+
+  return true;
+};
+
+/**
+ * ✅ FIX: Catch chunk loading errors from script tags
+ * These occur when a <script> tag fails to load
+ */
 window.addEventListener('error', (event) => {
-  // Check if this is a chunk loading error
-  if (event.filename?.includes('assets/') && event.filename?.includes('.js')) {
-    const error = new Error(`Failed to load chunk: ${event.filename}`);
-    Sentry.captureException(error, {
-      contexts: {
-        chunkError: {
-          filename: event.filename,
-          message: event.message,
-        }
-      }
-    });
-    console.error('Chunk loading error caught and sent to Sentry:', event);
+  // Handle errors from script loading
+  if (event.filename) {
+    const handled = handleChunkLoadingError(
+      `${event.message} - ${event.filename}`,
+      'filename'
+    );
+    if (handled) {
+      event.preventDefault();
+      return;
+    }
+  }
+
+  // Handle errors from the error object itself
+  if (event.error?.message) {
+    const handled = handleChunkLoadingError(
+      event.error.message,
+      'error-object'
+    );
+    if (handled) {
+      event.preventDefault();
+      return;
+    }
+  }
+}, true); // Use capture phase to catch errors early
+
+/**
+ * ✅ FIX: Catch chunk loading errors from dynamic imports
+ * These occur when import() promises are rejected
+ */
+window.addEventListener('unhandledrejection', (event) => {
+  const error = event.reason;
+  const errorMessage = error?.message || String(error);
+  
+  const handled = handleChunkLoadingError(
+    errorMessage,
+    'unhandled-rejection'
+  );
+  
+  if (handled) {
+    event.preventDefault();
   }
 });
 
-// ✅ FIX: Also catch via unhandledrejection for promise-based dynamic imports
-window.addEventListener('unhandledrejection', (event) => {
-  if (event.reason?.message?.includes('dynamically imported module')) {
-    Sentry.captureException(event.reason, {
-      contexts: {
-        dynamicImportError: {
-          message: event.reason.message,
-          reason: String(event.reason),
-        }
-      }
-    });
-    console.error('Dynamic import error caught and sent to Sentry:', event.reason);
+/**
+ * ✅ NEW: Monitor route changes for chunk errors
+ * Some chunk errors only manifest during navigation
+ */
+let lastLocation = window.location.pathname;
+const checkLocationChange = () => {
+  const currentLocation = window.location.pathname;
+  if (currentLocation !== lastLocation) {
+    lastLocation = currentLocation;
+    // Reset the flag on successful navigation
+    isHandlingChunkError = false;
   }
-});
+};
+window.addEventListener('popstate', checkLocationChange);
+window.addEventListener('pushstate', checkLocationChange);
 
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      retry: 1, // Don't retry endlessly if Supabase is down
+      retry: 1,
       refetchOnWindowFocus: false,
     },
   },
 });
 
-// ✅ FIX: Initialize Supabase client with queryClient to break circular dependencies
+// ✅ Initialize Supabase client
 initializeSupabaseClient(queryClient);
 
-// ✅ UPGRADE 9: Initialize offline support
+// ✅ Initialize offline support
 offlineManager.registerServiceWorker();
 (window as any).offlineManager = offlineManager;
 
-// Create a browser router instance.
+// Create router
 const router = createBrowserRouter([
   {
     path: '*',
@@ -104,21 +214,52 @@ const router = createBrowserRouter([
   },
 ]);
 
-// The Sentry.withSentryReactRouterV6Routing HOC will automatically
-// instrument the router passed to RouterProvider.
+// Wrap router with Sentry
 const SentryRouterProvider = Sentry.withSentryReactRouterV6Routing(RouterProvider);
 
-
-// ✅ DAY 1 FIX: Safely get root element with proper error handling
+// ✅ Safely get root element
 const rootElement = document.getElementById('root');
 
 if (!rootElement) {
   const errorMsg = 'Fatal error: Root element (#root) not found in HTML';
   logger.error(errorMsg);
-  document.body.innerHTML = `<div style="color: red; padding: 20px; font-family: monospace;">${errorMsg}</div>`;
+  document.body.innerHTML = `
+    <div style="
+      color: #ff6b35;
+      padding: 40px;
+      font-family: system-ui, -apple-system, sans-serif;
+      text-align: center;
+      max-width: 600px;
+      margin: 100px auto;
+      background: #1e293b;
+      border-radius: 12px;
+      border: 2px solid #ff6b35;
+    ">
+      <h1 style="font-size: 48px; margin-bottom: 20px;">⚠️</h1>
+      <h2 style="margin-bottom: 10px;">Application Error</h2>
+      <p style="color: #94a3b8;">${errorMsg}</p>
+      <button 
+        onclick="window.location.reload()" 
+        style="
+          margin-top: 20px;
+          padding: 12px 24px;
+          background: #ff6b35;
+          color: white;
+          border: none;
+          border-radius: 8px;
+          font-size: 16px;
+          cursor: pointer;
+          font-weight: bold;
+        "
+      >
+        Reload Page
+      </button>
+    </div>
+  `;
   throw new Error(errorMsg);
 }
 
+// ✅ Render app
 ReactDOM.createRoot(rootElement).render(
   <React.StrictMode>
     <ErrorBoundary>
@@ -129,7 +270,7 @@ ReactDOM.createRoot(rootElement).render(
           </AuthProvider>
         </QueryClientProvider>
       </ChunkErrorBoundary>
-      <SpeedInsights />
     </ErrorBoundary>
+    <SpeedInsights />
   </React.StrictMode>
 );

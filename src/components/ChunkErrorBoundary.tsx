@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { AlertTriangle, RefreshCw, Home } from 'lucide-react';
 import * as Sentry from "@sentry/react";
 import { logger } from '../services/logger';
@@ -8,6 +8,9 @@ interface ChunkErrorBoundaryState {
   error: Error | null;
   retryCount: number;
 }
+
+// Global flag to prevent multiple reloads
+let isReloading = false;
 
 class ChunkErrorBoundary extends React.Component<
   { children: React.ReactNode },
@@ -24,27 +27,46 @@ class ChunkErrorBoundary extends React.Component<
 
   static getDerivedStateFromError(error: Error): Partial<ChunkErrorBoundaryState> {
     // Check if it's a chunk loading error
-    if (error.message?.includes('dynamically imported module') || 
-        error.message?.includes('Failed to load chunk')) {
+    if (
+      error.message?.includes('dynamically imported module') || 
+      error.message?.includes('Failed to fetch dynamically imported module') ||
+      error.message?.includes('Failed to load chunk') ||
+      error.message?.includes('Loading chunk') ||
+      error.message?.includes('Importing a module script failed')
+    ) {
       return { hasChunkError: true, error };
     }
-    // Let other errors bubble up
-    throw error;
+    // Let other errors bubble up to the parent error boundary
+    return {};
   }
 
   componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
     if (this.state.hasChunkError) {
       logger.error('Chunk loading error:', error, errorInfo);
-      // Send to Sentry
+      
+      // Send to Sentry with more context
       Sentry.captureException(error, {
+        tags: {
+          errorType: 'chunk_loading_error'
+        },
         contexts: {
           chunkError: {
             message: error.message,
             componentStack: errorInfo.componentStack,
             retryCount: this.state.retryCount,
+            userAgent: navigator.userAgent,
+            timestamp: new Date().toISOString()
           }
         }
       });
+
+      // Auto-reload after first error (with delay to show message)
+      if (this.state.retryCount === 0 && !isReloading) {
+        isReloading = true;
+        setTimeout(() => {
+          window.location.href = '/';
+        }, 1500);
+      }
     }
   }
 
@@ -54,8 +76,16 @@ class ChunkErrorBoundary extends React.Component<
       error: null,
       retryCount: prev.retryCount + 1
     }));
-    // Hard reload to clear all caches
-    window.location.href = '/';
+    
+    // Clear service worker cache if available
+    if ('serviceWorker' in navigator && 'caches' in window) {
+      caches.keys().then(names => {
+        names.forEach(name => caches.delete(name));
+      });
+    }
+    
+    // Hard reload with cache clear
+    window.location.reload();
   };
 
   handleGoHome = () => {
@@ -78,15 +108,22 @@ class ChunkErrorBoundary extends React.Component<
               <div className="p-4 bg-orange-500/10 rounded-full mb-4">
                 <AlertTriangle className="w-12 h-12 text-orange-500" />
               </div>
-              <h2 className="text-2xl font-bold text-white">Loading Error</h2>
+              <h2 className="text-2xl font-bold text-white">
+                {this.state.retryCount === 0 ? 'Updating Application...' : 'Loading Error'}
+              </h2>
               <p className="text-slate-400 mt-2 text-sm">
-                Failed to load a required page module. This might be due to:
+                {this.state.retryCount === 0 
+                  ? 'Please wait while we refresh the page...'
+                  : 'Failed to load a required page module. This might be due to:'
+                }
               </p>
-              <ul className="text-slate-400 mt-3 text-xs text-left list-disc list-inside space-y-1">
-                <li>Network connectivity issues</li>
-                <li>Browser cache problems</li>
-                <li>Server-side file issues</li>
-              </ul>
+              {this.state.retryCount > 0 && (
+                <ul className="text-slate-400 mt-3 text-xs text-left list-disc list-inside space-y-1">
+                  <li>A recent update to the application</li>
+                  <li>Network connectivity issues</li>
+                  <li>Browser cache problems</li>
+                </ul>
+              )}
             </div>
             
             {/* Error Details Box */}
@@ -99,22 +136,30 @@ class ChunkErrorBoundary extends React.Component<
               </p>
             </div>
 
-            <div className="flex gap-4">
-              <button 
-                onClick={this.handleGoHome}
-                className="flex-1 flex items-center justify-center gap-2 bg-slate-800 hover:bg-slate-700 text-white py-3 px-4 rounded-xl transition-all border border-slate-600 hover:border-slate-500 font-medium"
-              >
-                <Home className="w-4 h-4" />
-                Go Home
-              </button>
-              <button 
-                onClick={this.handleRetry}
-                className="flex-1 flex items-center justify-center gap-2 bg-brand-orange hover:bg-orange-600 text-white py-3 px-4 rounded-xl transition-all shadow-lg shadow-brand-orange/20 font-bold"
-              >
-                <RefreshCw className="w-4 h-4" />
-                Retry Load
-              </button>
-            </div>
+            {this.state.retryCount > 0 && (
+              <div className="flex gap-4">
+                <button 
+                  onClick={this.handleGoHome}
+                  className="flex-1 flex items-center justify-center gap-2 bg-slate-800 hover:bg-slate-700 text-white py-3 px-4 rounded-xl transition-all border border-slate-600 hover:border-slate-500 font-medium"
+                >
+                  <Home className="w-4 h-4" />
+                  Go Home
+                </button>
+                <button 
+                  onClick={this.handleRetry}
+                  className="flex-1 flex items-center justify-center gap-2 bg-brand-orange hover:bg-orange-600 text-white py-3 px-4 rounded-xl transition-all shadow-lg shadow-brand-orange/20 font-bold"
+                >
+                  <RefreshCw className="w-4 h-4" />
+                  Retry Load
+                </button>
+              </div>
+            )}
+
+            {this.state.retryCount === 0 && (
+              <div className="flex justify-center">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-brand-orange"></div>
+              </div>
+            )}
           </div>
         </div>
       );
@@ -124,4 +169,88 @@ class ChunkErrorBoundary extends React.Component<
   }
 }
 
-export { ChunkErrorBoundary };
+// Hook component to add global listeners
+const ChunkErrorHandler: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  useEffect(() => {
+    // Handle errors from dynamic imports that happen outside React
+    const handleError = (event: ErrorEvent) => {
+      const error = event.error || event.message;
+      const errorMessage = typeof error === 'string' ? error : error?.message || '';
+      
+      if (
+        errorMessage.includes('dynamically imported module') ||
+        errorMessage.includes('Failed to fetch dynamically imported module') ||
+        errorMessage.includes('Failed to load chunk') ||
+        errorMessage.includes('Loading chunk') ||
+        errorMessage.includes('Importing a module script failed')
+      ) {
+        event.preventDefault();
+        logger.error('Global chunk loading error:', errorMessage);
+        
+        Sentry.captureException(error, {
+          tags: { errorType: 'chunk_loading_error_global' }
+        });
+
+        if (!isReloading) {
+          isReloading = true;
+          console.log('Detected chunk loading error, reloading page...');
+          setTimeout(() => {
+            window.location.reload();
+          }, 500);
+        }
+      }
+    };
+
+    // Handle unhandled promise rejections from dynamic imports
+    const handleUnhandledRejection = (event: PromiseRejectionEvent) => {
+      const error = event.reason;
+      const errorMessage = error?.message || String(error);
+      
+      if (
+        errorMessage.includes('dynamically imported module') ||
+        errorMessage.includes('Failed to fetch dynamically imported module') ||
+        errorMessage.includes('Failed to load chunk') ||
+        errorMessage.includes('Loading chunk') ||
+        errorMessage.includes('Importing a module script failed')
+      ) {
+        event.preventDefault();
+        logger.error('Unhandled chunk loading rejection:', errorMessage);
+        
+        Sentry.captureException(error, {
+          tags: { errorType: 'chunk_loading_rejection' }
+        });
+
+        if (!isReloading) {
+          isReloading = true;
+          console.log('Detected chunk loading error, reloading page...');
+          setTimeout(() => {
+            window.location.reload();
+          }, 500);
+        }
+      }
+    };
+
+    window.addEventListener('error', handleError);
+    window.addEventListener('unhandledrejection', handleUnhandledRejection);
+
+    return () => {
+      window.removeEventListener('error', handleError);
+      window.removeEventListener('unhandledrejection', handleUnhandledRejection);
+    };
+  }, []);
+
+  return <>{children}</>;
+};
+
+// Combined export
+const ChunkErrorBoundaryWithHandler: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  return (
+    <ChunkErrorHandler>
+      <ChunkErrorBoundary>
+        {children}
+      </ChunkErrorBoundary>
+    </ChunkErrorHandler>
+  );
+};
+
+export { ChunkErrorBoundaryWithHandler as ChunkErrorBoundary };
