@@ -5,59 +5,39 @@ import path from 'path'
 // https://vitejs.dev/config/
 export default defineConfig({
   plugins: [react()],
-  // 👇 CRITICAL FIX: Forces absolute paths
+  // 1. Base path for Vercel
   base: '/', 
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
     },
-    dedupe: ['react', 'react-dom'],
-  },
-  optimizeDeps: {
-    include: ['react', 'react-dom'],
   },
   server: {
     port: 5173,
     strictPort: false,
   },
   build: {
-    // 👇 CRITICAL FIX: Explicitly set output directory
     outDir: 'dist',
-    // Better chunk splitting to reduce errors
+    sourcemap: false,
+    chunkSizeWarningLimit: 1600,
     rollupOptions: {
       output: {
-        // Organize chunks by type
-        manualChunks: (id) => {
-          if (id.includes('node_modules/react') || id.includes('node_modules/react-dom')) {
-            return 'react-vendor';
-          }
-          if (id.includes('node_modules/react-router')) {
-            return 'router-vendor';
-          }
-          if (id.includes('node_modules/@sentry')) {
-            return 'sentry-vendor';
-          }
-          if (id.includes('node_modules/lucide-react')) {
-            return 'icons-vendor';
-          }
-          if (id.includes('node_modules/@supabase')) {
-            return 'supabase-vendor';
-          }
+        // 2. SAFETY FIX: Simplify chunk splitting
+        // Instead of splitting React, Router, and Sentry apart, 
+        // we keep them together to ensure correct loading order.
+        manualChunks(id) {
           if (id.includes('node_modules')) {
             return 'vendor';
           }
         },
-        // Use shorter, more stable hashes
-        chunkFileNames: 'assets/[name]-[hash:8].js',
-        entryFileNames: 'assets/[name]-[hash:8].js',
-        assetFileNames: 'assets/[name]-[hash:8].[ext]',
+        // Standard naming to prevent caching issues
+        entryFileNames: 'assets/[name]-[hash].js',
+        chunkFileNames: 'assets/[name]-[hash].js',
+        assetFileNames: 'assets/[name]-[hash].[ext]',
       },
     },
-    chunkSizeWarningLimit: 1000,
-    sourcemap: false,
   },
   define: {
     __APP_VERSION__: JSON.stringify(process.env.npm_package_version || `build-${Date.now()}`),
-    __BUILD_TIME__: JSON.stringify(new Date().toISOString()),
   },
 })
