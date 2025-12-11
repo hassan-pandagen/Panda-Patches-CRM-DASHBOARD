@@ -17,15 +17,10 @@ const SidebarItem: React.FC<SidebarItemProps> = ({ to, label, icon, prefetchType
   const { prefetchOrders, prefetchDashboard, prefetchReports, prefetchClockInOut } = useQueryPrefetch();
 
   const handleMouseEnter = async () => {
-    if (prefetchType === 'orders') {
-      await prefetchOrders();
-    } else if (prefetchType === 'dashboard') {
-      await prefetchDashboard();
-    } else if (prefetchType === 'reports') {
-      await prefetchReports();
-    } else if (prefetchType === 'clock-in-out') {
-      await prefetchClockInOut();
-    }
+    if (prefetchType === 'orders') await prefetchOrders();
+    else if (prefetchType === 'dashboard') await prefetchDashboard();
+    else if (prefetchType === 'reports') await prefetchReports();
+    else if (prefetchType === 'clock-in-out') await prefetchClockInOut();
   };
 
   return (
@@ -51,6 +46,9 @@ const SidebarItem: React.FC<SidebarItemProps> = ({ to, label, icon, prefetchType
 
 const Sidebar: React.FC = () => {
   const { role, signOut, settings, permissions } = useAuth();
+  
+  // ✅ STRICT CHECK: Is this user an Admin?
+  const isAdmin = role === 'ADMIN';
 
   const navItems = [
     { to: '/', label: 'Dashboard', icon: <LayoutDashboard className="w-5 h-5" />, prefetchType: 'dashboard' as const },
@@ -73,46 +71,38 @@ const Sidebar: React.FC = () => {
       </div>
 
       <nav className="grow space-y-2">
-        {/* ✅ FIX: Render main items EXACTLY ONCE */}
         {navItems
           .filter(item => {
-            if (item.to === '/') return permissions?.orders_create;
-            if (item.to === '/reports') return permissions?.reports_view_financials || role === 'ADMIN';
-            if (item.to === '/orders') return permissions?.orders_view_all;
+            // 1. Dashboard: Everyone
+            if (item.to === '/') return true;
+
+            // 2. Orders: Everyone (Data filtered by DB)
+            if (item.to === '/orders') return true;
+
+            // 3. Reports: ADMIN ONLY (Strict)
+            if (item.to === '/reports') return isAdmin;
+
+            // 4. Clock In/Out: Everyone
+            if (item.to === '/clock-in-out') return true;
+
             return true;
           })
           .map((item) => (
             <SidebarItem key={item.to} {...item} prefetchType={item.prefetchType} />
           ))}
 
-        {/* --- ADD NEW ORDER BUTTON (PERMISSION-BASED) --- */}
+        {/* New Order: Permission Based */}
         {permissions?.orders_create && (
-          <SidebarItem
-            to="/new-order"
-            label="New Order"
-            icon={<PlusCircle className="w-5 h-5" />}
-          />
+          <SidebarItem to="/new-order" label="New Order" icon={<PlusCircle className="w-5 h-5" />} />
         )}
 
-        {/* --- ADMIN-ONLY NAVIGATION --- */}
-        {role === 'ADMIN' && (
+        {/* ADMIN ONLY LINKS */}
+        {isAdmin && (
           <>
-            <div className="my-2 border-t border-white/10 mx-2" /> {/* Divider */}
-            <SidebarItem
-              to="/user-management"
-              label="User Management"
-              icon={<Users className="w-5 h-5" />}
-            />
-            <SidebarItem
-              to="/performance-metrics"
-              label="Performance Metrics"
-              icon={<Activity className="w-5 h-5" />}
-            />
-            <SidebarItem
-              to="/settings"
-              label="Settings"
-              icon={<Settings className="w-5 h-5" />}
-            />
+            <div className="my-2 border-t border-white/10 mx-2" />
+            <SidebarItem to="/user-management" label="User Management" icon={<Users className="w-5 h-5" />} />
+            <SidebarItem to="/performance-metrics" label="Performance Metrics" icon={<Activity className="w-5 h-5" />} />
+            <SidebarItem to="/settings" label="Settings" icon={<Settings className="w-5 h-5" />} />
           </>
         )}
       </nav>

@@ -64,8 +64,8 @@ export const useQueryPrefetch = () => {
       await queryClient.prefetchQuery({
         queryKey: queryKeys.dashboard.metrics(startDateStr, endDateStr),
         queryFn: async () => {
-          const start = new Date(`${startDateStr}T00:00:00.000Z`).toISOString();
-          const end = new Date(`${endDateStr}T23:59:59.999Z`).toISOString();
+          const start = `${startDateStr}T00:00:00.000Z`;
+          const end = `${endDateStr}T23:59:59.999Z`;
 
           const { data, error } = await supabase
             .from('orders')
@@ -83,8 +83,8 @@ export const useQueryPrefetch = () => {
       await queryClient.prefetchQuery({
         queryKey: queryKeys.dashboard.table(startDateStr, endDateStr),
         queryFn: async () => {
-          const start = new Date(`${startDateStr}T00:00:00.000Z`).toISOString();
-          const end = new Date(`${endDateStr}T23:59:59.999Z`).toISOString();
+          const start = `${startDateStr}T00:00:00.000Z`;
+          const end = `${endDateStr}T23:59:59.999Z`;
 
           const { data, error } = await supabase
             .from('orders')
@@ -119,8 +119,8 @@ export const useQueryPrefetch = () => {
       await queryClient.prefetchQuery({
         queryKey: queryKeys.orders.report(startDateStr, endDateStr),
         queryFn: async () => {
-          const start = new Date(`${startDateStr}T00:00:00.000Z`).toISOString();
-          const end = new Date(`${endDateStr}T23:59:59.999Z`).toISOString();
+          const start = `${startDateStr}T00:00:00.000Z`;
+          const end = `${endDateStr}T23:59:59.999Z`;
 
           const { data, error } = await supabase
             .from('orders')

@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Order, OrderStatus } from '@/types';
 import { Calendar, ArrowDown, ArrowUp, Mail, Phone, ExternalLink, ChevronRight } from 'lucide-react';
 import StatusBadge from '@/components/ui/StatusBadge';
+import { useAuth } from '@/contexts/AuthContext'; // 1. Import Auth
 
 // --- LOADING SKELETON ---
 const TableSkeleton: React.FC = () => (
@@ -30,12 +31,13 @@ interface OrdersTableProps {
 type SortKey = keyof Order | '';
 
 const OrdersTable: React.FC<OrdersTableProps> = ({ orders, isLoading = false }) => {
-  const [expandedRow, setExpandedRow] = useState<number | null>(null);
   const [sortKey, setSortKey] = useState<SortKey>('createdAt');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
-  
-  // ✅ 1. NAVIGATION HOOK
   const navigate = useNavigate();
+
+  // 2. GET CURRENT ROLE
+  const { role } = useAuth();
+  const isAdmin = role === 'ADMIN';
 
   // --- SORTING LOGIC ---
   const sortedOrders = useMemo(() => {
@@ -77,11 +79,9 @@ const OrdersTable: React.FC<OrdersTableProps> = ({ orders, isLoading = false }) 
     </th>
   );
 
-  // ✅ 2. SENIOR DEV LOGIC: The "Stop Propagation" Handler
-  // This physically stops the click from bubbling up to the row.
   const handleContactClick = (e: React.MouseEvent, identifier: string) => {
     e.preventDefault();
-    e.stopPropagation(); // <--- CRITICAL: Kills the row click
+    e.stopPropagation();
     navigate(`/customers/${encodeURIComponent(identifier)}`);
   };
 
@@ -100,6 +100,11 @@ const OrdersTable: React.FC<OrdersTableProps> = ({ orders, isLoading = false }) 
             <SortableHeader sortField="salesAgent">Sales Agent</SortableHeader>
             <SortableHeader sortField="status">Status</SortableHeader>
             <SortableHeader sortField="orderAmount">Amount</SortableHeader>
+            
+            {/* 3. ONLY SHOW PROFIT HEADER IF ADMIN */}
+            {isAdmin && (
+               <SortableHeader sortField="profit">Profit</SortableHeader>
+            )}
           </tr>
         </thead>
         
@@ -113,11 +118,9 @@ const OrdersTable: React.FC<OrdersTableProps> = ({ orders, isLoading = false }) 
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
                     transition={{ duration: 0.1 }}
-                    // ✅ THIS IS THE KEY: Add onClick to the ROW
                     onClick={() => handleRowClick(order.orderNumber)}
                     className="border-b border-slate-800 hover:bg-slate-800/60 cursor-pointer transition-colors group"
                   >
-                    {/* ORDER NUMBER */}
                     <td className="px-6 py-4 font-medium whitespace-nowrap">
                       <div className="flex flex-col">
                         <span className="text-white font-bold group-hover:text-brand-orange transition-colors">
@@ -130,20 +133,17 @@ const OrdersTable: React.FC<OrdersTableProps> = ({ orders, isLoading = false }) 
                       </div>
                     </td>
 
-                    {/* CUSTOMER NAME */}
                     <td className="px-6 py-4 font-medium text-white">
                         {order.customerName}
                     </td>
                     
-                    {/* ✅ CONTACT INFO (The Fixed Buttons) */}
                     <td className="px-6 py-4 relative z-20">
                       <div className="flex flex-col gap-2 items-start">
-                        {/* EMAIL BUTTON */}
                         {order.customerEmail && (
                           <button
                             type="button"
                             onClick={(e) => { 
-                              e.stopPropagation(); // <--- PREVENTS ROW CLICK
+                              e.stopPropagation(); 
                               navigate(`/customers/${order.customerEmail}`); 
                             }}
                             className="flex items-center gap-2 px-2 py-1 rounded bg-slate-900/50 border border-slate-700/50 hover:border-cyan-500/50 hover:bg-slate-800 transition-all group/btn"
@@ -157,12 +157,11 @@ const OrdersTable: React.FC<OrdersTableProps> = ({ orders, isLoading = false }) 
                           </button>
                         )}
                         
-                        {/* PHONE BUTTON */}
                         {order.customerPhone && (
                           <button
                             type="button"
                             onClick={(e) => { 
-                              e.stopPropagation(); // <--- PREVENTS ROW CLICK
+                              e.stopPropagation(); 
                               navigate(`/customers/${order.customerPhone}`); 
                             }}
                             className="flex items-center gap-2 px-2 py-1 rounded bg-slate-900/50 border border-slate-700/50 hover:border-emerald-500/50 hover:bg-slate-800 transition-all group/btn"
@@ -180,9 +179,16 @@ const OrdersTable: React.FC<OrdersTableProps> = ({ orders, isLoading = false }) 
                     
                     <td className="px-6 py-4 text-sm text-slate-400">{order.salesAgent}</td>
                     <td className="px-6 py-4"><StatusBadge status={order.status as OrderStatus} /></td>
-                    <td className="px-6 py-4 text-right font-medium text-emerald-400 font-mono">
+                    <td className="px-6 py-4 text-left font-medium text-emerald-400 font-mono">
                         ${(order.orderAmount ?? 0).toLocaleString()}
                     </td>
+
+                    {/* 4. ONLY SHOW PROFIT CELL IF ADMIN */}
+                    {isAdmin && (
+                        <td className="px-6 py-4 text-left font-medium text-green-400 font-mono">
+                            ${(order.profit ?? 0).toLocaleString()}
+                        </td>
+                    )}
                   </motion.tr>
                 </React.Fragment>
               ))}

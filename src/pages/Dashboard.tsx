@@ -155,10 +155,11 @@ export default function Dashboard() {
         .gte("created_at", start)
         .lte("created_at", end);
       
-      // If user is basic User, filter by their email (unless they have view_all permission)
-      // Note: RLS handles this securely, but this filters client-side for cleaner data
-      if (role === UserRole.USER) {
-        // You can add explicit filtering here if needed, but RLS is preferred
+      // ✅ FIX ADDED HERE: Force filter by email if not Admin
+      // This ensures sales agents ONLY see their own rows, regardless of RLS speed.
+      // While RLS is the primary security layer, this prevents UI flicker or showing incorrect data on a slow connection.
+      if (role !== UserRole.ADMIN && user?.email) {
+        query = query.eq("sales_agent", user.email);
       }
 
       const { data, error } = await query;

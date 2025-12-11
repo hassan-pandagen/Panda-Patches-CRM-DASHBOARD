@@ -20,13 +20,10 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 // 👇 ADD YOUR ADMIN EMAILS HERE
 const SUPER_ADMIN_EMAILS = [
   'hello@pandapatches.com',
-    // Add your specific login email here if different
 ];
 
-// Helper: Timeout promise to prevent infinite loading
-const timeoutPromise = (ms: number) => new Promise((_, reject) => 
-  setTimeout(() => reject(new Error('Request timed out')), ms)
-);
+// ✅ FIX 1: Removed the manual "timeoutPromise" function. 
+// It was causing the app to crash if Supabase took more than 5 seconds.
 
 // Helper: Fetch Profile with Admin Bypass
 const fetchUserProfile = async (userId: string, userEmail?: string) => {
@@ -50,22 +47,17 @@ const fetchUserProfile = async (userId: string, userEmail?: string) => {
   }
 
   try {
-    console.log('🔍 Fetching user profile for:', userId);
-    
-    // 2. Normal Database Check for everyone else
-    const dbRequest = supabase
+    // 2. Normal Database Check
+    // ✅ FIX 2: Removed Promise.race. We just await the DB.
+    const { data, error } = await supabase
       .from('user_profiles')
       .select('role, permissions')
       .eq('id', userId)
-      .single();
-
-    const { data, error } = await Promise.race([
-      dbRequest,
-      timeoutPromise(5000)
-    ]) as any;
+      .maybeSingle(); // Used maybeSingle() instead of single() to prevent 406 errors
 
     if (error) {
       console.warn('⚠️ Profile fetch failed, using default role.', error.message);
+      // Fallback to basic user if DB fails, don't crash
       return { role: UserRole.SALES_AGENT, permissions: {} as UserPermissions };
     }
 
@@ -75,7 +67,7 @@ const fetchUserProfile = async (userId: string, userEmail?: string) => {
     };
 
   } catch (err) {
-    console.error('⚠️ Profile fetch error/timeout:', err);
+    console.error('⚠️ Profile fetch logic error:', err);
     return { role: UserRole.SALES_AGENT, permissions: {} as UserPermissions };
   }
 };
@@ -94,7 +86,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     const initializeAuth = async () => {
       try {
-        console.log('🔐 Initializing auth...');
         setIsLoading(true);
 
         // Get current session
@@ -107,20 +98,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
         if (!mounted) return;
 
-        // Fetch global settings
-        const { data: settingsData } = await supabase
-          .from('settings')
-          .select('logo_url')
-          .eq('id', 'global_settings')
-          .single();
-
-        if (mounted && settingsData) {
-          setSettings(settingsData);
-        }
+        // Fetch settings (fail silently if this errors)
+        supabase.from('settings').select('logo_url').eq('id', 'global_settings').maybeSingle()
+          .then(({ data }) => {
+            if (mounted && data) setSettings(data);
+          });
 
         if (currentSession?.user) {
-          console.log('✅ Session found:', currentSession.user.email);
-          
           // Pass email to check for Super Admin status
           const userProfile = await fetchUserProfile(
             currentSession.user.id, 
@@ -133,10 +117,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             setRole(userProfile.role);
             setPermissions(userProfile.permissions);
           }
-        } else {
-          setSession(null);
-          setUser(null);
-          setRole(null);
         }
       } catch (error) {
         console.error('❌ Auth init error:', error);
@@ -162,15 +142,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           setRole(null);
           setPermissions(null);
         } else if (newSession?.user) {
-          const userProfile = await fetchUserProfile(
-            newSession.user.id, 
-            newSession.user.email
-          );
-          if (mounted) {
-            setSession(newSession);
-            setUser(newSession.user);
-            setRole(userProfile.role);
-            setPermissions(userProfile.permissions);
+          // Only fetch profile if user CHANGED or event is SIGNED_IN
+          if (newSession.user.id !== user?.id) {
+             const userProfile = await fetchUserProfile(
+                newSession.user.id, 
+                newSession.user.email
+             );
+             if (mounted) {
+                setSession(newSession);
+                setUser(newSession.user);
+                setRole(userProfile.role);
+                setPermissions(userProfile.permissions);
+             }
           }
         }
       }
@@ -180,7 +163,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       mounted = false;
       subscription.unsubscribe();
     };
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const refreshSession = async () => {
     try {
@@ -197,7 +180,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setPermissions(userProfile.permissions);
       }
     } catch (err) {
-      setError(err instanceof Error ? err : new Error('Refresh Failed'));
+      console.error("Refresh session failed", err);
+      // Don't set global error here, just log it
     }
   };
 

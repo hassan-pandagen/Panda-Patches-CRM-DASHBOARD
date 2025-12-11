@@ -75,14 +75,31 @@ export const useClockInOut = () => {
       if (!user) throw new Error('User not authenticated');
       if (isClockedIn) throw new Error('You are already clocked in.');
 
+      const now = new Date();
+
+      // --- START OVERNIGHT FIX ---
+      // Logic: If the current time is before 7 AM (the shift cutoff),
+      // we consider this shift as belonging to the previous calendar day.
+      const currentHour = now.getHours();
+      const workDateObj = new Date(now);
+
+      // If it is between 12:00 AM and 6:59 AM, subtract 1 day from the date.
+      if (currentHour < 7) {
+        workDateObj.setDate(workDateObj.getDate() - 1);
+      }
+
+      // Create the final YYYY-MM-DD string for the "logical" work date.
+      const workDate = workDateObj.toISOString().split('T')[0];
+      // --- END OVERNIGHT FIX ---
+
       const { data, error } = await supabase
         .from('attendance_sessions')
         .insert({
           user_id: user.id,
           user_email: user.email!,
           user_name: user.user_metadata.full_name || user.email,
-          clock_in_time: new Date().toISOString(),
-          work_date: new Date().toISOString().split('T')[0],
+          clock_in_time: now.toISOString(), // Keep exact timestamp for calculation
+          work_date: workDate, // Save the "Logical" date (e.g., Dec 11)
         });
 
       if (error) throw error;
