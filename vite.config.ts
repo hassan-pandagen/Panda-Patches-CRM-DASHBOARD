@@ -5,17 +5,12 @@ import path from 'path'
 // https://vitejs.dev/config/
 export default defineConfig({
   plugins: [react()],
+  // 1. Base path for Vercel
   base: '/', 
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
     },
-    // ✅ FIX: Force single React instance in production
-    dedupe: ['react', 'react-dom'],
-  },
-  optimizeDeps: {
-    // ✅ FIX: Pre-bundle React for consistency
-    include: ['react', 'react-dom', 'react/jsx-runtime'],
   },
   server: {
     port: 5173,
@@ -24,28 +19,23 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     sourcemap: false,
-    chunkSizeWarningLimit: 1600,
+    // Increase limit to avoid warnings about the larger vendor file
+    chunkSizeWarningLimit: 1600, 
     rollupOptions: {
       output: {
-        // ✅ FIX: Better chunking strategy for production
+        // 🛑 SAFETY FIX: Group ALL dependencies into one file.
+        // This ensures React is always loaded in the correct order.
         manualChunks(id) {
-          // Keep React and React-DOM together
-          if (id.includes('node_modules/react') || id.includes('node_modules/react-dom')) {
-            return 'react-vendor';
-          }
-          // All other vendor code
           if (id.includes('node_modules')) {
             return 'vendor';
           }
         },
+        // Standard naming to prevent caching issues
         entryFileNames: 'assets/[name]-[hash].js',
         chunkFileNames: 'assets/[name]-[hash].js',
         assetFileNames: 'assets/[name]-[hash].[ext]',
       },
     },
-    // ✅ FIX: Ensure proper minification without breaking React
-    minify: 'esbuild',
-    target: 'es2015',
   },
   define: {
     __APP_VERSION__: JSON.stringify(process.env.npm_package_version || `build-${Date.now()}`),

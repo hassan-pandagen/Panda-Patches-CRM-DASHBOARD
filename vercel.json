@@ -1,16 +1,8 @@
 {
-  "buildCommand": "npm run build",
-  "outputDirectory": "dist",
-  "installCommand": "npm install",
-  "framework": "vite",
   "rewrites": [
     {
       "source": "/api/sentry-proxy",
       "destination": "/api/sentry-proxy.ts"
-    },
-    {
-      "source": "/assets/(.*)",
-      "destination": "/assets/$1"
     },
     {
       "source": "/(.*)",
@@ -36,10 +28,5 @@
         }
       ]
     }
-  ],
-  "build": {
-    "env": {
-      "NODE_VERSION": "20"
-    }
-  }
+  ]
 }
