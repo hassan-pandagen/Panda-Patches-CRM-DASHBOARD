@@ -50,7 +50,7 @@ const SidebarItem: React.FC<SidebarItemProps> = ({ to, label, icon, prefetchType
 };
 
 const Sidebar: React.FC = () => {
-  const { role, signOut, isLoading, settings, permissions } = useAuth();
+  const { role, signOut, settings, permissions } = useAuth();
 
   const navItems = [
     { to: '/', label: 'Dashboard', icon: <LayoutDashboard className="w-5 h-5" />, prefetchType: 'dashboard' as const },
@@ -58,6 +58,7 @@ const Sidebar: React.FC = () => {
     { to: '/reports', label: 'Reports', icon: <BarChart3 className="w-5 h-5" />, prefetchType: 'reports' as const },
     { to: '/clock-in-out', label: 'Clock In/Out', icon: <Clock className="w-5 h-5" />, prefetchType: 'clock-in-out' as const },
   ];
+
   return (
     <aside className="w-64 bg-slate-900/70 backdrop-blur-xl border-r border-white/10 p-4 flex flex-col">
       <div className="flex items-center justify-center p-4 mb-4 h-20">
@@ -72,23 +73,19 @@ const Sidebar: React.FC = () => {
       </div>
 
       <nav className="grow space-y-2">
-        {navItems.map((item) => (
-          <SidebarItem key={item.to} {...item} prefetchType={item.prefetchType} />
-        ))}
-        {/* ✅ FIX: Filter nav items based on permissions */}
+        {/* ✅ FIX: Render main items EXACTLY ONCE */}
         {navItems
           .filter(item => {
-            if (item.label === 'Dashboard') return permissions?.orders_create; // Only show dashboard to sales/admins
-            if (item.label === 'Reports') return permissions?.reports_view_financials || role === 'ADMIN';
-            if (item.label === 'Orders') return permissions?.orders_view_all;
-            return true; // Show other items like Clock In/Out by default
+            if (item.to === '/') return permissions?.orders_create;
+            if (item.to === '/reports') return permissions?.reports_view_financials || role === 'ADMIN';
+            if (item.to === '/orders') return permissions?.orders_view_all;
+            return true;
           })
           .map((item) => (
             <SidebarItem key={item.to} {...item} prefetchType={item.prefetchType} />
           ))}
 
         {/* --- ADD NEW ORDER BUTTON (PERMISSION-BASED) --- */}
-        {/* ✅ FIX: Only show if user has 'orders_create' permission */}
         {permissions?.orders_create && (
           <SidebarItem
             to="/new-order"
@@ -100,6 +97,7 @@ const Sidebar: React.FC = () => {
         {/* --- ADMIN-ONLY NAVIGATION --- */}
         {role === 'ADMIN' && (
           <>
+            <div className="my-2 border-t border-white/10 mx-2" /> {/* Divider */}
             <SidebarItem
               to="/user-management"
               label="User Management"

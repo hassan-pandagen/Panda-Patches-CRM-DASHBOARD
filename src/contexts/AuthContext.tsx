@@ -20,8 +20,7 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 // 👇 ADD YOUR ADMIN EMAILS HERE
 const SUPER_ADMIN_EMAILS = [
   'hello@pandapatches.com',
-  'admin@pandapatches.com'
-  // Add your specific login email here if different
+    // Add your specific login email here if different
 ];
 
 // Helper: Timeout promise to prevent infinite loading
@@ -45,7 +44,7 @@ const fetchUserProfile = async (userId: string, userEmail?: string) => {
       orders_delete: true,
       reports_view_financials: true,
       shipping_view: true,
-      attendance_clock_only: true
+      attendance_clock_only: false  // ✅ FIXED: false so admin can see full attendance view
     };
     return { role: UserRole.ADMIN, permissions: adminPermissions };
   }

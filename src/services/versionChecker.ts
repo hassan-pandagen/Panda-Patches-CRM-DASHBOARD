@@ -6,8 +6,15 @@ import { logger } from './logger';
 declare const __APP_VERSION__: string;
 declare const __BUILD_TIME__: string;
 
-const CURRENT_VERSION = __APP_VERSION__;
-const BUILD_TIME = __BUILD_TIME__;
+// ✅ SAFELY ACCESS VARIABLES (Prevents "ReferenceError" crash)
+const CURRENT_VERSION = typeof __APP_VERSION__ !== 'undefined' 
+  ? __APP_VERSION__ 
+  : '1.0.0';
+
+const BUILD_TIME = typeof __BUILD_TIME__ !== 'undefined' 
+  ? __BUILD_TIME__ 
+  : new Date().toISOString();
+
 const VERSION_CHECK_KEY = 'app_version';
 const VERSION_CHECK_INTERVAL = 5 * 60 * 1000; // 5 minutes
 

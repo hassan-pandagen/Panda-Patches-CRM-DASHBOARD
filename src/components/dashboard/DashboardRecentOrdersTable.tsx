@@ -2,7 +2,6 @@ import React from 'react';
 import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { Order, OrderStatus } from '../../types';
-import { ChevronDown, ChevronUp, ArrowDownUp } from 'lucide-react';
 import StatusBadge from '../ui/StatusBadge';
 import Skeleton from '../ui/Skeleton';
 
@@ -23,33 +22,33 @@ const TableRow: React.FC<TableRowProps> = ({ order }) => {
       whileHover={{ backgroundColor: "rgba(51, 65, 85, 0.4)" }}
       className="border-b border-white/5 text-sm text-slate-300 transition-colors cursor-pointer group"
     >
-      {/* Order ID (Fixed Width) */}
-      <td className="whitespace-nowrap px-6 py-4 font-mono text-brand-orange w-32">
+      {/* Order ID */}
+      <td className="whitespace-nowrap px-6 py-4 font-mono text-brand-orange w-32 font-medium">
         {order.orderNumber}
       </td>
       
-      {/* Date (Fixed Width) */}
-      <td className="whitespace-nowrap px-6 py-4 w-32">
+      {/* Date */}
+      <td className="whitespace-nowrap px-6 py-4 w-32 text-slate-400">
         {new Date(order.createdAt).toLocaleDateString()}
       </td>
       
-      {/* Customer (Flexible, Truncated) */}
+      {/* Customer */}
       <td className="whitespace-nowrap px-6 py-4 font-medium text-white max-w-[180px] truncate" title={order.customerName}>
         {order.customerName}
       </td>
       
-      {/* Sales Agent (Flexible, Truncated) */}
-      <td className="whitespace-nowrap px-6 py-4 max-w-[200px] truncate text-slate-400" title={order.salesAgent}>
+      {/* Sales Agent */}
+      <td className="whitespace-nowrap px-6 py-4 max-w-[200px] truncate text-slate-500" title={order.salesAgent}>
         {order.salesAgent}
       </td>
       
-      {/* Status (Fixed Width) */}
+      {/* Status */}
       <td className="whitespace-nowrap px-6 py-4 w-36">
         <StatusBadge status={order.status as OrderStatus} />
       </td>
       
-      {/* Amount (Fixed Width, Left Aligned as requested) */}
-      <td className="whitespace-nowrap px-6 py-4 text-left font-semibold text-emerald-400 w-32">
+      {/* Amount */}
+      <td className="whitespace-nowrap px-6 py-4 text-left font-bold text-emerald-400 w-32">
         ${(order.orderAmount || 0).toLocaleString()}
       </td>
     </motion.tr>
@@ -60,7 +59,7 @@ const TableSkeleton: React.FC = () => (
   <tbody>
     {Array.from({ length: 5 }).map((_, i) => (
       <tr key={i} className="border-b border-slate-800">
-        {Array.from({ length: 6 }).map((_, j) => ( // Use a simple div for skeleton
+        {Array.from({ length: 6 }).map((_, j) => (
           <td key={j} className="px-6 py-4"><Skeleton height={20} className="bg-slate-700/50" /></td>
         ))}
       </tr>
@@ -77,60 +76,66 @@ interface DashboardRecentOrdersTableProps {
 const DashboardRecentOrdersTable: React.FC<DashboardRecentOrdersTableProps> = ({ 
   orders, 
   isLoading, 
-  className
+  className = '' 
 }) => {
-  // Headers are now for display only. Sorting logic is moved to the parent.
   const headers = [
     { key: 'orderNumber', label: 'Order ID', width: 'w-32' },
     { key: 'createdAt', label: 'Date', width: 'w-32' },
-    { key: 'customerName', label: 'Customer', width: 'w-auto' }, // Flexible
-    { key: 'salesAgent', label: 'Sales Agent', width: 'w-auto' }, // Flexible
+    { key: 'customerName', label: 'Customer', width: 'w-auto' },
+    { key: 'salesAgent', label: 'Sales Agent', width: 'w-auto' },
     { key: 'status', label: 'Status', width: 'w-36' },
     { key: 'orderAmount', label: 'Amount', width: 'w-32', align: 'left' },
   ] as const;
 
   return (
-    <div className={`relative overflow-hidden rounded-2xl bg-slate-900/40 backdrop-blur-xl border border-white/10 shadow-xl ${className}`}>
-      <div className="relative z-10 overflow-x-auto">
-        <table className="w-full text-left border-collapse">
-          <thead className="bg-slate-800/50 text-xs font-semibold uppercase tracking-wider text-slate-400 border-b border-white/10">
-            <tr>
-              {headers.map((header) => (
-                <th 
-                  key={header.key} 
-                  scope="col" 
-                  className={`px-6 py-4 ${header.width} transition-colors`}
-                >
-                  <div 
-                    className={`flex items-center gap-2 w-full ${
-                        header.align === 'right' ? 'justify-end' : 'justify-start'
-                    }`}
+    <div className={`relative group h-full ${className}`}>
+      {/* ✨ GLOW EFFECT LAYER (Matches Production Pipeline Style) */}
+      <div className="absolute -inset-0.5 bg-gradient-to-r from-blue-600 via-cyan-500 to-sky-500 rounded-2xl opacity-20 blur-md group-hover:opacity-40 transition duration-1000" />
+      
+      {/* Card Content */}
+      <div className="relative h-full overflow-hidden rounded-2xl bg-slate-900/90 backdrop-blur-xl border border-white/10 shadow-2xl flex flex-col">
+        
+        {/* Table Wrapper for Scrolling */}
+        <div className="relative z-10 overflow-x-auto flex-grow custom-scrollbar">
+          <table className="w-full text-left border-collapse">
+            <thead className="bg-slate-950/50 text-xs font-bold uppercase tracking-wider text-slate-400 border-b border-white/10 sticky top-0 backdrop-blur-md z-20">
+              <tr>
+                {headers.map((header) => (
+                  <th 
+                    key={header.key} 
+                    scope="col" 
+                    className={`px-6 py-4 ${header.width}`}
                   >
-                    {header.label}
-                  </div>
-                </th>
-              ))}
-            </tr>
-          </thead>
-          
-          {isLoading ? (
-            <TableSkeleton />
-          ) : (
-            <tbody>
-              {orders.length === 0 ? (
+                    <div className={`flex items-center gap-2 ${header.align === 'right' ? 'justify-end' : 'justify-start'}`}>
+                      {header.label}
+                    </div>
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            
+            {isLoading ? (
+              <TableSkeleton />
+            ) : (
+              <tbody className="divide-y divide-white/5 bg-slate-900/20">
+                {orders.length === 0 ? (
                   <tr>
-                      <td colSpan={6} className="text-center py-10 text-slate-500">
-                          No recent orders found.
+                      <td colSpan={6} className="text-center py-16">
+                          <div className="flex flex-col items-center justify-center text-slate-500">
+                              <p className="text-lg font-medium">No recent orders</p>
+                              <p className="text-sm">New orders will appear here</p>
+                          </div>
                       </td>
                   </tr>
-              ) : (
-                  orders.slice(0, 8).map(order => ( // Show max 8 rows for cleaner dashboard
-                      <TableRow key={order.id} order={order} />
-                  ))
-              )}
-            </tbody>
-          )}
-        </table>
+                ) : (
+                    orders.slice(0, 8).map(order => (
+                        <TableRow key={order.id} order={order} />
+                    ))
+                )}
+              </tbody>
+            )}
+          </table>
+        </div>
       </div>
     </div>
   );
