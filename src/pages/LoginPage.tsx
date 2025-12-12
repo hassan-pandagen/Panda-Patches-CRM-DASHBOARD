@@ -125,12 +125,17 @@ const LoginPage: React.FC = () => {
           {/* HEADER: Logo & Welcome Text */}
           <div className="text-center mb-8">
             <div className="flex justify-center mb-4">
-              {/* Falls back to /logo.svg if dynamic logo fails or isn't set */}
-              <img
-                src={settings?.logo_url || "/logo.svg"}
-                alt="Panda Patches Logo" 
-                className="h-16 w-auto object-contain drop-shadow-lg" 
-              />
+              {/* ✅ FIX: Add a loading state for the logo */}
+              {settings === undefined ? (
+                // Show a placeholder while settings are loading
+                <div className="h-16 w-32 bg-slate-800 rounded-lg animate-pulse"></div>
+              ) : (
+                <img
+                  src={settings?.logo_url || "/logo.svg"}
+                  alt="Panda Patches Logo" 
+                  className="h-16 w-auto object-contain drop-shadow-lg" 
+                />
+              )}
             </div>
             {mode === 'login' && (
               <>

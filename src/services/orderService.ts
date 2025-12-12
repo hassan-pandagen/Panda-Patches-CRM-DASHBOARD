@@ -1,7 +1,7 @@
 // src/services/orderService.ts
 
 import { supabase } from './supabaseClient';
-import { queryClient } from '../App';
+import { queryClient } from './queryClient';
 import { queryKeys } from '../constants/queryKeys';
 import { Order, OrderStatus } from '../types/index';
 import { logger } from './logger'; // ✅ UPGRADE 6: Logger service

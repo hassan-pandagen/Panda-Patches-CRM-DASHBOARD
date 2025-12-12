@@ -149,6 +149,7 @@ CREATE TABLE IF NOT EXISTS public.attendance_summary (
   user_name text NOT NULL,
   month date NOT NULL,
   total_days_worked integer DEFAULT 0,
+  updated_at timestamptz,
   total_hours numeric(8, 2) DEFAULT 0,
   late_days integer DEFAULT 0,
   overtime_hours numeric(8, 2) DEFAULT 0,
@@ -156,7 +157,6 @@ CREATE TABLE IF NOT EXISTS public.attendance_summary (
   incomplete_days integer DEFAULT 0,
   salary_status text DEFAULT 'PENDING',
   created_at timestamptz DEFAULT now(),
-  updated_at timestamptz DEFAULT now(),
   CONSTRAINT attendance_summary_user_month_unique UNIQUE (user_id, month)
 );
 
@@ -313,6 +313,49 @@ BEGIN
         RETURN NEW;
     END IF;
     RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- ✅ NEW: AUTOMATED ATTENDANCE SUMMARY
+CREATE OR REPLACE FUNCTION public.recalculate_attendance_summary()
+RETURNS TRIGGER AS $$
+DECLARE
+    target_user_id uuid;
+    target_date date;
+    month_start date;
+    
+    -- Variables for aggregation
+    _total_days int;
+    _total_hours numeric(10,2);
+    _user_email text;
+    _user_name text;
+BEGIN
+    -- Determine which user/date changed
+    IF (TG_OP = 'DELETE') THEN
+        target_user_id := OLD.user_id;
+        target_date := OLD.work_date;
+        _user_email := OLD.user_email;
+        _user_name := OLD.user_name;
+    ELSE
+        target_user_id := NEW.user_id;
+        target_date := NEW.work_date;
+        _user_email := NEW.user_email;
+        _user_name := NEW.user_name;
+    END IF;
+
+    month_start := date_trunc('month', target_date);
+
+    SELECT COUNT(DISTINCT id), COALESCE(SUM(duration_hours), 0)
+    INTO _total_days, _total_hours
+    FROM public.attendance_sessions
+    WHERE user_id = target_user_id AND work_date >= month_start AND work_date < (month_start + interval '1 month');
+
+    INSERT INTO public.attendance_summary (user_id, user_email, user_name, month, total_days_worked, total_hours, updated_at)
+    VALUES (target_user_id, _user_email, _user_name, month_start, _total_days, _total_hours, now())
+    ON CONFLICT (user_id, month) 
+    DO UPDATE SET total_days_worked = EXCLUDED.total_days_worked, total_hours = EXCLUDED.total_hours, user_email = EXCLUDED.user_email, updated_at = now();
+
+    RETURN NULL;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
@@ -474,8 +517,11 @@ FOR SELECT USING (
   public.is_admin() = true
 );
 
--- ✅ Settings - Only admins can access
-CREATE POLICY "settings_read_admin" ON public.settings FOR SELECT USING (public.is_admin());
+-- ✅ Settings - Public Read (for Login Page), Admin Write
+CREATE POLICY "settings_read_public" ON public.settings FOR SELECT 
+TO anon, authenticated 
+USING (true);
+
 CREATE POLICY "settings_update_admin" ON public.settings FOR UPDATE USING (public.is_admin());
 CREATE POLICY "settings_insert_admin" ON public.settings FOR INSERT WITH CHECK (public.is_admin());
 
@@ -544,16 +590,15 @@ CREATE POLICY "attendance_sessions_delete" ON public.attendance_sessions FOR DEL
 USING (public.is_admin());
 
 -- ✅ Attendance Summary - Own or admin
-CREATE POLICY "attendance_summary_select" ON public.attendance_summary FOR SELECT
+-- ✅ FIX: Users can see their own summary, Admins see all.
+CREATE POLICY "attendance_summary_select_final" ON public.attendance_summary FOR SELECT
 USING (auth.uid() = user_id OR public.is_admin());
 
-CREATE POLICY "attendance_summary_insert" ON public.attendance_summary FOR INSERT
+-- ✅ FIX: Only Admins can manually insert/update. Trigger handles normal operations.
+CREATE POLICY "attendance_summary_insert_final" ON public.attendance_summary FOR INSERT
 WITH CHECK (public.is_admin());
 
-CREATE POLICY "attendance_summary_update" ON public.attendance_summary FOR UPDATE
-USING (public.is_admin());
-
-CREATE POLICY "attendance_summary_delete" ON public.attendance_summary FOR DELETE
+CREATE POLICY "attendance_summary_update_final" ON public.attendance_summary FOR UPDATE
 USING (public.is_admin());
 
 -- ✅ Performance Metrics - SUPER ADMIN ONLY
@@ -582,6 +627,9 @@ CREATE TRIGGER trigger_log_order_changes AFTER UPDATE ON public.orders FOR EACH 
 
 DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
 CREATE TRIGGER on_auth_user_created AFTER INSERT ON auth.users FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
+
+DROP TRIGGER IF EXISTS trigger_update_attendance_summary ON public.attendance_sessions;
+CREATE TRIGGER trigger_update_attendance_summary AFTER INSERT OR UPDATE OR DELETE ON public.attendance_sessions FOR EACH ROW EXECUTE FUNCTION public.recalculate_attendance_summary();
 
 -- SECTION 9: VERIFICATION
 -- -----------------------------------------------------------------
