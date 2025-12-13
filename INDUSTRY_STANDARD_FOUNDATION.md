@@ -1,9 +1,9 @@
 # 🏢 Industry Standard Foundation Guide
 ## Panda Patches CRM - Complete Architecture & Best Practices
 
-**Document Version:** 1.0  
-**Last Updated:** December 2025  
-**Status:** Production-Ready Foundation  
+**Document Version:** 1.1  
+**Last Updated:** December 13, 2025  
+**Status:** Production-Ready Foundation (UI Enhanced)  
 **For:** Solo Developers & Development Teams  
 
 ---
@@ -1321,7 +1321,7 @@ test('User can create and edit order', async ({ page }) => {
 
 ---
 
-## Accessibility & UX
+## Accessibility & UX (2025 Standard)
 
 ### 1. **Semantic HTML**
 
@@ -1341,16 +1341,28 @@ test('User can create and edit order', async ({ page }) => {
 </button>
 ```
 
-### 2. **Keyboard Navigation**
+### 2. **Keyboard Navigation (Full Tab Support)**
 
 ```typescript
 // ✅ Native elements work automatically
 <button>Save</button> // ← Tab-accessible, Enter-activatable
 
+// ✅ Table rows with keyboard support
+<tr 
+  className="focus-ring" 
+  tabIndex={0}
+  onKeyDown={(e) => {
+    if (e.key === 'Enter') openEditModal(user);
+  }}
+>
+  {/* Table cells */}
+</tr>
+
 // ✅ Custom components need help
 <div
   role="button"
   tabIndex={0}
+  className="focus-ring"
   onKeyDown={(e) => e.key === 'Enter' && handleClick()}
   onClick={handleClick}
 >
@@ -1358,11 +1370,46 @@ test('User can create and edit order', async ({ page }) => {
 </div>
 ```
 
-### 3. **Color Contrast**
+### 3. **Focus Ring System (Brand-Focused Accessibility)**
+
+**Implementation:**
+```css
+/* src/index.css - Global focus ring utility */
+.focus-ring {
+  @apply focus:outline-none focus:ring-2 focus:ring-brand-orange/60 
+         focus:ring-offset-2 focus:ring-offset-[#0B1120] transition-all duration-200;
+}
+
+/* Auto-applies to all form fields */
+input:focus, 
+select:focus, 
+textarea:focus {
+  @apply outline-none ring-1 ring-brand-orange border-brand-orange/50;
+}
+```
+
+**Usage:**
+```typescript
+// Auto on all inputs
+<input type="email" />  {/* Has .focus-ring automatically */}
+
+// Manual on custom elements
+<button className="px-4 py-2 bg-blue-600 focus-ring">
+  Click Me
+</button>
+
+// Replaces browser's blue outline with brand orange
+// Creates visual feedback for keyboard navigation
+```
+
+### 4. **Color Contrast**
 
 ```css
 /* ✅ WCAG AA compliant */
 color: #1a1a1a; /* Against white background: 14:1 ratio */
+
+/* ✅ Focus ring uses brand-orange (#FB6E1D) */
+/* 3:1 minimum for focus indicators (exceeds WCAG AA) */
 
 /* ❌ WCAG AA non-compliant */
 color: #888888; /* Against white background: 4.5:1 ratio */
@@ -1370,25 +1417,69 @@ color: #888888; /* Against white background: 4.5:1 ratio */
 
 **Tool:** Use Tailwind's built-in accessible colors
 
-### 4. **Focus Management**
+### 5. **Focus Management & Visual Feedback**
 
 ```typescript
+// ✅ Tab navigation with visual indicators
+// Browser shows orange focus ring on each element
+// No need for custom ref management
+
+// Focus rings automatically visible on:
+// - Button clicks
+// - Tab navigation
+// - Keyboard interaction
+
+// Visual feedback is brand-orange (#FB6E1D)
 const modalRef = useRef<HTMLDivElement>(null);
 
 // When modal opens, focus first interactive element
 useEffect(() => {
   modalRef.current?.querySelector('button')?.focus();
+  // ← Shows orange focus ring automatically
 }, [isOpen]);
 
 // When modal closes, return focus to trigger button
 useEffect(() => {
   return () => {
     triggerButtonRef.current?.focus();
+    // ← Shows orange focus ring on return
   };
 }, []);
 ```
 
-### 5. **Loading & Error States**
+### 6. **Empty States (Professional Feedback)**
+
+```typescript
+// ✅ Show professional visual feedback, not blank UI
+import EmptyState from '@/components/ui/EmptyState';
+
+{!data || data.length === 0 ? (
+  <EmptyState 
+    title="No data found"
+    description="Get started by creating your first item."
+    action={
+      <button 
+        onClick={openCreateModal}
+        className="flex items-center gap-2 focus-ring"
+      >
+        <Plus className="w-4 h-4" />
+        Create Item
+      </button>
+    }
+  />
+) : (
+  // Render table/list
+)}
+```
+
+**Features:**
+- Animated SVG illustration
+- Clear title and description
+- Optional call-to-action button
+- Brand-orange accents
+- Professional visual feedback
+
+### 7. **Loading & Error States**
 
 ```typescript
 // ✅ Always show loading state
@@ -1397,9 +1488,139 @@ if (isLoading) return <LoadingSpinner />;
 // ✅ Always show error state
 if (error) return <ErrorMessage message={error.message} />;
 
-// ✅ Empty state
-if (!data?.length) return <EmptyState />;
+// ✅ Empty state (visual feedback)
+if (!data?.length) return <EmptyState title="No data" description="..." />;
+
+// ✅ Success feedback
+toast.success("Operation completed"); // Via toast
 ```
+
+### 8. **Accessibility Standards (A11y)**
+
+**Button Accessibility Pattern** - UserManagementPage example:
+```typescript
+// ✅ Icon buttons with text labels (accessible)
+<div className="flex items-center gap-2">
+  <button 
+    onClick={() => handleAction(user)}
+    className="text-indigo-400 hover:text-indigo-300 flex items-center gap-1 focus-ring rounded"
+  >
+    <Edit className="w-4 h-4" /> Edit  // Icon + descriptive text
+  </button>
+  <button 
+    onClick={() => handleDelete(user)}
+    className="text-red-400 hover:text-red-300 flex items-center gap-1 focus-ring rounded"
+  >
+    <Trash2 className="w-4 h-4" /> Delete // Clear semantic meaning
+  </button>
+</div>
+
+// ✅ Keyboard navigation
+<tr 
+  tabIndex={0}
+  onKeyDown={(e) => {
+    if (e.key === 'Enter') handleAction(user);
+  }}
+>
+  {/* Row content */}
+</tr>
+
+// ✅ Modal dialogs with focus management
+{modalOpen && (
+  <ConfirmationModal
+    isOpen={modalOpen}
+    onClose={closeModal}
+    onConfirm={handleConfirm}
+    title="Confirm Action"
+    message="Are you sure?"
+  />
+)}
+```
+
+**Key Principles:**
+- Icon buttons must have text labels or aria-labels
+- Interactive elements must be `<button>`, `<a>`, or have `tabIndex`
+- Keyboard navigation (Enter, Space) must work
+- Color shouldn't be the only indicator
+- Contrast ratio ≥ 4.5:1 (WCAG AA standard)
+
+### 9. **Component Design System**
+
+#### SpotlightCard (The Primitive)
+```typescript
+// Universal container with spotlight effect
+<SpotlightCard className="p-6">
+  {/* Any content works here */}
+</SpotlightCard>
+```
+
+**Features:**
+- Mouse-tracking spotlight glow (500px radius)
+- Opacity transitions on hover (300ms)
+- Works with all content types
+- Consistent across entire app
+
+#### StatCard (Metrics)
+```typescript
+// Purpose-built for displaying metrics
+<StatCard
+  title="Revenue"
+  value={12500}
+  icon={<DollarSign />}
+  prefix="$"
+  trend={{ value: 15.5, isPositive: true }}
+/>
+```
+
+**Features:**
+- Automatic SpotlightCard wrapping
+- Animated counter (0 → value in 1.5s)
+- Trend indicator with colors (green/red)
+- Icon with glow effect
+
+---
+
+## Common Patterns & UI Best Practices
+
+### Modal & Dialog Management
+
+**ConfirmationModal Pattern** (From UserManagementPage):
+```typescript
+// Centralized modal state management
+const [modalMode, setModalMode] = useState<ModalMode>(null);
+const [selectedUser, setSelectedUser] = useState<UserProfile | null>(null);
+
+// Modal open/close handlers
+const openDeleteModal = (user: UserProfile) => {
+  setSelectedUser(user);
+  setModalMode('delete');
+};
+
+const closeAllModals = () => {
+  setModalMode(null);
+  setSelectedUser(null);
+  // Reset all form states
+  setNewUserEmail('');
+  setNewUserName('');
+  // ... reset all state
+};
+
+// Render modal
+<ConfirmationModal
+  isOpen={modalMode === 'delete'}
+  onClose={closeAllModals}
+  onConfirm={handleDeleteUser}
+  title="Delete User"
+  message={`Are you sure you want to delete ${selectedUser?.email}?`}
+  isConfirming={deleteUserMutation.isPending}
+/>
+```
+
+**Benefits:**
+- Single modal state machine
+- Prevents multiple modals open
+- Clear close/confirm paths
+- Proper cleanup on close
 
 ---
 
@@ -1785,7 +2006,8 @@ const { data } = useQuery({
 ---
 
 **Version History**
-- v1.0 (Dec 2025) - Initial comprehensive guide
+- v1.1 (Dec 13, 2025) - Added accessibility standards, modal patterns, UI improvements
+- v1.0 (Dec 12, 2025) - Initial comprehensive guide
 
 **Maintainer Notes**
 This document should be updated when:

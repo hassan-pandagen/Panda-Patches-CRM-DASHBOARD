@@ -1,3 +1,4 @@
+// src/contexts/AuthContext.tsx
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { User, Session } from '@supabase/supabase-js';
 import { useQuery, useQueryClient } from '@tanstack/react-query'; 
@@ -13,41 +14,33 @@ interface AuthContextType {
   error: Error | null;
   signOut: () => Promise<void>;
   refreshSession: () => Promise<void>;
-  settings?: { logo_url?: string } | null;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-// 👇 ADD YOUR ADMIN EMAILS HERE
-const SUPER_ADMIN_EMAILS = [
-  'hello@pandapatches.com',
-];
-
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  // 1. Auth State (Still managed manually because Supabase is real-time)
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
   
   const queryClient = useQueryClient();
 
-  // 2. Initialize Session
+  // 1. Initialize Session
   useEffect(() => {
     let mounted = true;
 
     const initSession = async () => {
       try {
         const { data: { session }, error } = await supabase.auth.getSession();
-        if (error) throw error;
+        if (error) throw error; // This error we want to catch early
         if (mounted) {
           setSession(session);
           setUser(session?.user ?? null);
         }
       } catch (err) {
         console.error('Auth init error:', err);
-        // Safe Cleanup
-        localStorage.clear();
-        sessionStorage.clear();
+        // Only clear storage if it's a critical session parsing error
+        // localStorage.clear(); // ⚠️ Removed aggressive clear to prevent logout loops on network error
       } finally {
         if (mounted) setAuthLoading(false);
       }
@@ -60,7 +53,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setSession(newSession);
         setUser(newSession?.user ?? null);
         setAuthLoading(false);
-        // Clear React Query cache on logout
         if (!newSession) {
           queryClient.clear(); 
         }
@@ -73,42 +65,29 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
   }, [queryClient]);
 
-  // 3. INDUSTRY STANDARD: Fetch Profile with React Query
-  // This automatically runs when 'user.id' exists.
+  // 2. Fetch Profile (FIXED: Added retries and safety checks)
   const { data: profile, isLoading: isProfileLoading, error: profileError } = useQuery({
     queryKey: ['profile', user?.id],
     queryFn: async () => {
       if (!user?.id) return null;
-      const { data, error } = await supabase
+      
+      const { data, error, status } = await supabase
         .from('user_profiles')
         .select('*')
         .eq('id', user.id)
         .maybeSingle();
       
-      if (error) throw error;
+      // ✅ FIX: Ignore 406 errors (happens when row is missing but RLS allows select)
+      if (error && status !== 406) {
+        throw error;
+      }
+      
       return data;
     },
-    // Only run this query if we have a user
     enabled: !!user?.id, 
     staleTime: 1000 * 60 * 5, // 5 minutes
-    retry: false,
-  });
-
-  // ✅ FIX: Fetch global settings with React Query
-  const { data: settings } = useQuery({
-    queryKey: ['settings'],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('settings')
-        .select('logo_url')
-        .eq('id', 'global_settings')
-        .maybeSingle();
-      
-      if (error) throw error;
-      return data;
-    },
-    staleTime: 1000 * 60 * 60, // 1 hour, settings don't change often
-    retry: 1,
+    retry: 2, // ✅ FIX: Retry twice on network failure before crashing
+    refetchOnWindowFocus: false, // Don't spam DB when tabbing back
   });
 
   const signOut = async () => {
@@ -118,6 +97,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       queryClient.clear(); 
       setSession(null);
       setUser(null);
+      localStorage.clear(); // Safe to clear on explicit sign out
     }
   };
 
@@ -125,13 +105,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     await supabase.auth.refreshSession();
   };
 
-  // 4. Derived State 
   const role = profile?.role ?? null;
   const permissions = profile?.permissions ?? null;
   
-  // Combined loading state
   const isLoading = authLoading || (!!user && isProfileLoading);
-  const error = (profileError as Error) || null;
+  // ✅ FIX: Only consider it a hard error if profile fails AND we aren't loading
+  const error = !isLoading ? (profileError as Error) : null;
 
   const value: AuthContextType = {
     user,
@@ -142,7 +121,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     error,
     signOut,
     refreshSession,
-    settings,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
@@ -154,4 +132,4 @@ export function useAuth() {
     throw new Error('useAuth must be used within an AuthProvider');
   }
   return context;
-};
+}

@@ -1,6 +1,7 @@
 import React, { useEffect } from 'react';
 import { motion, useMotionValue, useTransform, animate } from 'framer-motion';
 import { ArrowUpRight, ArrowDownRight } from 'lucide-react';
+import SpotlightCard from './SpotlightCard';
 
 const AnimatedCounter: React.FC<{ value: number; prefix?: string }> = ({ value, prefix = '' }) => {
   const count = useMotionValue(0);
@@ -13,6 +14,7 @@ const AnimatedCounter: React.FC<{ value: number; prefix?: string }> = ({ value, 
 
   return <motion.span>{rounded}</motion.span>;
 };
+
 interface StatCardProps {
   title: string;
   value: number;
@@ -23,6 +25,7 @@ interface StatCardProps {
   };
   prefix?: string;
   isLoading?: boolean;
+  onClick?: () => void;
 }
 
 const StatCard: React.FC<StatCardProps> = ({
@@ -32,6 +35,7 @@ const StatCard: React.FC<StatCardProps> = ({
   trend,
   prefix = '',
   isLoading = false,
+  onClick,
 }) => {
   if (isLoading) {
     return (
@@ -47,16 +51,15 @@ const StatCard: React.FC<StatCardProps> = ({
   const TrendIcon = trend?.isPositive ? ArrowUpRight : ArrowDownRight;
 
   return (
-    <motion.div
-      whileHover={{ y: -8, scale: 1.02 }}
-      transition={{ type: 'spring', stiffness: 300, damping: 20 }}
-      className="group relative overflow-hidden rounded-2xl bg-slate-800/40 p-5 backdrop-blur-lg shadow-lg"
+    <SpotlightCard 
+      onClick={onClick}
+      className="p-5 h-full"
     >
-      <div className="absolute inset-0 z-0 opacity-0 transition-opacity duration-500 group-hover:opacity-100">
-        <div className="absolute inset-0 bg-gradient-to-r from-brand-orange to-purple-500 blur-md"></div>
-      </div>
-
-      <div className="relative z-10 flex flex-col justify-between h-full">
+      <motion.div
+        whileHover={{ y: -4 }}
+        transition={{ type: 'spring', stiffness: 300, damping: 20 }}
+        className="relative z-10 flex flex-col justify-between h-full"
+      >
         <div className="flex items-center justify-between text-slate-400">
           <h3 className="font-medium">{title}</h3>
           <motion.div
@@ -83,8 +86,8 @@ const StatCard: React.FC<StatCardProps> = ({
             <span className="text-slate-500">vs last month</span>
           </div>
         )}
-      </div>
-    </motion.div>
+      </motion.div>
+    </SpotlightCard>
   );
 };
 

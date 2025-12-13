@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { updateMyPassword } from '../../services/authService';
 import Spinner from '../ui/Spinner';
-import GlassCard from '../ui/GlassCard';
+import SpotlightCard from '../ui/SpotlightCard';
 import Button from '../ui/Button'; // Assuming you have this, otherwise use standard <button>
 import { useToast } from '../../hooks/useToast'; // Assuming you use this hook
 
@@ -42,8 +42,7 @@ export const ChangePasswordForm: React.FC = () => {
   };
 
   return (
-    <GlassCard>
-      <div className="p-6">
+    <SpotlightCard className="p-6">
         <h3 className="text-xl font-semibold text-slate-100 mb-4">Change Password</h3>
         <p className="text-slate-400 mb-6">
           Update your password to keep your account secure.
@@ -82,8 +81,7 @@ export const ChangePasswordForm: React.FC = () => {
               {isSaving ? <Spinner size="sm" /> : 'Update Password'}
             </Button>
           </div>
-        </form>
-      </div>
-    </GlassCard>
-  );
-};
+          </form>
+          </SpotlightCard>
+          );
+          };

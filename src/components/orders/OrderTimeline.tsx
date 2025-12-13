@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
 import { logger } from '../../services/logger';
-import GlassCard from '../ui/GlassCard';
+import SpotlightCard from '../ui/SpotlightCard';
 import { Mail, RefreshCw, User, Clock } from 'lucide-react';
 import { format } from 'date-fns';
 import { useOrderHistory } from '../../hooks/useOrderHistory';
@@ -66,7 +66,8 @@ const OrderTimeline: React.FC<{ orderId: number }> = ({ orderId }) => {
   }
 
   return (
-    <GlassCard title="Activity & Communications">
+    <SpotlightCard className="p-6">
+      <h3 className="text-lg font-semibold text-white mb-6">Activity & Communications</h3>
       <div className="relative border-l border-white/10 ml-3 space-y-8 py-2">
         
         {items.length === 0 && (
@@ -106,7 +107,7 @@ const OrderTimeline: React.FC<{ orderId: number }> = ({ orderId }) => {
           </div>
         ))}
       </div>
-    </GlassCard>
+    </SpotlightCard>
   );
 };
 

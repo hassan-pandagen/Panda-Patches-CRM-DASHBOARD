@@ -1,26 +1,30 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 // --- THIS IS THE CORRECTED IMPORT SECTION ---
 import { createUserWithRole, getAllUsers, deleteUser, updateUserProfile } from '@/services/authService';
 import { logger } from '@/services/logger';
 import { useAuth } from '../contexts/AuthContext';
-import { UserProfile, UserPermissions, UserRole } from '@/types'; // 1. Add 'Key' to imports
+import { UserProfile, UserPermissions, UserRole } from '@/types';
 import { Check, X, Plus, UserPlus, Edit, Trash2, Key, AlertCircle } from 'lucide-react';
 import Spinner from '@/components/ui/Spinner';
 import ConfirmationModal from '@/components/ui/ConfirmationModal';
+import SpotlightCard from '@/components/ui/SpotlightCard';
+import EmptyState from '@/components/ui/EmptyState';
 import { useToast } from '@/hooks/useToast';
 import { queryKeys } from '@/constants/queryKeys';
 
-const defaultPermissions: UserPermissions = {
+// Base defaults (all false to start clean)
+const emptyPermissions: UserPermissions = {
   users_manage: false,
-  orders_create: true,
+  orders_create: false,
   orders_view_all: false,
-  orders_change_status: true,
+  orders_change_status: false,
   orders_edit_financials: false,
   orders_edit_production: false,
   orders_delete: false,
   reports_view_financials: false,
-  shipping_view: true,
+  shipping_view: false,
+  attendance_clock_only: false,
 };
 
 type ModalMode = 'create' | 'edit' | 'delete' | 'password' | null;
@@ -37,22 +41,58 @@ const UserManagementPage: React.FC = () => {
   const [newUserName, setNewUserName] = useState('');
   const [newUserPassword, setNewUserPassword] = useState('');
   const [newUserRole, setNewUserRole] = useState<UserRole>(UserRole.USER);
-  const [newUserPermissions, setNewUserPermissions] = useState<UserPermissions>(defaultPermissions);
+  const [newUserPermissions, setNewUserPermissions] = useState<UserPermissions>(emptyPermissions);
   const [createdUserInfo, setCreatedUserInfo] = useState<{ email: string; } | null>(null);
   const [passwordCopied, setPasswordCopied] = useState(false);
 
   // State for Edit Modal
   const [editUserName, setEditUserName] = useState('');
   const [editUserRole, setEditUserRole] = useState<UserRole>(UserRole.USER);
-  const [editUserPermissions, setEditUserPermissions] = useState<UserPermissions>(defaultPermissions);
+  const [editUserPermissions, setEditUserPermissions] = useState<UserPermissions>(emptyPermissions);
 
-  // 2. Add this new state for the password modal
+  // State for Password Modal
   const [resetPassword, setResetPassword] = useState('');
 
-  // State for Change Password Modal
-  const [newPassword, setNewPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
-  const [passwordChangeMessage, setPasswordChangeMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
+  // --- PRESET LOGIC (Matches your Screenshots) ---
+  const applyPreset = (type: string, setPermissions: (p: UserPermissions) => void) => {
+    if (type === 'sales') {
+      // Manzoor's Configuration
+      setPermissions({
+        ...emptyPermissions,
+        orders_create: true,
+        orders_view_all: false, // Only sees own orders
+        orders_change_status: true,
+        orders_edit_financials: true,
+        orders_delete: false,
+        reports_view_financials: true, // Needs this for Dashboard
+        shipping_view: true,
+      });
+    } else if (type === 'production') {
+      // Hassan's Configuration
+      setPermissions({
+        ...emptyPermissions,
+        orders_create: false,
+        orders_view_all: true, // Must see production queue
+        orders_change_status: false, // Matches screenshot (X)
+        orders_edit_financials: false,
+        orders_edit_production: true, // The critical permission
+        reports_view_financials: false, // Hides Dashboard
+        shipping_view: false,
+      });
+    } else if (type === 'clock_only') {
+      setPermissions({
+        ...emptyPermissions,
+        attendance_clock_only: true,
+      });
+    } else if (type === 'admin_preset') {
+      // Full Access
+      const allTrue = Object.keys(emptyPermissions).reduce((acc, key) => {
+        acc[key] = true;
+        return acc;
+      }, {} as any);
+      setPermissions(allTrue);
+    }
+  };
 
   // --- MUTATIONS ---
   const createUserMutation = useMutation({
@@ -65,12 +105,9 @@ const UserManagementPage: React.FC = () => {
         setCreatedUserInfo({ email: data.user.email! }); // This part might change based on new flow
       }
     },
-    onError: (error: Error) => {
-      logger.error(error);
-    },
+    onError: (error: Error) => logger.error(error.message),
   });
 
-  // --- REAL MUTATIONS ---
 
   const deleteUserMutation = useMutation({
     mutationFn: (userId: string) => deleteUser(userId),
@@ -92,7 +129,6 @@ const UserManagementPage: React.FC = () => {
     onError: (error: Error) => toast.error("Update Failed", error.message),
   });
 
-  // ✅ FIX: Create a dedicated mutation for changing the password
   const changePasswordMutation = useMutation({
     mutationFn: (data: { id: string; updates: any }) => updateUserProfile(data.id, data.updates),
     onSuccess: () => {
@@ -126,13 +162,9 @@ const UserManagementPage: React.FC = () => {
   const handlePasswordReset = (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedUser || !resetPassword) return;
-
-    // Use the new, dedicated mutation for password changes
     changePasswordMutation.mutate({
       id: selectedUser.id,
-      updates: {
-        password: resetPassword
-      }
+      updates: { password: resetPassword }
     });
   };
   const handleDeleteUser = () => {
@@ -150,35 +182,30 @@ const UserManagementPage: React.FC = () => {
     setNewUserName('');
     setNewUserPassword('');
     setNewUserRole(UserRole.USER);
+    setNewUserPermissions(emptyPermissions);
     setCreatedUserInfo(null);
     setEditUserName('');
     setEditUserRole(UserRole.USER);
-    setEditUserPermissions(defaultPermissions);
+    setEditUserPermissions(emptyPermissions);
     setResetPassword('');
-    setNewPassword('');
-    setConfirmPassword('');
-    setPasswordChangeMessage(null);
-    // Reset mutations
     createUserMutation.reset();
     editUserMutation.reset();
     changePasswordMutation.reset();
     deleteUserMutation.reset();
   };
 
-  const closeAndResetModal = () => closeAllModals();
-  const closeEditModal = () => closeAllModals();
-  const closeDeleteModal = () => closeAllModals();
 
   const openCreateModal = () => {
     setModalMode('create');
     setSelectedUser(null);
+    applyPreset('sales', setNewUserPermissions); // Default to Sales
   };
 
   const openEditModal = (user: UserProfile) => {
     setSelectedUser(user);
     setEditUserName(user.full_name || '');
     setEditUserRole(user.role as UserRole);
-    setEditUserPermissions(user.permissions || { ...defaultPermissions });
+    setEditUserPermissions(user.permissions || { ...emptyPermissions });
     setModalMode('edit');
   };
 
@@ -200,9 +227,7 @@ const UserManagementPage: React.FC = () => {
 
   const { data: users, isLoading, error } = useQuery<UserProfile[], Error>({
     queryKey: queryKeys.users.all(),
-    queryFn: async () => {
-      return await getAllUsers();
-    },
+    queryFn: async () => getAllUsers(),
     enabled: role === UserRole.ADMIN || !!permissions?.users_manage,
   });
 
@@ -217,106 +242,127 @@ const UserManagementPage: React.FC = () => {
     );
   }
 
+  // Helper to determine current preset for dropdown value
+  const detectPreset = (perms: UserPermissions) => {
+    if (perms.orders_edit_production && perms.orders_view_all && !perms.reports_view_financials) return 'production';
+    if (perms.reports_view_financials && perms.orders_create && !perms.orders_view_all) return 'sales';
+    if (perms.attendance_clock_only) return 'clock_only';
+    return 'custom';
+  };
+
   return (
     <div className="max-w-6xl mx-auto p-6 text-slate-200">
       <div className="flex justify-between items-center mb-6">
-        <h1 className="text-3xl font-bold">User Management</h1>
-        <button onClick={openCreateModal} className="flex items-center gap-2 px-4 py-2 bg-blue-600 rounded-lg text-white hover:bg-blue-700 text-sm font-semibold">
-          <Plus className="w-4 h-4" /> Create User
-        </button>
-      </div>
+         <h1 className="text-3xl font-bold">User Management</h1>
+         <button onClick={openCreateModal} className="flex items-center gap-2 px-4 py-2 bg-blue-600 rounded-lg text-white hover:bg-blue-700 text-sm font-semibold focus-ring">
+           <Plus className="w-4 h-4" /> Create User
+         </button>
+       </div>
       
-      {isLoading && <p>Loading users...</p>}
+      {isLoading && <Spinner />}
       {error && <p className="text-red-400">Error: {error.message}</p>}
 
-      {users && (
-        <div className="bg-slate-800/50 border border-slate-700 rounded-lg overflow-hidden">
+      {!users || users.length === 0 ? (
+        <EmptyState 
+          title="No users found"
+          description="Get started by adding your first team member or sales agent."
+          action={
+            <button 
+              onClick={openCreateModal}
+              className="flex items-center gap-2 px-4 py-2 bg-white/5 hover:bg-white/10 text-white rounded-lg border border-white/10 transition-all focus-ring"
+            >
+              <Plus className="w-4 h-4" />
+              Create User
+            </button>
+          }
+        />
+      ) : (
+        <SpotlightCard className="p-0 overflow-hidden">
           <table className="min-w-full divide-y divide-slate-700">
             <thead className="bg-slate-900/70">
               <tr>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-slate-300 uppercase tracking-wider">
+                <th className="px-6 py-3 text-left text-xs font-medium text-slate-300 uppercase">
                   Email
                 </th>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-slate-300 uppercase tracking-wider">
+                <th className="px-6 py-3 text-left text-xs font-medium text-slate-300 uppercase">
                   Full Name
                 </th>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-slate-300 uppercase tracking-wider">
+                <th className="px-6 py-3 text-left text-xs font-medium text-slate-300 uppercase">
                   Role
                 </th>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-slate-300 uppercase tracking-wider">
-                  Access Permissions
+                <th className="px-6 py-3 text-left text-xs font-medium text-slate-300 uppercase">
+                  Permissions
                 </th>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-slate-300 uppercase tracking-wider">
+                <th className="px-6 py-3 text-left text-xs font-medium text-slate-300 uppercase">
                   Actions
                 </th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-800">
-              {!users || users.length === 0 ? (
-                <tr>
-                  <td colSpan={5} className="text-center py-16 text-slate-400">
-                    No users found. Create one to get started.
+              {users.map((user) => (
+                <tr 
+                  key={user.id} 
+                  className="hover:bg-slate-800/40 focus-ring cursor-pointer group" 
+                  tabIndex={0}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') openEditModal(user);
+                  }}
+                >
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-300">{user.email}</td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-300">{user.full_name || '-'}</td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm">
+                    <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${user.role === 'ADMIN' ? 'bg-indigo-600/30 text-indigo-300' : 'bg-cyan-600/30 text-cyan-300'}`}>
+                      {user.role}
+                    </span>
                   </td>
-                </tr>
-              ) : (
-                users.map((user) => (
-                  <tr key={user.id} className="hover:bg-slate-800/40">
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-300">{user.email}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-300">{user.full_name || '-'}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm">
-                      <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${user.role === 'ADMIN' ? 'bg-indigo-600/30 text-indigo-300' : 'bg-cyan-600/30 text-cyan-300'}`}>
-                        {user.role}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-300">
-                      <div className="flex flex-wrap gap-x-4 gap-y-2">
-                        {Object.entries(user.permissions || {}).map(([permission, hasAccess]) => (
-                          <div key={permission} className="flex items-center gap-1.5">
-                            {hasAccess ? (
-                              <Check className="w-4 h-4 text-green-400" />
-                            ) : (
-                              <X className="w-4 h-4 text-slate-500" />
-                            )}
-                            <span className="text-xs capitalize">
-                              {permission.replace('CAN_', '').replace(/_/g, ' ').toLowerCase()}
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-300">
+                    <div className="flex flex-wrap gap-x-4 gap-y-2 max-w-xs">
+                      {Object.entries(user.permissions || {}).map(([permission, hasAccess]) => {
+                         // Only show relevant true permissions to keep UI clean
+                         if (!hasAccess && permission !== 'users_manage') return null;
+                         return (
+                          <div key={permission} className="flex items-center gap-1">
+                            {hasAccess ? <Check className="w-3 h-3 text-green-400" /> : <X className="w-3 h-3 text-red-400" />}
+                            <span className="text-xs text-slate-400 capitalize">
+                              {permission.replace('orders_', '').replace('reports_', '').replace(/_/g, ' ')}
                             </span>
                           </div>
-                        ))}
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-300">
+                        )
+                      })}
+                    </div>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-300">
                       <div className="flex items-center gap-2">
-                        <button onClick={() => openEditModal(user)} className="text-indigo-400 hover:text-indigo-300 flex items-center gap-1">
-                          <Edit className="w-4 h-4" /> Edit
-                        </button>
-                        {/* --- CHANGE PASSWORD BUTTON --- */}
-                        <button
-                          onClick={() => openPasswordModal(user)}
-                          className="text-amber-400 hover:text-amber-300 flex items-center gap-1"
-                        >
-                          <Key className="w-4 h-4" /> Pass
-                        </button>
-                        {/* -------------------------------- */}
-                        <button onClick={() => openDeleteModal(user)} className="text-red-400 hover:text-red-300 flex items-center gap-1">
-                          <Trash2 className="w-4 h-4" /> Delete
-                        </button>
+                        <button onClick={() => openEditModal(user)} className="text-indigo-400 hover:text-indigo-300 flex items-center gap-1 focus-ring rounded">
+                              <Edit className="w-4 h-4" /> Edit
+                            </button>
+                            {/* --- CHANGE PASSWORD BUTTON --- */}
+                            <button
+                              onClick={() => openPasswordModal(user)}
+                              className="text-amber-400 hover:text-amber-300 flex items-center gap-1 focus-ring rounded"
+                            >
+                              <Key className="w-4 h-4" /> Pass
+                            </button>
+                            {/* -------------------------------- */}
+                            <button onClick={() => openDeleteModal(user)} className="text-red-400 hover:text-red-300 flex items-center gap-1 focus-ring rounded">
+                              <Trash2 className="w-4 h-4" /> Delete
+                            </button>
                       </div>
                     </td>
-                  </tr>
-                ))
-              )}
+                </tr>
+              ))}
             </tbody>
           </table>
-        </div>
+        </SpotlightCard>
       )}
 
-      {/* Delete Confirmation Modal */}
+      {/* Delete Confirmation */}
       <ConfirmationModal
         isOpen={modalMode === 'delete'}
-        onClose={closeDeleteModal}
+        onClose={closeAllModals}
         onConfirm={handleDeleteUser}
         title="Delete User"
-        message={`Are you sure you want to permanently delete the user ${selectedUser?.email}? This action cannot be undone.`}
+        message={`Are you sure you want to delete ${selectedUser?.email}?`}
         isConfirming={deleteUserMutation.isPending}
       />
 
@@ -324,70 +370,23 @@ const UserManagementPage: React.FC = () => {
       {modalMode === 'create' && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
           <div className="bg-slate-800 border border-slate-700 rounded-xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-            <div className="p-6 border-b border-slate-700 flex justify-between items-center">
+            <div className="p-8 border-b border-slate-700 flex justify-between items-center">
               <h3 className="text-xl font-bold text-white">Create New User</h3>
-              <button onClick={closeAndResetModal} className="text-slate-400 hover:text-white">
-                <X className="w-6 h-6" />
-              </button>
+              <button onClick={closeAllModals}><X className="w-6 h-6 text-slate-400" /></button>
             </div>
 
-            <form onSubmit={handleCreateUser} className="p-6 space-y-6">
-              {/* Success Message with Temp Password */}
-              {createdUserInfo && (
-                <div className="bg-green-900/30 border border-green-500/50 rounded-lg p-4 mb-4">
-                  <div className="flex items-center gap-2 text-green-400 font-semibold mb-2">
-                    <Check className="w-5 h-5" /> User Created & Activated
-                  </div>
-                  <p className="text-sm text-slate-300">
-                    The account for <strong className="text-white">{createdUserInfo.email}</strong> is ready.
-                  </p>
-                  
-                  {/* Password Copy Section - Security: Hidden by default, copy to clipboard only */}
-                  <div className="mt-3 p-3 bg-amber-900/30 border border-amber-500/50 rounded-lg">
-                    <p className="text-xs text-amber-200 mb-2 flex items-center gap-1">
-                      <AlertCircle className="w-4 h-4" />
-                      Temporary Password (copy below, not shown)
-                    </p>
-                    <button
-                      type="button"
-                      onClick={handleCopyPassword}
-                      className="w-full py-2 px-3 bg-amber-600 hover:bg-amber-700 text-white text-sm font-semibold rounded transition-colors flex items-center justify-center gap-2"
-                    >
-                      {passwordCopied ? (
-                        <>
-                          <Check className="w-4 h-4" />
-                          Password Copied!
-                        </>
-                      ) : (
-                        <>
-                          📋 Copy Password to Clipboard
-                        </>
-                      )}
-                    </button>
-                  </div>
-
-                  <p className="text-xs text-slate-400 mt-3">
-                    ✓ Click "Copy Password" button above to copy credentials
-                    <br />
-                    ✓ Send email & password to the agent via WhatsApp/Slack
-                    <br />
-                    ✓ Password is not shown for security reasons
-                  </p>
-                  
-                  <button 
-                    type="button" 
-                    onClick={closeAndResetModal}
-                    className="mt-4 w-full py-2 bg-slate-700 hover:bg-slate-600 rounded-lg text-sm transition-colors"
-                  >
-                    Done
-                  </button>
-                </div>
-              )}
-
-              {!createdUserInfo && (
-                <>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div className="space-y-2">
+            <form onSubmit={handleCreateUser} className="p-8 space-y-8">
+              {createdUserInfo ? (
+                /* ... Success View (Same as before) ... */
+                <div className="bg-green-900/30 p-4 rounded-lg">
+                   <p className="text-green-400">User Created!</p>
+                   <button type="button" onClick={handleCopyPassword} className="mt-2 bg-amber-600 px-3 py-1 rounded text-white text-sm">
+                     {passwordCopied ? 'Copied' : 'Copy Password'}
+                   </button>
+                   <button type="button" onClick={closeAllModals} className="mt-4 w-full bg-slate-700 py-2 rounded">Done</button>
+                </div>) : (<>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                    <div className="space-y-3">
                       <label className="text-sm font-medium text-slate-400">Email Address</label>
                       <input
                         type="email"
@@ -400,8 +399,8 @@ const UserManagementPage: React.FC = () => {
                     </div>
 
                     {/* NEW PASSWORD INPUT */}
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium text-slate-400">Assign Password</label>
+                     <div className="space-y-3">
+                       <label className="text-sm font-medium text-slate-400">Assign Password</label>
                       <input
                         type="text" // Using "text" so you can see it and copy it easily
                         required
@@ -413,8 +412,8 @@ const UserManagementPage: React.FC = () => {
                       />
                     </div>
                     
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium text-slate-400">Full Name</label>
+                    <div className="space-y-3">
+                    <label className="text-sm font-medium text-slate-400">Full Name</label>
                       <input
                         type="text"
                         required
@@ -426,9 +425,9 @@ const UserManagementPage: React.FC = () => {
                     </div>
                   </div>
 
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium text-slate-400">Role</label>
-                    <select
+                  <div className="space-y-3">
+                     <label className="text-sm font-medium text-slate-400">Role</label>
+                     <select
                       value={newUserRole}
                       onChange={(e) => setNewUserRole(e.target.value as UserRole)}
                       className="w-full px-4 py-2 bg-slate-900/50 border border-slate-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-white"
@@ -439,36 +438,10 @@ const UserManagementPage: React.FC = () => {
                   </div>
 
                   {/* User Type Preset for Create Form */}
-                  <div className="space-y-2">
+                  <div className="space-y-3">
                     <label className="text-sm font-medium text-slate-400">User Type (Preset)</label>
                     <select
-                      onChange={(e) => {
-                        if (e.target.value === 'production') {
-                          setNewUserPermissions({
-                            ...defaultPermissions,
-                            orders_create: false,
-                            orders_view_all: true,
-                            orders_change_status: true,
-                            orders_edit_financials: false,
-                            orders_edit_production: true,
-                          });
-                        } else if (e.target.value === 'clock_only') {
-                          setNewUserPermissions({
-                            users_manage: false,
-                            orders_create: false,
-                            orders_view_all: false,
-                            orders_change_status: false,
-                            orders_edit_financials: false,
-                            orders_edit_production: false,
-                            orders_delete: false,
-                            reports_view_financials: false,
-                            shipping_view: false,
-                            attendance_clock_only: true,
-                          });
-                        } else {
-                          setNewUserPermissions(defaultPermissions);
-                        }
-                      }}
+                      onChange={(e) => applyPreset(e.target.value, setNewUserPermissions)}
                       className="w-full px-4 py-2 bg-slate-900/50 border border-slate-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-white"
                       defaultValue="sales"
                     >
@@ -478,10 +451,10 @@ const UserManagementPage: React.FC = () => {
                     </select>
                   </div>
 
-                  <div className="space-y-3">
+                  <div className="space-y-4">
                     <label className="text-sm font-medium text-slate-400 block">Permissions</label>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      {Object.keys(defaultPermissions).map((key) => (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      {Object.keys(emptyPermissions).map((key) => (
                         <label key={key} className="flex items-center gap-3 p-3 bg-slate-900/30 rounded-lg border border-slate-700 cursor-pointer hover:border-slate-500 transition-colors">
                           <input
                             type="checkbox"
@@ -500,10 +473,10 @@ const UserManagementPage: React.FC = () => {
                     </div>
                   </div>
 
-                  <div className="flex justify-end gap-3 pt-4 border-t border-slate-700">
+                  <div className="flex justify-end gap-3 pt-8 border-t border-slate-700">
                     <button
                       type="button"
-                      onClick={closeAndResetModal}
+                      onClick={closeAllModals}
                       className="px-4 py-2 text-slate-300 hover:bg-slate-700 rounded-lg transition-colors"
                     >
                       Cancel
@@ -516,8 +489,7 @@ const UserManagementPage: React.FC = () => {
                       {createUserMutation.isPending ? <Spinner size="sm" /> : <UserPlus className="w-4 h-4" />}
                       Create User
                     </button>
-                  </div>
-                </>
+                  </div></>
               )}
             </form>
           </div>
@@ -528,106 +500,52 @@ const UserManagementPage: React.FC = () => {
       {modalMode === 'edit' && selectedUser && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
           <div className="bg-slate-800 border border-slate-700 rounded-xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-            <div className="p-6 border-b border-slate-700 flex justify-between items-center">
-              <h3 className="text-xl font-bold text-white">Edit User: {selectedUser.full_name}</h3>
-              <button onClick={closeEditModal} className="text-slate-400 hover:text-white">
-                <X className="w-6 h-6" />
-              </button>
+            <div className="p-8 border-b border-slate-700 flex justify-between items-center">
+              <h3 className="text-xl font-bold text-white">Edit {selectedUser.full_name}</h3>
+              <button onClick={closeAllModals}><X className="w-6 h-6 text-slate-400" /></button>
             </div>
 
-            <form onSubmit={handleEditUser} className="p-6 space-y-6">
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-slate-400">Full Name</label>
-                <input
-                  type="text"
-                  value={editUserName}
-                  onChange={(e) => setEditUserName(e.target.value)}
-                  className="w-full px-4 py-2 bg-slate-900/50 border border-slate-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-white"
-                />
-              </div>
+            <form onSubmit={handleEditUser} className="p-8 space-y-8">
+              <input type="text" value={editUserName} onChange={e => setEditUserName(e.target.value)} className="w-full bg-slate-900/50 border border-slate-600 rounded p-2 text-white" />
+              <select value={editUserRole} onChange={e => setEditUserRole(e.target.value as UserRole)} className="w-full bg-slate-900/50 border border-slate-600 rounded p-2 text-white">
+                <option value={UserRole.USER}>User</option>
+                <option value={UserRole.ADMIN}>Admin</option>
+              </select>
 
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-slate-400">Role</label>
+              {/* EDIT PRESET SELECTOR */}
+              <div>
+                <label className="text-sm text-slate-400 mb-1 block">Quick Apply Preset</label>
                 <select
-                  value={editUserRole}
-                  onChange={(e) => setEditUserRole(e.target.value as UserRole)}
-                  className="w-full px-4 py-2 bg-slate-900/50 border border-slate-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-white"
+                  onChange={(e) => applyPreset(e.target.value, setEditUserPermissions)} 
+                  className="w-full bg-slate-900/50 border border-slate-600 rounded p-2 text-white"
+                  value={detectPreset(editUserPermissions)}
                 >
-                  <option value={UserRole.USER}>Standard User</option>
-                  <option value={UserRole.ADMIN}>Administrator</option>
-                </select>
-              </div>
-
-              {/* --- NEW: User Type Selector for easier permission management --- */}
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-slate-400">User Type (Preset)</label>
-                <select
-                  onChange={(e) => {
-                    if (e.target.value === 'production') {
-                      setEditUserPermissions({ // Use a dedicated Production preset
-                        ...defaultPermissions,
-                        orders_create: false,
-                        orders_view_all: true,
-                        orders_change_status: true, // Allow status changes
-                        orders_edit_financials: false,
-                        orders_edit_production: true,
-                      });
-                    } else if (e.target.value === 'clock_only') {
-                      setEditUserPermissions({ // Clock-only user
-                        users_manage: false,
-                        orders_create: false,
-                        orders_view_all: false,
-                        orders_change_status: false,
-                        orders_edit_financials: false,
-                        orders_edit_production: false,
-                        orders_delete: false,
-                        reports_view_financials: false,
-                        shipping_view: false,
-                        attendance_clock_only: true,
-                      });
-                    } else { // 'sales'
-                      setEditUserPermissions(defaultPermissions);
-                    }
-                  }}
-                  className="w-full px-4 py-2 bg-slate-900/50 border border-slate-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-white"
-                  // Determine current type based on permissions
-                  value={editUserPermissions.attendance_clock_only ? 'clock_only' : (editUserPermissions.orders_edit_production ? 'production' : 'sales')}
-                >
+                  <option value="custom">Custom Configuration</option>
                   <option value="sales">Sales Agent</option>
                   <option value="production">Production User</option>
                   <option value="clock_only">Clock In/Out Only</option>
                 </select>
               </div>
 
-              <div className="space-y-3">
-                <label className="text-sm font-medium text-slate-400 block">Permissions</label>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  {Object.keys(defaultPermissions).map((key) => (
-                    <label key={key} className="flex items-center gap-3 p-3 bg-slate-900/30 rounded-lg border border-slate-700 cursor-pointer hover:border-slate-500 transition-colors">
-                      <input
-                        type="checkbox"
-                        checked={editUserPermissions[key as keyof UserPermissions]}
-                        onChange={(e) => setEditUserPermissions(prev => ({
-                          ...prev,
-                          [key]: e.target.checked
-                        }))}
-                        className="w-4 h-4 rounded border-slate-600 text-blue-600 focus:ring-offset-slate-900"
-                      />
-                      <span className="text-sm text-slate-300 capitalize">
-                        {key.replace('can_', '').replace(/_/g, ' ')}
-                      </span>
-                    </label>
-                  ))}
-                </div>
+              <div className="grid grid-cols-2 gap-4 bg-slate-900/30 p-6 rounded-lg">
+                {Object.keys(emptyPermissions).map((key) => (
+                  <label key={key} className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={editUserPermissions[key as keyof UserPermissions]}
+                      onChange={(e) => setEditUserPermissions(prev => ({ ...prev, [key]: e.target.checked }))}
+                      className="rounded bg-slate-800 border-slate-600 text-blue-600"
+                    />
+                    <span className="text-sm text-slate-300 capitalize">{key.replace(/_/g, ' ')}</span>
+                  </label>
+                ))}
               </div>
-
-              <div className="flex justify-end gap-3 pt-4 border-t border-slate-700">
-                <button type="button" onClick={closeEditModal} className="px-4 py-2 text-slate-300 hover:bg-slate-700 rounded-lg transition-colors">
+              <div className="flex justify-end gap-3 pt-6 border-t border-slate-700">
+                <button type="button" onClick={closeAllModals} className="px-4 py-2 text-slate-300">
                   Cancel
                 </button>
-                <button type="submit" disabled={editUserMutation.isPending} className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg font-medium transition-colors flex items-center gap-2 disabled:opacity-50">
-                  {editUserMutation.isPending ? <Spinner size="sm" /> : <Edit className="w-4 h-4" />}
-                  Save Changes
+                <button type="submit" disabled={editUserMutation.isPending} className="px-4 py-2 bg-indigo-600 rounded text-white">
+                  {editUserMutation.isPending ? 'Saving...' : 'Save Changes'}
                 </button>
               </div>
             </form>
@@ -639,47 +557,25 @@ const UserManagementPage: React.FC = () => {
       {modalMode === 'password' && selectedUser && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
           <div className="bg-slate-800 border border-slate-700 rounded-xl shadow-2xl max-w-md w-full">
-            <div className="p-6 border-b border-slate-700 flex justify-between items-center">
-              <h3 className="text-xl font-bold text-white">Change Password</h3>
-              <button onClick={closeAndResetModal} className="text-slate-400 hover:text-white">
-                <X className="w-6 h-6" />
-              </button>
+            <div className="p-8 border-b border-slate-700 flex justify-between items-center">
+              <h3 className="text-white font-bold">Change Password</h3>
             </div>
 
-            <form onSubmit={handlePasswordReset} className="p-6 space-y-6">
-              <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg text-amber-200 text-sm">
-                Changing password for: <strong>{selectedUser.email}</strong>
-              </div>
-
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-slate-400">New Password</label>
-                <input
-                  type="text"
-                  required
-                  minLength={6}
-                  placeholder="Enter new password..."
-                  value={resetPassword}
-                  onChange={(e) => setResetPassword(e.target.value)}
-                  className="w-full px-4 py-2 bg-slate-900/50 border border-slate-600 rounded-lg focus:ring-2 focus:ring-amber-500 text-white"
-                />
-                <p className="text-xs text-slate-500">Must be at least 6 characters.</p>
-              </div>
-
-              <div className="flex justify-end gap-3 pt-2">
+            <form onSubmit={handlePasswordReset} className="p-8 space-y-6">
+              <input type="text" required minLength={6} value={resetPassword} onChange={e => setResetPassword(e.target.value)} placeholder="New Password" className="w-full bg-slate-900/50 border border-slate-600 rounded p-2 text-white" />
+              <div className="flex justify-end gap-3 pt-4 border-t border-slate-700">
                 <button
                   type="button"
-                  onClick={closeAndResetModal}
-                  className="px-4 py-2 text-slate-300 hover:bg-slate-700 rounded-lg transition-colors"
+                  onClick={closeAllModals}
+                  className="text-slate-300 px-4 py-2"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  disabled={changePasswordMutation.isPending}
-                  className="px-4 py-2 bg-amber-600 hover:bg-amber-500 text-white rounded-lg font-medium transition-colors flex items-center gap-2"
+                  className="bg-amber-600 text-white px-4 py-2 rounded"
                 >
-                  {changePasswordMutation.isPending ? <Spinner size="sm" /> : <Key className="w-4 h-4" />}
-                  Update Password
+                  Update
                 </button>
               </div>
             </form>

@@ -1,11 +1,8 @@
-// src/main.tsx - FIXED VERSION (Consistent Imports)
+// src/main.tsx
 import React from 'react';
 import ReactDOM from 'react-dom/client';
-import {
-  createBrowserRouter,
-  RouterProvider,
-} from 'react-router-dom';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { createBrowserRouter, RouterProvider } from 'react-router-dom';
+import { QueryClientProvider } from '@tanstack/react-query';
 import { ToastProvider } from './constants/ToastContext';
 import { SpeedInsights } from '@vercel/speed-insights/react';
 import { AuthProvider } from './contexts/AuthContext';
@@ -25,87 +22,82 @@ initSentryAsync().catch((error) => {
   console.warn('Failed to initialize Sentry:', error);
 });
 versionChecker.init();
-console.log('%c🐼 Panda Patches CRM', 'color: #ff6b35; font-weight: bold; font-size: 16px;');
-console.log('Version:', versionChecker.getVersionInfo());
 
-// --- CHUNK ERROR HANDLING ---
+// --- CHUNK ERROR HANDLING (FIXED) ---
 let isHandlingChunkError = false;
+
 const handleChunkLoadingError = (errorMessage: string, source: string) => {
+  // Normalize error message for easier checking
+  const msg = errorMessage.toLowerCase();
+
   const isChunkError = 
-    errorMessage.includes('dynamically imported module') ||
-    errorMessage.includes('Failed to fetch dynamically imported module') ||
-    errorMessage.includes('Failed to load chunk') ||
-    errorMessage.includes('Loading chunk') ||
-    errorMessage.includes('Importing a module script failed') ||
-    (source === 'filename' && errorMessage.includes('assets/') && errorMessage.includes('.js'));
+    msg.includes('dynamically imported module') ||
+    msg.includes('failed to fetch dynamically imported module') ||
+    msg.includes('failed to load chunk') ||
+    msg.includes('loading chunk') ||
+    msg.includes('importing a module script failed') ||
+    msg.includes('missing script') ||
+    // ✅ FIX: Catch 404s on assets specifically (like your Sentry error)
+    (msg.includes('error') && msg.includes('/assets/') && msg.includes('.js')) ||
+    msg.includes('net::err_aborted');
 
   if (!isChunkError) return false;
+  
+  // Prevent infinite loops
   if (isHandlingChunkError) return true;
 
   isHandlingChunkError = true;
   logger.warn('🔄 Chunk loading error detected - app will reload', { message: errorMessage, source });
 
-  // Log to Sentry for tracking (but don't send duplicate events)
   captureMessage('Chunk loading error - auto reload', 'warning', {
     errorType: 'chunk_loading',
     source,
     errorMessage,
   }).catch(() => {});
 
-  // Show user-friendly message
-  console.log('%c⚠️ Loading new version...', 'color: #ff6b35; font-weight: bold;');
+  // Show visual feedback before reload
+  console.log('%c⚠️ New version detected, updating...', 'color: #ff6b35; font-weight: bold; font-size: 14px;');
 
-  // Reload after a short delay to allow logging
-  setTimeout(() => window.location.reload(), 500);
+  // ✅ FIX: Use location.reload(true) to force cache bypass if possible
+  setTimeout(() => {
+    window.location.reload(); 
+  }, 200); // Faster reload
   return true;
 };
 
+// Listener 1: Script Loading Errors
 window.addEventListener('error', (event) => {
-  if (event.filename && handleChunkLoadingError(`${event.message} - ${event.filename}`, 'filename')) {
-    event.preventDefault();
-  } else if (event.error?.message && handleChunkLoadingError(event.error.message, 'error-object')) {
+  // Check if it's a script file error
+  const isScriptError = event.target && (event.target as HTMLElement).tagName === 'SCRIPT';
+  const filename = event.filename || (isScriptError ? (event.target as HTMLScriptElement).src : '');
+
+  if (filename && handleChunkLoadingError(`${event.message} - ${filename}`, 'script-error')) {
     event.preventDefault();
   }
-}, true); // Use capture phase to catch errors early
+}, true); 
 
+// Listener 2: Promise Rejections (Dynamic Imports)
 window.addEventListener('unhandledrejection', (event) => {
   if (handleChunkLoadingError(event.reason?.message || String(event.reason), 'unhandled-rejection')) {
     event.preventDefault();
   }
 });
 
-// Initialize Supabase with the single client instance
+// Initialize Supabase
 initializeSupabaseClient(queryClient);
-
-// Initialize offline support
 offlineManager.registerServiceWorker();
 (window as any).offlineManager = offlineManager;
 
-// Create router
-const router = createBrowserRouter([
-  {
-    path: '*',
-    element: <App />,
-  },
-]);
+const router = createBrowserRouter([{ path: '*', element: <App /> }]);
 
-// Safely get root
 const rootElement = document.getElementById('root');
-if (!rootElement) {
-  const errorMsg = 'Fatal error: Root element (#root) not found in HTML';
-  logger.error(errorMsg);
-  document.body.innerHTML = `<div style="padding: 20px; color: red;">${errorMsg} <button onclick="location.reload()">Reload</button></div>`;
-  throw new Error(errorMsg);
-}
+if (!rootElement) throw new Error('Root element not found');
 
-// --- RENDER ---
 ReactDOM.createRoot(rootElement).render(
   <React.StrictMode>
     <ErrorBoundary>
       <ChunkErrorBoundary>
-        {/* ✅ WRAPPER 1: QueryClient (Top Level) */}
         <QueryClientProvider client={queryClient}>
-          {/* ✅ WRAPPER 2: AuthProvider (Has access to QueryClient) */}
           <AuthProvider>
             <ToastProvider>
               <RouterProvider router={router} />

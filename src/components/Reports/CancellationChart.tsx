@@ -1,7 +1,7 @@
 import React, { useMemo } from 'react';
 import { PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { Order } from '../../types';
-import GlassCard from '../ui/GlassCard';
+import SpotlightCard from '../ui/SpotlightCard';
 import { useNavigate } from 'react-router-dom';
 import { AlertCircle, Ban, ArrowRight } from 'lucide-react';
 
@@ -75,12 +75,13 @@ const CancellationChart: React.FC<CancellationChartProps> = ({ orders }) => {
 
   if (totalCancelCount === 0 && totalRefundCount === 0) {
     return (
-      <GlassCard title="Quality & Refunds">
+      <SpotlightCard className="p-6">
+        <h3 className="text-lg font-semibold text-white mb-6">Quality & Refunds</h3>
         <div className="h-64 flex flex-col items-center justify-center text-gray-500">
           <p className="text-lg font-medium">No Data Available</p>
           <p className="text-sm">You have 0 cancelled or refunded orders.</p>
         </div>
-      </GlassCard>
+      </SpotlightCard>
     );
   }
 
@@ -153,7 +154,8 @@ const CancellationChart: React.FC<CancellationChartProps> = ({ orders }) => {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         
         {/* CHART 1: CANCELLATIONS */}
-        <GlassCard title="Why Customers Cancelled">
+        <SpotlightCard className="p-6">
+          <h3 className="text-lg font-semibold text-white mb-6">Why Customers Cancelled</h3>
           {totalCancelCount > 0 ? (
             <div className="h-72 w-full">
               <ResponsiveContainer width="100%" height="100%">
@@ -181,10 +183,11 @@ const CancellationChart: React.FC<CancellationChartProps> = ({ orders }) => {
           ) : (
             <div className="h-72 flex items-center justify-center text-slate-500 text-sm">No Cancellations</div>
           )}
-        </GlassCard>
+        </SpotlightCard>
 
         {/* CHART 2: REFUNDS */}
-        <GlassCard title="Why We Refunded">
+        <SpotlightCard className="p-6">
+          <h3 className="text-lg font-semibold text-white mb-6">Why We Refunded</h3>
           {totalRefundCount > 0 ? (
             <div className="h-72 w-full">
               <ResponsiveContainer width="100%" height="100%">
@@ -212,7 +215,7 @@ const CancellationChart: React.FC<CancellationChartProps> = ({ orders }) => {
           ) : (
              <div className="h-72 flex items-center justify-center text-slate-500 text-sm">No Refunds (Good Job!)</div>
           )}
-        </GlassCard>
+        </SpotlightCard>
 
       </div>
     </div>

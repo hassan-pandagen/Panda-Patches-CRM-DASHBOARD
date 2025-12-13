@@ -15,7 +15,7 @@ import FileUploadSection from '../components/orders/FileUpload';
 // UI Components
 import Spinner from '../components/ui/Spinner';
 import Button from '../components/ui/Button';
-import GlassCard from '../components/ui/GlassCard';
+import SpotlightCard from '../components/ui/SpotlightCard';
 import StatusBadge from '../components/ui/StatusBadge';
 
 // Icons
@@ -333,7 +333,7 @@ const OrderPage: React.FC = () => {
             
             {/* CUSTOMER INFO - Only show to non-production users or admins */}
             {!(canViewProduction && !isAdmin) && (
-              <GlassCard>
+              <SpotlightCard className="p-6">
                 <div className="flex justify-between items-start mb-6">
                   <h3 className="text-lg font-semibold text-white flex items-center gap-2">
                       Customer Information
@@ -369,12 +369,12 @@ const OrderPage: React.FC = () => {
                      </p>
                   </div>
                 </div>
-              </GlassCard>
+              </SpotlightCard>
             )}
 
             {/* DESIGN & PRODUCTION INFO */}
             {canViewProduction ? (
-              <GlassCard>
+              <SpotlightCard className="p-6">
                 <h3 className="text-lg font-semibold text-white mb-6">Design & Production</h3>
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
                   <div>
@@ -513,7 +513,7 @@ const OrderPage: React.FC = () => {
                   </div>
                 )}
                 
-                </GlassCard>
+                </SpotlightCard>
                 ) : (
                 <div className="p-8 rounded-xl border border-slate-700/50 bg-slate-800/20 flex flex-col items-center justify-center gap-3 text-slate-500 text-center">
                 <Lock className="w-8 h-8 opacity-50" />
@@ -524,7 +524,7 @@ const OrderPage: React.FC = () => {
 
           {/* --- RIGHT COLUMN --- */}
           <div className="lg:col-span-1 space-y-6">
-            <GlassCard>
+            <SpotlightCard className="p-6">
               <h3 className="text-lg font-semibold text-white mb-4">Summary</h3>
               <div className="space-y-4">
                 <div className="flex justify-between items-center"><p className="text-slate-400 text-sm">Status</p><StatusBadge status={order.status as OrderStatus}/></div>
@@ -532,11 +532,11 @@ const OrderPage: React.FC = () => {
                 <div className="flex justify-between items-center"><p className="text-slate-400 text-sm">Sales Agent</p><p className="font-medium text-white">{order.salesAgent}</p></div>
                 <div className="flex justify-between items-center"><p className="text-slate-400 text-sm">Lead Source</p><p className="font-medium text-white">{order.leadSource || 'N/A'}</p></div>
               </div>
-            </GlassCard>
+            </SpotlightCard>
 
             {/* FINANCIALS (Secured) */}
             {canViewFinancials ? (
-              <GlassCard>
+              <SpotlightCard className="p-6">
                 <h3 className="text-lg font-semibold text-white mb-4">Financials</h3>
                 <div className="space-y-3">
                   <div className="flex justify-between items-center py-1">
@@ -569,9 +569,9 @@ const OrderPage: React.FC = () => {
                       </div>
                     </div>
                   )}
-                </div>
-              </GlassCard>
-            ) : (
+                  </div>
+                  </SpotlightCard>
+                  ) : (
                // Empty state for non-financial users is handled by simply NOT rendering the card.
                // Or you can render a locked state if you prefer:
               <div className="p-6 rounded-xl border border-slate-700/50 bg-slate-800/20 flex items-center justify-center gap-3 text-slate-500">

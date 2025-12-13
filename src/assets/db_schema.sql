@@ -171,16 +171,6 @@ CREATE TABLE IF NOT EXISTS public.performance_metrics (
     metadata jsonb
 );
 
-CREATE TABLE IF NOT EXISTS public.settings (
-    id text PRIMARY KEY,
-    logo_url text,
-    created_at timestamptz DEFAULT now(),
-    updated_at timestamptz DEFAULT now()
-);
-
-INSERT INTO public.settings (id, logo_url) VALUES ('global_settings', '')
-ON CONFLICT (id) DO NOTHING;
-
 -- SECTION 3: BUCKET SETUP
 -- -----------------------------------------------------------------
 INSERT INTO storage.buckets (id, name, public) VALUES ('order-attachments', 'order-attachments', true) ON CONFLICT (id) DO NOTHING;
@@ -506,7 +496,6 @@ ALTER TABLE public.email_templates ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.attendance_summary ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.attendance_sessions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.performance_metrics ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.settings ENABLE ROW LEVEL SECURITY;
 
 -- ✅ User Profiles - Admin can see all, users see only their own
 -- ✅ FIXED: Uses public.is_admin() to prevent recursion loops
@@ -516,14 +505,6 @@ FOR SELECT USING (
   OR 
   public.is_admin() = true
 );
-
--- ✅ Settings - Public Read (for Login Page), Admin Write
-CREATE POLICY "settings_read_public" ON public.settings FOR SELECT 
-TO anon, authenticated 
-USING (true);
-
-CREATE POLICY "settings_update_admin" ON public.settings FOR UPDATE USING (public.is_admin());
-CREATE POLICY "settings_insert_admin" ON public.settings FOR INSERT WITH CHECK (public.is_admin());
 
 -- ✅ Orders - Admins see all, users see only their own
 CREATE POLICY "orders_select_policy" ON public.orders FOR SELECT 

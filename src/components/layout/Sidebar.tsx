@@ -1,26 +1,49 @@
-import React from 'react';
-import { NavLink, useLocation } from 'react-router-dom';
-import { LayoutDashboard, Package, BarChart3, Settings, Users, LogOut, PlusCircle, Clock, Activity } from 'lucide-react';
-import { useAuth } from '../../contexts/AuthContext';
-import { useQueryPrefetch } from '../../hooks/useQueryPrefetch';
+import React from "react";
+import { NavLink, useLocation } from "react-router-dom";
+import {
+  LayoutDashboard,
+  Package,
+  BarChart3,
+  Settings,
+  Users,
+  LogOut,
+  PlusCircle,
+  Clock,
+  Activity,
+} from "lucide-react";
+import { useAuth } from "../../contexts/AuthContext";
+import { useQueryPrefetch } from "../../hooks/useQueryPrefetch";
+import { BrandLogo } from "../ui/BrandLogo";
 
 interface SidebarItemProps {
   to: string;
   label: string;
   icon: React.ReactNode;
-  prefetchType?: 'orders' | 'dashboard' | 'reports' | 'clock-in-out' | 'none';
+  prefetchType?: "orders" | "dashboard" | "reports" | "clock-in-out" | "none";
 }
 
-const SidebarItem: React.FC<SidebarItemProps> = ({ to, label, icon, prefetchType = 'none' }) => {
+const SidebarItem: React.FC<SidebarItemProps> = ({
+  to,
+  label,
+  icon,
+  prefetchType = "none",
+}) => {
   const location = useLocation();
-  const isActive = location.pathname === to || (to !== '/' && location.pathname.startsWith(to));
-  const { prefetchOrders, prefetchDashboard, prefetchReports, prefetchClockInOut } = useQueryPrefetch();
+  const isActive =
+    location.pathname === to ||
+    (to !== "/" && location.pathname.startsWith(to));
+  const {
+    prefetchOrders,
+    prefetchDashboard,
+    prefetchReports,
+    prefetchClockInOut,
+  } = useQueryPrefetch();
 
   const handleMouseEnter = async () => {
-    if (prefetchType === 'orders') await prefetchOrders();
-    else if (prefetchType === 'dashboard') await prefetchDashboard();
-    else if (prefetchType === 'reports') await prefetchReports();
-    else if (prefetchType === 'clock-in-out') await prefetchClockInOut();
+    if (prefetchType === "orders") await prefetchOrders();
+    else if (prefetchType === "dashboard") await prefetchDashboard();
+    else if (prefetchType === "reports") await prefetchReports();
+    else if (prefetchType === "clock-in-out") await prefetchClockInOut();
   };
 
   return (
@@ -28,12 +51,11 @@ const SidebarItem: React.FC<SidebarItemProps> = ({ to, label, icon, prefetchType
       to={to}
       onMouseEnter={handleMouseEnter}
       onTouchStart={handleMouseEnter}
-      className={ `flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-all duration-200 relative ${
-          isActive
-            ? 'bg-brand-orange text-white shadow-lg shadow-brand-orange/20'
-            : 'text-slate-300 hover:bg-white/10 hover:text-white'
-        }`
-      }
+      className={`flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-all duration-200 relative ${
+        isActive
+          ? "bg-brand-orange text-white shadow-lg shadow-brand-orange/20"
+          : "text-slate-300 hover:bg-white/10 hover:text-white"
+      }`}
     >
       {icon}
       <span>{label}</span>
@@ -45,64 +67,106 @@ const SidebarItem: React.FC<SidebarItemProps> = ({ to, label, icon, prefetchType
 };
 
 const Sidebar: React.FC = () => {
-  const { role, signOut, settings, permissions } = useAuth();
-  
-  // ✅ STRICT CHECK: Is this user an Admin?
-  const isAdmin = role === 'ADMIN';
+  const { role, signOut, permissions } = useAuth();
+
+  const isAdmin = role === "ADMIN";
+
+  // Helper: Is this a "Financial" viewer? (Sales Manager)
+  const canViewFinancials = isAdmin || permissions?.reports_view_financials;
+
+  // Helper: Is this a "Production" viewer? (Hassan)
+  const canViewProduction = isAdmin || permissions?.orders_edit_production;
 
   const navItems = [
-    { to: '/', label: 'Dashboard', icon: <LayoutDashboard className="w-5 h-5" />, prefetchType: 'dashboard' as const },
-    { to: '/orders', label: 'Orders', icon: <Package className="w-5 h-5" />, prefetchType: 'orders' as const },
-    { to: '/reports', label: 'Reports', icon: <BarChart3 className="w-5 h-5" />, prefetchType: 'reports' as const },
-    { to: '/clock-in-out', label: 'Clock In/Out', icon: <Clock className="w-5 h-5" />, prefetchType: 'clock-in-out' as const },
+    {
+      to: "/",
+      label: "Dashboard",
+      icon: <LayoutDashboard className="w-5 h-5" />,
+      prefetchType: "dashboard" as const,
+    },
+    {
+      to: "/orders",
+      label: "Orders",
+      icon: <Package className="w-5 h-5" />,
+      prefetchType: "orders" as const,
+    },
+    {
+      to: "/reports",
+      label: "Reports",
+      icon: <BarChart3 className="w-5 h-5" />,
+      prefetchType: "reports" as const,
+    },
+    {
+      to: "/clock-in-out",
+      label: "Clock In/Out",
+      icon: <Clock className="w-5 h-5" />,
+      prefetchType: "clock-in-out" as const,
+    },
   ];
 
   return (
-    <aside className="w-64 bg-slate-900/70 backdrop-blur-xl border-r border-white/10 p-4 flex flex-col">
-      <div className="flex items-center justify-center p-4 mb-4 h-20">
-        {settings?.logo_url ? (
-          <img src={settings.logo_url} alt="Company Logo" className="max-h-full max-w-full object-contain" />
-        ) : (
-          <div className="flex items-center gap-3">
-            <img src="/logo.png" alt="Panda Patches Logo" className="h-10 w-10" />
-            <h1 className="text-xl font-bold text-white">Panda Patches</h1>
-          </div>
-        )}
+    <aside className="w-64 flex flex-col h-full bg-[#1e293b]/20 backdrop-blur-xl border-r border-white/5 relative">
+      {/* Add a subtle top-to-bottom shine on the right border */}
+      <div className="absolute right-0 top-0 bottom-0 w-[1px] bg-gradient-to-b from-transparent via-white/10 to-transparent" />
+
+      {/* Logo Header */}
+      <div className="flex items-center justify-center h-20 flex-shrink-0 px-4">
+        <BrandLogo className="h-9 w-auto" variant="dark" />
       </div>
-
-      <nav className="grow space-y-2">
+      <nav className="grow space-y-2 p-4">
         {navItems
-          .filter(item => {
-            // 1. Dashboard: Everyone
-            if (item.to === '/') return true;
+          .filter((item) => {
+            // 1. Dashboard: Only Admin or Financial Viewers (Hides for Production)
+            if (item.to === "/") return canViewFinancials;
 
-            // 2. Orders: Everyone (Data filtered by DB)
-            if (item.to === '/orders') return true;
+            // 2. Orders: Everyone
+            if (item.to === "/orders") return true;
 
-            // 3. Reports: ADMIN ONLY (Strict)
-            if (item.to === '/reports') return isAdmin;
+            // 3. Reports: Show if they can view Financials OR Production stats
+            if (item.to === "/reports")
+              return canViewFinancials || canViewProduction;
 
             // 4. Clock In/Out: Everyone
-            if (item.to === '/clock-in-out') return true;
+            if (item.to === "/clock-in-out") return true;
 
             return true;
           })
           .map((item) => (
-            <SidebarItem key={item.to} {...item} prefetchType={item.prefetchType} />
+            <SidebarItem
+              key={item.to}
+              {...item}
+              prefetchType={item.prefetchType}
+            />
           ))}
 
         {/* New Order: Permission Based */}
         {permissions?.orders_create && (
-          <SidebarItem to="/new-order" label="New Order" icon={<PlusCircle className="w-5 h-5" />} />
+          <SidebarItem
+            to="/new-order"
+            label="New Order"
+            icon={<PlusCircle className="w-5 h-5" />}
+          />
         )}
 
         {/* ADMIN ONLY LINKS */}
         {isAdmin && (
           <>
             <div className="my-2 border-t border-white/10 mx-2" />
-            <SidebarItem to="/user-management" label="User Management" icon={<Users className="w-5 h-5" />} />
-            <SidebarItem to="/performance-metrics" label="Performance Metrics" icon={<Activity className="w-5 h-5" />} />
-            <SidebarItem to="/settings" label="Settings" icon={<Settings className="w-5 h-5" />} />
+            <SidebarItem
+              to="/user-management"
+              label="User Management"
+              icon={<Users className="w-5 h-5" />}
+            />
+            <SidebarItem
+              to="/performance-metrics"
+              label="Performance Metrics"
+              icon={<Activity className="w-5 h-5" />}
+            />
+            <SidebarItem
+              to="/settings"
+              label="Settings"
+              icon={<Settings className="w-5 h-5" />}
+            />
           </>
         )}
       </nav>

@@ -11,6 +11,7 @@ import {
 import { motion } from "framer-motion";
 
 import { useAuth } from "../contexts/AuthContext";
+import SpotlightCard from "../components/ui/SpotlightCard";
 import { supabase } from "../services/supabaseClient";
 import { useDashboardMetrics } from "../hooks/useDashboardMetrics";
 import { mapDbToOrder } from "../services/orderService";
@@ -20,9 +21,7 @@ import CardSkeleton from "../components/CardSkeleton";
 import DashboardRecentOrdersTable from "../components/dashboard/DashboardRecentOrdersTable";
 import ProductionProgress from "../components/dashboard/ProductionProgress";
 import ToggleButtons from "../components/ui/ToggleButtons";
-import DateRangeFilter, {
-  DateRange,
-} from "../components/ui/DateRangeFilter";
+import DateRangeFilter, { DateRange } from "../components/ui/DateRangeFilter";
 
 // --- ANIMATION VARIANTS ---
 const containerVariants = {
@@ -67,22 +66,14 @@ const DashboardStatCard: React.FC<DashboardCardProps> = ({
   if (isLoading) return <CardSkeleton />;
 
   return (
-    <motion.div variants={cardVariants} className="relative group cursor-pointer" onClick={onClick}>
-      {/* Gradient Glow Background */}
-      <div
-        className={`absolute -inset-0.5 ${gradient} rounded-2xl opacity-0 group-hover:opacity-50 blur transition duration-500`}
-      />
-      
-      {/* Card Content */}
-      <div className="relative bg-slate-900/40 backdrop-blur-xl border border-white/10 rounded-2xl p-4 transform group-hover:scale-[1.02] transition-all duration-300 shadow-xl group-hover:shadow-2xl h-full">
+    <motion.div variants={cardVariants}>
+      <SpotlightCard onClick={onClick} className="p-4">
         <div className="flex items-center justify-between">
           <div className="flex-1">
-            <p className="text-sm font-medium text-slate-400 mb-1">
-              {title}
-            </p>
-            <h3 className="text-3xl font-bold text-white tracking-tight">
+            <p className="text-sm font-medium text-slate-400 mb-1">{title}</p>
+            <h3 className="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-br from-white to-slate-400 drop-shadow-sm tracking-tight">
               {prefix}
-              {typeof value === 'number' ? value.toLocaleString() : value}
+              {typeof value === "number" ? value.toLocaleString() : value}
               {suffix}
             </h3>
           </div>
@@ -90,7 +81,7 @@ const DashboardStatCard: React.FC<DashboardCardProps> = ({
             {icon}
           </div>
         </div>
-      </div>
+      </SpotlightCard>
     </motion.div>
   );
 };
@@ -101,8 +92,12 @@ export default function Dashboard() {
   const [searchTerm, setSearchTerm] = useState("");
 
   // UNIFIED DATE CONTROL
-  const [dateView, setDateView] = useState<"today" | "week" | "month" | "custom">("week");
-  const [customDateRange, setCustomDateRange] = useState<DateRange | null>(null);
+  const [dateView, setDateView] = useState<
+    "today" | "week" | "month" | "custom"
+  >("week");
+  const [customDateRange, setCustomDateRange] = useState<DateRange | null>(
+    null
+  );
 
   // Calculate the active date range
   const activeDateRange = useMemo(() => {
@@ -133,28 +128,39 @@ export default function Dashboard() {
     setDateView("custom");
   };
 
-  const { data: orders = [], isLoading, error } = useQuery({
+  const {
+    data: orders = [],
+    isLoading,
+    error,
+  } = useQuery({
     queryKey: queryKeys.dashboard.unified(
       activeDateRange.startDate,
       activeDateRange.endDate
     ),
     queryFn: async () => {
       // Auth check inside query to be safe
-      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-      
+      const {
+        data: { session },
+        error: sessionError,
+      } = await supabase.auth.getSession();
+
       if (sessionError || !session) {
-        throw new Error('Not authenticated');
+        throw new Error("Not authenticated");
       }
 
-      const start = new Date(`${activeDateRange.startDate}T00:00:00.000Z`).toISOString();
-      const end = new Date(`${activeDateRange.endDate}T23:59:59.999Z`).toISOString();
+      const start = new Date(
+        `${activeDateRange.startDate}T00:00:00.000Z`
+      ).toISOString();
+      const end = new Date(
+        `${activeDateRange.endDate}T23:59:59.999Z`
+      ).toISOString();
 
       let query = supabase
         .from("orders")
         .select("*")
         .gte("created_at", start)
         .lte("created_at", end);
-      
+
       // ✅ FIX ADDED HERE: Force filter by email if not Admin
       // This ensures sales agents ONLY see their own rows, regardless of RLS speed.
       // While RLS is the primary security layer, this prevents UI flicker or showing incorrect data on a slow connection.
@@ -190,7 +196,10 @@ export default function Dashboard() {
       );
     }
     // Sort by newest
-    return [...filtered].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    return [...filtered].sort(
+      (a, b) =>
+        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    );
   }, [orders, searchTerm]);
 
   // Loading State
@@ -207,9 +216,16 @@ export default function Dashboard() {
     return (
       <div className="flex items-center justify-center min-h-screen p-6 text-center">
         <div>
-          <h2 className="text-2xl font-bold text-white mb-2">Error Loading Dashboard</h2>
+          <h2 className="text-2xl font-bold text-white mb-2">
+            Error Loading Dashboard
+          </h2>
           <p className="text-slate-400 mb-4">{(error as Error).message}</p>
-          <button onClick={() => window.location.reload()} className="px-6 py-2 bg-brand-orange rounded-lg text-white">Retry</button>
+          <button
+            onClick={() => window.location.reload()}
+            className="px-6 py-2 bg-brand-orange rounded-lg text-white"
+          >
+            Retry
+          </button>
         </div>
       </div>
     );
@@ -217,8 +233,17 @@ export default function Dashboard() {
 
   const isAdmin = role === UserRole.ADMIN;
   const getViewText = () => {
-    if (dateView === "custom") return `${new Date(activeDateRange.startDate).toLocaleDateString()} - ${new Date(activeDateRange.endDate).toLocaleDateString()}`;
-    return dateView === "today" ? "today" : dateView === "week" ? "this week" : "this month";
+    if (dateView === "custom")
+      return `${new Date(
+        activeDateRange.startDate
+      ).toLocaleDateString()} - ${new Date(
+        activeDateRange.endDate
+      ).toLocaleDateString()}`;
+    return dateView === "today"
+      ? "today"
+      : dateView === "week"
+      ? "this week"
+      : "this month";
   };
 
   return (
@@ -238,13 +263,17 @@ export default function Dashboard() {
           <div>
             <h1 className="text-4xl font-bold text-white">Dashboard</h1>
             <p className="text-slate-400 mt-2">
-              Real-time business overview for <span className="text-white font-medium">{getViewText()}</span>
+              Real-time business overview for{" "}
+              <span className="text-white font-medium">{getViewText()}</span>
             </p>
           </div>
 
           <div className="flex flex-col lg:flex-row items-start lg:items-center gap-4">
             <ToggleButtons view={dateView} onViewChange={setDateView} />
-            <DateRangeFilter value={activeDateRange} onChange={handleCustomDateChange} />
+            <DateRangeFilter
+              value={activeDateRange}
+              onChange={handleCustomDateChange}
+            />
           </div>
         </motion.div>
 
@@ -305,52 +334,43 @@ export default function Dashboard() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* LEFT COLUMN: Production & Quick Actions */}
           <div className="lg:col-span-1 space-y-6">
-            <div className="relative group">
-              <div className="absolute -inset-0.5 bg-gradient-to-r from-purple-500 to-pink-500 rounded-2xl opacity-0 group-hover:opacity-30 blur transition duration-500" />
-              <div className="relative bg-slate-900/40 backdrop-blur-xl border border-white/10 rounded-2xl p-6 shadow-xl">
-                <ProductionProgress orders={orders} />
-              </div>
-            </div>
+            <SpotlightCard className="p-6">
+              <ProductionProgress orders={orders} />
+            </SpotlightCard>
 
             {isAdmin && (
-              <div
-                className="relative group cursor-pointer"
+              <SpotlightCard
                 onClick={() => navigate("/clock-in-out")}
+                className="p-6 cursor-pointer"
               >
-                <div className="absolute -inset-0.5 bg-gradient-to-r from-emerald-500 to-teal-500 rounded-2xl opacity-0 group-hover:opacity-30 blur transition duration-500" />
-                <div className="relative bg-slate-900/40 backdrop-blur-xl border border-white/10 rounded-2xl p-6 shadow-xl transform group-hover:scale-[1.02] transition-all duration-300">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h3 className="text-lg font-semibold text-white">
-                        Attendance Tracking
-                      </h3>
-                      <p className="text-sm text-slate-400 mt-1">
-                        View team activity & productivity
-                      </p>
-                    </div>
-                    <div className="p-3 bg-gradient-to-br from-white/10 to-white/5 rounded-xl">
-                      <Package className="w-6 h-6 text-emerald-400" />
-                    </div>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="text-lg font-semibold text-white">
+                      Attendance Tracking
+                    </h3>
+                    <p className="text-sm text-slate-400 mt-1">
+                      View team activity & productivity
+                    </p>
+                  </div>
+                  <div className="p-3 bg-gradient-to-br from-white/10 to-white/5 rounded-xl">
+                    <Package className="w-6 h-6 text-emerald-400" />
                   </div>
                 </div>
-              </div>
+              </SpotlightCard>
             )}
           </div>
 
           {/* RIGHT COLUMN: Recent Orders Table */}
           <div className="lg:col-span-2">
-            <div className="relative group h-full">
-              <div className="absolute -inset-0.5 bg-gradient-to-r from-blue-500/20 to-cyan-500/20 rounded-2xl opacity-0 group-hover:opacity-40 blur transition duration-500" />
-              <div className="relative h-full bg-slate-900/40 backdrop-blur-xl border border-white/10 rounded-2xl shadow-xl overflow-hidden">
-                 <DashboardRecentOrdersTable
-                  orders={recentOrders.map((o) => ({
-                    ...o,
-                    status: o.status as OrderStatus,
-                  }))}
-                  isLoading={isLoading}
-                />
-              </div>
-            </div>
+            <SpotlightCard className="overflow-hidden">
+              <DashboardRecentOrdersTable
+                orders={recentOrders.map((o) => ({
+                  ...o,
+                  status: o.status as OrderStatus,
+                }))}
+                isLoading={isLoading}
+              />
+            </SpotlightCard>
           </div>
         </div>
       </div>

@@ -5,12 +5,11 @@ import { logger } from '../services/logger';
 import { useAuth } from '../contexts/AuthContext';
 import Spinner from '../components/ui/Spinner';
 import { Eye, EyeOff, Lock, Mail, ArrowRight } from 'lucide-react';
+import { BrandLogo } from '../components/ui/BrandLogo';
 
 const LoginPage: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const { settings } = useAuth();
-  
   // Form State
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -123,20 +122,11 @@ const LoginPage: React.FC = () => {
         <div className="bg-slate-900/60 backdrop-blur-xl border border-white/10 rounded-2xl p-8 shadow-2xl">
           
           {/* HEADER: Logo & Welcome Text */}
-          <div className="text-center mb-8">
-            <div className="flex justify-center mb-4">
-              {/* ✅ FIX: Add a loading state for the logo */}
-              {settings === undefined ? (
-                // Show a placeholder while settings are loading
-                <div className="h-16 w-32 bg-slate-800 rounded-lg animate-pulse"></div>
-              ) : (
-                <img
-                  src={settings?.logo_url || "/logo.svg"}
-                  alt="Panda Patches Logo" 
-                  className="h-16 w-auto object-contain drop-shadow-lg" 
-                />
-              )}
+          <div className="text-center">
+            <div className="mb-8 flex justify-center">
+               <BrandLogo className="h-20 w-auto" variant="dark" />
             </div>
+            
             {mode === 'login' && (
               <>
                 <h2 className="text-3xl font-bold text-white tracking-tight">Welcome Back</h2>
@@ -150,6 +140,7 @@ const LoginPage: React.FC = () => {
               </>
             )}
           </div>
+          <div className="mt-8">
 
           {/* ERROR MESSAGE */}
           {error && (
@@ -289,6 +280,7 @@ const LoginPage: React.FC = () => {
               </button>
             </form>
           )}
+          </div>
         </div>
 
         {/* Footer Text */}
