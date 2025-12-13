@@ -22,6 +22,8 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../services/supabaseClient';
 import { performanceMonitor } from '../services/performanceMonitor';
 import { queryKeys } from '../constants/queryKeys';
+import SpotlightCard from '../components/ui/SpotlightCard';
+import EmptyState from '../components/ui/EmptyState';
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -391,11 +393,8 @@ const ClockInOutPage: React.FC = () => {
           className="grid grid-cols-1 lg:grid-cols-3 gap-6"
         >
           {/* Main Clock Button */}
-          <div className="lg:col-span-2">
-            <div className="relative group">
-              <div className="absolute -inset-0.5 bg-gradient-to-r from-brand-orange to-orange-600 rounded-2xl opacity-0 group-hover:opacity-50 blur transition duration-500" />
-
-              <div className="relative bg-slate-900/40 backdrop-blur-xl border border-white/10 rounded-2xl p-8 text-center">
+           <div className="lg:col-span-2">
+             <SpotlightCard className="p-8 text-center">
                 <div className="mb-6">
                   <p className="text-slate-400 mb-2">Current Status</p>
                   <p className="text-3xl font-bold text-white">
@@ -437,42 +436,41 @@ const ClockInOutPage: React.FC = () => {
                 )}
 
                 <div className="flex gap-4">
-                  <button
-                    onClick={handleClockIn}
-                    disabled={isClockedIn || isClockingIn}
-                    className={`flex-1 py-4 px-6 rounded-xl font-bold text-lg transition-all flex items-center justify-center gap-2 ${
-                      isClockedIn
-                        ? 'bg-slate-700 text-slate-400 cursor-not-allowed'
-                        : 'bg-gradient-to-r from-emerald-500 to-teal-500 text-white hover:shadow-lg hover:shadow-emerald-500/20'
-                    }`}
-                  >
-                    <LogIn className="w-5 h-5" />
-                    Clock In
-                  </button>
+                   <button
+                     onClick={handleClockIn}
+                     disabled={isClockedIn || isClockingIn}
+                     className={`flex-1 py-4 px-6 rounded-xl font-bold text-lg transition-all flex items-center justify-center gap-2 focus-ring ${
+                       isClockedIn
+                         ? 'bg-slate-700 text-slate-400 cursor-not-allowed'
+                         : 'bg-gradient-to-r from-emerald-500 to-teal-500 text-white hover:shadow-lg hover:shadow-emerald-500/20'
+                     }`}
+                     aria-label={isClockedIn ? "Already clocked in" : "Clock in"}
+                   >
+                     <LogIn className="w-5 h-5" />
+                     Clock In
+                   </button>
 
-                  <button
-                    onClick={handleClockOut}
-                    disabled={!isClockedIn || isClockingOut}
-                    className={`flex-1 py-4 px-6 rounded-xl font-bold text-lg transition-all flex items-center justify-center gap-2 ${
-                      !isClockedIn
-                        ? 'bg-slate-700 text-slate-400 cursor-not-allowed'
-                        : 'bg-gradient-to-r from-red-500 to-rose-500 text-white hover:shadow-lg hover:shadow-red-500/20'
-                    }`}
-                  >
-                    <LogOut className="w-5 h-5" />
-                    Clock Out
-                  </button>
+                   <button
+                     onClick={handleClockOut}
+                     disabled={!isClockedIn || isClockingOut}
+                     className={`flex-1 py-4 px-6 rounded-xl font-bold text-lg transition-all flex items-center justify-center gap-2 focus-ring ${
+                       !isClockedIn
+                         ? 'bg-slate-700 text-slate-400 cursor-not-allowed'
+                         : 'bg-gradient-to-r from-red-500 to-rose-500 text-white hover:shadow-lg hover:shadow-red-500/20'
+                     }`}
+                     aria-label={!isClockedIn ? "Already clocked out" : "Clock out"}
+                   >
+                     <LogOut className="w-5 h-5" />
+                     Clock Out
+                   </button>
+                 </div>
+                </SpotlightCard>
                 </div>
-              </div>
-            </div>
-          </div>
 
-          {/* Status Cards */}
-          <div className="space-y-4">
-            {/* Today Status */}
-            <div className="relative group">
-              <div className="absolute -inset-0.5 bg-gradient-to-r from-blue-500 to-cyan-500 rounded-2xl opacity-0 group-hover:opacity-30 blur transition duration-500" />
-              <div className="relative bg-slate-900/40 backdrop-blur-xl border border-white/10 rounded-2xl p-6">
+                {/* Status Cards */}
+                <div className="space-y-4">
+                {/* Today Status */}
+                <SpotlightCard className="p-6">
                 <div className="flex items-center gap-3 mb-4">
                   <CheckCircle className="w-5 h-5 text-blue-400" />
                   <h3 className="text-sm font-semibold text-slate-400 uppercase">Status</h3>
@@ -485,13 +483,10 @@ const ClockInOutPage: React.FC = () => {
                     ? `Since: ${format(parseISO(activeSession.clock_in_time), 'h:mm a')}`
                     : 'Ready to clock in'}
                 </p>
-              </div>
-            </div>
+              </SpotlightCard>
 
-            {/* Time Display */}
-            <div className="relative group">
-              <div className="absolute -inset-0.5 bg-gradient-to-r from-purple-500 to-pink-500 rounded-2xl opacity-0 group-hover:opacity-30 blur transition duration-500" />
-              <div className="relative bg-slate-900/40 backdrop-blur-xl border border-white/10 rounded-2xl p-6">
+              {/* Time Display */}
+              <SpotlightCard className="p-6">
                 <div className="flex items-center gap-3 mb-4">
                   <TrendingUp className="w-5 h-5 text-purple-400" />
                   <h3 className="text-sm font-semibold text-slate-400 uppercase">Hours</h3>
@@ -507,10 +502,9 @@ const ClockInOutPage: React.FC = () => {
                     }}
                   />
                 </div>
-              </div>
+              </SpotlightCard>
             </div>
-          </div>
-        </motion.div>
+          </motion.div>
 
         {/* ADMIN SECTION */}
         {isAdmin && (
@@ -519,7 +513,7 @@ const ClockInOutPage: React.FC = () => {
             <div className="flex gap-2 border-b border-white/10">
               <button
                 onClick={() => setAdminTab('daily')}
-                className={`px-4 py-3 font-semibold transition-all ${
+                className={`px-4 py-3 font-semibold transition-all focus-ring rounded ${
                   adminTab === 'daily'
                     ? 'text-brand-orange border-b-2 border-brand-orange'
                     : 'text-slate-400 hover:text-white'
@@ -531,7 +525,7 @@ const ClockInOutPage: React.FC = () => {
 
               <button
                 onClick={() => setAdminTab('monthly')}
-                className={`px-4 py-3 font-semibold transition-all ${
+                className={`px-4 py-3 font-semibold transition-all focus-ring rounded ${
                   adminTab === 'monthly'
                     ? 'text-brand-orange border-b-2 border-brand-orange'
                     : 'text-slate-400 hover:text-white'

@@ -14,6 +14,7 @@ import { queryKeys } from '../constants/queryKeys';
 import Button from '../components/ui/Button';
 import Skeleton from '../components/ui/Skeleton';
 import EmptyState from '../components/ui/EmptyState'; // Ensure this is imported
+import SpotlightCard from '../components/ui/SpotlightCard';
 import { 
   Search, 
   Plus, 
@@ -298,7 +299,7 @@ const AllOrdersPage: React.FC = () => {
       </div>
 
       {/* --- CONTROLS BAR --- */}
-      <div className="bg-slate-900/40 backdrop-blur-xl border border-white/10 rounded-2xl p-4 space-y-4">
+      <SpotlightCard className="p-4 space-y-4">
         
         {/* Active Filters Banner */}
         {(salesAgentParam || leadSourceParam || dateParam) && (
@@ -309,7 +310,7 @@ const AllOrdersPage: React.FC = () => {
               {leadSourceParam && <span>Source: {leadSourceParam}</span>}
               {dateParam && <span>Date: {new Date(dateParam).toLocaleDateString()}</span>}
             </div>
-            <button onClick={clearDrillDown} className="text-slate-400 hover:text-white">
+            <button onClick={clearDrillDown} className="text-slate-400 hover:text-white focus-ring rounded" aria-label="Clear filters">
               <X className="w-4 h-4" />
             </button>
           </div>
@@ -323,7 +324,7 @@ const AllOrdersPage: React.FC = () => {
             placeholder="Search by Order ID, Name, Phone (e.g. 300123), or Email..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full bg-slate-800/50 border border-slate-600 text-white text-sm rounded-xl pl-10 pr-4 py-3 focus:ring-2 focus:ring-brand-orange/50 focus:border-brand-orange transition-all placeholder-slate-400"
+            className="w-full bg-slate-800/50 border border-slate-600 text-white text-sm rounded-xl pl-10 pr-4 py-3 focus:ring-2 focus:ring-brand-orange/50 focus:border-brand-orange transition-all placeholder-slate-400 focus-ring"
           />
         </div>
 
@@ -347,9 +348,9 @@ const AllOrdersPage: React.FC = () => {
           <FilterTab active={activeFilter === 'QUALITY_ASSURANCE'} label="Quality Assurance" count={getCount('QUALITY_ASSURANCE')} onClick={() => setActiveFilter('QUALITY_ASSURANCE')} />
           <FilterTab active={activeFilter === 'CANCELLED'} label="Cancelled" count={getCount('CANCELLED')} onClick={() => setActiveFilter('CANCELLED')} />
         </div>
-      </div>
+        </SpotlightCard>
 
-      {/* --- ORDERS LIST --- */}
+        {/* --- ORDERS LIST --- */}
       <div className="space-y-3">
         <AnimatePresence mode="wait">
           {paginatedOrders.length === 0 ? (

@@ -4,6 +4,7 @@ import { supabase } from '../services/supabaseClient';
 import { logger } from '../services/logger';
 import { useAuth } from '../contexts/AuthContext';
 import Spinner from '../components/ui/Spinner';
+import SpotlightCard from '../components/ui/SpotlightCard';
 import { Eye, EyeOff, Lock, Mail, ArrowRight } from 'lucide-react';
 import { BrandLogo } from '../components/ui/BrandLogo';
 
@@ -118,8 +119,8 @@ const LoginPage: React.FC = () => {
 
       <div className="max-w-md w-full space-y-8 relative z-10">
         
-        {/* 3. GLASSMORPHISM CARD */}
-        <div className="bg-slate-900/60 backdrop-blur-xl border border-white/10 rounded-2xl p-8 shadow-2xl">
+        {/* 3. SPOTLIGHTCARD WRAPPER */}
+        <SpotlightCard className="p-8">
           
           {/* HEADER: Logo & Welcome Text */}
           <div className="text-center">
@@ -176,7 +177,7 @@ const LoginPage: React.FC = () => {
                     required
                     autoComplete="email"
                     placeholder="hello@pandapatches.com"
-                    className="block w-full pl-10 pr-3 py-3 bg-slate-800/50 border border-slate-700 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-brand-orange/50 focus:border-brand-orange transition-all duration-200"
+                    className="block w-full pl-10 pr-3 py-3 bg-slate-800/50 border border-slate-700 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-brand-orange/50 focus:border-brand-orange transition-all duration-200 focus-ring"
                   />
                 </div>
               </div>
@@ -197,14 +198,15 @@ const LoginPage: React.FC = () => {
                     required
                     autoComplete="current-password"
                     placeholder="••••••••"
-                    className="block w-full pl-10 pr-10 py-3 bg-slate-800/50 border border-slate-700 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-brand-orange/50 focus:border-brand-orange transition-all duration-200"
+                    className="block w-full pl-10 pr-10 py-3 bg-slate-800/50 border border-slate-700 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-brand-orange/50 focus:border-brand-orange transition-all duration-200 focus-ring"
                   />
                   {/* Toggle Password Visibility */}
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-500 hover:text-white transition-colors focus:outline-none"
-                  >
+                   <button
+                     type="button"
+                     onClick={() => setShowPassword(!showPassword)}
+                     className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-500 hover:text-white transition-colors focus:outline-none focus-ring rounded"
+                     aria-label={showPassword ? "Hide password" : "Show password"}
+                   >
                     {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
                   </button>
                 </div>
@@ -217,11 +219,11 @@ const LoginPage: React.FC = () => {
               </div>
 
               {/* SUBMIT BUTTON */}
-              <button
-                type="submit"
-                disabled={loading || !email || !password}
-                className="group relative w-full flex justify-center py-3 px-4 border border-transparent rounded-xl text-white bg-brand-orange hover:bg-orange-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand-orange disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 font-semibold shadow-lg shadow-brand-orange/20 hover:shadow-brand-orange/40"
-              >
+               <button
+                 type="submit"
+                 disabled={loading || !email || !password}
+                 className="group relative w-full flex justify-center py-3 px-4 border border-transparent rounded-xl text-white bg-brand-orange hover:bg-orange-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand-orange disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 font-semibold shadow-lg shadow-brand-orange/20 hover:shadow-brand-orange/40 focus-ring"
+               >
                 {loading ? (
                   <div className="flex items-center gap-2"><Spinner size="sm" /><span>Signing in...</span></div>
                 ) : (
@@ -281,9 +283,9 @@ const LoginPage: React.FC = () => {
             </form>
           )}
           </div>
-        </div>
+          </SpotlightCard>
 
-        {/* Footer Text */}
+          {/* Footer Text */}
         <p className="text-center text-xs text-slate-500 mt-8">
           &copy; {new Date().getFullYear()} Panda Patches. All rights reserved.
         </p>
