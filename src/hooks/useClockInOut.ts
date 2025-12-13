@@ -12,8 +12,8 @@ export const SHIFT_CONFIG = {
   UNDERTIME_THRESHOLD: 7.5,
 };
 
+// 1. Fetch Today's History (For the list view)
 const fetchTodayAttendance = async (userId: string | undefined): Promise<AttendanceSession[]> => {
-  // ✅ FIX: Safe guard against undefined ID
   if (!userId) return [];
 
   const todayStart = startOfDay(new Date()).toISOString();
@@ -31,44 +31,55 @@ const fetchTodayAttendance = async (userId: string | undefined): Promise<Attenda
   return data || [];
 };
 
-const findActiveSession = async (userId: string): Promise<AttendanceSession | null> => {
+// 2. Fetch ANY Active Session (For the status check)
+// This finds a session where clock_out_time IS NULL, regardless of date
+const fetchCurrentActiveSession = async (userId: string | undefined): Promise<AttendanceSession | null> => {
+  if (!userId) return null;
+
   const { data, error } = await supabase
     .from('attendance_sessions')
     .select('*')
     .eq('user_id', userId)
     .is('clock_out_time', null)
-    .single();
+    .maybeSingle(); // Use maybeSingle to avoid 406 errors
 
-  if (error && error.code !== 'PGRST116') {
-     throw error;
-  }
+  if (error) throw error;
   return data;
 };
 
 export const useClockInOut = () => {
   const { user } = useAuth();
   const queryClient = useQueryClient();
-
-  const { data: todaySessions = [], isLoading: isLoadingToday } = useQuery({
+  // Query A: Today's History
+  const { data: todaySessions = [], isLoading: isLoadingHistory } = useQuery({
     queryKey: queryKeys.attendance.today(user?.id),
-    // ✅ FIX: Pass user?.id and let the fetcher handle it
     queryFn: () => fetchTodayAttendance(user?.id),
-    // Only run if user is defined
     enabled: !!user?.id,
-    staleTime: 10 * 1000, 
-    refetchOnMount: true,
+    staleTime: 1000 * 60, // 1 minute
+  });
+
+  // Query B: Current Status (The Truth Source)
+  const { data: activeSession, isLoading: isLoadingStatus } = useQuery({
+    queryKey: ['attendance', 'active', user?.id],
+    queryFn: () => fetchCurrentActiveSession(user?.id),
+    enabled: !!user?.id,
+    // Critical: Keep this fresh
+    staleTime: 0,
     refetchOnWindowFocus: true,
   });
 
-  const activeSession = todaySessions.find(s => s.clock_out_time === null);
   const isClockedIn = !!activeSession;
-
+  const isLoading = isLoadingHistory || isLoadingStatus;
+  // --- CLOCK IN ---
   const clockInMutation = useMutation({
     mutationFn: async () => {
       if (!user) throw new Error('User not authenticated');
+      // Double check client-side state
       if (isClockedIn) throw new Error('You are already clocked in.');
 
       const now = new Date();
+      
+      // Overnight Logic: If before 7AM, count as previous day
       const currentHour = now.getHours();
       const workDateObj = new Date(now);
 
@@ -91,25 +102,28 @@ export const useClockInOut = () => {
       if (error) throw error;
     },
     onSuccess: () => {
-      return queryClient.invalidateQueries({ queryKey: queryKeys.attendance.all() });
+      // Refresh everything
+      queryClient.invalidateQueries({ queryKey: queryKeys.attendance.all() });
+      queryClient.invalidateQueries({ queryKey: ['attendance', 'active'] });
     },
   });
-
+  // --- CLOCK OUT ---
   const clockOutMutation = useMutation({
     mutationFn: async () => {
       if (!user) throw new Error('User not authenticated');
-      const sessionToClockOut = await findActiveSession(user.id);
-      if (!sessionToClockOut) throw new Error('No active session to clock out from.');
+      // Use the activeSession from our dedicated query, not the list
+      if (!activeSession) throw new Error('No active session found.');
 
       const { error } = await supabase
         .from('attendance_sessions')
         .update({ clock_out_time: new Date().toISOString() })
-        .eq('id', sessionToClockOut.id);
+        .eq('id', activeSession.id);
 
       if (error) throw error;
     },
     onSuccess: () => {
-      return queryClient.invalidateQueries({ queryKey: queryKeys.attendance.all() });
+      queryClient.invalidateQueries({ queryKey: queryKeys.attendance.all() });
+      queryClient.invalidateQueries({ queryKey: ['attendance', 'active'] });
     },
   });
 
@@ -117,7 +131,7 @@ export const useClockInOut = () => {
     todaySessions,
     activeSession,
     isClockedIn,
-    isLoadingToday,
+    isLoadingToday: isLoading,
     clockIn: clockInMutation.mutate,
     isClockingIn: clockInMutation.isPending,
     clockInError: clockInMutation.error,

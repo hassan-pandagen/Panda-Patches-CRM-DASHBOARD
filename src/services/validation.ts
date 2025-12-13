@@ -5,42 +5,77 @@ import { logger } from './logger';
 
 // ============ ORDER SCHEMAS ============
 
+// ============ CORRECTED ORDER SCHEMA ============
 export const orderSchema = z.object({
+  // ✅ Required String Fields
   customerName: z.string()
+    .min(1, 'Customer Name is required')
     .min(2, 'Name must be at least 2 characters')
     .max(100, 'Name too long'),
   
   customerEmail: z.string()
+    .min(1, 'Email is required')
     .email('Invalid email address'),
   
-  patchesQuantity: z.number()
-    .int('Must be whole number')
-    .positive('Quantity must be greater than 0'),
-  
-  orderAmount: z.number()
-    .positive('Order amount must be positive'),
-  
-  shippingAddress: z.string()
-    .min(5, 'Address is required'),
-  
-  orderStatus: z.enum([
+  // ✅ CRITICAL: Status matches your data (not orderStatus)
+  status: z.enum([
     'NEW_ORDER',
+    'AWAITING_APPROVAL',
+    'REVISION_REQUESTED',
+    'APPROVED',
     'IN_PRODUCTION',
-    'READY_TO_SHIP',
+    'QUALITY_ASSURANCE',
     'SHIPPED',
     'DELIVERED',
+    'FEEDBACK',
     'CANCELLED',
-    'REVISION_REQUESTED',
-    'REFUNDED',
-  ]),
+    'REFUNDED'
+  ]).default('NEW_ORDER'),
   
-  // Optional fields
+  // ✅ Required Numbers with validation
+  patchesQuantity: z.number()
+    .min(1, 'Quantity must be at least 1'),
+  
+  orderAmount: z.number()
+    .min(0, 'Order amount cannot be negative'),
+  
+  amountPaid: z.number()
+    .min(0, 'Amount paid cannot be negative'),
+  
+  // ✅ Optional Fields
+  customerPhone: z.string().optional().nullable(),
+  customerProfileUrl: z.string().url().optional().nullable(),
+  
+  designName: z.string().optional(),
+  patchesType: z.string().optional(),
+  designSize: z.string().optional(),
+  designBacking: z.string().optional(),
   instructions: z.string().optional(),
-  notes: z.string().optional(),
-  mockupUrls: z.array(z.string().url()).optional(),
-  productionFileUrls: z.array(z.string().url()).optional(),
+  
+  shippingAddress: z.string().optional(),
   shippingCarrier: z.string().optional(),
-});
+  shippingTrackingNumber: z.string().optional(),
+  
+  productionCost: z.number().min(0).optional(),
+  shippingCost: z.number().min(0).optional(),
+  marketingCost: z.number().min(0).optional(),
+  
+  isUrgent: z.boolean().optional(),
+  leadSource: z.string().optional(),
+  
+  // ✅ Array Fields
+  mockupUrls: z.array(z.string()).optional(),
+  productionFileUrls: z.array(z.string()).optional(),
+  shippingAttachmentUrls: z.array(z.string()).optional(),
+  customerAttachmentUrls: z.array(z.string()).optional(),
+  
+  // ✅ Reason Fields
+  reasonCategory: z.string().optional(),
+  reasonDetails: z.string().optional(),
+  
+  revisionNotes: z.string().optional(),
+  redoNotes: z.string().optional(),
+}).partial();  // Flexible for partial updates
 
 // ============ USER SCHEMAS ============
 

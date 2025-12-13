@@ -10,6 +10,7 @@ import OrderForm, { SaveData } from '../components/orders/OrderForm';
 import { useWarnIfUnsaved } from "../hooks";
 import UnsavedChangesModal from "../components/ui/UnsavedChangesModal";
 import { useAuth } from "../contexts/AuthContext";
+import { useToast } from "../hooks/useToast";
 import { logger } from "../services/logger";
 import { Copy } from "lucide-react";
 
@@ -24,6 +25,7 @@ const NewOrderPage: React.FC = () => {
   const location = useLocation(); // Hook to get the passed data
   const queryClient = useQueryClient();
   const { user } = useAuth();
+  const { success: showSuccess } = useToast();
   
   const { showModal, confirmLeave, cancelLeave } = useWarnIfUnsaved(isDirty, allowNavigation);
 
@@ -61,75 +63,80 @@ const NewOrderPage: React.FC = () => {
     } as Order;
   }, [sourceOrder]);
 
-  const handleSave = async (formData: SaveData) => {
+  const handleSave = async (payload: { current: SaveData; isNew: boolean; changes: any[] }) => {
     setIsSaving(true);
     setError(null);
     
     try {
-      // --- CRITICAL MAPPING: CAMELCASE -> SNAKE_CASE ---
-      const dbPayload = {
-        customer_name: formData.customerName,
-        customer_email: formData.customerEmail,
-        customer_phone: formData.customerPhone,
-        customer_profile_url: formData.customerProfileUrl,
+      // ✅ Extract the actual form data from the payload structure
+      const formData = payload.current;
+      
+      // ✅ LAYER 4: Explicit Type Safety
+      // Pass camelCase formData with explicit type casting, let service handle conversion
+      
+      const sanitizedFormData = {
+        // Required String Fields (with type casting to ensure strings)
+        customerName: String(formData.customerName || ''),
+        customerEmail: String(formData.customerEmail || ''),
+        customerPhone: String(formData.customerPhone || ''),
+        customerProfileUrl: String(formData.customerProfileUrl || ''),
         
-        shipping_address: formData.shippingAddress,
-        shipping_carrier: formData.shippingCarrier,
-        shipping_tracking_number: formData.shippingTrackingNumber,
+        // Shipping
+        shippingAddress: String(formData.shippingAddress || ''),
+        shippingCarrier: String(formData.shippingCarrier || ''),
+        shippingTrackingNumber: String(formData.shippingTrackingNumber || ''),
         
-        design_name: formData.designName,
-        patches_quantity: formData.patchesQuantity,
-        patches_type: formData.patchesType,
-        design_size: formData.designSize,
-        design_backing: formData.designBacking,
-        instructions: formData.instructions,
+        // Design & Product
+        designName: String(formData.designName || ''),
+        patchesQuantity: Number(formData.patchesQuantity) || 0,
+        patchesType: String(formData.patchesType || ''),
+        designSize: String(formData.designSize || ''),
+        designBacking: String(formData.designBacking || ''),
+        instructions: String(formData.instructions || ''),
         
-        // ✅ FIX: Ensure order_amount is never null, defaulting to 0.
-        // This prevents the NOT NULL constraint violation for roles that can't see financials.
-        order_amount: formData.orderAmount ?? 0,
+        // Financials (with safe number conversion)
+        orderAmount: Number(formData.orderAmount) || 0,
+        amountPaid: Number(formData.amountPaid) || 0,
+        productionCost: Number(formData.productionCost) || 0,
+        shippingCost: Number(formData.shippingCost) || 0,
+        marketingCost: Number(formData.marketingCost) || 0,
         
-        // *** THIS IS THE FIX ***
-        amount_paid: formData.amountPaid, 
+        // Status (with explicit fallback)
+        status: String(formData.status || OrderStatus.NEW_ORDER),
         
-        production_cost: formData.productionCost || 0,
-        shipping_cost: formData.shippingCost || 0,
-        marketing_cost: formData.marketingCost || 0,
-
-        lead_source: formData.leadSource,
-        status: formData.status.toString(),
-        is_urgent: formData.isUrgent,
+        // Lead & Urgency
+        leadSource: String(formData.leadSource || ''),
+        isUrgent: Boolean(formData.isUrgent),
         
-        // Arrays
-        mockup_urls: formData.mockupUrls,
-        production_file_urls: formData.productionFileUrls,
-        shipping_attachment_urls: formData.shippingAttachmentUrls,
-        customer_attachment_urls: formData.customerAttachmentUrls
+        // Arrays (ensure they are arrays)
+        mockupUrls: Array.isArray(formData.mockupUrls) ? formData.mockupUrls : [],
+        productionFileUrls: Array.isArray(formData.productionFileUrls) ? formData.productionFileUrls : [],
+        shippingAttachmentUrls: Array.isArray(formData.shippingAttachmentUrls) ? formData.shippingAttachmentUrls : [],
+        customerAttachmentUrls: Array.isArray(formData.customerAttachmentUrls) ? formData.customerAttachmentUrls : [],
+        
+        // Reasons
+        reasonCategory: String(formData.reasonCategory || ''),
+        reasonDetails: String(formData.reasonDetails || ''),
       };
 
-      // Send the mapped payload (dbPayload), NOT formData
-      const newOrder = await createOrder(dbPayload, user?.email || 'unknown');
+      // Send the sanitized camelCase payload - service will convert to snake_case
+      const newOrder = await createOrder(sanitizedFormData, user?.email || 'unknown');
       
       // ✅ SUCCESS SEQUENCE
-      // 1. Invalidate queries to start refetching data in the background.
+      showSuccess(`Order ${newOrder.orderNumber} created successfully!`);
       await queryClient.invalidateQueries({ queryKey: queryKeys.orders.all() });
       await queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.table('', '') });
 
-      // 2. Set the state to allow navigation and define the destination path.
       setAllowNavigation(true);
       setIsDirty(false);
-      // ✅ FIX: Use state to navigate, preventing a race condition with the unsaved changes modal.
       setNavigateTo(`/order/${newOrder.orderNumber}/edit`);
       
     } catch (err: any) {
       logger.error('Failed to create order', err);
-      // ✅ FIX: Properly handle different error shapes.
-      // Supabase errors are objects with a 'message' property. Other errors might be strings or standard Error objects.
       const errorMessage = err?.message || (typeof err === 'string' ? err : 'An unknown error occurred. Check the console for details.');
       setError(`Failed to create order: ${errorMessage}`);
       setIsDirty(true);
     } finally {
-      // ✅ Always stop the spinner, whether the save succeeded or failed.
-      // This ensures the UI is responsive and allows navigation to proceed.
       setIsSaving(false);
     }
   };

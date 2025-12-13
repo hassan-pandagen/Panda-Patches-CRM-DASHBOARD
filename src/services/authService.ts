@@ -91,14 +91,15 @@ export const deleteUser = async (userId: string) => {
   const end = performanceMonitor.startMeasure('deleteUser', 'api');
   try {
     if (!userId) throw new Error('User ID is required');
-    
+
+    // Use supabase.functions.invoke - it properly handles auth
     const { data, error } = await supabase.functions.invoke('delete-user', {
-      body: { user_id: userId }
+      body: { user_id: userId },
     });
-    
+
     if (error) throw new Error(error.message);
     if (data?.error) throw new Error(data.error);
-    
+
     logger.info(`[Auth Service] User deleted: ${userId}`);
     end();
     return data;

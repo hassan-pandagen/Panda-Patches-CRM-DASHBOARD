@@ -97,16 +97,75 @@ interface ExistingCustomerInfo {
 
 // TRANSFORM: Convert DB data to Form Data
 const transformOrderToFormData = (order: Order | null | undefined): SaveData => {
-  if (!order) return {} as SaveData;
+  // ✅ LAYER 1: Guarantee valid initial state
+  if (!order) {
+    // Creating a NEW order - provide sensible defaults
+    return {
+      // Required fields
+      customerName: '',
+      customerEmail: '',
+      customerPhone: '',
+      customerProfileUrl: '',
+      
+      // ✅ CRITICAL: Status always has default value
+      status: OrderStatus.NEW_ORDER,  // NEVER undefined
+      
+      // Product details
+      designName: '',
+      patchesQuantity: 0,
+      patchesType: '',
+      designSize: '',
+      designBacking: '',
+      instructions: '',
+      
+      // Shipping
+      shippingAddress: '',
+      shippingCarrier: '',
+      shippingTrackingNumber: '',
+      
+      // Financials
+      orderAmount: 0,
+      amountPaid: 0,
+      productionCost: 0,
+      shippingCost: 0,
+      marketingCost: 0,
+      
+      // Lead info
+      leadSource: '',
+      isUrgent: false,
+      
+      // Files
+      mockupUrls: [],
+      productionFileUrls: [],
+      shippingAttachmentUrls: [],
+      customerAttachmentUrls: [],
+      
+      // Reason fields
+      reasonCategory: '',
+      reasonDetails: '',
+    } as SaveData;
+  }
+
+  // EDITING an order - use existing data with safe fallbacks
   return {
     ...order,
+    
+    // ✅ CRITICAL: Fallback for existing orders too
+    status: order.status || OrderStatus.NEW_ORDER,
+    
     patchesQuantity: order.patchesQuantity || 0,
+    orderAmount: order.orderAmount || 0,
+    amountPaid: order.amountPaid || 0,
+    productionCost: order.productionCost || 0,
+    shippingCost: order.shippingCost || 0,
+    marketingCost: order.marketingCost || 0,
+    
+    // Ensure arrays are arrays
     mockupUrls: Array.isArray(order.mockupUrls) ? order.mockupUrls : [],
     productionFileUrls: Array.isArray(order.productionFileUrls) ? order.productionFileUrls : [],
     shippingAttachmentUrls: Array.isArray(order.shippingAttachmentUrls) ? order.shippingAttachmentUrls : [],
     customerAttachmentUrls: Array.isArray(order.customerAttachmentUrls) ? order.customerAttachmentUrls : [],
     
-    // ✅ Initialize new fields
     reasonCategory: order.reasonCategory || '',
     reasonDetails: order.reasonDetails || '',
   };
@@ -124,7 +183,26 @@ const OrderForm: React.FC<OrderFormProps> = ({
   // ✅ FIX: Get toast methods directly
   const { success, error: showError } = useToast();
 
-  const formDefaultValues = useMemo(() => transformOrderToFormData(initialData), [initialData]);
+  const formDefaultValues = useMemo(() => ({
+    // Start with the transformed data, which handles duplication logic
+    ...transformOrderToFormData(initialData),
+    // Then, GUARANTEE that all required/core fields have a safe default value.
+    // This prevents "uncontrolled to controlled" errors in react-hook-form.
+    status: initialData?.status || OrderStatus.NEW_ORDER,
+    customerName: initialData?.customerName || '',
+    customerEmail: initialData?.customerEmail || '',
+    patchesQuantity: initialData?.patchesQuantity || 1,
+    orderAmount: initialData?.orderAmount || 0,
+    amountPaid: initialData?.amountPaid || 0,
+    productionCost: initialData?.productionCost || 0,
+    shippingCost: initialData?.shippingCost || 0,
+    marketingCost: initialData?.marketingCost || 0,
+    isUrgent: initialData?.isUrgent || false,
+    mockupUrls: initialData?.mockupUrls || [],
+    productionFileUrls: initialData?.productionFileUrls || [],
+    shippingAttachmentUrls: initialData?.shippingAttachmentUrls || [],
+    customerAttachmentUrls: initialData?.customerAttachmentUrls || [],
+  }), [initialData]);
 
   // Internal state for the spinner, managed by the form itself.
   const [isSaving, setIsSaving] = useState(false);
@@ -472,11 +550,29 @@ const OrderForm: React.FC<OrderFormProps> = ({
       <FormSectionWrapper title="Order Status">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-10">
           <div>
-            <label className="block text-sm font-medium text-slate-300">Status</label>
-            <select {...register('status')} className="mt-1 block w-full bg-slate-800 border-slate-600 rounded-md text-white focus:ring-brand-orange focus:border-brand-orange">
+            <label className="block text-sm font-medium text-slate-300">
+              Status <span className="text-red-400">*</span>
+            </label>
+            <select 
+              {...register('status', { 
+                required: 'Status is required'  // ✅ LAYER 2: Enforce required
+              })} 
+              className={`mt-1 block w-full bg-slate-800 border rounded-md text-white focus:ring-brand-orange focus:border-brand-orange transition-colors ${
+                errors.status 
+                  ? 'border-red-500 bg-red-950/10' 
+                  : 'border-slate-600'
+              }`}
+            >
+              <option value="">-- Select Status --</option>
               {/* ✅ FIX: Use the manually defined list to guarantee order and inclusion */}
               {statusOptions.map(s => <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>)}
             </select>
+            {errors.status && (
+              <p className="text-red-400 text-xs mt-1 flex items-center gap-1">
+                <span>⚠️</span>
+                {errors.status.message}
+              </p>
+            )}
           </div>
           <div>
             <label className="block text-sm font-medium text-slate-300">Lead Source</label>

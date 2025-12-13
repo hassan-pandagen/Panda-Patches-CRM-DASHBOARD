@@ -1,169 +1,53 @@
 // src/services/versionChecker.ts - Auto-detect and notify users of app updates
 
-import { logger } from './logger';
-
-// Get build version from Vite's define
-declare const __APP_VERSION__: string;
-declare const __BUILD_TIME__: string;
-
-// ✅ SAFELY ACCESS VARIABLES (Prevents "ReferenceError" crash)
-const CURRENT_VERSION = typeof __APP_VERSION__ !== 'undefined' 
-  ? __APP_VERSION__ 
-  : '1.0.0';
-
-const BUILD_TIME = typeof __BUILD_TIME__ !== 'undefined' 
-  ? __BUILD_TIME__ 
-  : new Date().toISOString();
-
-const VERSION_CHECK_KEY = 'app_version';
-const VERSION_CHECK_INTERVAL = 5 * 60 * 1000; // 5 minutes
+// ⚠️ STEP 1: CHANGE THIS NUMBER EVERY TIME YOU DEPLOY A BUG FIX
+// Example: Change to '2.6.1' next time, then '2.6.2', etc.
+const CURRENT_VERSION = '2.6.0'; 
 
 export const versionChecker = {
-  // Store current version in localStorage
-  saveVersion() {
-    try {
-      localStorage.setItem(VERSION_CHECK_KEY, CURRENT_VERSION);
-      localStorage.setItem(`${VERSION_CHECK_KEY}_build_time`, BUILD_TIME);
-    } catch (e) {
-      logger.error('Failed to save version:', e);
-    }
-  },
+  init: () => {
+    // 1. Get the version currently stored in the user's browser
+    const storedVersion = localStorage.getItem('app_version');
 
-  // Check if version has changed
-  hasVersionChanged(): boolean {
-    try {
-      const storedVersion = localStorage.getItem(VERSION_CHECK_KEY);
+    console.log(`[System Check] Code Version: ${CURRENT_VERSION} | Browser Version: ${storedVersion}`);
 
-      // First time - no version stored yet
-      if (!storedVersion) {
-        this.saveVersion();
-        return false;
-      }
+    // 2. Compare. If they don't match, it means you deployed a new update.
+    if (storedVersion !== CURRENT_VERSION) {
+      console.warn('🚀 New update detected! Cleaning up old cache...');
 
-      // Version changed
-      if (storedVersion !== CURRENT_VERSION) {
-        logger.info('Version changed:', {
-          old: storedVersion,
-          new: CURRENT_VERSION,
-        });
-        return true;
-      }
-
-      return false;
-    } catch (e) {
-      logger.error('Failed to check version:', e);
-      return false;
-    }
-  },
-
-  // Get current version info
-  getVersionInfo() {
-    return {
-      version: CURRENT_VERSION,
-      buildTime: BUILD_TIME,
-    };
-  },
-
-  // Initialize version checking
-  init() {
-    // Check if we just loaded a new version
-    if (this.hasVersionChanged()) {
-      logger.info('New version detected, clearing caches');
-
-      // Clear service worker cache if available
-      if ('serviceWorker' in navigator && 'caches' in window) {
-        caches
-          .keys()
-          .then((names) => {
-            names.forEach((name) => caches.delete(name));
-          })
-          .catch((err) => {
-            logger.error('Failed to clear caches:', err);
-          });
-      }
-
-      // Save new version
-      this.saveVersion();
-
-      // Show update notification
-      this.notifyUpdate();
-    } else {
-      this.saveVersion();
-    }
-
-    // Set up periodic version check (for long-running sessions)
-    this.startPeriodicCheck();
-  },
-
-  // Notify user of update
-  notifyUpdate() {
-    logger.info('App has been updated to version:', CURRENT_VERSION);
-
-    // Dispatch event that your app can listen to
-    window.dispatchEvent(
-      new CustomEvent('app:update-available', {
-        detail: { version: CURRENT_VERSION },
-      })
-    );
-  },
-
-  // Periodic check for updates (for SPAs that run for long periods)
-  startPeriodicCheck() {
-    setInterval(() => {
-      // Fetch a cache-busted version of index.html
-      fetch(`/index.html?t=${Date.now()}`, {
-        cache: 'no-cache',
-        headers: {
-          'Cache-Control': 'no-cache',
-        },
-      })
-        .then((response) => response.text())
-        .then((html) => {
-          // Extract script hash from HTML to detect new build
-          const scriptMatch = html.match(/src="\/assets\/index-([a-zA-Z0-9]+)\.js"/);
-          const currentScriptElement = document.querySelector(
-            'script[src*="/assets/index-"]'
-          );
-          const currentScriptMatch = currentScriptElement
-            ?.getAttribute('src')
-            ?.match(/index-([a-zA-Z0-9]+)\.js/);
-
-          if (scriptMatch && currentScriptMatch) {
-            const newHash = scriptMatch[1];
-            const currentHash = currentScriptMatch[1];
-
-            if (newHash !== currentHash) {
-              logger.info('New version detected via periodic check', {
-                current: currentHash,
-                new: newHash,
-              });
-
-              // Notify of update
-              this.notifyUpdate();
-            }
+      // --- AGGRESSIVE CLEANUP ---
+      
+      // Clear Local Storage (Removes old state/settings)
+      localStorage.clear();
+      
+      // Clear Session Storage (Removes old session data)
+      sessionStorage.clear();
+      
+      // Unregister Service Workers (Stops the browser from serving old HTML)
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.getRegistrations().then((registrations) => {
+          for (const registration of registrations) {
+            registration.unregister();
           }
-        })
-        .catch((err) => {
-          logger.error('Version check failed:', err);
         });
-    }, VERSION_CHECK_INTERVAL);
+      }
+
+      // Clear Cache Storage (Deletes old JS/CSS files)
+      if ('caches' in window) {
+        caches.keys().then((names) => {
+          names.forEach((name) => {
+            caches.delete(name);
+          });
+        });
+      }
+
+      // 3. Save the NEW version so we don't loop forever
+      localStorage.setItem('app_version', CURRENT_VERSION);
+
+      // 4. Force a hard reload from the server
+      window.location.reload();
+    }
   },
 
-  // Force reload the app
-  forceReload() {
-    logger.info('Forcing app reload');
-    window.location.reload();
-  },
+  getVersionInfo: () => CURRENT_VERSION
 };
-
-// Auto-initialize on page load
-if (typeof window !== 'undefined') {
-  // Wait for DOM to be ready
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', () => {
-      versionChecker.init();
-    });
-  } else {
-    versionChecker.init();
-  }
-}

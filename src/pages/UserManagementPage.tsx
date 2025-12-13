@@ -1,20 +1,24 @@
+// src/pages/UserManagementPage.tsx
+// PRODUCTION-READY: Proper error handling, validation, and state management
+
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-// --- THIS IS THE CORRECTED IMPORT SECTION ---
 import { createUserWithRole, getAllUsers, deleteUser, updateUserProfile } from '@/services/authService';
 import { logger } from '@/services/logger';
 import { useAuth } from '../contexts/AuthContext';
 import { UserProfile, UserPermissions, UserRole } from '@/types';
-import { Check, X, Plus, UserPlus, Edit, Trash2, Key, AlertCircle } from 'lucide-react';
+import { Check, X, Plus, Edit, Trash2, Key, AlertCircle, Copy, CheckCircle } from 'lucide-react';
 import Spinner from '@/components/ui/Spinner';
 import ConfirmationModal from '@/components/ui/ConfirmationModal';
-import SpotlightCard from '@/components/ui/SpotlightCard';
-import EmptyState from '@/components/ui/EmptyState';
+import Button from '@/components/ui/Button';
 import { useToast } from '@/hooks/useToast';
 import { queryKeys } from '@/constants/queryKeys';
 
-// Base defaults (all false to start clean)
-const emptyPermissions: UserPermissions = {
+// ============================================
+// CONSTANTS & TYPES
+// ============================================
+
+const EMPTY_PERMISSIONS: UserPermissions = {
   users_manage: false,
   orders_create: false,
   orders_view_all: false,
@@ -27,185 +31,223 @@ const emptyPermissions: UserPermissions = {
   attendance_clock_only: false,
 };
 
-type ModalMode = 'create' | 'edit' | 'delete' | 'password' | null;
+type ModalMode = 'create' | 'edit' | 'delete' | 'password' | 'viewPermissions' | null;
+
+interface UserFormData {
+  email: string;
+  name: string;
+  password: string;
+  role: UserRole;
+  permissions: UserPermissions;
+}
+
+// ============================================
+// PERMISSION PRESETS
+// ============================================
+
+const PERMISSION_PRESETS = {
+  sales: {
+    ...EMPTY_PERMISSIONS,
+    orders_create: true,
+    orders_view_all: false,
+    orders_change_status: true,
+    orders_edit_financials: true,
+    reports_view_financials: true,
+    shipping_view: true,
+  },
+  production: {
+    ...EMPTY_PERMISSIONS,
+    orders_view_all: true,
+    orders_edit_production: true,
+  },
+  clock_only: {
+    ...EMPTY_PERMISSIONS,
+    attendance_clock_only: true,
+  },
+  admin: Object.keys(EMPTY_PERMISSIONS).reduce((acc, key) => {
+    acc[key as keyof UserPermissions] = true;
+    return acc;
+  }, {} as UserPermissions),
+};
+
+// ============================================
+// PERMISSION LABELS
+// ============================================
+
+const PERMISSION_LABELS: Record<keyof UserPermissions, string> = {
+  users_manage: 'Manage Users',
+  orders_create: 'Create Orders',
+  orders_view_all: 'View All Orders',
+  orders_change_status: 'Change Status',
+  orders_edit_financials: 'Edit Financials',
+  orders_edit_production: 'Edit Production',
+  orders_delete: 'Delete Orders',
+  reports_view_financials: 'View Reports',
+  shipping_view: 'View Shipping',
+  attendance_clock_only: 'Clock Only',
+};
+
+// ============================================
+// VALIDATION FUNCTIONS
+// ============================================
+
+const validateEmail = (email: string): string | null => {
+  if (!email) return 'Email is required';
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return 'Invalid email format';
+  return null;
+};
+
+const validatePassword = (password: string): string | null => {
+  if (!password) return 'Password is required';
+  if (password.length < 6) return 'Password must be at least 6 characters';
+  return null;
+};
+
+const validateName = (name: string): string | null => {
+  if (!name) return 'Name is required';
+  if (name.length < 2) return 'Name must be at least 2 characters';
+  return null;
+};
+
+// ============================================
+// MAIN COMPONENT
+// ============================================
 
 const UserManagementPage: React.FC = () => {
   const { role, permissions } = useAuth();
   const queryClient = useQueryClient();
-  const { toast } = useToast();
+  const { success, error: showError } = useToast();
+  
+  // Modal state
   const [modalMode, setModalMode] = useState<ModalMode>(null);
   const [selectedUser, setSelectedUser] = useState<UserProfile | null>(null);
-
-  // State for Create Modal
-  const [newUserEmail, setNewUserEmail] = useState('');
-  const [newUserName, setNewUserName] = useState('');
-  const [newUserPassword, setNewUserPassword] = useState('');
-  const [newUserRole, setNewUserRole] = useState<UserRole>(UserRole.USER);
-  const [newUserPermissions, setNewUserPermissions] = useState<UserPermissions>(emptyPermissions);
-  const [createdUserInfo, setCreatedUserInfo] = useState<{ email: string; } | null>(null);
+  
+  // Form state
+  const [formData, setFormData] = useState<UserFormData>({
+    email: '',
+    name: '',
+    password: '',
+    role: UserRole.USER,
+    permissions: PERMISSION_PRESETS.sales,
+  });
+  
+  // UI state
+  const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
   const [passwordCopied, setPasswordCopied] = useState(false);
 
-  // State for Edit Modal
-  const [editUserName, setEditUserName] = useState('');
-  const [editUserRole, setEditUserRole] = useState<UserRole>(UserRole.USER);
-  const [editUserPermissions, setEditUserPermissions] = useState<UserPermissions>(emptyPermissions);
+  // ============================================
+  // QUERIES & MUTATIONS
+  // ============================================
 
-  // State for Password Modal
-  const [resetPassword, setResetPassword] = useState('');
+  const { data: users, isLoading, error: queryError } = useQuery<UserProfile[], Error>({
+    queryKey: queryKeys.users.all(),
+    queryFn: getAllUsers,
+    enabled: role === UserRole.ADMIN || !!permissions?.users_manage,
+  });
 
-  // --- PRESET LOGIC (Matches your Screenshots) ---
-  const applyPreset = (type: string, setPermissions: (p: UserPermissions) => void) => {
-    if (type === 'sales') {
-      // Manzoor's Configuration
-      setPermissions({
-        ...emptyPermissions,
-        orders_create: true,
-        orders_view_all: false, // Only sees own orders
-        orders_change_status: true,
-        orders_edit_financials: true,
-        orders_delete: false,
-        reports_view_financials: true, // Needs this for Dashboard
-        shipping_view: true,
-      });
-    } else if (type === 'production') {
-      // Hassan's Configuration
-      setPermissions({
-        ...emptyPermissions,
-        orders_create: false,
-        orders_view_all: true, // Must see production queue
-        orders_change_status: false, // Matches screenshot (X)
-        orders_edit_financials: false,
-        orders_edit_production: true, // The critical permission
-        reports_view_financials: false, // Hides Dashboard
-        shipping_view: false,
-      });
-    } else if (type === 'clock_only') {
-      setPermissions({
-        ...emptyPermissions,
-        attendance_clock_only: true,
-      });
-    } else if (type === 'admin_preset') {
-      // Full Access
-      const allTrue = Object.keys(emptyPermissions).reduce((acc, key) => {
-        acc[key] = true;
-        return acc;
-      }, {} as any);
-      setPermissions(allTrue);
-    }
-  };
-
-  // --- MUTATIONS ---
   const createUserMutation = useMutation({
-    mutationFn: () => createUserWithRole(newUserEmail, newUserRole, newUserPermissions, newUserName, newUserPassword),
+    mutationFn: async () => {
+      const errors: Record<string, string> = {};
+      const emailError = validateEmail(formData.email);
+      const passwordError = validatePassword(formData.password);
+      const nameError = validateName(formData.name);
+      
+      if (emailError) errors.email = emailError;
+      if (passwordError) errors.password = passwordError;
+      if (nameError) errors.name = nameError;
+      
+      if (Object.keys(errors).length > 0) {
+        setValidationErrors(errors);
+        throw new Error('Validation failed');
+      }
+      
+      return createUserWithRole(
+        formData.email,
+        formData.role,
+        formData.permissions,
+        formData.name,
+        formData.password
+      );
+    },
     onSuccess: (data) => {
       if (data.error) {
-        throw new Error(data.error); // Ensure error is thrown for onError to catch
+        showError('Creation Failed', data.error);
+        return;
       }
-      if (data.user) {
-        setCreatedUserInfo({ email: data.user.email! }); // This part might change based on new flow
+      
+      queryClient.invalidateQueries({ queryKey: queryKeys.users.all() });
+      success('User Created', `${formData.email} has been added successfully.`);
+      closeAllModals();
+    },
+    onError: (error: Error) => {
+      if (error.message !== 'Validation failed') {
+        showError('Creation Failed', error.message);
       }
     },
-    onError: (error: Error) => logger.error(error.message),
   });
 
-
-  const deleteUserMutation = useMutation({
-    mutationFn: (userId: string) => deleteUser(userId),
+  const updateUserMutation = useMutation({
+    mutationFn: async (data: { id: string; updates: any }) => {
+      return updateUserProfile(data.id, data.updates);
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.users.all() });
-      setModalMode(null);
-      toast.success("User Deleted", `The user ${selectedUser?.email} has been removed.`);
+      success('User Updated', 'Changes have been saved successfully.');
+      closeAllModals();
     },
-    onError: (error: Error) => toast.error("Deletion Failed", error.message),
+    onError: (error: Error) => {
+      showError('Update Failed', error.message);
+    },
   });
 
-  const editUserMutation = useMutation({
-    mutationFn: (data: { id: string; updates: any }) => updateUserProfile(data.id, data.updates),
+  const deleteUserMutation = useMutation({
+    mutationFn: deleteUser,
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.users.all() }); // Refetch users after update
-      setModalMode(null);
-      toast.success("User Updated", "The user's profile has been saved.");
+      queryClient.invalidateQueries({ queryKey: queryKeys.users.all() });
+      success('User Deleted', `${selectedUser?.email} has been removed.`);
+      closeAllModals();
     },
-    onError: (error: Error) => toast.error("Update Failed", error.message),
+    onError: (error: Error) => {
+      showError('Deletion Failed', error.message);
+    },
   });
 
-  const changePasswordMutation = useMutation({
-    mutationFn: (data: { id: string; updates: any }) => updateUserProfile(data.id, data.updates),
-    onSuccess: () => {
-      setModalMode(null);
-      // Use a specific success message for password changes
-      toast.success("Password Updated", `The password for ${selectedUser?.email} has been changed.`);
-    },
-    onError: (error: Error) => toast.error("Password Update Failed", error.message),
-  });
+  // ============================================
+  // EVENT HANDLERS
+  // ============================================
 
-  // --- EVENT HANDLERS ---
-  const handleCreateUser = (e: React.FormEvent) => {
-    e.preventDefault();
-    createUserMutation.mutate();
-  };
-
-  const handleEditUser = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!selectedUser) return;
-    
-    editUserMutation.mutate({
-      id: selectedUser.id,
-      updates: {
-        full_name: editUserName,
-        role: editUserRole,
-        permissions: editUserPermissions
-      }
+  const resetForm = () => {
+    setFormData({
+      email: '',
+      name: '',
+      password: '',
+      role: UserRole.USER,
+      permissions: PERMISSION_PRESETS.sales,
     });
+    setValidationErrors({});
+    setPasswordCopied(false);
   };
 
-  const handlePasswordReset = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!selectedUser || !resetPassword) return;
-    changePasswordMutation.mutate({
-      id: selectedUser.id,
-      updates: { password: resetPassword }
-    });
-  };
-  const handleDeleteUser = () => {
-    if (selectedUser) {
-      deleteUserMutation.mutate(selectedUser.id);
-    }
-  };
-
-  // --- MODAL CONTROLS ---
   const closeAllModals = () => {
     setModalMode(null);
     setSelectedUser(null);
-    // Reset all form states
-    setNewUserEmail('');
-    setNewUserName('');
-    setNewUserPassword('');
-    setNewUserRole(UserRole.USER);
-    setNewUserPermissions(emptyPermissions);
-    setCreatedUserInfo(null);
-    setEditUserName('');
-    setEditUserRole(UserRole.USER);
-    setEditUserPermissions(emptyPermissions);
-    setResetPassword('');
-    createUserMutation.reset();
-    editUserMutation.reset();
-    changePasswordMutation.reset();
-    deleteUserMutation.reset();
+    resetForm();
   };
 
-
   const openCreateModal = () => {
+    resetForm();
     setModalMode('create');
-    setSelectedUser(null);
-    applyPreset('sales', setNewUserPermissions); // Default to Sales
   };
 
   const openEditModal = (user: UserProfile) => {
     setSelectedUser(user);
-    setEditUserName(user.full_name || '');
-    setEditUserRole(user.role as UserRole);
-    setEditUserPermissions(user.permissions || { ...emptyPermissions });
+    setFormData({
+      email: user.email,
+      name: user.full_name || '',
+      password: '',
+      role: user.role as UserRole,
+      permissions: user.permissions || EMPTY_PERMISSIONS,
+    });
     setModalMode('edit');
   };
 
@@ -216,367 +258,571 @@ const UserManagementPage: React.FC = () => {
 
   const openPasswordModal = (user: UserProfile) => {
     setSelectedUser(user);
+    setFormData({ ...formData, password: '' });
     setModalMode('password');
   };
 
+  const openPermissionsModal = (user: UserProfile) => {
+    setSelectedUser(user);
+    setFormData({
+      email: user.email,
+      name: user.full_name || '',
+      password: '',
+      role: user.role as UserRole,
+      permissions: user.permissions || EMPTY_PERMISSIONS,
+    });
+    setModalMode('viewPermissions');
+  };
+
+  const handleCreateUser = (e: React.FormEvent) => {
+    e.preventDefault();
+    createUserMutation.mutate();
+  };
+
+  const handleEditUser = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedUser) return;
+    
+    updateUserMutation.mutate({
+      id: selectedUser.id,
+      updates: {
+        full_name: formData.name,
+        role: formData.role,
+        permissions: formData.permissions,
+      },
+    });
+  };
+
+  const handlePasswordReset = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedUser) return;
+    
+    const passwordError = validatePassword(formData.password);
+    if (passwordError) {
+      setValidationErrors({ password: passwordError });
+      return;
+    }
+    
+    updateUserMutation.mutate({
+      id: selectedUser.id,
+      updates: { password: formData.password },
+    });
+  };
+
+  const handleDeleteUser = () => {
+    if (selectedUser) {
+      deleteUserMutation.mutate(selectedUser.id);
+    }
+  };
+
+  const applyPreset = (presetName: keyof typeof PERMISSION_PRESETS) => {
+    setFormData(prev => ({
+      ...prev,
+      permissions: PERMISSION_PRESETS[presetName],
+    }));
+  };
+
   const handleCopyPassword = () => {
-    navigator.clipboard.writeText(newUserPassword);
+    navigator.clipboard.writeText(formData.password);
     setPasswordCopied(true);
     setTimeout(() => setPasswordCopied(false), 2000);
   };
 
-  const { data: users, isLoading, error } = useQuery<UserProfile[], Error>({
-    queryKey: queryKeys.users.all(),
-    queryFn: async () => getAllUsers(),
-    enabled: role === UserRole.ADMIN || !!permissions?.users_manage,
-  });
+  // ============================================
+  // PERMISSION CHECK
+  // ============================================
 
   if (role !== UserRole.ADMIN && !permissions?.users_manage) {
     return (
       <div className="max-w-4xl mx-auto p-6">
         <div className="bg-red-900/20 border border-red-500/50 rounded-xl p-6 text-center">
+          <AlertCircle className="w-12 h-12 text-red-400 mx-auto mb-4" />
           <h2 className="text-2xl font-bold text-red-400 mb-2">Access Denied</h2>
-          <p className="text-slate-300">You do not have permission to view this page.</p>
+          <p className="text-slate-300">You do not have permission to manage users.</p>
         </div>
       </div>
     );
   }
 
-  // Helper to determine current preset for dropdown value
-  const detectPreset = (perms: UserPermissions) => {
-    if (perms.orders_edit_production && perms.orders_view_all && !perms.reports_view_financials) return 'production';
-    if (perms.reports_view_financials && perms.orders_create && !perms.orders_view_all) return 'sales';
-    if (perms.attendance_clock_only) return 'clock_only';
-    return 'custom';
-  };
+  // ============================================
+  // RENDER
+  // ============================================
 
   return (
-    <div className="max-w-6xl mx-auto p-6 text-slate-200">
-      <div className="flex justify-between items-center mb-6">
-         <h1 className="text-3xl font-bold">User Management</h1>
-         <button onClick={openCreateModal} className="flex items-center gap-2 px-4 py-2 bg-blue-600 rounded-lg text-white hover:bg-blue-700 text-sm font-semibold focus-ring">
-           <Plus className="w-4 h-4" /> Create User
-         </button>
-       </div>
-      
-      {isLoading && <Spinner />}
-      {error && <p className="text-red-400">Error: {error.message}</p>}
+    <div className="max-w-7xl mx-auto p-6">
+      {/* Header */}
+      <div className="mb-8">
+        <div className="flex justify-between items-center">
+          <div>
+            <h1 className="text-4xl font-bold text-white">User Management</h1>
+            <p className="text-slate-400 mt-2">Manage team members and their permissions</p>
+          </div>
+          <Button 
+            onClick={openCreateModal}
+            className="flex items-center gap-2"
+          >
+            <Plus className="w-5 h-5" />
+            Create User
+          </Button>
+        </div>
+      </div>
 
-      {!users || users.length === 0 ? (
-        <EmptyState 
-          title="No users found"
-          description="Get started by adding your first team member or sales agent."
-          action={
-            <button 
-              onClick={openCreateModal}
-              className="flex items-center gap-2 px-4 py-2 bg-white/5 hover:bg-white/10 text-white rounded-lg border border-white/10 transition-all focus-ring"
-            >
-              <Plus className="w-4 h-4" />
-              Create User
-            </button>
-          }
-        />
-      ) : (
-        <SpotlightCard className="p-0 overflow-hidden">
-          <table className="min-w-full divide-y divide-slate-700">
-            <thead className="bg-slate-900/70">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-slate-300 uppercase">
-                  Email
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-slate-300 uppercase">
-                  Full Name
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-slate-300 uppercase">
-                  Role
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-slate-300 uppercase">
-                  Permissions
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-slate-300 uppercase">
-                  Actions
-                </th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-800">
-              {users.map((user) => (
-                <tr 
-                  key={user.id} 
-                  className="hover:bg-slate-800/40 focus-ring cursor-pointer group" 
-                  tabIndex={0}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') openEditModal(user);
-                  }}
-                >
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-300">{user.email}</td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-300">{user.full_name || '-'}</td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm">
-                    <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${user.role === 'ADMIN' ? 'bg-indigo-600/30 text-indigo-300' : 'bg-cyan-600/30 text-cyan-300'}`}>
-                      {user.role}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-300">
-                    <div className="flex flex-wrap gap-x-4 gap-y-2 max-w-xs">
-                      {Object.entries(user.permissions || {}).map(([permission, hasAccess]) => {
-                         // Only show relevant true permissions to keep UI clean
-                         if (!hasAccess && permission !== 'users_manage') return null;
-                         return (
-                          <div key={permission} className="flex items-center gap-1">
-                            {hasAccess ? <Check className="w-3 h-3 text-green-400" /> : <X className="w-3 h-3 text-red-400" />}
-                            <span className="text-xs text-slate-400 capitalize">
-                              {permission.replace('orders_', '').replace('reports_', '').replace(/_/g, ' ')}
-                            </span>
-                          </div>
-                        )
-                      })}
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-300">
-                      <div className="flex items-center gap-2">
-                        <button onClick={() => openEditModal(user)} className="text-indigo-400 hover:text-indigo-300 flex items-center gap-1 focus-ring rounded">
-                              <Edit className="w-4 h-4" /> Edit
-                            </button>
-                            {/* --- CHANGE PASSWORD BUTTON --- */}
-                            <button
-                              onClick={() => openPasswordModal(user)}
-                              className="text-amber-400 hover:text-amber-300 flex items-center gap-1 focus-ring rounded"
-                            >
-                              <Key className="w-4 h-4" /> Pass
-                            </button>
-                            {/* -------------------------------- */}
-                            <button onClick={() => openDeleteModal(user)} className="text-red-400 hover:text-red-300 flex items-center gap-1 focus-ring rounded">
-                              <Trash2 className="w-4 h-4" /> Delete
-                            </button>
-                      </div>
-                    </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </SpotlightCard>
+      {/* Loading State */}
+      {isLoading && (
+        <div className="flex justify-center py-12">
+          <Spinner />
+        </div>
+      )}
+      
+      {/* Error State */}
+      {queryError && (
+        <div className="bg-red-900/20 border border-red-500/50 rounded-xl p-4 mb-6">
+          <p className="text-red-400">Error loading users: {queryError.message}</p>
+        </div>
       )}
 
-      {/* Delete Confirmation */}
+      {/* Users Table */}
+      {!isLoading && !queryError && (!users || users.length === 0) ? (
+        <div className="text-center py-12 rounded-xl border border-white/10 bg-slate-900/40">
+          <Plus className="w-12 h-12 text-slate-500 mx-auto mb-4" />
+          <h3 className="text-lg font-semibold text-slate-300 mb-2">No users found</h3>
+          <p className="text-slate-500 mb-6">Get started by creating your first team member</p>
+          <Button onClick={openCreateModal} variant="secondary">
+            Create User
+          </Button>
+        </div>
+      ) : users && users.length > 0 && (
+        <div className="group relative bg-slate-900/40 backdrop-blur-xl border border-white/10 rounded-2xl shadow-xl overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="border-b border-white/10 bg-slate-900/50">
+                  <th className="px-6 py-4 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">Email</th>
+                  <th className="px-6 py-4 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">Name</th>
+                  <th className="px-6 py-4 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">Role</th>
+                  <th className="px-6 py-4 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">Permissions</th>
+                  <th className="px-6 py-4 text-right text-xs font-semibold text-slate-400 uppercase tracking-wider">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-white/5">
+                {users.map((user) => (
+                  <tr 
+                    key={user.id} 
+                    className="hover:bg-white/5 transition-colors"
+                  >
+                    <td className="px-6 py-4 text-sm text-slate-200 font-medium">{user.email}</td>
+                    <td className="px-6 py-4 text-sm text-slate-300">{user.full_name || '-'}</td>
+                    <td className="px-6 py-4 text-sm">
+                      <span className={`px-3 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${
+                        user.role === 'ADMIN' 
+                          ? 'bg-brand-orange/20 text-brand-orange' 
+                          : 'bg-brand-green/20 text-brand-green'
+                      }`}>
+                        {user.role}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 text-sm">
+                      <div className="flex flex-wrap gap-2">
+                        {Object.entries(user.permissions || {})
+                          .filter(([_, hasAccess]) => hasAccess)
+                          .slice(0, 2)
+                          .map(([permission]) => (
+                            <span 
+                              key={permission} 
+                              className="px-2 py-1 bg-brand-green/10 text-brand-green text-xs rounded-md border border-brand-green/20"
+                            >
+                              ✓ {PERMISSION_LABELS[permission as keyof UserPermissions]}
+                            </span>
+                          ))}
+                        {Object.values(user.permissions || {}).filter(Boolean).length > 2 && (
+                          <button
+                            onClick={() => openPermissionsModal(user)}
+                            className="text-xs text-slate-300 px-2 py-1 hover:bg-slate-700 rounded-md transition-colors cursor-pointer"
+                          >
+                            +{Object.values(user.permissions || {}).filter(Boolean).length - 2}
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-right">
+                      <div className="flex items-center justify-end gap-2">
+                        <button 
+                          onClick={() => openEditModal(user)} 
+                          className="p-2 hover:bg-slate-700 rounded-lg transition-colors text-slate-400 hover:text-brand-orange"
+                          title="Edit User"
+                        >
+                          <Edit className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => openPasswordModal(user)}
+                          className="p-2 hover:bg-slate-700 rounded-lg transition-colors text-slate-400 hover:text-slate-200"
+                          title="Change Password"
+                        >
+                          <Key className="w-4 h-4" />
+                        </button>
+                        <button 
+                          onClick={() => openDeleteModal(user)} 
+                          className="p-2 hover:bg-red-900/20 rounded-lg transition-colors text-slate-400 hover:text-red-400"
+                          title="Delete User"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
       <ConfirmationModal
         isOpen={modalMode === 'delete'}
         onClose={closeAllModals}
         onConfirm={handleDeleteUser}
         title="Delete User"
-        message={`Are you sure you want to delete ${selectedUser?.email}?`}
+        message={`Are you sure you want to delete ${selectedUser?.email}? This action cannot be undone.`}
         isConfirming={deleteUserMutation.isPending}
       />
 
-      {/* --- CREATE USER MODAL --- */}
+      {/* Create User Modal */}
       {modalMode === 'create' && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
-          <div className="bg-slate-800 border border-slate-700 rounded-xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-            <div className="p-8 border-b border-slate-700 flex justify-between items-center">
-              <h3 className="text-xl font-bold text-white">Create New User</h3>
-              <button onClick={closeAllModals}><X className="w-6 h-6 text-slate-400" /></button>
-            </div>
-
-            <form onSubmit={handleCreateUser} className="p-8 space-y-8">
-              {createdUserInfo ? (
-                /* ... Success View (Same as before) ... */
-                <div className="bg-green-900/30 p-4 rounded-lg">
-                   <p className="text-green-400">User Created!</p>
-                   <button type="button" onClick={handleCopyPassword} className="mt-2 bg-amber-600 px-3 py-1 rounded text-white text-sm">
-                     {passwordCopied ? 'Copied' : 'Copy Password'}
-                   </button>
-                   <button type="button" onClick={closeAllModals} className="mt-4 w-full bg-slate-700 py-2 rounded">Done</button>
-                </div>) : (<>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                    <div className="space-y-3">
-                      <label className="text-sm font-medium text-slate-400">Email Address</label>
-                      <input
-                        type="email"
-                        required
-                        value={newUserEmail}
-                        onChange={(e) => setNewUserEmail(e.target.value)}
-                        className="w-full px-4 py-2 bg-slate-900/50 border border-slate-600 rounded-lg text-white"
-                        placeholder="agent@pandapatches.com"
-                      />
-                    </div>
-
-                    {/* NEW PASSWORD INPUT */}
-                     <div className="space-y-3">
-                       <label className="text-sm font-medium text-slate-400">Assign Password</label>
-                      <input
-                        type="text" // Using "text" so you can see it and copy it easily
-                        required
-                        minLength={6}
-                        value={newUserPassword}
-                        onChange={(e) => setNewUserPassword(e.target.value)}
-                        className="w-full px-4 py-2 bg-slate-900/50 border border-slate-600 rounded-lg text-white focus:border-brand-orange"
-                        placeholder="e.g. Panda2025!"
-                      />
-                    </div>
-                    
-                    <div className="space-y-3">
-                    <label className="text-sm font-medium text-slate-400">Full Name</label>
-                      <input
-                        type="text"
-                        required
-                        value={newUserName}
-                        onChange={(e) => setNewUserName(e.target.value)}
-                        className="w-full px-4 py-2 bg-slate-900/50 border border-slate-600 rounded-lg text-white"
-                        placeholder="Agent Name"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="space-y-3">
-                     <label className="text-sm font-medium text-slate-400">Role</label>
-                     <select
-                      value={newUserRole}
-                      onChange={(e) => setNewUserRole(e.target.value as UserRole)}
-                      className="w-full px-4 py-2 bg-slate-900/50 border border-slate-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-white"
-                    >
-                      <option value={UserRole.USER}>Standard User</option>
-                      <option value={UserRole.ADMIN}>Administrator</option>
-                    </select>
-                  </div>
-
-                  {/* User Type Preset for Create Form */}
-                  <div className="space-y-3">
-                    <label className="text-sm font-medium text-slate-400">User Type (Preset)</label>
-                    <select
-                      onChange={(e) => applyPreset(e.target.value, setNewUserPermissions)}
-                      className="w-full px-4 py-2 bg-slate-900/50 border border-slate-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-white"
-                      defaultValue="sales"
-                    >
-                      <option value="sales">Sales Agent</option>
-                      <option value="production">Production User</option>
-                      <option value="clock_only">Clock In/Out Only</option>
-                    </select>
-                  </div>
-
-                  <div className="space-y-4">
-                    <label className="text-sm font-medium text-slate-400 block">Permissions</label>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      {Object.keys(emptyPermissions).map((key) => (
-                        <label key={key} className="flex items-center gap-3 p-3 bg-slate-900/30 rounded-lg border border-slate-700 cursor-pointer hover:border-slate-500 transition-colors">
-                          <input
-                            type="checkbox"
-                            checked={newUserPermissions[key as keyof UserPermissions]}
-                            onChange={(e) => setNewUserPermissions(prev => ({
-                              ...prev,
-                              [key]: e.target.checked
-                            }))}
-                            className="w-4 h-4 rounded border-slate-600 text-blue-600 focus:ring-offset-slate-900"
-                          />
-                          <span className="text-sm text-slate-300 capitalize">
-                            {key.replace('can_', '').replace(/_/g, ' ')}
-                          </span>
-                        </label>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div className="flex justify-end gap-3 pt-8 border-t border-slate-700">
-                    <button
-                      type="button"
-                      onClick={closeAllModals}
-                      className="px-4 py-2 text-slate-300 hover:bg-slate-700 rounded-lg transition-colors"
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      type="submit"
-                      disabled={createUserMutation.isPending}
-                      className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg font-medium transition-colors flex items-center gap-2 disabled:opacity-50"
-                    >
-                      {createUserMutation.isPending ? <Spinner size="sm" /> : <UserPlus className="w-4 h-4" />}
-                      Create User
-                    </button>
-                  </div></>
-              )}
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* --- EDIT USER MODAL --- */}
-      {modalMode === 'edit' && selectedUser && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
-          <div className="bg-slate-800 border border-slate-700 rounded-xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-            <div className="p-8 border-b border-slate-700 flex justify-between items-center">
-              <h3 className="text-xl font-bold text-white">Edit {selectedUser.full_name}</h3>
-              <button onClick={closeAllModals}><X className="w-6 h-6 text-slate-400" /></button>
-            </div>
-
-            <form onSubmit={handleEditUser} className="p-8 space-y-8">
-              <input type="text" value={editUserName} onChange={e => setEditUserName(e.target.value)} className="w-full bg-slate-900/50 border border-slate-600 rounded p-2 text-white" />
-              <select value={editUserRole} onChange={e => setEditUserRole(e.target.value as UserRole)} className="w-full bg-slate-900/50 border border-slate-600 rounded p-2 text-white">
-                <option value={UserRole.USER}>User</option>
-                <option value={UserRole.ADMIN}>Admin</option>
-              </select>
-
-              {/* EDIT PRESET SELECTOR */}
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-slate-900/95 border border-white/10 rounded-2xl max-w-xl w-full max-h-[90vh] overflow-y-auto">
+            <form onSubmit={handleCreateUser} className="p-8 space-y-6">
               <div>
-                <label className="text-sm text-slate-400 mb-1 block">Quick Apply Preset</label>
+                <h2 className="text-2xl font-bold text-white">Create User</h2>
+                <p className="text-slate-400 text-sm mt-1">Add a new team member</p>
+              </div>
+
+              {/* Email */}
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-2">Email</label>
+                <input
+                  type="email"
+                  value={formData.email}
+                  onChange={(e) => setFormData({...formData, email: e.target.value})}
+                  className="w-full px-4 py-2 bg-slate-800 border border-white/10 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:border-brand-orange transition-colors"
+                  placeholder="user@example.com"
+                />
+                {validationErrors.email && <p className="text-red-400 text-xs mt-1">{validationErrors.email}</p>}
+              </div>
+
+              {/* Name */}
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-2">Full Name</label>
+                <input
+                  type="text"
+                  value={formData.name}
+                  onChange={(e) => setFormData({...formData, name: e.target.value})}
+                  className="w-full px-4 py-2 bg-slate-800 border border-white/10 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:border-brand-orange transition-colors"
+                  placeholder="John Doe"
+                />
+                {validationErrors.name && <p className="text-red-400 text-xs mt-1">{validationErrors.name}</p>}
+              </div>
+
+              {/* Password */}
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-2">Password</label>
+                <input
+                  type="password"
+                  value={formData.password}
+                  onChange={(e) => setFormData({...formData, password: e.target.value})}
+                  className="w-full px-4 py-2 bg-slate-800 border border-white/10 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:border-brand-orange transition-colors"
+                  placeholder="••••••"
+                />
+                {validationErrors.password && <p className="text-red-400 text-xs mt-1">{validationErrors.password}</p>}
+              </div>
+
+              {/* Role */}
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-2">Role</label>
                 <select
-                  onChange={(e) => applyPreset(e.target.value, setEditUserPermissions)} 
-                  className="w-full bg-slate-900/50 border border-slate-600 rounded p-2 text-white"
-                  value={detectPreset(editUserPermissions)}
+                  value={formData.role}
+                  onChange={(e) => setFormData({...formData, role: e.target.value as UserRole})}
+                  className="w-full px-4 py-2 bg-slate-800 border border-white/10 rounded-lg text-white focus:outline-none focus:border-brand-orange transition-colors"
                 >
-                  <option value="custom">Custom Configuration</option>
-                  <option value="sales">Sales Agent</option>
-                  <option value="production">Production User</option>
-                  <option value="clock_only">Clock In/Out Only</option>
+                  <option value={UserRole.USER}>User</option>
+                  <option value={UserRole.ADMIN}>Admin</option>
                 </select>
               </div>
 
-              <div className="grid grid-cols-2 gap-4 bg-slate-900/30 p-6 rounded-lg">
-                {Object.keys(emptyPermissions).map((key) => (
-                  <label key={key} className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={editUserPermissions[key as keyof UserPermissions]}
-                      onChange={(e) => setEditUserPermissions(prev => ({ ...prev, [key]: e.target.checked }))}
-                      className="rounded bg-slate-800 border-slate-600 text-blue-600"
-                    />
-                    <span className="text-sm text-slate-300 capitalize">{key.replace(/_/g, ' ')}</span>
-                  </label>
-                ))}
+              {/* Permissions Presets */}
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-3">Permission Preset</label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => applyPreset('sales')}
+                    className="px-3 py-2 bg-slate-800 border border-white/10 hover:border-brand-orange rounded-lg text-sm text-slate-300 hover:text-white transition-colors"
+                  >
+                    Sales
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => applyPreset('production')}
+                    className="px-3 py-2 bg-slate-800 border border-white/10 hover:border-brand-orange rounded-lg text-sm text-slate-300 hover:text-white transition-colors"
+                  >
+                    Production
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => applyPreset('clock_only')}
+                    className="px-3 py-2 bg-slate-800 border border-white/10 hover:border-brand-orange rounded-lg text-sm text-slate-300 hover:text-white transition-colors"
+                  >
+                    Clock Only
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => applyPreset('admin')}
+                    className="px-3 py-2 bg-slate-800 border border-white/10 hover:border-brand-orange rounded-lg text-sm text-slate-300 hover:text-white transition-colors"
+                  >
+                    Admin
+                  </button>
+                </div>
               </div>
-              <div className="flex justify-end gap-3 pt-6 border-t border-slate-700">
-                <button type="button" onClick={closeAllModals} className="px-4 py-2 text-slate-300">
+
+              {/* Permissions Grid */}
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-3">Permissions</label>
+                <div className="grid grid-cols-1 gap-2 max-h-48 overflow-y-auto p-3 bg-slate-800/30 rounded-lg border border-white/5">
+                  {Object.entries(PERMISSION_LABELS).map(([key, label]) => (
+                    <label key={key} className="flex items-center gap-3 cursor-pointer hover:bg-white/5 p-2 rounded transition-colors">
+                      <input
+                        type="checkbox"
+                        checked={formData.permissions[key as keyof UserPermissions]}
+                        onChange={(e) => setFormData(prev => ({
+                          ...prev,
+                          permissions: {
+                            ...prev.permissions,
+                            [key]: e.target.checked,
+                          },
+                        }))}
+                        className="w-4 h-4 rounded bg-slate-700 border-white/20 text-brand-orange focus:ring-brand-orange cursor-pointer"
+                      />
+                      <span className="text-sm text-slate-300">{label}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              {/* Buttons */}
+              <div className="flex gap-3 pt-4">
+                <button
+                  type="button"
+                  onClick={closeAllModals}
+                  className="flex-1 px-4 py-2 bg-slate-800 border border-white/10 rounded-lg text-white hover:bg-slate-700 transition-colors"
+                >
                   Cancel
                 </button>
-                <button type="submit" disabled={editUserMutation.isPending} className="px-4 py-2 bg-indigo-600 rounded text-white">
-                  {editUserMutation.isPending ? 'Saving...' : 'Save Changes'}
-                </button>
+                <Button
+                  type="submit"
+                  disabled={createUserMutation.isPending}
+                  className="flex-1"
+                >
+                  {createUserMutation.isPending ? 'Creating...' : 'Create User'}
+                </Button>
               </div>
             </form>
           </div>
         </div>
       )}
 
-      {/* --- CHANGE PASSWORD MODAL --- */}
-      {modalMode === 'password' && selectedUser && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
-          <div className="bg-slate-800 border border-slate-700 rounded-xl shadow-2xl max-w-md w-full">
-            <div className="p-8 border-b border-slate-700 flex justify-between items-center">
-              <h3 className="text-white font-bold">Change Password</h3>
-            </div>
+      {/* Edit User Modal */}
+      {modalMode === 'edit' && selectedUser && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-slate-900/95 border border-white/10 rounded-2xl max-w-xl w-full max-h-[90vh] overflow-y-auto">
+            <form onSubmit={handleEditUser} className="p-8 space-y-6">
+              <div>
+                <h2 className="text-2xl font-bold text-white">Edit User</h2>
+                <p className="text-slate-400 text-sm mt-1">{selectedUser.email}</p>
+              </div>
 
-            <form onSubmit={handlePasswordReset} className="p-8 space-y-6">
-              <input type="text" required minLength={6} value={resetPassword} onChange={e => setResetPassword(e.target.value)} placeholder="New Password" className="w-full bg-slate-900/50 border border-slate-600 rounded p-2 text-white" />
-              <div className="flex justify-end gap-3 pt-4 border-t border-slate-700">
+              {/* Name */}
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-2">Full Name</label>
+                <input
+                  type="text"
+                  value={formData.name}
+                  onChange={(e) => setFormData({...formData, name: e.target.value})}
+                  className="w-full px-4 py-2 bg-slate-800 border border-white/10 rounded-lg text-white focus:outline-none focus:border-brand-orange transition-colors"
+                />
+              </div>
+
+              {/* Role */}
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-2">Role</label>
+                <select
+                  value={formData.role}
+                  onChange={(e) => setFormData({...formData, role: e.target.value as UserRole})}
+                  className="w-full px-4 py-2 bg-slate-800 border border-white/10 rounded-lg text-white focus:outline-none focus:border-brand-orange transition-colors"
+                >
+                  <option value={UserRole.USER}>User</option>
+                  <option value={UserRole.ADMIN}>Admin</option>
+                </select>
+              </div>
+
+              {/* Permissions Grid */}
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-3">Permissions</label>
+                <div className="grid grid-cols-1 gap-2 max-h-48 overflow-y-auto p-3 bg-slate-800/30 rounded-lg border border-white/5">
+                  {Object.entries(PERMISSION_LABELS).map(([key, label]) => (
+                    <label key={key} className="flex items-center gap-3 cursor-pointer hover:bg-white/5 p-2 rounded transition-colors">
+                      <input
+                        type="checkbox"
+                        checked={formData.permissions[key as keyof UserPermissions]}
+                        onChange={(e) => setFormData(prev => ({
+                          ...prev,
+                          permissions: {
+                            ...prev.permissions,
+                            [key]: e.target.checked,
+                          },
+                        }))}
+                        className="w-4 h-4 rounded bg-slate-700 border-white/20 text-brand-orange focus:ring-brand-orange cursor-pointer"
+                      />
+                      <span className="text-sm text-slate-300">{label}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              {/* Buttons */}
+              <div className="flex gap-3 pt-4">
                 <button
                   type="button"
                   onClick={closeAllModals}
-                  className="text-slate-300 px-4 py-2"
+                  className="flex-1 px-4 py-2 bg-slate-800 border border-white/10 rounded-lg text-white hover:bg-slate-700 transition-colors"
                 >
                   Cancel
                 </button>
-                <button
+                <Button
                   type="submit"
-                  className="bg-amber-600 text-white px-4 py-2 rounded"
+                  disabled={updateUserMutation.isPending}
+                  className="flex-1"
                 >
-                  Update
+                  {updateUserMutation.isPending ? 'Saving...' : 'Save Changes'}
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Password Reset Modal */}
+      {modalMode === 'password' && selectedUser && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-slate-900/95 border border-white/10 rounded-2xl max-w-md w-full">
+            <form onSubmit={handlePasswordReset} className="p-8 space-y-6">
+              <div>
+                <h2 className="text-2xl font-bold text-white">Reset Password</h2>
+                <p className="text-slate-400 text-sm mt-1">{selectedUser.email}</p>
+              </div>
+
+              {/* Password */}
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-2">New Password</label>
+                <input
+                  type="password"
+                  value={formData.password}
+                  onChange={(e) => setFormData({...formData, password: e.target.value})}
+                  className="w-full px-4 py-2 bg-slate-800 border border-white/10 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:border-brand-orange transition-colors"
+                  placeholder="••••••"
+                />
+                {validationErrors.password && <p className="text-red-400 text-xs mt-1">{validationErrors.password}</p>}
+              </div>
+
+              {/* Copy Button */}
+              {formData.password && (
+                <button
+                  type="button"
+                  onClick={handleCopyPassword}
+                  className="w-full px-4 py-2 bg-slate-800 border border-white/10 rounded-lg text-white hover:bg-slate-700 transition-colors flex items-center justify-center gap-2 text-sm"
+                >
+                  {passwordCopied ? (
+                    <>
+                      <CheckCircle className="w-4 h-4 text-brand-green" />
+                      Copied!
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="w-4 h-4" />
+                      Copy Password
+                    </>
+                  )}
                 </button>
+              )}
+
+              {/* Buttons */}
+              <div className="flex gap-3 pt-4">
+                <button
+                  type="button"
+                  onClick={closeAllModals}
+                  className="flex-1 px-4 py-2 bg-slate-800 border border-white/10 rounded-lg text-white hover:bg-slate-700 transition-colors"
+                >
+                  Cancel
+                </button>
+                <Button
+                  type="submit"
+                  disabled={updateUserMutation.isPending || !formData.password}
+                  className="flex-1"
+                >
+                  {updateUserMutation.isPending ? 'Saving...' : 'Reset Password'}
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* View All Permissions Modal */}
+      {modalMode === 'viewPermissions' && selectedUser && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-slate-900/95 border border-white/10 rounded-2xl max-w-md w-full max-h-[90vh] overflow-y-auto">
+            <form onSubmit={handleEditUser} className="p-8 space-y-6">
+              <div>
+                <h2 className="text-2xl font-bold text-white">All Permissions</h2>
+                <p className="text-slate-400 text-sm mt-1">{selectedUser.email}</p>
+              </div>
+
+              {/* Permissions Grid */}
+              <div className="space-y-2">
+                {Object.entries(PERMISSION_LABELS).map(([key, label]) => (
+                  <label key={key} className="flex items-center gap-3 cursor-pointer hover:bg-white/5 p-2 rounded transition-colors">
+                    <input
+                      type="checkbox"
+                      checked={formData.permissions[key as keyof UserPermissions]}
+                      onChange={(e) => setFormData(prev => ({
+                        ...prev,
+                        permissions: {
+                          ...prev.permissions,
+                          [key]: e.target.checked,
+                        },
+                      }))}
+                      className="w-4 h-4 rounded bg-slate-700 border-white/20 text-brand-orange focus:ring-brand-orange cursor-pointer"
+                    />
+                    <span className="text-sm text-slate-300">{label}</span>
+                  </label>
+                ))}
+              </div>
+
+              {/* Buttons */}
+              <div className="flex gap-3 pt-4">
+                <button
+                  type="button"
+                  onClick={closeAllModals}
+                  className="flex-1 px-4 py-2 bg-slate-800 border border-white/10 rounded-lg text-white hover:bg-slate-700 transition-colors"
+                >
+                  Cancel
+                </button>
+                <Button
+                  type="submit"
+                  disabled={updateUserMutation.isPending}
+                  className="flex-1"
+                >
+                  {updateUserMutation.isPending ? 'Saving...' : 'Save Changes'}
+                </Button>
               </div>
             </form>
           </div>

@@ -78,7 +78,7 @@ CREATE TABLE IF NOT EXISTS public.orders (
     lead_source text,
     created_at timestamptz NOT NULL DEFAULT now(),
     updated_at timestamptz NOT NULL DEFAULT now(),
-    created_by uuid DEFAULT auth.uid() REFERENCES public.user_profiles(id)
+    created_by uuid DEFAULT auth.uid() REFERENCES public.user_profiles(id) ON DELETE SET NULL
 );
 
 CREATE TABLE IF NOT EXISTS public.order_history (
@@ -505,6 +505,14 @@ FOR SELECT USING (
   OR 
   public.is_admin() = true
 );
+
+-- Add service_role policy for Edge Functions
+CREATE POLICY "service_role_full_access"
+ON public.user_profiles
+FOR ALL
+TO service_role
+USING (true)
+WITH CHECK (true);
 
 -- ✅ Orders - Admins see all, users see only their own
 CREATE POLICY "orders_select_policy" ON public.orders FOR SELECT 
