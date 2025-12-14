@@ -18,6 +18,33 @@ Deno.serve(async (req: Request) => {
     
     if (!user_id) throw new Error("User ID is required");
 
+    // ✅ SECURITY FIX: Validate permission object structure
+    const VALID_PERMISSIONS = new Set([
+      'users_manage',
+      'orders_create',
+      'orders_view_all',
+      'orders_change_status',
+      'orders_edit_financials',
+      'orders_edit_production',
+      'orders_delete',
+      'reports_view_financials',
+      'shipping_view',
+      'attendance_clock_only'
+    ]);
+
+    if (permissions && typeof permissions === 'object') {
+      for (const key of Object.keys(permissions)) {
+        if (!VALID_PERMISSIONS.has(key)) {
+          throw new Error(`Invalid permission: ${key}. Allowed: ${Array.from(VALID_PERMISSIONS).join(', ')}`);
+        }
+        if (typeof permissions[key] !== 'boolean') {
+          throw new Error(`Permission ${key} must be boolean, got ${typeof permissions[key]}`);
+        }
+      }
+    } else if (permissions) {
+      throw new Error("Permissions must be an object");
+    }
+
     // 1. Update Auth (Email/Password/Metadata)
     const authAttributes: any = {
       user_metadata: { full_name, role, permissions }

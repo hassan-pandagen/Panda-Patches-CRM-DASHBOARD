@@ -27,7 +27,7 @@ const SearchResultsPage: React.FC = () => {
   const query = searchParams.get('q') || '';
   
   const { role, permissions } = useAuth();
-  const canViewFinancials = role === UserRole.ADMIN || permissions?.view_financials;
+  const canViewFinancials = role === UserRole.ADMIN || permissions?.orders_edit_financials || permissions?.view_financials;
 
   // --- FETCH SEARCH RESULTS ---
   const { data: results = [], isLoading } = useQuery({

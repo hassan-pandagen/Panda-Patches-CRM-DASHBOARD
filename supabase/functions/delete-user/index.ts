@@ -1,10 +1,22 @@
 // supabase/functions/delete-user/index.ts
+// FIXED VERSION - Proper deletion sequence with database cleanup
+
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+};
+
+const createResponse = (body: any, status = 200) => {
+  return new Response(
+    JSON.stringify(body),
+    { 
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      status 
+    }
+  );
 };
 
 serve(async (req) => {
@@ -14,142 +26,274 @@ serve(async (req) => {
   }
 
   try {
-    console.log('=== DELETE USER FUNCTION START ===');
+    console.log('=== DELETE USER REQUEST STARTED ===');
     
-    // 1. Create Admin Client
-    const supabaseAdmin = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
-    );
-    console.log('✓ Admin client created');
+    // ==========================================
+    // LAYER 1: ENVIRONMENT VALIDATION
+    // ==========================================
+    const SUPABASE_URL = Deno.env.get('SUPABASE_URL');
+    const SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+    const ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY');
 
-    // 2. Verify Authorization Header
+    if (!SUPABASE_URL || !SERVICE_ROLE_KEY || !ANON_KEY) {
+      throw new Error('Missing required environment variables');
+    }
+
+    // ==========================================
+    // LAYER 2: AUTHENTICATION & AUTHORIZATION
+    // ==========================================
+    
     const authHeader = req.headers.get('Authorization');
     if (!authHeader) {
-      console.error('✗ No authorization header');
-      throw new Error('No authorization header');
+      return createResponse({ error: 'Missing authorization header' }, 401);
     }
-    console.log('✓ Authorization header present');
 
-    // 3. Get Calling User
-    const supabaseClient = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_ANON_KEY') ?? '',
-      { global: { headers: { Authorization: authHeader } } }
-    );
+    // Create client with user's token
+    const supabaseClient = createClient(SUPABASE_URL, ANON_KEY, {
+      global: { headers: { Authorization: authHeader } },
+      auth: { persistSession: false }
+    });
 
+    // Verify the user is authenticated
     const { data: { user }, error: authError } = await supabaseClient.auth.getUser();
     
-    if (authError) {
-      console.error('✗ Auth error:', authError.message);
-      throw new Error(`Authentication failed: ${authError.message}`);
+    if (authError || !user) {
+      console.error('Authentication failed:', authError?.message);
+      return createResponse({ 
+        error: 'Authentication failed',
+        details: authError?.message 
+      }, 401);
     }
-    
-    if (!user) {
-      console.error('✗ No user found');
-      throw new Error('User not authenticated');
-    }
-    
-    console.log('✓ Calling user authenticated:', user.email);
 
-    // 4. Check Admin Role or Manage Users Permission
-    console.log('Fetching user profile with ID:', user.id);
+    console.log('✓ User authenticated:', user.email);
+
+    // Create admin client
+    const supabaseAdmin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
+      auth: { autoRefreshToken: false, persistSession: false }
+    });
+
+    // Check if user has ADMIN role
     const { data: profile, error: profileError } = await supabaseAdmin
       .from('user_profiles')
-      .select('role, permissions')
+      .select('role, email')
       .eq('id', user.id)
       .single();
 
     if (profileError) {
-      console.error('✗ Profile fetch error:', profileError);
-      console.error('Profile error message:', profileError.message);
-      console.error('Profile error code:', profileError.code);
-      throw new Error(`Failed to fetch user profile: ${profileError.message}`);
+      console.error('Failed to verify permissions:', profileError);
+      return createResponse({ 
+        error: 'Failed to verify permissions',
+        details: profileError.message 
+      }, 500);
     }
 
-    if (!profile) {
-      console.error('✗ No profile data returned');
-      throw new Error('No profile data returned for user');
+    if (profile?.role !== 'ADMIN') {
+      console.error('Permission denied for user:', profile?.email);
+      return createResponse({ 
+        error: 'Insufficient permissions',
+        required: 'ADMIN',
+        current: profile?.role || 'UNKNOWN'
+      }, 403);
     }
 
-    console.log('✓ User profile fetched. Role:', profile.role);
-    console.log('✓ Permissions:', profile.permissions);
+    console.log('✓ Permissions verified: ADMIN');
 
-    // Allow if ADMIN role OR has users_manage permission
-    const isAdmin = profile.role === 'ADMIN';
-    const canManageUsers = profile.permissions?.users_manage === true;
+    // ==========================================
+    // LAYER 3: REQUEST VALIDATION
+    // ==========================================
     
-    if (!isAdmin && !canManageUsers) {
-      console.error('✗ Insufficient permissions. User role:', profile.role, 'can_manage:', canManageUsers);
-      return new Response(
-        JSON.stringify({ error: 'Insufficient permissions. Admin role or users_manage permission required.' }), 
-        { 
-          status: 403, 
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
-        }
-      );
+    let body;
+    try {
+      body = await req.json();
+    } catch (e) {
+      return createResponse({ error: 'Invalid JSON in request body' }, 400);
     }
-    
-    console.log('✓ Permissions verified (Admin:', isAdmin, 'or Manage Users:', canManageUsers, ')');
 
-    // 5. Parse Request Body
-    const body = await req.json();
-    console.log('✓ Request body:', body);
-    
     const { user_id } = body;
     
     if (!user_id) {
-      console.error('✗ Missing user_id in body');
-      throw new Error("Missing 'user_id' in request body");
+      return createResponse({ 
+        error: 'Missing required field',
+        field: 'user_id'
+      }, 400);
     }
-    
-    console.log('✓ Target user_id:', user_id);
 
-    // 6. Delete User from auth.users (cascades to user_profiles and related tables)
-    console.log('Attempting to delete user from auth...');
+    // Validate UUID format
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!uuidRegex.test(user_id)) {
+      return createResponse({ 
+        error: 'Invalid user_id format',
+        expected: 'UUID',
+        received: user_id
+      }, 400);
+    }
+
+    // Prevent self-deletion
+    if (user_id === user.id) {
+      return createResponse({ 
+        error: 'Cannot delete your own account'
+      }, 400);
+    }
+
+    console.log('✓ Request validated. Target user ID:', user_id);
+
+    // ==========================================
+    // LAYER 4: FETCH USER DETAILS FIRST
+    // ==========================================
+    
+    const { data: targetUser, error: fetchError } = await supabaseAdmin
+      .from('user_profiles')
+      .select('email, role')
+      .eq('id', user_id)
+      .single();
+
+    if (fetchError || !targetUser) {
+      console.error('User not found:', user_id);
+      return createResponse({ 
+        error: 'User not found',
+        user_id: user_id
+      }, 404);
+    }
+
+    console.log('✓ Target user found:', targetUser.email);
+
+    // ==========================================
+    // LAYER 5: DATABASE CLEANUP (CRITICAL FIX)
+    // ==========================================
+    
+    // Step 1: Delete related records that might block deletion
+    console.log('→ Cleaning up related records...');
+
+    // Delete order history (if any orders exist for this user)
+    const { error: historyError } = await supabaseAdmin
+      .from('order_history')
+      .delete()
+      .eq('user_email', targetUser.email);
+    
+    if (historyError) {
+      console.warn('Warning: Could not delete order history:', historyError.message);
+    }
+
+    // Delete order communications
+    const { error: commError } = await supabaseAdmin
+      .from('order_communications')
+      .delete()
+      .eq('user_email', targetUser.email);
+    
+    if (commError) {
+      console.warn('Warning: Could not delete communications:', commError.message);
+    }
+
+    // Delete performance metrics
+    const { error: metricsError } = await supabaseAdmin
+      .from('performance_metrics')
+      .delete()
+      .eq('user_id', user_id);
+    
+    if (metricsError) {
+      console.warn('Warning: Could not delete performance metrics:', metricsError.message);
+    }
+
+    // Delete attendance sessions
+    const { error: attendanceError } = await supabaseAdmin
+      .from('attendance_sessions')
+      .delete()
+      .eq('user_id', user_id);
+    
+    if (attendanceError) {
+      console.warn('Warning: Could not delete attendance sessions:', attendanceError.message);
+    }
+
+    // Delete attendance summary
+    const { error: summaryError } = await supabaseAdmin
+      .from('attendance_summary')
+      .delete()
+      .eq('user_id', user_id);
+    
+    if (summaryError) {
+      console.warn('Warning: Could not delete attendance summary:', summaryError.message);
+    }
+
+    // Update orders created by this user to set created_by to NULL
+    const { error: ordersUpdateError } = await supabaseAdmin
+      .from('orders')
+      .update({ created_by: null })
+      .eq('created_by', user_id);
+    
+    if (ordersUpdateError) {
+      console.warn('Warning: Could not update orders created_by:', ordersUpdateError.message);
+    }
+
+    // Update monthly costs added by this user
+    const { error: costsUpdateError } = await supabaseAdmin
+      .from('monthly_costs')
+      .update({ added_by: null })
+      .eq('added_by', user_id);
+    
+    if (costsUpdateError) {
+      console.warn('Warning: Could not update monthly costs:', costsUpdateError.message);
+    }
+
+    console.log('✓ Related records cleaned up');
+
+    // ==========================================
+    // LAYER 6: DELETE USER PROFILE
+    // ==========================================
+    
+    console.log('→ Deleting user profile from user_profiles...');
+    
+    const { error: profileDeleteError } = await supabaseAdmin
+      .from('user_profiles')
+      .delete()
+      .eq('id', user_id);
+
+    if (profileDeleteError) {
+      console.error('Failed to delete user profile:', profileDeleteError);
+      return createResponse({ 
+        error: 'Failed to delete user profile',
+        details: profileDeleteError.message 
+      }, 500);
+    }
+
+    console.log('✓ User profile deleted');
+
+    // ==========================================
+    // LAYER 7: DELETE AUTH USER (FINAL STEP)
+    // ==========================================
+    
+    console.log('→ Deleting user from auth.users...');
     
     const { error: deleteError } = await supabaseAdmin.auth.admin.deleteUser(user_id);
 
     if (deleteError) {
-      console.error('✗ Auth delete error:', deleteError.message);
-      throw new Error(`Failed to delete user: ${deleteError.message}`);
+      console.error('Failed to delete auth user:', deleteError);
+      return createResponse({ 
+        error: 'Failed to delete user from authentication',
+        details: deleteError.message 
+      }, 500);
     }
 
-    console.log('✓ User successfully deleted');
-    console.log('=== DELETE USER FUNCTION END ===');
+    console.log('✓ Auth user deleted successfully');
+    console.log('=== DELETE USER COMPLETED ===');
 
-    return new Response(
-      JSON.stringify({ 
-        message: "User successfully deleted",
-        details: "User account and all associated data have been removed"
-      }),
-      { 
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        status: 200 
-      }
-    );
+    // Success response
+    return createResponse({ 
+      success: true,
+      message: 'User deleted successfully',
+      deleted_user_email: targetUser.email,
+      deleted_user_id: user_id
+    }, 200);
 
   } catch (error: any) {
-    console.error('=== FUNCTION ERROR ===');
-    console.error('Error:', error.message);
-    console.error('Stack:', error.stack);
-    console.error('Full error:', error);
+    console.error('=== UNEXPECTED ERROR ===');
+    console.error('Error type:', error.name);
+    console.error('Error message:', error.message);
+    console.error('Error stack:', error.stack);
     
-    // Determine appropriate status code
-    let statusCode = 400;
-    if (error.message?.includes('Insufficient permissions') || error.message?.includes('Admin role required')) {
-      statusCode = 403;
-    }
-    
-    return new Response(
-      JSON.stringify({ 
-        error: error.message || 'Internal Server Error',
-        details: error.stack 
-      }),
-      { 
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        status: statusCode
-      }
-    );
+    return createResponse({ 
+      error: 'Internal server error',
+      message: error.message,
+      type: error.name
+    }, 500);
   }
 });

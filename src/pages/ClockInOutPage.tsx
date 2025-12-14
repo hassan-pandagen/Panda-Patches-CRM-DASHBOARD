@@ -385,6 +385,105 @@ const ClockInOutPage: React.FC = () => {
           </motion.div>
         )}
 
+        {/* ✅ ADD THIS: Active Session Warning Banner */}
+        {activeSession && (
+          <motion.div
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="p-6 bg-blue-500/10 border border-blue-500/30 rounded-xl"
+          >
+            <div className="flex items-start gap-4">
+              <div className="flex-shrink-0">
+                <Clock className="w-6 h-6 text-blue-400" />
+              </div>
+              <div className="flex-1">
+                <h3 className="text-lg font-semibold text-blue-400 mb-2">
+                  Active Session in Progress
+                </h3>
+                <div className="space-y-2 text-sm text-slate-300">
+                  <p>
+                    <span className="font-semibold">Work Date:</span>{' '}
+                    {format(parseISO(activeSession.work_date), 'EEEE, MMMM dd, yyyy')}
+                  </p>
+                  <p>
+                    <span className="font-semibold">Clocked In:</span>{' '}
+                    {format(parseISO(activeSession.clock_in_time), 'h:mm:ss a')}
+                  </p>
+                  <p>
+                    <span className="font-semibold">Hours Active:</span>{' '}
+                    {(() => {
+                      const hours = (currentTime.getTime() - new Date(activeSession.clock_in_time).getTime()) / (60 * 60 * 1000);
+                      return `${hours.toFixed(2)}h`;
+                    })()}
+                  </p>
+                  
+                  {/* Warning for long sessions */}
+                  {(() => {
+                    const hoursActive = (currentTime.getTime() - new Date(activeSession.clock_in_time).getTime()) / (60 * 60 * 1000);
+                    if (hoursActive > 12) {
+                      return (
+                        <div className="mt-3 p-3 bg-yellow-500/10 border border-yellow-500/30 rounded-lg">
+                          <p className="text-yellow-400 font-semibold flex items-center gap-2">
+                            <AlertCircle className="w-4 h-4" />
+                            You've been clocked in for over 12 hours. Don't forget to clock out!
+                          </p>
+                        </div>
+                      );
+                    }
+                    return null;
+                  })()}
+                </div>
+              </div>
+            </div>
+          </motion.div>
+        )}
+
+        {/* ✅ ADD THIS: Shift Information Panel */}
+        <motion.div
+          variants={cardVariants}
+          initial="hidden"
+          animate="visible"
+          className="bg-slate-900/40 backdrop-blur-xl border border-white/10 rounded-2xl p-6"
+        >
+          <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+            <Clock className="w-5 h-5 text-brand-orange" />
+            Shift Information
+          </h3>
+          
+          <div className="space-y-3 text-sm">
+            <div className="flex justify-between items-center p-3 bg-slate-800/30 rounded-lg">
+              <span className="text-slate-400">Current Work Date:</span>
+              <span className="text-white font-semibold">
+                {(() => {
+                  const now = new Date();
+                  const currentHour = now.getHours();
+                  const workDateObj = new Date(now);
+                  
+                  if (currentHour < SHIFT_CONFIG.SHIFT_CUTOFF_HOUR) {
+                    workDateObj.setDate(workDateObj.getDate() - 1);
+                  }
+                  
+                  return format(workDateObj, 'EEEE, MMM dd');
+                })()}
+              </span>
+            </div>
+            
+            <div className="flex justify-between items-center p-3 bg-slate-800/30 rounded-lg">
+              <span className="text-slate-400">Shift Cutoff Time:</span>
+              <span className="text-white font-semibold">
+                {SHIFT_CONFIG.SHIFT_CUTOFF_HOUR}:00 AM
+              </span>
+            </div>
+            
+            <div className="p-3 bg-blue-500/5 border border-blue-500/20 rounded-lg">
+              <p className="text-xs text-blue-400">
+                <strong>Note:</strong> Clock-ins before {SHIFT_CONFIG.SHIFT_CUTOFF_HOUR}:00 AM 
+                count as the previous day's shift.
+              </p>
+            </div>
+          </div>
+        </motion.div>
+
         {/* CLOCK IN/OUT SECTION */}
         <motion.div
           variants={cardVariants}

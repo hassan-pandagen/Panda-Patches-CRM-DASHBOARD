@@ -12,29 +12,26 @@ const AppLayout: React.FC = () => {
       {/* --- LAYER 1: AMBIENT ALIVE BACKGROUND --- */}
       <div className="fixed inset-0 z-0 overflow-hidden pointer-events-none">
         {/* Top Left - Warm Glow (Breathing) */}
-        <motion.div 
-          animate={{ scale: [1, 1.2, 1], opacity: [0.4, 0.6, 0.4] }}
+        <motion.div
+          animate={{ scale: [1, 1.2, 1], opacity: [0.3, 0.5, 0.3] }}
           transition={{ duration: 8, repeat: Infinity, ease: "easeInOut" }}
-          className="absolute -top-[20%] -left-[10%] w-[800px] h-[800px] bg-brand-orange/15 rounded-full blur-[120px]"
+          className="absolute -top-[20%] -left-[10%] w-[800px] h-[800px] bg-brand-orange/20 rounded-full blur-[120px]"
         />
-        
+
         {/* Bottom Right - Cool Glow (Breathing) */}
-        <motion.div 
-          animate={{ scale: [1, 1.1, 1], opacity: [0.4, 0.5, 0.4] }}
+        <motion.div
+          animate={{ scale: [1, 1.1, 1], opacity: [0.3, 0.4, 0.3] }}
           transition={{
             duration: 10,
             repeat: Infinity,
             ease: "easeInOut",
             delay: 1,
           }}
-          className="absolute -bottom-[20%] -right-[10%] w-[600px] h-[600px] bg-blue-600/15 rounded-full blur-[120px]"
+          className="absolute -bottom-[20%] -right-[10%] w-[600px] h-[600px] bg-blue-600/20 rounded-full blur-[120px]"
         />
 
-        {/* Center - Ambient Light Fill */}
-        <div className="absolute top-[20%] left-[30%] w-[600px] h-[600px] bg-slate-500/5 rounded-full blur-[150px]" />
-        
-        {/* Extra: Subtle Top-Right Light for balance */}
-        <div className="fixed top-[-10%] right-[5%] w-[500px] h-[500px] bg-cyan-500/10 rounded-full blur-[120px]" />
+        {/* Center - Subtle Fill */}
+        <div className="absolute top-[20%] left-[30%] w-[600px] h-[600px] bg-purple-500/5 rounded-full blur-[150px]" />
       </div>
 
       {/* --- LAYER 2: FILM GRAIN (THE MAGIC SAUCE) --- */}
@@ -67,14 +64,9 @@ const AppLayout: React.FC = () => {
             <Outlet />
           </motion.div>
 
-          {/* Floating System Status Badge */}
-          <div className="py-8 flex justify-center">
-            <div className="flex items-center gap-2 px-4 py-1.5 bg-white/5 border border-white/10 rounded-full backdrop-blur-md shadow-lg hover:border-white/20 transition-all duration-300">
-              <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shadow-[0_0_8px_rgba(16,185,129,0.5)]" />
-              <span className="text-[10px] font-mono font-medium tracking-widest text-slate-400 uppercase">
-                Panda Patches OS <span className="text-slate-600">|</span> v2.5
-              </span>
-            </div>
+          {/* Floating Footer Credit (Optional but nice) */}
+          <div className="py-6 text-center text-xs text-slate-600 font-medium tracking-widest uppercase opacity-50 hover:opacity-100 transition-opacity">
+            Panda Patches OS v2.5
           </div>
         </main>
       </div>

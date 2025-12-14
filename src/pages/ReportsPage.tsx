@@ -699,10 +699,31 @@ type ReportType =
   | "quality";
 
 const ReportsPage: React.FC = () => {
-  const { user, role, permissions, isLoading: isAuthLoading } = useAuth();
+   const { user, role, permissions, isLoading: isAuthLoading } = useAuth();
 
-  const [searchParams, setSearchParams] = useSearchParams();
-  const [dateRange, setDateRange] = React.useState<DateRange>(getDefaultRange);
+   const [searchParams, setSearchParams] = useSearchParams();
+   
+   // Calculate default range (last 30 days like Dashboard "month" view, not just last 7 days)
+   const getDefaultReportsRange = (): DateRange => {
+     const endDate = new Date();
+     const startDate = new Date();
+     startDate.setMonth(endDate.getMonth() - 1);
+     
+     // Format dates in local timezone, not UTC
+     const formatLocalDate = (date: Date) => {
+       const year = date.getFullYear();
+       const month = String(date.getMonth() + 1).padStart(2, '0');
+       const day = String(date.getDate()).padStart(2, '0');
+       return `${year}-${month}-${day}`;
+     };
+     
+     return {
+       startDate: formatLocalDate(startDate),
+       endDate: formatLocalDate(endDate),
+     };
+   };
+   
+   const [dateRange, setDateRange] = React.useState<DateRange>(getDefaultReportsRange);
 
   // --- 1. DYNAMIC TAB GENERATION (The Clean UI Fix) ---
   const availableReports = useMemo(() => {
@@ -768,10 +789,22 @@ const ReportsPage: React.FC = () => {
     queryKey: queryKeys.orders.report(dateRange.startDate, dateRange.endDate),
     queryFn: async () => {
       if (!user) return [];
+      
+      // Account for local timezone offset (Pakistan is UTC+5)
+      const getTimezoneOffset = () => {
+        const date = new Date();
+        return date.getTimezoneOffset() * 60 * 1000; // Convert to milliseconds
+      };
+      
+      const offset = getTimezoneOffset();
+      
       const startDate = new Date(dateRange.startDate);
       startDate.setHours(0, 0, 0, 0);
+      startDate.setTime(startDate.getTime() - offset); // Adjust for timezone
+      
       const endDate = new Date(dateRange.endDate);
       endDate.setHours(23, 59, 59, 999);
+      endDate.setTime(endDate.getTime() - offset); // Adjust for timezone
 
       // 1. Query the TABLE (snake_case source)
       let query = supabase
@@ -780,14 +813,13 @@ const ReportsPage: React.FC = () => {
         .gte("created_at", startDate.toISOString()) // 2. Filter using SNAKE_CASE
         .lte("created_at", endDate.toISOString()); // 2. Filter using SNAKE_CASE
 
-      // RLS handles this, but explicit filtering is a good safeguard.
-      if (role === UserRole.USER && !permissions?.orders_view_all) {
+      // Filter by sales agent if not Admin (same logic as Dashboard)
+      if (role !== UserRole.ADMIN && user?.email) {
         query = query.eq("sales_agent", user.email);
       }
 
       const { data, error } = await query;
       if (error) throw error;
-      // 3. Map immediately (Convert to Frontend Language)
       return (data || []).map(mapDbToOrder);
     },
     enabled: !!user && !isAuthLoading && availableReports.length > 0,

@@ -94,7 +94,7 @@ export default function Dashboard() {
   // UNIFIED DATE CONTROL
   const [dateView, setDateView] = useState<
     "today" | "week" | "month" | "custom"
-  >("week");
+  >("month");
   const [customDateRange, setCustomDateRange] = useState<DateRange | null>(
     null
   );

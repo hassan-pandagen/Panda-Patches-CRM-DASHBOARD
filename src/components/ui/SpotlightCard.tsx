@@ -40,15 +40,15 @@ const SpotlightCard: React.FC<SpotlightCardProps> = ({
       onMouseEnter={handleFocus}
       onMouseLeave={handleBlur}
       onClick={onClick}
-      className={`relative rounded-2xl border border-white/5 bg-[#0B1120]/40 backdrop-blur-xl overflow-hidden shadow-xl group cursor-default ${
+      className={`relative rounded-2xl border border-white/10 bg-slate-900/40 overflow-hidden group cursor-default ${
         onClick ? "cursor-pointer" : ""
       } ${className}`}
     >
-      {/* The Moving Spotlight Gradient - Subtle Glass Reflection */}
+      {/* The Moving Spotlight Gradient */}
       <div
         className="pointer-events-none absolute -inset-px opacity-0 transition duration-300 group-hover:opacity-100"
         style={{
-          background: `radial-gradient(500px circle at ${position.x}px ${position.y}px, rgba(255, 255, 255, 0.06), transparent 40%)`,
+          background: `radial-gradient(600px circle at ${position.x}px ${position.y}px, rgba(251, 110, 29, 0.15), transparent 40%)`,
         }}
       />
 

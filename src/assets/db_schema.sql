@@ -24,6 +24,12 @@ DROP TRIGGER IF EXISTS trigger_check_production_updates ON public.orders;
 DROP FUNCTION IF EXISTS public.check_production_updates() CASCADE;
 DROP VIEW IF EXISTS public.orders_with_details;
 DROP VIEW IF EXISTS public.sales_agent_reports;
+DROP VIEW IF EXISTS public.active_attendance_sessions;
+DROP FUNCTION IF EXISTS public.auto_close_stale_sessions() CASCADE;
+DROP FUNCTION IF EXISTS public.validate_clock_in() CASCADE;
+DROP FUNCTION IF EXISTS public.get_work_date(timestamptz) CASCADE;
+DROP FUNCTION IF EXISTS public.admin_force_clock_out(uuid, uuid) CASCADE;
+DROP FUNCTION IF EXISTS public.handle_attendance_updated_at() CASCADE;
 
 -- SECTION 2: TABLES (IF NOT EXISTS - Safe)
 -- -----------------------------------------------------------------
@@ -138,6 +144,7 @@ CREATE TABLE IF NOT EXISTS public.attendance_sessions (
       ELSE 0
     END
   ) STORED,
+  updated_at timestamptz DEFAULT now(),
   work_date date NOT NULL,
   CONSTRAINT attendance_sessions_pkey PRIMARY KEY (id)
 );
@@ -171,6 +178,12 @@ CREATE TABLE IF NOT EXISTS public.performance_metrics (
     metadata jsonb
 );
 
+-- SECTION 2.1: SCHEMA MIGRATIONS / ALTERATIONS
+-- -----------------------------------------------------------------
+-- Add columns that might be missing from older schema versions.
+ALTER TABLE public.attendance_sessions 
+ADD COLUMN IF NOT EXISTS updated_at timestamptz DEFAULT now();
+
 -- SECTION 3: BUCKET SETUP
 -- -----------------------------------------------------------------
 INSERT INTO storage.buckets (id, name, public) VALUES ('order-attachments', 'order-attachments', true) ON CONFLICT (id) DO NOTHING;
@@ -195,6 +208,9 @@ CREATE INDEX IF NOT EXISTS idx_attendance_sessions_user_id ON public.attendance_
 CREATE INDEX IF NOT EXISTS idx_attendance_sessions_user_email ON public.attendance_sessions(user_email);
 CREATE INDEX IF NOT EXISTS idx_attendance_sessions_date ON public.attendance_sessions(work_date);
 CREATE INDEX IF NOT EXISTS idx_attendance_sessions_active ON public.attendance_sessions(user_id) WHERE clock_out_time IS NULL;
+-- Ensures each user can only have ONE active session (where clock_out_time is NULL)
+DROP INDEX IF EXISTS idx_attendance_one_active_session;
+CREATE UNIQUE INDEX idx_attendance_one_active_session ON public.attendance_sessions (user_id) WHERE clock_out_time IS NULL;
 CREATE INDEX IF NOT EXISTS idx_attendance_summary_user_id ON public.attendance_summary(user_id);
 CREATE INDEX IF NOT EXISTS idx_attendance_summary_month ON public.attendance_summary(month);
 CREATE INDEX IF NOT EXISTS idx_performance_metrics_user_id ON public.performance_metrics(user_id);
@@ -349,6 +365,63 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
+-- ✅ NEW: Auto-close forgotten sessions (e.g., run daily with pg_cron)
+CREATE OR REPLACE FUNCTION public.auto_close_stale_sessions()
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+BEGIN
+  -- Close sessions that are older than 24 hours and still active
+  UPDATE public.attendance_sessions
+  SET 
+    clock_out_time = clock_in_time + interval '24 hours'
+  WHERE 
+    clock_out_time IS NULL 
+    AND clock_in_time < (now() - interval '24 hours');
+END;
+$$;
+
+-- ✅ NEW: Validation trigger to prevent clock-in if already active
+CREATE OR REPLACE FUNCTION public.validate_clock_in()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+  active_count INTEGER;
+BEGIN
+  -- Check if user already has an active session
+  SELECT COUNT(*) INTO active_count
+  FROM public.attendance_sessions
+  WHERE 
+    user_id = NEW.user_id 
+    AND clock_out_time IS NULL
+    AND id != COALESCE(NEW.id, '00000000-0000-0000-0000-000000000000'::uuid);
+  
+  IF active_count > 0 THEN
+    RAISE EXCEPTION 'User already has an active clock-in session. Please clock out first.';
+  END IF;
+  
+  RETURN NEW;
+END;
+$$;
+
+-- ✅ NEW: Helper function to get current work date for shifts crossing midnight
+CREATE OR REPLACE FUNCTION public.get_work_date(clock_time timestamptz)
+RETURNS date
+LANGUAGE plpgsql
+IMMUTABLE
+AS $$
+BEGIN
+  -- If before 7 AM, count as previous day's shift
+  IF EXTRACT(HOUR FROM clock_time) < 7 THEN
+    RETURN (clock_time - interval '1 day')::date;
+  ELSE
+    RETURN clock_time::date;
+  END IF;
+END;
+$$;
 -- ✅ CRITICAL: Helper functions to prevent RLS recursion
 CREATE OR REPLACE FUNCTION public.get_user_role()
 RETURNS text LANGUAGE sql SECURITY DEFINER STABLE AS $$
@@ -412,6 +485,55 @@ BEGIN
     RETURN NEW;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- ✅ NEW: Admin function to force close a session
+CREATE OR REPLACE FUNCTION public.admin_force_clock_out(session_id uuid, admin_user_id uuid)
+RETURNS json
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+  admin_role text;
+  session_data record;
+BEGIN
+  -- Check if caller is admin
+  SELECT role INTO admin_role
+  FROM public.user_profiles
+  WHERE id = admin_user_id;
+  
+  IF admin_role != 'ADMIN' THEN
+    RAISE EXCEPTION 'Only admins can force clock out';
+  END IF;
+  
+  -- Get session details
+  SELECT * INTO session_data
+  FROM public.attendance_sessions
+  WHERE id = session_id;
+  
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Session not found';
+  END IF;
+  
+  IF session_data.clock_out_time IS NOT NULL THEN
+    RAISE EXCEPTION 'Session already closed';
+  END IF;
+  
+  -- Force clock out
+  UPDATE public.attendance_sessions SET clock_out_time = now() WHERE id = session_id;
+  
+  RETURN json_build_object(
+    'success', true,
+    'session_id', session_id,
+    'user_email', session_data.user_email,
+    'clock_out_time', now()
+  );
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.handle_attendance_updated_at()
+RETURNS TRIGGER LANGUAGE plpgsql AS $$
+BEGIN NEW.updated_at = now(); RETURN NEW; END;
+$$;
 
 GRANT SELECT ON auth.users TO postgres;
 GRANT INSERT ON public.user_profiles TO postgres;
@@ -485,10 +607,32 @@ SELECT * FROM agent_metrics LEFT JOIN agent_status_counts USING (sales_agent);
 
 ALTER VIEW public.sales_agent_reports OWNER TO postgres;
 
+-- ✅ NEW: View for active sessions (for admin monitoring)
+CREATE OR REPLACE VIEW public.active_attendance_sessions AS
+SELECT 
+  s.id,
+  s.user_id,
+  s.user_email,
+  s.user_name,
+  s.clock_in_time,
+  EXTRACT(EPOCH FROM (now() - s.clock_in_time)) / 3600 AS hours_active,
+  CASE 
+    WHEN (now() - s.clock_in_time) > interval '24 hours' THEN 'STALE'
+    WHEN (now() - s.clock_in_time) > interval '12 hours' THEN 'WARNING'
+    ELSE 'ACTIVE'
+  END AS session_status
+FROM public.attendance_sessions s
+WHERE s.clock_out_time IS NULL;
+
 -- SECTION 7: RLS & PERMISSIONS (SECURE)
 -- -----------------------------------------------------------------
+-- ⚠️ IMPORTANT: Views cannot have RLS enabled, they inherit from base tables
+-- -----------------------------------------------------------------
+
+-- Enable RLS on TABLES ONLY (not views)
 ALTER TABLE public.orders ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.order_history ENABLE ROW LEVEL SECURITY;
+
 ALTER TABLE public.user_profiles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.monthly_costs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.order_communications ENABLE ROW LEVEL SECURITY;
@@ -496,6 +640,8 @@ ALTER TABLE public.email_templates ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.attendance_summary ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.attendance_sessions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.performance_metrics ENABLE ROW LEVEL SECURITY;
+
+-- NOTE: active_attendance_sessions is a VIEW - it automatically inherits RLS policies from attendance_sessions table. No separate RLS needed.
 
 -- ✅ User Profiles - Admin can see all, users see only their own
 -- ✅ FIXED: Uses public.is_admin() to prevent recursion loops
@@ -579,11 +725,9 @@ CREATE POLICY "attendance_sessions_delete" ON public.attendance_sessions FOR DEL
 USING (public.is_admin());
 
 -- ✅ Attendance Summary - Own or admin
--- ✅ FIX: Users can see their own summary, Admins see all.
 CREATE POLICY "attendance_summary_select_final" ON public.attendance_summary FOR SELECT
 USING (auth.uid() = user_id OR public.is_admin());
 
--- ✅ FIX: Only Admins can manually insert/update. Trigger handles normal operations.
 CREATE POLICY "attendance_summary_insert_final" ON public.attendance_summary FOR INSERT
 WITH CHECK (public.is_admin());
 
@@ -599,6 +743,15 @@ WITH CHECK (true);
 
 CREATE POLICY "perf_metrics_delete" ON public.performance_metrics FOR DELETE
 USING (public.is_super_admin());
+
+-- ✅ NOTE: Views don't need RLS policies
+-- active_attendance_sessions VIEW automatically inherits security from attendance_sessions table
+-- orders_with_details VIEW automatically inherits security from orders table
+-- sales_agent_reports VIEW automatically inherits security from orders table
+
+-- Grant access to views for authenticated users
+GRANT SELECT ON public.active_attendance_sessions TO authenticated;
+GRANT SELECT ON public.sales_agent_reports TO authenticated;
 
 -- SECTION 8: TRIGGERS
 -- -----------------------------------------------------------------
@@ -619,6 +772,12 @@ CREATE TRIGGER on_auth_user_created AFTER INSERT ON auth.users FOR EACH ROW EXEC
 
 DROP TRIGGER IF EXISTS trigger_update_attendance_summary ON public.attendance_sessions;
 CREATE TRIGGER trigger_update_attendance_summary AFTER INSERT OR UPDATE OR DELETE ON public.attendance_sessions FOR EACH ROW EXECUTE FUNCTION public.recalculate_attendance_summary();
+
+DROP TRIGGER IF EXISTS trigger_validate_clock_in ON public.attendance_sessions;
+CREATE TRIGGER trigger_validate_clock_in BEFORE INSERT ON public.attendance_sessions FOR EACH ROW EXECUTE FUNCTION public.validate_clock_in();
+
+DROP TRIGGER IF EXISTS trigger_attendance_updated_at ON public.attendance_sessions;
+CREATE TRIGGER trigger_attendance_updated_at BEFORE UPDATE ON public.attendance_sessions FOR EACH ROW EXECUTE FUNCTION public.handle_attendance_updated_at();
 
 -- SECTION 9: VERIFICATION
 -- -----------------------------------------------------------------

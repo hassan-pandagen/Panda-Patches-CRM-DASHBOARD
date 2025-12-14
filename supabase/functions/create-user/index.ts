@@ -22,6 +22,33 @@ Deno.serve(async (req: Request) => {
     
     if (!email || !password) throw new Error("Email and Password are required");
 
+    // ✅ SECURITY FIX: Validate permission object structure
+    const VALID_PERMISSIONS = new Set([
+      'users_manage',
+      'orders_create',
+      'orders_view_all',
+      'orders_change_status',
+      'orders_edit_financials',
+      'orders_edit_production',
+      'orders_delete',
+      'reports_view_financials',
+      'shipping_view',
+      'attendance_clock_only'
+    ]);
+
+    if (access && typeof access === 'object') {
+      for (const key of Object.keys(access)) {
+        if (!VALID_PERMISSIONS.has(key)) {
+          throw new Error(`Invalid permission: ${key}. Allowed: ${Array.from(VALID_PERMISSIONS).join(', ')}`);
+        }
+        if (typeof access[key] !== 'boolean') {
+          throw new Error(`Permission ${key} must be boolean, got ${typeof access[key]}`);
+        }
+      }
+    } else if (access) {
+      throw new Error("Permissions must be an object");
+    }
+
     // 2. Create User with Auto-Confirm
     const { data: { user }, error: createError } = await supabaseAdmin.auth.admin.createUser({
       email: email,

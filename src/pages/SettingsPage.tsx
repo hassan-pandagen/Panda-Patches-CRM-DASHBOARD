@@ -7,6 +7,7 @@ import { useToast } from "../hooks/useToast";
 import { queryKeys } from "../constants/queryKeys";
 import FileUploadSection from "../components/orders/FileUpload";
 import Button from "../components/ui/Button";
+import GlassCard from "../components/ui/GlassCard";
 import SpotlightCard from "../components/ui/SpotlightCard";
 import { ChangePasswordForm } from "../components/settings/ChangePasswordForm";
 import Spinner from "../components/ui/Spinner";
@@ -109,13 +110,18 @@ const SettingsPage: React.FC = () => {
 
             <div className="space-y-6">
               {/* Logo Upload Section */}
-              <FileUploadSection
-                title="Company Logo"
-                bucketName="logos"
-                folderPath="public"
-                urls={logoUrl ? [logoUrl] : []}
-                onUrlsChange={handleLogoUpload}
-              />
+              <div>
+                <label className="text-sm font-medium text-slate-300 mb-4 block">
+                  Company Logo
+                </label>
+                <FileUploadSection
+                  title="Company Logo"
+                  bucketName="logos"
+                  folderPath="public"
+                  urls={logoUrl ? [logoUrl] : []}
+                  onUrlsChange={handleLogoUpload}
+                />
+              </div>
 
               {/* Current Logo Preview */}
               {logoUrl && (

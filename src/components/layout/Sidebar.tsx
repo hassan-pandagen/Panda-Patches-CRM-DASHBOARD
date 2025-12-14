@@ -105,9 +105,9 @@ const Sidebar: React.FC = () => {
   ];
 
   return (
-    <aside className="w-64 flex flex-col h-full bg-[#1e293b]/20 backdrop-blur-xl border-r border-white/5 relative">
+    <aside className="w-64 flex flex-col h-full bg-[#0B1120]/80 backdrop-blur-xl border-r border-white/5 relative">
       {/* Add a subtle top-to-bottom shine on the right border */}
-      <div className="absolute right-0 top-0 bottom-0 w-[1px] bg-gradient-to-b from-transparent via-white/10 to-transparent" />
+      <div className="absolute right-0 top-0 bottom-0 w-[1px] bg-gradient-to-b from-transparent via-white/20 to-transparent" />
 
       {/* Logo Header */}
       <div className="flex items-center justify-center h-20 flex-shrink-0 px-4">

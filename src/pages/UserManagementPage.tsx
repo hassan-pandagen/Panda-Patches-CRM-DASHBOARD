@@ -134,6 +134,7 @@ const UserManagementPage: React.FC = () => {
   // UI state
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
   const [passwordCopied, setPasswordCopied] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false); // Prevent double-clicks
 
   // ============================================
   // QUERIES & MUTATIONS
@@ -170,6 +171,7 @@ const UserManagementPage: React.FC = () => {
       );
     },
     onSuccess: (data) => {
+      setIsSubmitting(false);
       if (data.error) {
         showError('Creation Failed', data.error);
         return;
@@ -180,6 +182,7 @@ const UserManagementPage: React.FC = () => {
       closeAllModals();
     },
     onError: (error: Error) => {
+      setIsSubmitting(false);
       if (error.message !== 'Validation failed') {
         showError('Creation Failed', error.message);
       }
@@ -191,11 +194,13 @@ const UserManagementPage: React.FC = () => {
       return updateUserProfile(data.id, data.updates);
     },
     onSuccess: () => {
+      setIsSubmitting(false);
       queryClient.invalidateQueries({ queryKey: queryKeys.users.all() });
       success('User Updated', 'Changes have been saved successfully.');
       closeAllModals();
     },
     onError: (error: Error) => {
+      setIsSubmitting(false);
       showError('Update Failed', error.message);
     },
   });
@@ -203,11 +208,13 @@ const UserManagementPage: React.FC = () => {
   const deleteUserMutation = useMutation({
     mutationFn: deleteUser,
     onSuccess: () => {
+      setIsSubmitting(false);
       queryClient.invalidateQueries({ queryKey: queryKeys.users.all() });
       success('User Deleted', `${selectedUser?.email} has been removed.`);
       closeAllModals();
     },
     onError: (error: Error) => {
+      setIsSubmitting(false);
       showError('Deletion Failed', error.message);
     },
   });
@@ -276,13 +283,16 @@ const UserManagementPage: React.FC = () => {
 
   const handleCreateUser = (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSubmitting) return; // Prevent double-submit
+    setIsSubmitting(true);
     createUserMutation.mutate();
   };
 
   const handleEditUser = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedUser) return;
+    if (!selectedUser || isSubmitting) return; // Prevent double-submit
     
+    setIsSubmitting(true);
     updateUserMutation.mutate({
       id: selectedUser.id,
       updates: {
@@ -295,7 +305,7 @@ const UserManagementPage: React.FC = () => {
 
   const handlePasswordReset = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedUser) return;
+    if (!selectedUser || isSubmitting) return; // Prevent double-submit
     
     const passwordError = validatePassword(formData.password);
     if (passwordError) {
@@ -303,6 +313,7 @@ const UserManagementPage: React.FC = () => {
       return;
     }
     
+    setIsSubmitting(true);
     updateUserMutation.mutate({
       id: selectedUser.id,
       updates: { password: formData.password },

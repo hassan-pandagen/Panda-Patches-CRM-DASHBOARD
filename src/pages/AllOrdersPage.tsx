@@ -139,7 +139,7 @@ const AllOrdersPage: React.FC = () => {
   const leadSourceParam = searchParams.get('leadSource');
   const dateParam = searchParams.get('date'); 
 
-  const canViewFinancials = role === UserRole.ADMIN || permissions?.view_financials;
+  const canViewFinancials = role === UserRole.ADMIN || permissions?.orders_edit_financials || permissions?.view_financials;
 
   // --- URL AUTO-FILTER ---
   React.useEffect(() => {
