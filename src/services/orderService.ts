@@ -210,6 +210,7 @@ export const prepareEmailData = (order: Order, triggerStatus: string) => {
     patch_type: order.patchesType,
     backing: order.designBacking,
     size: order.designSize,
+    instructions: order.instructions || '',
     
     total_price: `$${(order.orderAmount || 0).toLocaleString()}`,
     amount_paid: `$${(order.amountPaid || 0).toLocaleString()}`,
@@ -226,8 +227,10 @@ export const prepareEmailData = (order: Order, triggerStatus: string) => {
 };
 
 export const triggerStatusEmail = async (order: Order, statusToCheck: string) => {
+  console.log(`📧 [Email Service] triggerStatusEmail called with status: ${statusToCheck}, customer: ${order.customerEmail}`);
   
   if (!order.customerEmail || !isValidEmail(order.customerEmail)) {
+    console.warn(`❌ [Email Service] Invalid email: ${order.customerEmail}`);
     logger.warn(`[Email Service] Skipping email trigger - invalid customer email: ${order.customerEmail}`);
     return;
   }
@@ -235,6 +238,7 @@ export const triggerStatusEmail = async (order: Order, statusToCheck: string) =>
   const emailData = prepareEmailData(order, statusToCheck);
   const requests: { to: string; template_id: string }[] = [];
 
+  console.log(`📧 [Email Service] Triggering emails for status: ${statusToCheck}`);
   logger.info(`[Email Service] Triggering emails for status: ${statusToCheck}`);
   
   switch (statusToCheck) {
@@ -272,11 +276,13 @@ export const triggerStatusEmail = async (order: Order, statusToCheck: string) =>
   }
 
   if (requests.length === 0) {
+    console.warn(`⚠️ [Email Service] No email templates configured for status: ${statusToCheck}`);
     logger.warn('[Email Service] No email templates configured for this status');
     return;
   }
 
   const validRequests = requests.filter(req => req.to && req.template_id && isValidEmail(req.to));
+  console.log(`📧 [Email Service] Prepared ${validRequests.length} email(s) to send:`, validRequests.map(r => r.to));
 
   // Send emails in parallel
   const emailPromises = validRequests.map(async (req) => {
@@ -446,10 +452,17 @@ export const updateOrderDetails = async (
     await supabase.from('order_history').insert(historyRecords);
   }
 
-  if (updates.status && updates.status !== oldOrder.status) {
-    triggerStatusEmail(newOrder, updates.status).catch(err => 
-       logger.error("⚠️ Email trigger failed (background):", err)
-    );
+  // ✅ AFTER database update and mapping, compare OLD vs NEW
+  const statusChanged = oldOrder.status !== newOrder.status;
+
+  console.log(`🔍 Status: ${oldOrder.status} → ${newOrder.status} | Changed: ${statusChanged}`);
+
+  if (statusChanged) {
+    console.log(`📧 Triggering email for status: ${newOrder.status}`);
+    triggerStatusEmail(newOrder, newOrder.status).catch(err => {
+      console.error("❌ Email failed:", err);
+      logger.error("⚠️ Email trigger failed (background):", err);
+    });
   }
 
   await queryClient.invalidateQueries({ queryKey: queryKeys.orders.report('', '') });

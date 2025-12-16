@@ -150,6 +150,7 @@ serve(async (req) => {
         body: JSON.stringify({
           personalizations: [{
               to: [{ email: to }],
+              cc: [{ email: 'hello@pandapatches.com' }],
               dynamic_template_data: processedData
           }],
           from: { email: 'hello@pandapatches.com', name: 'Panda Patches' },

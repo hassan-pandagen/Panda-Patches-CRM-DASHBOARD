@@ -9,7 +9,7 @@ import { useAuth } from "../contexts/AuthContext";
 import { useToast } from "../hooks/useToast";
 import { queryKeys } from "../constants/queryKeys";
 import { mapDbToOrder } from "../services/orderService";
-
+import { updateOrderDetails } from '../services/orderService';
 import OrderForm, { SaveData } from "../components/orders/OrderForm";
 import Spinner from "../components/ui/Spinner";
 import { ArrowLeft } from "lucide-react";
@@ -33,16 +33,16 @@ const EditOrderPage: React.FC = () => {
     queryFn: async () => {
       if (!orderNumber) throw new Error("No order number provided.");
 
-      // ✅ 1. QUERY THE RAW TABLE (Snake Case)
+      // ✅ Query base table directly (industry standard, not the view)
       const { data, error } = await supabase
-        .from("orders_with_details")
+        .from("orders")
         .select("*")
-        .eq("orderNumber", orderNumber) // ✅ FIX: Use the camelCase column name from the view
+        .eq('order_number', orderNumber)
         .single();
 
       if (error) throw error;
 
-      // ✅ 2. MAP TO CAMEL CASE (The Adapter)
+      // ✅ Map to frontend format
       return mapDbToOrder(data);
     },
     enabled: !!orderNumber,
@@ -77,15 +77,16 @@ const EditOrderPage: React.FC = () => {
 
   // Update order mutation
   const updateOrderMutation = useMutation({
-    mutationFn: async (updateData: Partial<Order>) => {
+    mutationFn: async (updateData: Partial<Order> & { [key: string]: any }) => {
       console.log('💾 Saving order with data:', updateData);
       
-      const { error } = await supabase
-        .from('orders')
-        .update(updateData)
-        .eq('id', initialOrder?.id); // ✅ FIX: Use the actual order ID (bigint)
-
-      if (error) throw error;
+      // ✅ Import and use the service function that has email trigger logic
+      return await updateOrderDetails(
+        initialOrder!.id,
+        updateData,
+        initialOrder!,
+        user?.email || 'unknown'
+      );
     },
     onSuccess: async () => {
       console.log('✅ Save successful, invalidating queries...');
@@ -119,7 +120,7 @@ const EditOrderPage: React.FC = () => {
       }, 500);
 
       setHasUnsavedChanges(false);
-      success('Order updated successfully!');
+      success('Order Updated', 'Your changes have been saved successfully.');
 
       // ✅ FIX: Navigate back to the order details page after a successful save.
       navigate(`/order/${orderNumber}`);
@@ -135,45 +136,22 @@ const EditOrderPage: React.FC = () => {
   const canEditFinancials =
     role === UserRole.ADMIN || permissions?.orders_edit_financials === true;
 
+  // ✅ Sales Agents with both permissions can edit all fields
+  const canEditAll = 
+    role === UserRole.ADMIN || 
+    (permissions?.orders_edit_production === true && 
+     permissions?.orders_edit_financials === true);
+
   // --- SAVE HANDLER ---
   const handleSave = async (data: { current: any; isNew: boolean }) => {
     console.log('📝 handleSave called with:', data);
 
     try {
-      // Convert camelCase to snake_case for database
-      const dbData = {
-        customer_name: data.current.customerName,
-        customer_email: data.current.customerEmail,
-        customer_phone: data.current.customerPhone,
-        customer_profile_url: data.current.customerProfileUrl,
-        shipping_address: data.current.shippingAddress,
-        design_name: data.current.designName,
-        patches_quantity: data.current.patchesQuantity,
-        patches_type: data.current.patchesType,
-        design_size: data.current.designSize,
-        design_backing: data.current.designBacking,
-        instructions: data.current.instructions,
-        order_amount: data.current.orderAmount,
-        amount_paid: data.current.amountPaid,
-        production_cost: data.current.productionCost,
-        shipping_cost: data.current.shippingCost,
-        marketing_cost: data.current.marketingCost, // ✅ This is the field you're changing
-        status: data.current.status,
-        is_urgent: data.current.isUrgent,
-        lead_source: data.current.leadSource,
-        shipping_carrier: data.current.shippingCarrier,
-        shipping_tracking_number: data.current.shippingTrackingNumber,
-        mockup_urls: data.current.mockupUrls,
-        production_file_urls: data.current.productionFileUrls,
-        shipping_attachment_urls: data.current.shippingAttachmentUrls,
-        customer_attachment_urls: data.current.customerAttachmentUrls,
-        reason_category: data.current.reasonCategory,
-        reason_details: data.current.reasonDetails,
-      };
-
-      console.log('🗄️ Database payload:', dbData);
+      // The `updateOrderDetails` service function expects a camelCase object.
+      const camelCaseData = data.current;
+      console.log('🗄️ Service payload (camelCase):', camelCaseData);
       
-      await updateOrderMutation.mutateAsync(dbData);
+      await updateOrderMutation.mutateAsync(camelCaseData);
     } catch (error) {
       console.error('💥 Save error:', error);
       throw error;
@@ -247,7 +225,7 @@ const EditOrderPage: React.FC = () => {
         onSave={handleSave}
         initialData={initialOrder}
         isSaving={updateOrderMutation.isPending}
-        showFinancials={canEditFinancials}
+        showFinancials={canEditAll}
         onFormChange={handleFormChange}
       />
 

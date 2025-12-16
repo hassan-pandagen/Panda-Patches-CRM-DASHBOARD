@@ -5,7 +5,7 @@ import { User, LogOut, Settings, ChevronDown } from 'lucide-react';
 import NotificationBell from '../ui/NotificationBell'; // <--- Import the new component
 
 const Header: React.FC = () => {
-  const { user, profile, signOut } = useAuth();
+  const { user, role, signOut, profile } = useAuth();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -25,8 +25,8 @@ const Header: React.FC = () => {
       <div className="flex items-center gap-4">
         
         {/* 1. USE THE NEW NOTIFICATION COMPONENT */}
-        {/* Only show for Admins or specific roles if desired */}
-        {(profile?.role === 'ADMIN' || profile?.role === 'PRODUCTION') && (
+        {/* Only show for Admins */}
+        {role === 'ADMIN' && (
             <NotificationBell />
         )}
 
