@@ -208,7 +208,7 @@ const OrderPage: React.FC = () => {
     }
   });
 
-  if (isLoading) return <div className="flex h-screen items-center justify-center"><Spinner /></div>;
+  if (isLoading) return <Spinner fullScreen message="Loading order details..." />;
   if (error || !order) return <div className="text-center py-10 text-red-400">Error loading order.</div>;
 
   return (

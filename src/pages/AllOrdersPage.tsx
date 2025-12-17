@@ -6,7 +6,7 @@ import { useSearchParams, Link, useNavigate } from 'react-router-dom';
 import { supabase } from '../services/supabaseClient';
 import { Order, OrderStatus, UserRole } from '../types';
 import { useAuth } from '../contexts/AuthContext';
-import { getStatusInfo } from '../constants';
+import { getStatusInfo } from '../constants/statusInfo';
 import { mapDbToOrder } from '../services/orderService';
 import { queryKeys } from '../constants/queryKeys';
 

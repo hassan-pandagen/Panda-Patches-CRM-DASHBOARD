@@ -99,6 +99,14 @@ export default function Dashboard() {
     null
   );
 
+  // Helper function to convert local date to YYYY-MM-DD string
+  const getLocalDateString = (date: Date): string => {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
   // Calculate the active date range
   const activeDateRange = useMemo(() => {
     if (dateView === "custom" && customDateRange) {
@@ -118,8 +126,8 @@ export default function Dashboard() {
     }
 
     return {
-      startDate: startDate.toISOString().split("T")[0],
-      endDate: endDate.toISOString().split("T")[0],
+      startDate: getLocalDateString(startDate),
+      endDate: getLocalDateString(endDate),
     };
   }, [dateView, customDateRange]);
 
@@ -148,18 +156,20 @@ export default function Dashboard() {
         throw new Error("Not authenticated");
       }
 
-      const start = new Date(
-        `${activeDateRange.startDate}T00:00:00.000Z`
-      ).toISOString();
-      const end = new Date(
-        `${activeDateRange.endDate}T23:59:59.999Z`
-      ).toISOString();
+      // Parse dates in local timezone, not UTC
+      const startParts = activeDateRange.startDate.split('-');
+      const start = new Date(parseInt(startParts[0]), parseInt(startParts[1]) - 1, parseInt(startParts[2]));
+      start.setHours(0, 0, 0, 0);
+      
+      const endParts = activeDateRange.endDate.split('-');
+      const end = new Date(parseInt(endParts[0]), parseInt(endParts[1]) - 1, parseInt(endParts[2]));
+      end.setHours(23, 59, 59, 999);
 
       let query = supabase
-        .from("orders")
-        .select("*")
-        .gte("created_at", start)
-        .lte("created_at", end);
+         .from("orders")
+         .select("*")
+         .gte("created_at", start.toISOString())
+         .lte("created_at", end.toISOString());
 
       // ✅ FIX ADDED HERE: Force filter by email if not Admin
       // This ensures sales agents ONLY see their own rows, regardless of RLS speed.

@@ -7,7 +7,7 @@ import { supabase } from '../services/supabaseClient';
 import { Order, OrderStatus, UserRole } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 import { queryKeys } from '../constants/queryKeys';
-import { getStatusInfo } from '../constants';
+import { getStatusInfo } from '../constants/statusInfo';
 import { Package, Lock, Search, ArrowRight } from 'lucide-react';
 import EmptyState from '../components/ui/EmptyState';
 import Spinner from '../components/ui/Spinner';
@@ -49,7 +49,7 @@ const SearchResultsPage: React.FC = () => {
     enabled: !!query,
   });
 
-  if (isLoading) return <div className="flex h-screen items-center justify-center"><Spinner /></div>;
+  if (isLoading) return <Spinner fullScreen message="Searching orders..." />;
 
   return (
     <div className="space-y-6 min-h-screen pb-10">

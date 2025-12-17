@@ -13,6 +13,7 @@ export const LEAD_SOURCE_OPTIONS: string[] = [
   'WhatsApp',
   'RingCentral',
   'ChatGPT',
+  'Tawk.to',
   'Referral',
   'Direct',
   'Other' // Always include an "Other" for edge cases

@@ -1,6 +1,6 @@
 import React from 'react';
 import { OrderStatus } from '../../types';
-import { getStatusInfo } from '../../constants';
+import { getStatusInfo } from '../../constants/statusInfo';
 
 interface StatusFilterProps {
   selectedStatus: string;

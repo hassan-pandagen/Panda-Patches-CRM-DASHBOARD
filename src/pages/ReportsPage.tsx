@@ -141,6 +141,33 @@ const CustomTooltip: React.FC<TooltipProps<ValueType, NameType>> = ({
 // --- 1. SALES REPORT (Visible to Admin & Sales Agent) ---
 const SalesReportComponent: React.FC<ReportComponentProps> = ({ orders }) => {
   const navigate = useNavigate();
+  const [userNames, setUserNames] = useState<Record<string, string>>({});
+
+  // Fetch user names from user_profiles
+  useEffect(() => {
+    const fetchUserNames = async () => {
+      const emails = Array.from(new Set(orders.map(o => o.salesAgent).filter(Boolean)));
+      if (emails.length === 0) return;
+
+      const { data, error } = await supabase
+        .from('user_profiles')
+        .select('email, full_name')
+        .in('email', emails);
+
+      if (error) {
+        logger.error('Error fetching user names:', error);
+        return;
+      }
+
+      const names: Record<string, string> = {};
+      (data || []).forEach(user => {
+        names[user.email] = user.full_name || user.email.split('@')[0];
+      });
+      setUserNames(names);
+    };
+
+    fetchUserNames();
+  }, [orders]);
 
   // SAFEGUARDS: If DB sends NULL (masked), treat as 0
   const totalNetRevenue = useMemo(
@@ -184,6 +211,25 @@ const SalesReportComponent: React.FC<ReportComponentProps> = ({ orders }) => {
       date,
       revenue,
     })).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+  }, [orders]);
+
+  const agentPerformance = useMemo(() => {
+    const agentData = new Map<string, { orders: number; revenue: number; collected: number }>();
+    for (const order of orders) {
+      const agent = order.salesAgent || "Unassigned";
+      if (!agentData.has(agent)) {
+        agentData.set(agent, { orders: 0, revenue: 0, collected: 0 });
+      }
+      const data = agentData.get(agent)!;
+      data.orders += 1;
+      data.revenue += order.orderAmount || 0;
+      data.collected += order.amountPaid || 0;
+    }
+    return Array.from(agentData.entries(), ([agent, data]) => ({
+      agent,
+      ...data,
+      avg: data.orders > 0 ? data.revenue / data.orders : 0,
+    })).sort((a, b) => b.revenue - a.revenue);
   }, [orders]);
 
   return (
@@ -241,6 +287,168 @@ const SalesReportComponent: React.FC<ReportComponentProps> = ({ orders }) => {
           />
         </StatCardWrapper>
       </motion.div>
+
+      <div className="group relative bg-slate-900/40 backdrop-blur-xl border border-white/10 rounded-2xl shadow-xl p-8 hover:border-white/20 transition-colors duration-300 overflow-hidden">
+        {/* Spotlight effect */}
+        <div className="absolute -top-20 -right-20 w-96 h-96 bg-brand-orange/5 rounded-full blur-3xl opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none" />
+        
+        <div className="relative z-10 flex items-center justify-between mb-6">
+          <div>
+            <h4 className="text-xl font-bold text-white flex items-center gap-2">
+              <Award className="w-5 h-5 text-brand-orange" />
+              Sales Agent Performance
+            </h4>
+            <p className="text-slate-400 text-sm mt-1">Performance metrics across all sales agents</p>
+          </div>
+        </div>
+        
+        <div className="relative z-10 overflow-x-auto">
+          <table className="w-full">
+            <thead>
+              <tr className="border-b border-white/10 bg-slate-800/50">
+                <th className="text-center py-4 px-6 font-bold text-slate-300 uppercase text-xs tracking-wider">Agent</th>
+                <th className="text-center py-4 px-6 font-bold text-slate-300 uppercase text-xs tracking-wider">
+                  <div className="flex items-center justify-center gap-1">
+                    <CheckCircle className="w-4 h-4" />
+                    Orders
+                  </div>
+                </th>
+                <th className="text-center py-4 px-6 font-bold text-slate-300 uppercase text-xs tracking-wider">
+                  <div className="flex items-center justify-center gap-1">
+                    <DollarSign className="w-4 h-4" />
+                    Revenue
+                  </div>
+                </th>
+                <th className="text-center py-4 px-6 font-bold text-slate-300 uppercase text-xs tracking-wider">
+                  <div className="flex items-center justify-center gap-1">
+                    <TrendingUp className="w-4 h-4" />
+                    Avg Order
+                  </div>
+                </th>
+                <th className="text-center py-4 px-6 font-bold text-slate-300 uppercase text-xs tracking-wider">
+                  <div className="flex items-center justify-center gap-1">
+                    <CheckCircle className="w-4 h-4" />
+                    Collected
+                  </div>
+                </th>
+                <th className="text-center py-4 px-6 font-bold text-slate-300 uppercase text-xs tracking-wider">
+                  <div className="flex items-center justify-center gap-1">
+                    <AlertCircle className="w-4 h-4" />
+                    Pending
+                  </div>
+                </th>
+                <th className="text-center py-4 px-6 font-bold text-slate-300 uppercase text-xs tracking-wider">Collection %</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-700/50">
+              {agentPerformance.length > 0 ? (
+                agentPerformance.map((agent, idx) => {
+                  const pending = agent.revenue - agent.collected;
+                  const collectionRate = agent.revenue > 0 ? (agent.collected / agent.revenue) * 100 : 0;
+                  return (
+                    <tr
+                      key={idx}
+                      className="hover:bg-white/5 transition-colors duration-200 group"
+                    >
+                      <td className="py-4 px-6 font-medium text-slate-200 group-hover:text-white transition-colors text-center">
+                        <button
+                          onClick={() => navigate(`/orders?salesAgent=${encodeURIComponent(agent.agent)}`)}
+                          className="bg-slate-700/50 hover:bg-brand-orange/20 px-3 py-2 rounded-lg text-base font-semibold transition-colors duration-200 text-brand-orange hover:text-brand-orange border border-slate-600 hover:border-brand-orange/50"
+                          title={`View orders from ${agent.agent}`}
+                        >
+                          {userNames[agent.agent] || agent.agent.split("@")[0] || agent.agent}
+                        </button>
+                      </td>
+                      <td className="py-4 px-6 text-center">
+                        <span className="inline-block bg-blue-500/20 text-blue-300 px-3 py-1.5 rounded-lg font-semibold text-sm border border-blue-500/30">
+                          {agent.orders}
+                        </span>
+                      </td>
+                      <td className="py-4 px-6 text-center">
+                        <span className="text-green-400 font-bold text-base">
+                          ${agent.revenue.toLocaleString("en-US", { maximumFractionDigits: 0 })}
+                        </span>
+                      </td>
+                      <td className="py-4 px-6 text-center text-slate-300 font-medium">
+                        ${agent.avg.toLocaleString("en-US", { maximumFractionDigits: 0 })}
+                      </td>
+                      <td className="py-4 px-6 text-center">
+                        <span className="text-emerald-400 font-bold text-base">
+                          ${agent.collected.toLocaleString("en-US", { maximumFractionDigits: 0 })}
+                        </span>
+                      </td>
+                      <td className="py-4 px-6 text-center">
+                        <span className={`font-bold text-base ${pending > 0 ? 'text-amber-400' : 'text-slate-400'}`}>
+                          ${pending.toLocaleString("en-US", { maximumFractionDigits: 0 })}
+                        </span>
+                      </td>
+                      <td className="py-4 px-6 text-center">
+                        <div className="flex items-center justify-center gap-2">
+                          <div className="w-24 bg-slate-700 rounded-full h-2 overflow-hidden">
+                            <div 
+                              className="h-full bg-gradient-to-r from-brand-orange to-orange-500 transition-all duration-300"
+                              style={{ width: `${Math.min(collectionRate, 100)}%` }}
+                            />
+                          </div>
+                          <span className="text-brand-orange font-bold text-sm min-w-[50px] text-center">
+                            {collectionRate.toFixed(0)}%
+                          </span>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
+              ) : (
+                <tr>
+                  <td colSpan={7} className="py-12 text-center text-slate-400">
+                    <AlertCircle className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                    No sales data available for this period
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        {agentPerformance.length > 0 && (
+          <div className="relative z-10 mt-6 pt-6 border-t border-slate-700/50 grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="group/stat relative bg-slate-800/30 hover:bg-slate-800/50 rounded-lg p-4 border border-slate-700/50 hover:border-brand-orange/30 transition-all duration-300 overflow-hidden">
+              <div className="absolute inset-0 bg-brand-orange/5 opacity-0 group-hover/stat:opacity-100 transition-opacity duration-300" />
+              <div className="relative z-10">
+                <p className="text-slate-400 text-xs font-semibold uppercase mb-1">Total Agents</p>
+                <p className="text-2xl font-bold text-white">{agentPerformance.length}</p>
+              </div>
+            </div>
+            <div className="group/stat relative bg-slate-800/30 hover:bg-slate-800/50 rounded-lg p-4 border border-slate-700/50 hover:border-blue-400/30 transition-all duration-300 overflow-hidden">
+              <div className="absolute inset-0 bg-blue-500/5 opacity-0 group-hover/stat:opacity-100 transition-opacity duration-300" />
+              <div className="relative z-10">
+                <p className="text-slate-400 text-xs font-semibold uppercase mb-1">Total Orders</p>
+                <p className="text-2xl font-bold text-blue-400">{agentPerformance.reduce((sum, a) => sum + a.orders, 0)}</p>
+              </div>
+            </div>
+            <div className="group/stat relative bg-slate-800/30 hover:bg-slate-800/50 rounded-lg p-4 border border-slate-700/50 hover:border-green-400/30 transition-all duration-300 overflow-hidden">
+              <div className="absolute inset-0 bg-green-500/5 opacity-0 group-hover/stat:opacity-100 transition-opacity duration-300" />
+              <div className="relative z-10">
+                <p className="text-slate-400 text-xs font-semibold uppercase mb-1">Total Revenue</p>
+                <p className="text-2xl font-bold text-green-400">
+                  ${agentPerformance.reduce((sum, a) => sum + a.revenue, 0).toLocaleString("en-US", { maximumFractionDigits: 0 })}
+                </p>
+              </div>
+            </div>
+            <div className="group/stat relative bg-slate-800/30 hover:bg-slate-800/50 rounded-lg p-4 border border-slate-700/50 hover:border-brand-orange/30 transition-all duration-300 overflow-hidden">
+              <div className="absolute inset-0 bg-brand-orange/5 opacity-0 group-hover/stat:opacity-100 transition-opacity duration-300" />
+              <div className="relative z-10">
+                <p className="text-slate-400 text-xs font-semibold uppercase mb-1">Avg Collection %</p>
+                <p className="text-2xl font-bold text-brand-orange">
+                  {agentPerformance.length > 0 
+                    ? (agentPerformance.reduce((sum, a) => sum + (a.revenue > 0 ? (a.collected / a.revenue) * 100 : 0), 0) / agentPerformance.length).toFixed(0)
+                    : 0}%
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
 
       <div className="bg-slate-900/40 backdrop-blur-xl border border-white/10 rounded-2xl p-6 shadow-xl">
         <h4 className="text-lg font-semibold text-white mb-4">
@@ -834,6 +1042,7 @@ const ReportsPage: React.FC = () => {
       { label: "Order #", key: "orderNumber" },
       { label: "Status", key: "status" },
       { label: "Customer", key: "customerName" },
+      { label: "Sales Agent", key: "salesAgent" },
     ];
 
     // Only add financial columns to CSV if they have permission
@@ -852,11 +1061,7 @@ const ReportsPage: React.FC = () => {
   }, [filteredOrders, permissions, activeReport]);
 
   if (isAuthLoading || isQueryLoading)
-    return (
-      <div className="flex h-screen items-center justify-center">
-        <Spinner />
-      </div>
-    );
+    return <Spinner fullScreen message="Preparing your reports..." />;
   if (availableReports.length === 0)
     return (
       <div className="flex h-screen items-center justify-center text-slate-500">

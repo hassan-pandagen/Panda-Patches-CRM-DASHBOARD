@@ -115,7 +115,7 @@ const SettingsPage: React.FC = () => {
                   Company Logo
                 </label>
                 <FileUploadSection
-                  title="Company Logo"
+                  title=""
                   bucketName="logos"
                   folderPath="public"
                   urls={logoUrl ? [logoUrl] : []}

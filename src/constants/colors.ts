@@ -20,5 +20,6 @@ export const SOURCE_COLORS: Record<string, string> = {
     'YouTube': '#FF0000', // Youtube Red
     'LinkedIn': '#0A66C2', // LinkedIn Blue
     'Snapchat': '#FFFC00', // Snapchat Yellow
+    'Tawk.to': '#365CC1', // Tawk.to Deep Blue
     'Other': '#94A3B8' // Slate Gray
 };
