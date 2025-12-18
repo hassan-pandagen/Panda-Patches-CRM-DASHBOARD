@@ -29,7 +29,7 @@ const EditOrderPage: React.FC = () => {
     isLoading,
     error,
   } = useQuery<Order, Error>({
-    queryKey: queryKeys.orders.single(Number(orderNumber)),
+    queryKey: queryKeys.orders.single(orderNumber), // FIX: Use the string orderNumber from the URL for the query key
     queryFn: async () => {
       if (!orderNumber) throw new Error("No order number provided.");
 
@@ -50,7 +50,7 @@ const EditOrderPage: React.FC = () => {
 
   // Fetch activity log (order history)
   const { data: activityLog } = useQuery({
-    queryKey: queryKeys.orders.history(Number(orderNumber)),
+    queryKey: queryKeys.orders.history(orderNumber), // FIX: Use the string orderNumber for consistency
     queryFn: async () => {
       const { data, error } = await supabase
         .from('order_history')
@@ -94,10 +94,10 @@ const EditOrderPage: React.FC = () => {
       // ✅ FIX 1: Invalidate all related queries
       await Promise.all([
         queryClient.invalidateQueries({ 
-          queryKey: queryKeys.orders.single(initialOrder!.id) 
+          queryKey: queryKeys.orders.single(orderNumber) 
         }),
         queryClient.invalidateQueries({ 
-          queryKey: queryKeys.orders.history(initialOrder!.id) 
+          queryKey: queryKeys.orders.history(orderNumber) 
         }),
         queryClient.invalidateQueries({ 
           queryKey: queryKeys.orders.lists() 
@@ -107,7 +107,7 @@ const EditOrderPage: React.FC = () => {
       // ✅ FIX 2: Force immediate refetch of activity log
       console.log('🔄 Force refetching activity log...');
       await queryClient.refetchQueries({ 
-        queryKey: queryKeys.orders.history(initialOrder!.id),
+        queryKey: queryKeys.orders.history(orderNumber),
         type: 'active'
       });
 
@@ -115,7 +115,7 @@ const EditOrderPage: React.FC = () => {
       setTimeout(async () => {
         console.log('🔄 Second refetch after delay...');
         await queryClient.refetchQueries({ 
-          queryKey: queryKeys.orders.history(initialOrder!.id)
+          queryKey: queryKeys.orders.history(orderNumber)
         });
       }, 500);
 
