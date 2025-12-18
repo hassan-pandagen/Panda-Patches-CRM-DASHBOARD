@@ -65,6 +65,7 @@ const OrderPage: React.FC = () => {
     const [isProcessing, setIsProcessing] = React.useState(false);
     const [productionFiles, setProductionFiles] = React.useState<string[]>([]);
     const [isEditingProduction, setIsEditingProduction] = React.useState(false);
+    const [isLabelCopied, setIsLabelCopied] = React.useState(false);
 
     // --- PERMISSION CHECKS ---
     const isAdmin = role === UserRole.ADMIN;
@@ -536,13 +537,60 @@ const OrderPage: React.FC = () => {
                                 )}
 
                             </SpotlightCard>
-                        ) : (
-                            <div className="p-8 rounded-xl border border-slate-700/50 bg-slate-800/20 flex flex-col items-center justify-center gap-3 text-slate-500 text-center">
-                                <Lock className="w-8 h-8 opacity-50" />
-                                <span className="font-medium">Production details are restricted for your role.</span>
+                            ) : (
+                             <div className="p-8 rounded-xl border border-slate-700/50 bg-slate-800/20 flex flex-col items-center justify-center gap-3 text-slate-500 text-center">
+                                 <Lock className="w-8 h-8 opacity-50" />
+                                 <span className="font-medium">Production details are restricted for your role.</span>
+                             </div>
+                            )}
+
+                            {/* SHIPPING LABEL SECTION */}
+                            <SpotlightCard className="p-6">
+                                 <div className="flex items-center justify-between mb-6">
+                                     <h3 className="text-lg font-semibold text-white">Shipping Label</h3>
+                                     <button
+                                         onClick={() => {
+                                             const labelText = `CUSTOMER NAME: ${order.customerName || '-'}\nPHONE: ${order.customerPhone || '-'}\nQUANTITY: ${order.patchesQuantity || '0'} pcs\nPATCH TYPE: ${order.patchesType || '-'}\n\nSHIPPING ADDRESS:\n${order.shippingAddress || 'No address provided'}`;
+                                              navigator.clipboard.writeText(labelText);
+                                              setIsLabelCopied(true);
+                                              setTimeout(() => setIsLabelCopied(false), 2000);
+                                          }}
+                                          className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                                              isLabelCopied
+                                                  ? 'bg-green-600/20 text-green-400 border border-green-500/30'
+                                                  : 'bg-blue-600/20 hover:bg-blue-600/30 text-blue-400 border border-blue-500/30'
+                                          }`}
+                                      >
+                                          {isLabelCopied ? '✓ Ready to Paste!' : 'Copy Label'}
+                                      </button>
+                                 </div>
+                                 
+                                 <div className="bg-slate-800/30 border border-slate-700/50 rounded-lg p-6 select-all">
+                                     <div className="space-y-4 font-mono text-sm text-white">
+                                         <div>
+                                             <p className="text-xs text-slate-400 font-bold uppercase">CUSTOMER NAME</p>
+                                             <p className="text-white">{order.customerName || '-'}</p>
+                                         </div>
+                                         <div>
+                                             <p className="text-xs text-slate-400 font-bold uppercase">PHONE</p>
+                                             <p className="text-white">{order.customerPhone || '-'}</p>
+                                         </div>
+                                         <div>
+                                             <p className="text-xs text-slate-400 font-bold uppercase">QUANTITY</p>
+                                             <p className="text-white">{order.patchesQuantity || '0'} pcs</p>
+                                         </div>
+                                         <div>
+                                             <p className="text-xs text-slate-400 font-bold uppercase">PATCH TYPE</p>
+                                             <p className="text-white">{order.patchesType || '-'}</p>
+                                         </div>
+                                         <div className="pt-4 border-t border-slate-700/50">
+                                             <p className="text-xs text-slate-400 font-bold uppercase mb-2">SHIPPING ADDRESS</p>
+                                             <p className="text-white whitespace-pre-wrap">{order.shippingAddress || 'No address provided'}</p>
+                                         </div>
+                                     </div>
+                                 </div>
+                            </SpotlightCard>
                             </div>
-                        )}
-                    </div>
 
                     {/* --- RIGHT COLUMN --- */}
                     <div className="lg:col-span-1 space-y-6">
