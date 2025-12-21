@@ -88,6 +88,42 @@ initializeSupabaseClient(queryClient);
 offlineManager.registerServiceWorker();
 (window as any).offlineManager = offlineManager;
 
+// ✅ Register Service Worker for deployment cache busting
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/service-worker.js')
+      .then((registration) => {
+        console.log('✅ Service Worker registered:', registration);
+        
+        // Check for updates periodically
+        setInterval(() => {
+          registration.update();
+        }, 60000); // Check every 60 seconds
+        
+        // Listen for new version
+        registration.addEventListener('updatefound', () => {
+          const newWorker = registration.installing;
+          if (newWorker) {
+            newWorker.addEventListener('statechange', () => {
+              if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                // Show update notification
+                console.log('🔄 New version available - prompting user');
+                const message = 'New version available! Reload to get the latest updates.';
+                if (confirm(message)) {
+                  newWorker.postMessage({ type: 'SKIP_WAITING' });
+                  window.location.reload();
+                }
+              }
+            });
+          }
+        });
+      })
+      .catch((error) => {
+        console.warn('⚠️ Service Worker registration failed:', error);
+      });
+  });
+}
+
 const router = createBrowserRouter([{ path: '*', element: <App /> }]);
 
 const rootElement = document.getElementById('root');

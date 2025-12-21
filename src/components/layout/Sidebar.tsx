@@ -3,6 +3,7 @@ import { NavLink, useLocation } from "react-router-dom";
 import {
   LayoutDashboard,
   Package,
+  FileText,
   BarChart3,
   Settings,
   Users,
@@ -145,6 +146,15 @@ const Sidebar: React.FC = () => {
             to="/new-order"
             label="New Order"
             icon={<PlusCircle className="w-5 h-5" />}
+          />
+        )}
+
+        {/* Quotes: Permission Based */}
+        {permissions?.orders_create && (
+          <SidebarItem
+            to="/quotes"
+            label="Quotes"
+            icon={<FileText className="w-5 h-5" />}
           />
         )}
 

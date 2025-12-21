@@ -75,7 +75,7 @@ serve(async (req) => {
       throw new Error('SendGrid API key not configured in Supabase secrets');
     }
 
-    const { to, template_id, dynamic_data } = await req.json();
+    const { to, cc, template_id, dynamic_data } = await req.json();
     const attachments = [];
 
     // Deep copy data so we can modify it for the template
@@ -150,7 +150,7 @@ serve(async (req) => {
         body: JSON.stringify({
           personalizations: [{
               to: [{ email: to }],
-              cc: [{ email: 'hello@pandapatches.com' }],
+              cc: cc ? [{ email: 'hello@pandapatches.com' }, { email: cc }] : [{ email: 'hello@pandapatches.com' }],
               dynamic_template_data: processedData
           }],
           from: { email: 'hello@pandapatches.com', name: 'Panda Patches' },

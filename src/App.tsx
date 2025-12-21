@@ -7,6 +7,9 @@ import LazyLoadingFallback from '@/components/LazyLoadingFallback';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import OfflineIndicator from '@/components/OfflineIndicator';
 
+// Hooks
+import { useSupabaseRealtime } from '@/hooks/useSupabaseRealtime';
+
 // Critical Pages (Eager)
 import Dashboard from '@/pages/Dashboard';
 import LoginPage from '@/pages/LoginPage';
@@ -16,6 +19,9 @@ const AllOrdersPage = lazy(() => import('@/pages/AllOrdersPage'));
 const NewOrderPage = lazy(() => import('@/pages/NewOrderPage'));
 const EditOrderPage = lazy(() => import('@/pages/EditOrderPage'));
 const OrderPage = lazy(() => import('@/pages/OrderPage'));
+const QuotesPage = lazy(() => import('@/pages/QuotesPage'));
+const QuoteDetailPage = lazy(() => import('@/pages/QuoteDetailPage'));
+const NewQuotePage = lazy(() => import('@/pages/NewQuotePage'));
 const ReportsPage = lazy(() => import('@/pages/ReportsPage'));
 const SettingsPage = lazy(() => import('@/pages/SettingsPage'));
 const SearchResultsPage = lazy(() => import('@/pages/SearchResultsPage'));
@@ -29,6 +35,9 @@ import ProtectedRoute from './ProtectedRoute';
 import AdminRoute from './AdminRoute';
 
 const App: React.FC = () => {
+  // ✅ Enable Supabase Realtime for live data updates
+  useSupabaseRealtime();
+
   return (
     <>
       {/* ✅ NO PROVIDERS HERE - They are all in main.tsx */}
@@ -51,6 +60,9 @@ const App: React.FC = () => {
               <Route path="/new-order" element={<NewOrderPage />} />
               <Route path="/order/:orderNumber" element={<OrderPage />} />
               <Route path="/order/:orderNumber/edit" element={<EditOrderPage />} />
+              <Route path="/quotes" element={<QuotesPage />} />
+              <Route path="/quote/:quoteNumber" element={<QuoteDetailPage />} />
+              <Route path="/new-quote" element={<NewQuotePage />} />
               <Route path="/reports" element={<ReportsPage />} />
               <Route path="/customers/:identifier" element={<CustomerHistoryPage />} />
               <Route path="/settings" element={<SettingsPage />} />

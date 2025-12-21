@@ -80,6 +80,12 @@ const PRODUCTION_MANAGER_EMAILS = [
   'pandaproductionoffice@gmail.com'
 ];
 
+// ✅ PVC Vendor Email (separate routing)
+const PVC_VENDOR_EMAIL = 'arsalan.ali.khan.85@gmail.com';
+
+// ✅ Design Team CC (for internal emails only)
+const DESIGN_TEAM_CC = 'design@pandapatches.com';
+
 
 const getFileName = (url: string): string => {
   try {
@@ -92,6 +98,16 @@ const getFileName = (url: string): string => {
 const isValidEmail = (email: string): boolean => {
   if (!email || typeof email !== 'string') return false;
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
+};
+
+// ✅ Get internal team emails based on patch type
+const getInternalEmails = (patchType?: string): string[] => {
+  // PVC orders go only to Arsalan (vendor)
+  if (patchType?.toLowerCase() === 'pvc') {
+    return [PVC_VENDOR_EMAIL];
+  }
+  // All other patch types go to production team
+  return PRODUCTION_MANAGER_EMAILS;
 };
 
 export const mapDbToOrder = (data: any): Order => {
@@ -236,42 +252,48 @@ export const triggerStatusEmail = async (order: Order, statusToCheck: string) =>
   }
 
   const emailData = prepareEmailData(order, statusToCheck);
-  const requests: { to: string; template_id: string }[] = [];
+  const requests: { to: string; template_id: string; isInternal: boolean; cc?: string }[] = [];
 
   console.log(`📧 [Email Service] Triggering emails for status: ${statusToCheck}`);
   logger.info(`[Email Service] Triggering emails for status: ${statusToCheck}`);
   
+  // ✅ Get the right email recipients based on patch type
+  const internalEmails = getInternalEmails(order.patchesType);
+  // ✅ Generate unique thread ID for internal emails per order
+  const internalThreadId = `order-${order.id}-internal@pandapatches.com`;
+
   switch (statusToCheck) {
     case OrderStatus.NEW_ORDER:
-      if (SENDGRID_TEMPLATES.CUSTOMER_NEW_ORDER) requests.push({ to: order.customerEmail, template_id: SENDGRID_TEMPLATES.CUSTOMER_NEW_ORDER });
-      if (SENDGRID_TEMPLATES.INTERNAL_NEW_ORDER) PRODUCTION_MANAGER_EMAILS.forEach(email => requests.push({ to: email, template_id: SENDGRID_TEMPLATES.INTERNAL_NEW_ORDER }));
+      if (SENDGRID_TEMPLATES.CUSTOMER_NEW_ORDER) requests.push({ to: order.customerEmail, template_id: SENDGRID_TEMPLATES.CUSTOMER_NEW_ORDER, isInternal: false });
+      if (SENDGRID_TEMPLATES.INTERNAL_NEW_ORDER) internalEmails.forEach(email => requests.push({ to: email, template_id: SENDGRID_TEMPLATES.INTERNAL_NEW_ORDER, isInternal: true, cc: DESIGN_TEAM_CC }));
       break;
     case OrderStatus.AWAITING_APPROVAL:
-      if (SENDGRID_TEMPLATES.CUSTOMER_MOCKUP_READY) requests.push({ to: order.customerEmail, template_id: SENDGRID_TEMPLATES.CUSTOMER_MOCKUP_READY });
+      if (SENDGRID_TEMPLATES.CUSTOMER_MOCKUP_READY) requests.push({ to: order.customerEmail, template_id: SENDGRID_TEMPLATES.CUSTOMER_MOCKUP_READY, isInternal: false });
+      if (SENDGRID_TEMPLATES.INTERNAL_REVISION_REQUESTED) internalEmails.forEach(email => requests.push({ to: email, template_id: SENDGRID_TEMPLATES.INTERNAL_REVISION_REQUESTED, isInternal: true, cc: DESIGN_TEAM_CC }));
       break;
     case OrderStatus.REVISION_REQUESTED:
-      if (SENDGRID_TEMPLATES.CUSTOMER_REVISION_IN_PROGRESS) requests.push({ to: order.customerEmail, template_id: SENDGRID_TEMPLATES.CUSTOMER_REVISION_IN_PROGRESS });
-      if (SENDGRID_TEMPLATES.INTERNAL_REVISION_REQUESTED) PRODUCTION_MANAGER_EMAILS.forEach(email => requests.push({ to: email, template_id: SENDGRID_TEMPLATES.INTERNAL_REVISION_REQUESTED }));
+      if (SENDGRID_TEMPLATES.CUSTOMER_REVISION_IN_PROGRESS) requests.push({ to: order.customerEmail, template_id: SENDGRID_TEMPLATES.CUSTOMER_REVISION_IN_PROGRESS, isInternal: false });
+      if (SENDGRID_TEMPLATES.INTERNAL_REVISION_REQUESTED) internalEmails.forEach(email => requests.push({ to: email, template_id: SENDGRID_TEMPLATES.INTERNAL_REVISION_REQUESTED, isInternal: true, cc: DESIGN_TEAM_CC }));
       break;
     case OrderStatus.IN_PRODUCTION:
     case OrderStatus.APPROVED:
-      if (SENDGRID_TEMPLATES.CUSTOMER_PRODUCTION_START) requests.push({ to: order.customerEmail, template_id: SENDGRID_TEMPLATES.CUSTOMER_PRODUCTION_START });
-      if (SENDGRID_TEMPLATES.INTERNAL_PRODUCTION_START) PRODUCTION_MANAGER_EMAILS.forEach(email => requests.push({ to: email, template_id: SENDGRID_TEMPLATES.INTERNAL_PRODUCTION_START }));
+      if (SENDGRID_TEMPLATES.CUSTOMER_PRODUCTION_START) requests.push({ to: order.customerEmail, template_id: SENDGRID_TEMPLATES.CUSTOMER_PRODUCTION_START, isInternal: false });
+      if (SENDGRID_TEMPLATES.INTERNAL_PRODUCTION_START) internalEmails.forEach(email => requests.push({ to: email, template_id: SENDGRID_TEMPLATES.INTERNAL_PRODUCTION_START, isInternal: true, cc: DESIGN_TEAM_CC }));
       break;
     case OrderStatus.QUALITY_ASSURANCE:
-      if (SENDGRID_TEMPLATES.INTERNAL_QUALITY_ASSURANCE) requests.push({ to: order.customerEmail, template_id: SENDGRID_TEMPLATES.INTERNAL_QUALITY_ASSURANCE });
+      if (SENDGRID_TEMPLATES.INTERNAL_QUALITY_ASSURANCE) requests.push({ to: order.customerEmail, template_id: SENDGRID_TEMPLATES.INTERNAL_QUALITY_ASSURANCE, isInternal: false });
       break;
     case OrderStatus.SHIPPED:
-      if (SENDGRID_TEMPLATES.CUSTOMER_SHIPPED) requests.push({ to: order.customerEmail, template_id: SENDGRID_TEMPLATES.CUSTOMER_SHIPPED });
+      if (SENDGRID_TEMPLATES.CUSTOMER_SHIPPED) requests.push({ to: order.customerEmail, template_id: SENDGRID_TEMPLATES.CUSTOMER_SHIPPED, isInternal: false });
       break;
     case OrderStatus.DELIVERED:
-      if (SENDGRID_TEMPLATES.CUSTOMER_DELIVERED) requests.push({ to: order.customerEmail, template_id: SENDGRID_TEMPLATES.CUSTOMER_DELIVERED });
+      if (SENDGRID_TEMPLATES.CUSTOMER_DELIVERED) requests.push({ to: order.customerEmail, template_id: SENDGRID_TEMPLATES.CUSTOMER_DELIVERED, isInternal: false });
       break;
     case OrderStatus.FEEDBACK:
-      if (SENDGRID_TEMPLATES.CUSTOMER_FEEDBACK) requests.push({ to: order.customerEmail, template_id: SENDGRID_TEMPLATES.CUSTOMER_FEEDBACK });
+      if (SENDGRID_TEMPLATES.CUSTOMER_FEEDBACK) requests.push({ to: order.customerEmail, template_id: SENDGRID_TEMPLATES.CUSTOMER_FEEDBACK, isInternal: false });
       break;
     case OrderStatus.REFUNDED:
-      if (SENDGRID_TEMPLATES.CUSTOMER_REFUNDED) requests.push({ to: order.customerEmail, template_id: SENDGRID_TEMPLATES.CUSTOMER_REFUNDED });
+      if (SENDGRID_TEMPLATES.CUSTOMER_REFUNDED) requests.push({ to: order.customerEmail, template_id: SENDGRID_TEMPLATES.CUSTOMER_REFUNDED, isInternal: false });
       break;
   }
 
@@ -287,8 +309,28 @@ export const triggerStatusEmail = async (order: Order, statusToCheck: string) =>
   // Send emails in parallel
   const emailPromises = validRequests.map(async (req) => {
     try {
+      const emailPayload: any = {
+        to: req.to,
+        template_id: req.template_id,
+        dynamic_data: emailData
+      };
+
+      // ✅ Add CC for internal emails only
+      if (req.isInternal && req.cc) {
+        emailPayload.cc = req.cc;
+      }
+
+      // ✅ Add email threading headers for internal emails only
+      if (req.isInternal) {
+        emailPayload.headers = {
+          'Message-ID': `<${internalThreadId}-${Date.now()}@pandapatches.com>`,
+          'In-Reply-To': `<${internalThreadId}@pandapatches.com>`,
+          'References': `<${internalThreadId}@pandapatches.com>`
+        };
+      }
+
       const response = await supabase.functions.invoke('send-email', {
-        body: { to: req.to, template_id: req.template_id, dynamic_data: emailData }
+        body: emailPayload
       });
       
       console.log('[Email Service] Function response:', response);

@@ -87,15 +87,39 @@
       created_by uuid DEFAULT auth.uid() REFERENCES public.user_profiles(id) ON DELETE SET NULL
   );
 
+  CREATE TABLE IF NOT EXISTS public.quotes (
+       id bigint PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
+       quote_number text UNIQUE NOT NULL,
+       customer_name text NOT NULL,
+       customer_email text,
+       customer_phone text,
+       customer_profile_url text,
+       design_name text,
+       patches_quantity integer DEFAULT 0,
+       patches_type text,
+       design_size text,
+       design_backing text,
+       instructions text,
+       estimated_amount numeric(10,2),
+       notes text,
+       mockup_urls text[],
+       customer_attachment_urls text[],
+       sales_agent text NOT NULL,
+       lead_source text,
+       created_at timestamptz NOT NULL DEFAULT now(),
+       updated_at timestamptz NOT NULL DEFAULT now(),
+       created_by uuid DEFAULT auth.uid() REFERENCES public.user_profiles(id) ON DELETE SET NULL
+   );
+
   CREATE TABLE IF NOT EXISTS public.order_history (
-      id bigint PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
-      order_id bigint NOT NULL REFERENCES public.orders(id) ON DELETE CASCADE,
-      user_email text NOT NULL,
-      field_changed text NOT NULL,
-      old_value text,
-      new_value text,
-      changed_at timestamptz NOT NULL DEFAULT now()
-  );
+       id bigint PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
+       order_id bigint NOT NULL REFERENCES public.orders(id) ON DELETE CASCADE,
+       user_email text NOT NULL,
+       field_changed text NOT NULL,
+       old_value text,
+       new_value text,
+       changed_at timestamptz NOT NULL DEFAULT now()
+   );
 
   CREATE TABLE IF NOT EXISTS public.monthly_costs (
       id bigint PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
@@ -188,19 +212,93 @@
   -- -----------------------------------------------------------------
   INSERT INTO storage.buckets (id, name, public) VALUES ('order-attachments', 'order-attachments', true) ON CONFLICT (id) DO NOTHING;
   INSERT INTO storage.buckets (id, name, public) VALUES ('production-files', 'production-files', true) ON CONFLICT (id) DO NOTHING;
-  INSERT INTO storage.buckets (id, name, public) VALUES ('logos', 'logos', true) ON CONFLICT (id) DO NOTHING;
+  INSERT INTO storage.buckets (id, name, public) VALUES ('quote-mockups', 'quote-mockups', true) ON CONFLICT (id) DO NOTHING;
 
   UPDATE storage.buckets SET allowed_mime_types = NULL, public = true, file_size_limit = 52428800 WHERE id = 'order-attachments';
   UPDATE storage.buckets SET allowed_mime_types = NULL, public = true, file_size_limit = 52428800 WHERE id = 'production-files';
-  UPDATE storage.buckets SET allowed_mime_types = NULL, public = true, file_size_limit = 52428800 WHERE id = 'logos';
+  UPDATE storage.buckets SET allowed_mime_types = NULL, public = true, file_size_limit = 52428800 WHERE id = 'quote-mockups';
+
+  -- SECTION 3.1: STORAGE POLICIES
+  -- -----------------------------------------------------------------
+  -- Drop existing storage policies first
+  DO $$
+  DECLARE
+      r RECORD;
+  BEGIN
+      FOR r IN (SELECT policyname FROM pg_policies WHERE schemaname = 'storage' AND tablename = 'objects')
+      LOOP
+          EXECUTE format('DROP POLICY IF EXISTS %I ON storage.objects', r.policyname);
+      END LOOP;
+  END $$;
+
+  -- Allow authenticated users to upload to buckets
+  CREATE POLICY "allow_authenticated_upload_order_attachments"
+  ON storage.objects
+  FOR INSERT
+  TO authenticated
+  WITH CHECK (bucket_id = 'order-attachments');
+
+  CREATE POLICY "allow_authenticated_upload_production_files"
+  ON storage.objects
+  FOR INSERT
+  TO authenticated
+  WITH CHECK (bucket_id = 'production-files');
+
+  CREATE POLICY "allow_authenticated_upload_quote_mockups"
+  ON storage.objects
+  FOR INSERT
+  TO authenticated
+  WITH CHECK (bucket_id = 'quote-mockups');
+
+  -- Allow public read from all buckets
+  CREATE POLICY "allow_public_read_order_attachments"
+  ON storage.objects
+  FOR SELECT
+  TO public
+  USING (bucket_id = 'order-attachments');
+
+  CREATE POLICY "allow_public_read_production_files"
+  ON storage.objects
+  FOR SELECT
+  TO public
+  USING (bucket_id = 'production-files');
+
+  CREATE POLICY "allow_public_read_quote_mockups"
+  ON storage.objects
+  FOR SELECT
+  TO public
+  USING (bucket_id = 'quote-mockups');
+
+  -- Allow authenticated users to delete
+  CREATE POLICY "allow_authenticated_delete_order_attachments"
+  ON storage.objects
+  FOR DELETE
+  TO authenticated
+  USING (bucket_id = 'order-attachments');
+
+  CREATE POLICY "allow_authenticated_delete_production_files"
+  ON storage.objects
+  FOR DELETE
+  TO authenticated
+  USING (bucket_id = 'production-files');
+
+  CREATE POLICY "allow_authenticated_delete_quote_mockups"
+  ON storage.objects
+  FOR DELETE
+  TO authenticated
+  USING (bucket_id = 'quote-mockups');
 
   -- SECTION 4: INDEXES
-  -- -----------------------------------------------------------------
-  CREATE INDEX IF NOT EXISTS idx_orders_status ON public.orders(status text_ops);
-  CREATE INDEX IF NOT EXISTS idx_orders_customer_email ON public.orders(customer_email text_ops);
-  CREATE INDEX IF NOT EXISTS idx_orders_sales_agent ON public.orders(sales_agent text_ops);
-  CREATE INDEX IF NOT EXISTS idx_orders_customer_phone ON public.orders(customer_phone text_ops);
-  CREATE INDEX IF NOT EXISTS idx_orders_created_at ON public.orders(created_at timestamptz_ops);
+   -- -----------------------------------------------------------------
+   CREATE INDEX IF NOT EXISTS idx_orders_status ON public.orders(status text_ops);
+   CREATE INDEX IF NOT EXISTS idx_orders_customer_email ON public.orders(customer_email text_ops);
+   CREATE INDEX IF NOT EXISTS idx_orders_sales_agent ON public.orders(sales_agent text_ops);
+   CREATE INDEX IF NOT EXISTS idx_orders_customer_phone ON public.orders(customer_phone text_ops);
+   CREATE INDEX IF NOT EXISTS idx_orders_created_at ON public.orders(created_at timestamptz_ops);
+   CREATE INDEX IF NOT EXISTS idx_quotes_quote_number ON public.quotes(quote_number);
+   CREATE INDEX IF NOT EXISTS idx_quotes_customer_email ON public.quotes(customer_email text_ops);
+   CREATE INDEX IF NOT EXISTS idx_quotes_sales_agent ON public.quotes(sales_agent text_ops);
+   CREATE INDEX IF NOT EXISTS idx_quotes_created_at ON public.quotes(created_at timestamptz_ops);
   CREATE INDEX IF NOT EXISTS idx_order_history_order_id ON public.order_history(order_id);
   CREATE INDEX IF NOT EXISTS idx_order_history_order_user ON public.order_history(order_id, user_email);
   CREATE INDEX IF NOT EXISTS idx_order_communications_order_id ON public.order_communications(order_id);
@@ -218,11 +316,20 @@
   -- SECTION 5: FUNCTIONS & TRIGGERS
   -- -----------------------------------------------------------------
   CREATE SEQUENCE IF NOT EXISTS public.order_number_seq START 10001;
+  CREATE SEQUENCE IF NOT EXISTS public.quote_number_seq START 1;
 
   CREATE OR REPLACE FUNCTION public.generate_order_number()
   RETURNS TRIGGER AS $$
   BEGIN
       NEW.order_number = 'PP-' || nextval('public.order_number_seq');
+      RETURN NEW;
+  END;
+  $$ LANGUAGE plpgsql SECURITY DEFINER;
+
+  CREATE OR REPLACE FUNCTION public.generate_quote_number()
+  RETURNS TRIGGER AS $$
+  BEGIN
+      NEW.quote_number = 'QT-' || LPAD(nextval('public.quote_number_seq')::text, 5, '0');
       RETURN NEW;
   END;
   $$ LANGUAGE plpgsql SECURITY DEFINER;
@@ -635,10 +742,11 @@
   -- -----------------------------------------------------------------
 
   -- Enable RLS on TABLES ONLY (not views)
-  ALTER TABLE public.orders ENABLE ROW LEVEL SECURITY;
-  ALTER TABLE public.order_history ENABLE ROW LEVEL SECURITY;
+   ALTER TABLE public.orders ENABLE ROW LEVEL SECURITY;
+   ALTER TABLE public.quotes ENABLE ROW LEVEL SECURITY;
+   ALTER TABLE public.order_history ENABLE ROW LEVEL SECURITY;
 
-  ALTER TABLE public.user_profiles ENABLE ROW LEVEL SECURITY;
+   ALTER TABLE public.user_profiles ENABLE ROW LEVEL SECURITY;
   ALTER TABLE public.monthly_costs ENABLE ROW LEVEL SECURITY;
   ALTER TABLE public.order_communications ENABLE ROW LEVEL SECURITY;
   ALTER TABLE public.email_templates ENABLE ROW LEVEL SECURITY;
@@ -681,6 +789,30 @@
 
   CREATE POLICY "orders_delete_policy" ON public.orders FOR DELETE
   USING (public.is_admin());
+
+  -- ✅ Quotes - Admin sees all, users see only their own
+  CREATE POLICY "quotes_select_policy" ON public.quotes FOR SELECT 
+  USING (
+      public.is_admin() 
+      OR public.has_permission('orders_view_all') 
+      OR sales_agent = public.get_user_email()
+  );
+
+  CREATE POLICY "quotes_insert_policy" ON public.quotes FOR INSERT 
+  WITH CHECK (public.has_permission('orders_create'));
+
+  CREATE POLICY "service_role_quotes_full_access"
+  ON public.quotes
+  FOR ALL
+  TO service_role
+  USING (true)
+  WITH CHECK (true);
+
+  CREATE POLICY "quotes_update_policy" ON public.quotes FOR UPDATE 
+  USING (public.is_admin() OR sales_agent = public.get_user_email());
+
+  CREATE POLICY "quotes_delete_policy" ON public.quotes FOR DELETE
+  USING (public.is_admin() OR sales_agent = public.get_user_email());
 
   -- ✅ Order History
   CREATE POLICY "order_history_select" ON public.order_history FOR SELECT 
@@ -762,6 +894,9 @@
   -- -----------------------------------------------------------------
   DROP TRIGGER IF EXISTS trigger_generate_order_number ON public.orders;
   CREATE TRIGGER trigger_generate_order_number BEFORE INSERT ON public.orders FOR EACH ROW EXECUTE FUNCTION public.generate_order_number();
+
+  DROP TRIGGER IF EXISTS trigger_generate_quote_number ON public.quotes;
+  CREATE TRIGGER trigger_generate_quote_number BEFORE INSERT ON public.quotes FOR EACH ROW EXECUTE FUNCTION public.generate_quote_number();
 
   DROP TRIGGER IF EXISTS trigger_handle_updated_at ON public.orders;
   CREATE TRIGGER trigger_handle_updated_at BEFORE UPDATE ON public.orders FOR EACH ROW EXECUTE FUNCTION public.handle_updated_at();

@@ -70,4 +70,12 @@ export const queryKeys = {
   customer: {
     history: (customerId: string) => ['customer', 'history', customerId] as const,
   },
+
+  // All keys related to quotes
+  quotes: {
+    all: () => ['quotes'] as const,
+    lists: () => [...queryKeys.quotes.all(), 'list'] as const,
+    details: () => [...queryKeys.quotes.all(), 'single'] as const,
+    single: (quoteNumber: string) => [...queryKeys.quotes.details(), quoteNumber] as const,
+  },
 };

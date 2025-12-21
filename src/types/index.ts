@@ -154,13 +154,48 @@ export interface AttendanceSession {
 }
 
 export interface OrderSummary {
-  id: number;
-  orderNumber: string;
-  customerName: string;
-  status: string;
-  createdAt: string;
-  isUrgent?: boolean;
-  salesAgent?: string;
-  orderAmount?: number;
-  amountRemaining?: number;
+   id: number;
+   orderNumber: string;
+   customerName: string;
+   status: string;
+   createdAt: string;
+   isUrgent?: boolean;
+   salesAgent?: string;
+   orderAmount?: number;
+   amountRemaining?: number;
+}
+
+// --- QUOTE TYPE ---
+export interface Quote {
+   // --- Core Quote Details ---
+   id: number;
+   quoteNumber: string;
+   createdAt: string;
+   updatedAt: string;
+   
+   // --- Customer Information ---
+   customerName: string;
+   customerEmail: string;
+   customerPhone?: string;
+   customerProfileUrl?: string;
+
+   // --- Design & Production Details ---
+   designName?: string;
+   patchesQuantity?: number;
+   patchesType?: string;
+   designSize?: string;
+   designBacking?: string;
+   instructions?: string;
+
+   // --- Financials ---
+   estimatedAmount?: number;
+
+   // --- Personnel & Sourcing ---
+   salesAgent: string;
+   leadSource?: string;
+
+   // --- Notes & Attachments ---
+   notes?: string;
+   mockupUrls?: string[];
+   customerAttachmentUrls?: string[];
 }
