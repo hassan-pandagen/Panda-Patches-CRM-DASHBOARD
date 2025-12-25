@@ -33,6 +33,7 @@ export enum Permissions {
   USERS_MANAGE = 'users_manage',
   ORDERS_CREATE = 'orders_create',
   ORDERS_VIEW_ALL = 'orders_view_all',
+  ORDERS_VIEW_OWN_ONLY = 'orders_view_own_only',
   ORDERS_CHANGE_STATUS = 'orders_change_status',
   ORDERS_EDIT_FINANCIALS = 'orders_edit_financials',
   ORDERS_EDIT_PRODUCTION = 'orders_edit_production',
@@ -102,6 +103,7 @@ export type UserPermissions = {
   users_manage?: boolean;
   orders_create?: boolean;
   orders_view_all?: boolean;
+  orders_view_own_only?: boolean;
   orders_change_status?: boolean;
   orders_edit_financials?: boolean;
   orders_edit_production?: boolean;

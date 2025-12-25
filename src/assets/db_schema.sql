@@ -925,3 +925,25 @@
   SELECT routine_name FROM information_schema.routines 
   WHERE routine_schema = 'public' 
   AND routine_name IN ('get_user_role', 'get_user_email', 'is_admin', 'is_super_admin', 'has_permission');
+
+  -- SECTION 10: DATA MIGRATION - Add orders_view_own_only Permission
+  -- -----------------------------------------------------------------
+  -- Migration for: Sales Agent Order Scoping Feature
+  -- Purpose: Add new permission to scope sales agents to see only their own orders
+  -- Safe to run multiple times - uses jsonb_set with conditional checks
+  
+  UPDATE user_profiles
+  SET permissions = jsonb_set(
+    permissions,
+    '{orders_view_own_only}',
+    'true'::jsonb
+  )
+  WHERE role != 'ADMIN'
+    AND (permissions->>'orders_view_own_only' IS NULL OR permissions->>'orders_view_own_only' = 'false');
+
+  -- Verify migration completed
+  SELECT 
+    'Migration: orders_view_own_only permission added' as migration_status,
+    COUNT(*) as non_admin_users_updated
+  FROM user_profiles 
+  WHERE role != 'ADMIN' AND permissions->>'orders_view_own_only' = 'true';

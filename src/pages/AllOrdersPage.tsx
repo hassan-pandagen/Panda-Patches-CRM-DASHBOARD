@@ -6,7 +6,7 @@ import { useSearchParams, Link, useNavigate } from 'react-router-dom';
 import { supabase } from '../services/supabaseClient';
 import { Order, OrderStatus, UserRole } from '../types';
 import { useAuth } from '../contexts/AuthContext';
-import { getStatusInfo } from '../constants/statusInfo';
+import { getStatusInfo } from '../constants';
 import { mapDbToOrder } from '../services/orderService';
 import { queryKeys } from '../constants/queryKeys';
 
@@ -76,14 +76,6 @@ const AllOrdersPage: React.FC = () => {
 
     const canViewFinancials = role === UserRole.ADMIN || permissions?.orders_edit_financials || permissions?.view_financials;
 
-    // --- DEFAULT FILTER BASED ON USER ROLE ---
-    React.useEffect(() => {
-        // If production user (non-admin) and no filter is set, default to IN_PRODUCTION
-        if (role !== UserRole.ADMIN && permissions?.orders_edit_production && activeFilter === 'ALL') {
-            setActiveFilter('IN_PRODUCTION');
-        }
-    }, [role, permissions]);
-
     // --- URL AUTO-FILTER ---
     React.useEffect(() => {
         const filterParam = searchParams.get('filter');
@@ -102,7 +94,7 @@ const AllOrdersPage: React.FC = () => {
             // Reduces data transfer by ~60% per order
             const { data, error } = await supabase
                 .from('orders')
-                .select('id, order_number, customer_name, customer_email, design_name, status, created_at, sales_agent, order_amount, is_urgent, is_urgent_approved')
+                .select('id, order_number, customer_name, customer_email, design_name, status, created_at, sales_agent, order_amount')
                 .order('created_at', { ascending: false });
 
             if (error) throw new Error(error.message);
@@ -155,8 +147,8 @@ const AllOrdersPage: React.FC = () => {
         } else if (activeFilter === 'PAYMENT_PENDING') {
             filtered = filtered.filter(o => o.amountRemaining > 0.01 && o.status !== 'CANCELLED' && o.status !== 'REFUNDED');
         } else if (activeFilter === 'URGENT') {
-            // ✅ Show urgent orders that are still active (not shipped, delivered, or completed)
-            filtered = filtered.filter(o => o.isUrgent === true && !['SHIPPED', 'DELIVERED', 'COMPLETED'].includes(o.status) && !isOrderOverdue(o));
+            // ✅ Show urgent orders that are still active (not shipped, delivered, completed, or cancelled)
+            filtered = filtered.filter(o => o.isUrgent === true && !['SHIPPED', 'DELIVERED', 'COMPLETED', 'CANCELLED', 'REFUNDED'].includes(o.status) && !isOrderOverdue(o));
         } else if (searchParams.get('ids')) {
             const idList = searchParams.get('ids')!.split(',');
             filtered = filtered.filter(order => idList.includes(order.orderNumber));
@@ -192,7 +184,7 @@ const AllOrdersPage: React.FC = () => {
     );
 
     // --- COUNTS FOR TABS ---
-    const urgentCount = orders.filter(o => o.isUrgent && !['SHIPPED', 'DELIVERED', 'COMPLETED'].includes(o.status) && !isOrderOverdue(o)).length; // Only count active urgent orders
+    const urgentCount = orders.filter(o => o.isUrgent && !['SHIPPED', 'DELIVERED', 'COMPLETED', 'CANCELLED', 'REFUNDED'].includes(o.status) && !isOrderOverdue(o)).length;
     const getCount = (status: string) => orders.filter(o => o.status === status).length;
 
     const clearDrillDown = () => {
@@ -271,59 +263,25 @@ const AllOrdersPage: React.FC = () => {
                     />
                 </div>
 
-                {/* FILTER TABS - Admin sees all, Production users (non-admin) see limited filters */}
+                {/* EXPANDED FILTER TABS */}
                 <div className="flex items-center gap-2 overflow-x-auto pb-2 no-scrollbar">
-                    {role === UserRole.ADMIN ? (
-                        <>
-                            {/* ADMIN: All filters */}
-                            <FilterTab active={activeFilter === 'ALL'} label="All Orders" count={orders.length} onClick={() => setActiveFilter('ALL')} />
-                            <FilterTab active={activeFilter === 'URGENT'} label="Urgent" count={urgentCount} onClick={() => setActiveFilter('URGENT')} isUrgent={true} />
-                            <FilterTab active={activeFilter === 'OVERDUE'} label="Overdue" count={overdueCount} onClick={() => setActiveFilter('OVERDUE')} isUrgent={true} />
+                    <FilterTab active={activeFilter === 'ALL'} label="All Orders" count={orders.length} onClick={() => setActiveFilter('ALL')} />
+                    <FilterTab active={activeFilter === 'URGENT'} label="Urgent" count={urgentCount} onClick={() => setActiveFilter('URGENT')} isUrgent={true} />
+                    <FilterTab active={activeFilter === 'OVERDUE'} label="Overdue" count={overdueCount} onClick={() => setActiveFilter('OVERDUE')} isUrgent={true} />
 
-                            <div className="w-px h-6 bg-slate-600 mx-2 shrink-0" />
+                    <div className="w-px h-6 bg-slate-600 mx-2 shrink-0" />
 
-                            <FilterTab active={activeFilter === 'NEW_ORDER'} label="New" count={getCount('NEW_ORDER')} onClick={() => setActiveFilter('NEW_ORDER')} />
-                            <FilterTab active={activeFilter === 'AWAITING_CUSTOMER_APPROVAL'} label="Awaiting Approval" count={getCount('AWAITING_CUSTOMER_APPROVAL')} onClick={() => setActiveFilter('AWAITING_CUSTOMER_APPROVAL')} />
-                            <FilterTab active={activeFilter === 'IN_PRODUCTION'} label="In Production" count={getCount('IN_PRODUCTION')} onClick={() => setActiveFilter('IN_PRODUCTION')} />
-                            <FilterTab active={activeFilter === 'REVISION_REQUESTED'} label="Revision" count={getCount('REVISION_REQUESTED')} onClick={() => setActiveFilter('REVISION_REQUESTED')} />
+                    <FilterTab active={activeFilter === 'NEW_ORDER'} label="New" count={getCount('NEW_ORDER')} onClick={() => setActiveFilter('NEW_ORDER')} />
+                    <FilterTab active={activeFilter === 'AWAITING_CUSTOMER_APPROVAL'} label="Awaiting Approval" count={getCount('AWAITING_CUSTOMER_APPROVAL')} onClick={() => setActiveFilter('AWAITING_CUSTOMER_APPROVAL')} />
+                    <FilterTab active={activeFilter === 'IN_PRODUCTION'} label="In Production" count={getCount('IN_PRODUCTION')} onClick={() => setActiveFilter('IN_PRODUCTION')} />
+                    <FilterTab active={activeFilter === 'REVISION_REQUESTED'} label="Revision" count={getCount('REVISION_REQUESTED')} onClick={() => setActiveFilter('REVISION_REQUESTED')} />
 
-                            <div className="w-px h-6 bg-slate-600 mx-2 shrink-0" />
+                    <div className="w-px h-6 bg-slate-600 mx-2 shrink-0" />
 
-                            <FilterTab active={activeFilter === 'SHIPPED'} label="Shipped" count={getCount('SHIPPED')} onClick={() => setActiveFilter('SHIPPED')} />
-                            <FilterTab active={activeFilter === 'DELIVERED'} label="Delivered" count={getCount('DELIVERED')} onClick={() => setActiveFilter('DELIVERED')} />
-                            <FilterTab active={activeFilter === 'QUALITY_ASSURANCE'} label="Quality Assurance" count={getCount('QUALITY_ASSURANCE')} onClick={() => setActiveFilter('QUALITY_ASSURANCE')} />
-                            <FilterTab active={activeFilter === 'CANCELLED'} label="Cancelled" count={getCount('CANCELLED')} onClick={() => setActiveFilter('CANCELLED')} />
-                        </>
-                    ) : permissions?.orders_edit_production ? (
-                        <>
-                            {/* PRODUCTION USERS: Limited filters only (no All Orders - they can search instead) */}
-                            <FilterTab active={activeFilter === 'URGENT'} label="Urgent" count={urgentCount} onClick={() => setActiveFilter('URGENT')} isUrgent={true} />
-                            <FilterTab active={activeFilter === 'OVERDUE'} label="Overdue" count={overdueCount} onClick={() => setActiveFilter('OVERDUE')} isUrgent={true} />
-                            <FilterTab active={activeFilter === 'NEW_ORDER'} label="New" count={getCount('NEW_ORDER')} onClick={() => setActiveFilter('NEW_ORDER')} />
-                            <FilterTab active={activeFilter === 'IN_PRODUCTION'} label="In Production" count={getCount('IN_PRODUCTION')} onClick={() => setActiveFilter('IN_PRODUCTION')} />
-                        </>
-                    ) : (
-                        <>
-                            {/* SALES AGENTS: All filters (same as admin) */}
-                            <FilterTab active={activeFilter === 'ALL'} label="All Orders" count={orders.length} onClick={() => setActiveFilter('ALL')} />
-                            <FilterTab active={activeFilter === 'URGENT'} label="Urgent" count={urgentCount} onClick={() => setActiveFilter('URGENT')} isUrgent={true} />
-                            <FilterTab active={activeFilter === 'OVERDUE'} label="Overdue" count={overdueCount} onClick={() => setActiveFilter('OVERDUE')} isUrgent={true} />
-
-                            <div className="w-px h-6 bg-slate-600 mx-2 shrink-0" />
-
-                            <FilterTab active={activeFilter === 'NEW_ORDER'} label="New" count={getCount('NEW_ORDER')} onClick={() => setActiveFilter('NEW_ORDER')} />
-                            <FilterTab active={activeFilter === 'AWAITING_CUSTOMER_APPROVAL'} label="Awaiting Approval" count={getCount('AWAITING_CUSTOMER_APPROVAL')} onClick={() => setActiveFilter('AWAITING_CUSTOMER_APPROVAL')} />
-                            <FilterTab active={activeFilter === 'IN_PRODUCTION'} label="In Production" count={getCount('IN_PRODUCTION')} onClick={() => setActiveFilter('IN_PRODUCTION')} />
-                            <FilterTab active={activeFilter === 'REVISION_REQUESTED'} label="Revision" count={getCount('REVISION_REQUESTED')} onClick={() => setActiveFilter('REVISION_REQUESTED')} />
-
-                            <div className="w-px h-6 bg-slate-600 mx-2 shrink-0" />
-
-                            <FilterTab active={activeFilter === 'SHIPPED'} label="Shipped" count={getCount('SHIPPED')} onClick={() => setActiveFilter('SHIPPED')} />
-                            <FilterTab active={activeFilter === 'DELIVERED'} label="Delivered" count={getCount('DELIVERED')} onClick={() => setActiveFilter('DELIVERED')} />
-                            <FilterTab active={activeFilter === 'QUALITY_ASSURANCE'} label="Quality Assurance" count={getCount('QUALITY_ASSURANCE')} onClick={() => setActiveFilter('QUALITY_ASSURANCE')} />
-                            <FilterTab active={activeFilter === 'CANCELLED'} label="Cancelled" count={getCount('CANCELLED')} onClick={() => setActiveFilter('CANCELLED')} />
-                        </>
-                    )}
+                    <FilterTab active={activeFilter === 'SHIPPED'} label="Shipped" count={getCount('SHIPPED')} onClick={() => setActiveFilter('SHIPPED')} />
+                    <FilterTab active={activeFilter === 'DELIVERED'} label="Delivered" count={getCount('DELIVERED')} onClick={() => setActiveFilter('DELIVERED')} />
+                    <FilterTab active={activeFilter === 'QUALITY_ASSURANCE'} label="Quality Assurance" count={getCount('QUALITY_ASSURANCE')} onClick={() => setActiveFilter('QUALITY_ASSURANCE')} />
+                    <FilterTab active={activeFilter === 'CANCELLED'} label="Cancelled" count={getCount('CANCELLED')} onClick={() => setActiveFilter('CANCELLED')} />
                 </div>
             </SpotlightCard>
 
