@@ -206,6 +206,7 @@ const OrderForm: React.FC<OrderFormProps> = ({
 
   // Internal state for the spinner, managed by the form itself.
   const [isSaving, setIsSaving] = useState(false);
+  const [isUploading, setIsUploading] = useState(false); // Track if files are still uploading
   
   // ✅ State for live customer check
   const [existingCustomer, setExistingCustomer] = useState<ExistingCustomerInfo | null>(null);
@@ -275,6 +276,13 @@ const OrderForm: React.FC<OrderFormProps> = ({
 
   const onSubmit = async (data: SaveData) => {
     console.log('📝 Form submitted with data:', data);
+    
+    // ✅ CHECK: Prevent submission if files are still uploading
+    if (isUploading) {
+      showError('Please wait for all files to finish uploading before submitting.');
+      return;
+    }
+
     setIsSaving(true); // Start Spinner
 
     try {
@@ -311,7 +319,7 @@ const OrderForm: React.FC<OrderFormProps> = ({
   const profit = orderAmount - (productionCost + shippingCost + marketingCost);
   const watchedStatus = watch('status');
 
-  const patchTypes = ["Embroidered", "PVC", "Woven", "Chenille", "Leather", "Printed", "3D Embroidery Puff", "3D Embroidery Transfer", "Chenille Transfer", "Sequin Patch"];
+  const patchTypes = ["Embroidered", "PVC", "Woven", "Chenille", "Leather", "3D Embroidery Puff", "3D Embroidery Transfer", "Chenille Transfer", "Sequin Patch", "Sublimation Patch", "DTF Transfer", "Silicone Transfer", "High Density Transfer"];
   const shippingCarriers = ["FedEx", "DHL", "UPS", "USPS", "Other"];
   const backingOptions = ["Iron on", "Sew on", "Sticker", "Velcro"];
   
@@ -472,6 +480,7 @@ const OrderForm: React.FC<OrderFormProps> = ({
               folderPath={`mockups/${orderNum}`}
               urls={watch('mockupUrls') || []}
               onUrlsChange={(urls) => setValue('mockupUrls', urls)}
+              onUploadStateChange={setIsUploading}
             />
           </div>
 
@@ -483,6 +492,7 @@ const OrderForm: React.FC<OrderFormProps> = ({
               folderPath={`production-files/${orderNum}`}
               urls={watch('productionFileUrls') || []}
               onUrlsChange={(urls) => setValue('productionFileUrls', urls)}
+              onUploadStateChange={setIsUploading}
             />
           </div>
 
@@ -494,6 +504,7 @@ const OrderForm: React.FC<OrderFormProps> = ({
               folderPath={`customer-refs/${orderNum}`}
               urls={watch('customerAttachmentUrls') || []}
               onUrlsChange={(urls) => setValue('customerAttachmentUrls', urls)}
+              onUploadStateChange={setIsUploading}
             />
           </div>
           
@@ -505,6 +516,7 @@ const OrderForm: React.FC<OrderFormProps> = ({
               folderPath={`shipping-docs/${orderNum}`}
               urls={watch('shippingAttachmentUrls') || []}
               onUrlsChange={(urls) => setValue('shippingAttachmentUrls', urls)}
+              onUploadStateChange={setIsUploading}
             />
           </div>
 
@@ -634,10 +646,12 @@ const OrderForm: React.FC<OrderFormProps> = ({
       </FormSectionWrapper>
 
       <div className="flex justify-end gap-4 pt-6 border-t border-slate-700">
-        <Button type="button" variant="secondary" onClick={() => reset(formDefaultValues)}>
+        <Button type="button" variant="secondary" onClick={() => reset(formDefaultValues)} disabled={isSaving || isUploading}>
           Cancel
         </Button>
-        <Button type="submit" disabled={isSaving}>{isSaving ? <Spinner small /> : 'Save Changes'}</Button>
+        <Button type="submit" disabled={isSaving || isUploading} title={isUploading ? "Please wait for all files to finish uploading" : ""}>
+          {isSaving ? <Spinner small /> : isUploading ? 'Uploading Files...' : 'Save Changes'}
+        </Button>
       </div>
     </form>
   );

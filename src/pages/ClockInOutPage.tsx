@@ -1,5 +1,7 @@
-// src/pages/ClockInOutPage.tsx - CLOCK IN/OUT ATTENDANCE
-import React, { useState, useEffect, useMemo } from 'react';
+// src/pages/ClockInOutPage.tsx - INDUSTRY STANDARD ATTENDANCE TRACKING
+// Pakistan timezone (PKT) with Denver (MST) business hours alignment
+
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   LogIn,
   LogOut,
@@ -10,21 +12,49 @@ import {
   CheckCircle,
   Users,
   Download,
-  Upload,
+  AlertTriangle,
+  Timer,
+  CalendarDays,
+  FileSpreadsheet,
+  ChevronRight,
+  RefreshCw,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { format, parseISO, startOfWeek, endOfWeek, startOfDay, endOfDay } from 'date-fns';
+import { 
+  format, 
+  parseISO, 
+  startOfWeek, 
+  endOfWeek, 
+  startOfMonth,
+  endOfMonth,
+  differenceInMinutes,
+  addHours,
+} from 'date-fns';
 import { useAuth } from '../contexts/AuthContext';
 import { Navigate } from 'react-router-dom';
-import { useClockInOut } from '../hooks/useClockInOut';
+import { 
+  useClockInOut, 
+  SHIFT_CONFIG,
+  calculateWorkDate,
+  determineStatus,
+  generateDailyReport,
+  generateWeeklyReport,
+  generateMonthlyReport,
+  getWorkingDaysInRange,
+  getPakistanTime,
+  DailyReport,
+  WeeklyReport,
+  MonthlyReport,
+} from '../hooks/useClockInOut';
 import DateRangeFilter, { DateRange, getDefaultRange } from '../components/ui/DateRangeFilter';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../services/supabaseClient';
-import { performanceMonitor } from '../services/performanceMonitor';
 import { queryKeys } from '../constants/queryKeys';
 import SpotlightCard from '../components/ui/SpotlightCard';
-import EmptyState from '../components/ui/EmptyState';
 
+// ============================================
+// ANIMATION VARIANTS
+// ============================================
 const containerVariants = {
   hidden: { opacity: 0 },
   visible: {
@@ -42,37 +72,97 @@ const cardVariants = {
   },
 };
 
+// ============================================
+// HELPER COMPONENTS
+// ============================================
+
+const StatusBadge: React.FC<{ status: string; size?: 'sm' | 'md' }> = ({ status, size = 'md' }) => {
+  const getColors = (status: string) => {
+    switch (status) {
+      case 'COMPLETED':
+        return 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30';
+      case 'OVERTIME':
+        return 'bg-purple-500/20 text-purple-400 border-purple-500/30';
+      case 'UNDERTIME':
+        return 'bg-orange-500/20 text-orange-400 border-orange-500/30';
+      case 'INCOMPLETE':
+        return 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30';
+      case 'ABSENT':
+        return 'bg-red-500/20 text-red-400 border-red-500/30';
+      case 'ACTIVE':
+        return 'bg-blue-500/20 text-blue-400 border-blue-500/30';
+      default:
+        return 'bg-slate-500/20 text-slate-400 border-slate-500/30';
+    }
+  };
+
+  const sizeClasses = size === 'sm' ? 'px-2 py-1 text-xs' : 'px-3 py-1.5 text-xs';
+
+  return (
+    <span className={`${sizeClasses} rounded-lg font-bold border ${getColors(status)}`}>
+      {status}
+    </span>
+  );
+};
+
+const StatCard: React.FC<{
+  icon: React.ReactNode;
+  label: string;
+  value: string | number;
+  subtext?: string;
+  color?: string;
+}> = ({ icon, label, value, subtext, color = 'text-white' }) => (
+  <div className="bg-slate-800/30 rounded-xl p-4 border border-white/5">
+    <div className="flex items-center gap-2 mb-2">
+      {icon}
+      <span className="text-xs font-semibold text-slate-400 uppercase tracking-wide">{label}</span>
+    </div>
+    <p className={`text-2xl font-bold ${color}`}>{value}</p>
+    {subtext && <p className="text-xs text-slate-500 mt-1">{subtext}</p>}
+  </div>
+);
+
+// ============================================
+// MAIN COMPONENT
+// ============================================
 const ClockInOutPage: React.FC = () => {
   const { user, role, permissions } = useAuth();
   const queryClient = useQueryClient();
 
+  // State
   const [dateRange, setDateRange] = useState<DateRange>(() => getDefaultRange());
   const [currentTime, setCurrentTime] = useState(new Date());
   const [selectedUser, setSelectedUser] = useState<string>('');
-  const [activeTab, setActiveTab] = useState<'clock' | 'admin'>('clock');
-  const [adminTab, setAdminTab] = useState<'daily' | 'monthly' | 'performance'>('daily');
-  const [selectedMonth, setSelectedMonth] = useState(
-    new Date().toISOString().slice(0, 7) // YYYY-MM
-  );
+  const [adminTab, setAdminTab] = useState<'daily' | 'weekly' | 'monthly'>('daily');
+  const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().slice(0, 7));
+  const [selectedWeekStart, setSelectedWeekStart] = useState(() => {
+    const today = new Date();
+    const weekStart = startOfWeek(today, { weekStartsOn: 1 });
+    return weekStart.toISOString().split('T')[0];
+  });
 
-  // --- NEW: Refactored hook usage ---
+  // Clock In/Out Hook
   const {
     todaySessions,
     activeSession,
     isClockedIn,
     isLoadingToday,
+    totalHoursToday,
+    timeRemainingHours,
+    currentSessionHours,
+    autoClockOutWarning,
+    todayStatus,
     clockIn,
     isClockingIn,
     clockOut,
     isClockingOut,
     clockInError,
     clockOutError,
-    SHIFT_CONFIG,
   } = useClockInOut();
 
   const error = clockInError?.message || clockOutError?.message;
 
-  // --- NEW: Admin-specific data fetching ---
+  // Admin data fetching
   const { data: allAttendance = [], isLoading: isLoadingAll } = useQuery({
     queryKey: queryKeys.attendance.list({ dateRange, selectedUser }),
     queryFn: async () => {
@@ -81,7 +171,8 @@ const ClockInOutPage: React.FC = () => {
         .select('*')
         .gte('work_date', dateRange.startDate)
         .lte('work_date', dateRange.endDate)
-        .order('work_date', { ascending: false });
+        .order('work_date', { ascending: false })
+        .order('clock_in_time', { ascending: false });
 
       if (selectedUser) {
         query = query.eq('user_email', selectedUser);
@@ -90,7 +181,7 @@ const ClockInOutPage: React.FC = () => {
       if (error) throw error;
       return data || [];
     },
-    enabled: role === 'ADMIN', // Only admins can fetch all records
+    enabled: role === 'ADMIN',
   });
 
   // Update clock every second
@@ -99,127 +190,67 @@ const ClockInOutPage: React.FC = () => {
     return () => clearInterval(timer);
   }, []);
 
-  // Check if user is admin and NOT a clock-only user
+  // Permissions check
   const isAdmin = role === 'ADMIN' && !permissions?.attendance_clock_only;
 
   if (!user) {
     return <Navigate to="/login" replace />;
   }
 
-  // Calculate current shift time remaining
-  const getTimeRemaining = (): string => {
-    if (!isClockedIn) return 'N/A';
+  // ============================================
+  // COMPUTED VALUES
+  // ============================================
+  
+  const pktTime = getPakistanTime(currentTime);
+  const workDate = calculateWorkDate(currentTime);
 
-    const totalMsWorkedToday = todaySessions.reduce((total, session) => {
-      const start = new Date(session.clock_in_time).getTime();
-      // If session is ongoing, count up to now. Otherwise, use clock_out_time.
-      const end = session.clock_out_time ? new Date(session.clock_out_time).getTime() : currentTime.getTime();
-      return total + (end - start);
-    }, 0);
-
-    const requiredMs = SHIFT_CONFIG.REQUIRED_HOURS * 60 * 60 * 1000;
-    const remaining = Math.max(0, requiredMs - totalMsWorkedToday);
-
-    const hours = Math.floor(remaining / (60 * 60 * 1000));
-    const minutes = Math.floor((remaining % (60 * 60 * 1000)) / (60 * 1000));
-
-    return `${hours}h ${minutes}m`;
-  };
-
-  // ✅ FIX: Create wrapper functions to handle cache invalidation for the admin view
-  const handleClockIn = async () => {
-    await clockIn();
-    // After clocking in, invalidate all attendance queries to refresh the view
-    queryClient.invalidateQueries({ queryKey: queryKeys.attendance.all() });
-  };
-
-  const handleClockOut = async () => {
-    await clockOut();
-    // After clocking out, invalidate all attendance queries to refresh the view
-    queryClient.invalidateQueries({ queryKey: queryKeys.attendance.all() });
-  };
-
-  const totalHoursWorked = useMemo(() => {
-    return todaySessions.reduce((total, session) => {
-      const start = new Date(session.clock_in_time);
-      const end = session.clock_out_time ? new Date(session.clock_out_time) : currentTime;
-      return total + (end.getTime() - start.getTime()) / (3600 * 1000);
-    }, 0);
-  }, [todaySessions, currentTime]);
-
-  // ✅ FIX: Calculate unique users directly in the component using useMemo
+  // Unique users for filter
   const uniqueUsers = useMemo(() => {
     const seen = new Set<string>();
     const users: Array<{ email: string; name: string }> = [];
-
     allAttendance.forEach((record) => {
       if (!seen.has(record.user_email)) {
         seen.add(record.user_email);
         users.push({ email: record.user_email, name: record.user_name });
       }
     });
-
     return users.sort((a, b) => a.name.localeCompare(b.name));
   }, [allAttendance]);
 
-  const monthlyStats = useMemo(() => {
-    performanceMonitor.start('calculate-monthly-stats');
+  // Auto clock-out countdown
+  const autoClockOutTime = useMemo(() => {
+    if (!activeSession) return null;
+    const clockIn = new Date(activeSession.clock_in_time);
+    return addHours(clockIn, SHIFT_CONFIG.MAX_SHIFT_HOURS);
+  }, [activeSession]);
 
-    if (adminTab !== 'monthly') {
-      performanceMonitor.end('calculate-monthly-stats', 'operation');
-      return [];
-    }
-    const monthData = allAttendance.filter((r) => r.work_date.startsWith(selectedMonth));
-    const userStats = new Map<string, any>();
+  const minutesUntilAutoClockOut = useMemo(() => {
+    if (!autoClockOutTime) return null;
+    return Math.max(0, differenceInMinutes(autoClockOutTime, currentTime));
+  }, [autoClockOutTime, currentTime]);
 
-    monthData.forEach((record) => {
-      if (!userStats.has(record.user_email)) {
-        userStats.set(record.user_email, {
-          name: record.user_name,
-          email: record.user_email,
-          totalDays: 0,
-          totalHours: 0,
-          overtimeHours: 0,
-          undertimeHours: 0,
-          incompleteDays: 0,
-        });
-      }
-      const stats = userStats.get(record.user_email);
-      stats.totalDays += 1;
-      stats.totalHours += record.duration_hours;
+  // ============================================
+  // HANDLERS
+  // ============================================
 
-      // ✅ Map old "LATE" status to correct status (24/7 operation)
-      let correctedStatus;
-      if (record.duration_hours === 0) correctedStatus = 'INCOMPLETE';
-      else if (record.duration_hours >= SHIFT_CONFIG.OVERTIME_THRESHOLD) correctedStatus = 'OVERTIME';
-      else if (record.duration_hours < SHIFT_CONFIG.UNDERTIME_THRESHOLD) correctedStatus = 'UNDERTIME';
-      else correctedStatus = 'COMPLETED';
+  const handleClockIn = async () => {
+    await clockIn();
+    queryClient.invalidateQueries({ queryKey: queryKeys.attendance.all() });
+  };
 
-      if (correctedStatus === 'INCOMPLETE') stats.incompleteDays += 1;
-      if (correctedStatus === 'OVERTIME') {
-        stats.overtimeHours += Math.max(0, record.duration_hours - SHIFT_CONFIG.REQUIRED_HOURS);
-      }
-      if (correctedStatus === 'UNDERTIME') {
-        stats.undertimeHours += Math.max(0, SHIFT_CONFIG.REQUIRED_HOURS - record.duration_hours);
-      }
-    });
-    performanceMonitor.end('calculate-monthly-stats', 'operation');
-    return Array.from(userStats.values());
-  }, [allAttendance, adminTab, selectedMonth, SHIFT_CONFIG.REQUIRED_HOURS]);
+  const handleClockOut = async () => {
+    await clockOut();
+    queryClient.invalidateQueries({ queryKey: queryKeys.attendance.all() });
+  };
 
-  // ✅ NEW: Quick filter functions
   const filterToday = () => {
-    const today = new Date();
-    const dateStr = today.toISOString().split('T')[0];
-    setDateRange({
-      startDate: dateStr,
-      endDate: dateStr,
-    });
+    const today = calculateWorkDate(new Date());
+    setDateRange({ startDate: today, endDate: today });
   };
 
   const filterThisWeek = () => {
     const today = new Date();
-    const weekStart = startOfWeek(today, { weekStartsOn: 1 }); // Monday
+    const weekStart = startOfWeek(today, { weekStartsOn: 1 });
     const weekEnd = endOfWeek(today, { weekStartsOn: 1 });
     setDateRange({
       startDate: weekStart.toISOString().split('T')[0],
@@ -227,7 +258,20 @@ const ClockInOutPage: React.FC = () => {
     });
   };
 
-  // ✅ Helper function to properly escape CSV values
+  const filterThisMonth = () => {
+    const today = new Date();
+    const monthStart = startOfMonth(today);
+    const monthEnd = endOfMonth(today);
+    setDateRange({
+      startDate: monthStart.toISOString().split('T')[0],
+      endDate: monthEnd.toISOString().split('T')[0],
+    });
+  };
+
+  // ============================================
+  // EXPORT FUNCTIONS
+  // ============================================
+
   const escapeCSV = (value: any) => {
     if (value === null || value === undefined) return '';
     const str = String(value);
@@ -237,115 +281,140 @@ const ClockInOutPage: React.FC = () => {
     return str;
   };
 
-  // ✅ NEW: Export daily records to CSV (12-hour format with AM/PM)
-  const handleExportDaily = () => {
-    const exportData = allAttendance.map((record) => {
-      // Map old "LATE" status to correct status based on hours (24/7 no late tracking)
-      let correctedStatus;
-      if (record.duration_hours === 0) correctedStatus = 'INCOMPLETE';
-      else if (record.duration_hours >= SHIFT_CONFIG.OVERTIME_THRESHOLD) correctedStatus = 'OVERTIME';
-      else if (record.duration_hours < SHIFT_CONFIG.UNDERTIME_THRESHOLD) correctedStatus = 'UNDERTIME';
-      else correctedStatus = 'COMPLETED';
-      
-
-      return {
-        'Employee Name': record.user_name,
-        'Email': record.user_email,
-        'Date': format(parseISO(record.work_date), 'MMM dd, yyyy'),
-        'Clock In': format(parseISO(record.clock_in_time), 'h:mm:ss a'), // 12-hour with AM/PM
-        'Clock Out': record.clock_out_time ? format(parseISO(record.clock_out_time), 'h:mm:ss a') : '—',
-        'Hours Worked': record.duration_hours.toFixed(2),
-        'Status': correctedStatus,
-      };
-    });
-
-    if (!exportData || exportData.length === 0) return;
-    
-    // ✅ DAY 3 FIX: Add array bounds check
-    const firstRow = exportData[0];
+  const downloadCSV = (data: any[], filename: string) => {
+    if (!data || data.length === 0) return;
+    const firstRow = data[0];
     if (!firstRow) return;
     
     const headers = Object.keys(firstRow).map(escapeCSV).join(',');
-    const rows = exportData.map(row => Object.values(row).map(escapeCSV).join(','));
+    const rows = data.map(row => Object.values(row).map(escapeCSV).join(','));
     const csv = [headers, ...rows].join('\n');
-    // ✅ Add UTF-8 BOM so Excel opens with correct encoding
     const BOM = '\uFEFF';
     const blob = new Blob([BOM + csv], { type: 'text/csv;charset=utf-8;' });
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `attendance-daily-${format(new Date(), 'yyyy-MM-dd')}.csv`;
+    a.download = filename;
     a.click();
     window.URL.revokeObjectURL(url);
   };
 
+  const handleExportDaily = () => {
+    const exportData = allAttendance.map((record) => {
+      const hours = record.clock_out_time 
+        ? record.duration_hours 
+        : (new Date().getTime() - new Date(record.clock_in_time).getTime()) / (60 * 60 * 1000);
+      
+      const status = determineStatus(hours, !record.clock_out_time);
+
+      return {
+        'Employee Name': record.user_name,
+        'Email': record.user_email,
+        'Work Date': format(parseISO(record.work_date), 'MMM dd, yyyy'),
+        'Day': format(parseISO(record.work_date), 'EEEE'),
+        'Clock In (PKT)': format(parseISO(record.clock_in_time), 'h:mm:ss a'),
+        'Clock Out (PKT)': record.clock_out_time ? format(parseISO(record.clock_out_time), 'h:mm:ss a') : '—',
+        'Hours Worked': hours.toFixed(2),
+        'Overtime Hours': hours > SHIFT_CONFIG.OVERTIME_THRESHOLD ? (hours - SHIFT_CONFIG.REQUIRED_HOURS).toFixed(2) : '0.00',
+        'Undertime Hours': hours < SHIFT_CONFIG.UNDERTIME_THRESHOLD && hours > 0 ? (SHIFT_CONFIG.REQUIRED_HOURS - hours).toFixed(2) : '0.00',
+        'Status': status,
+        'Auto Clock-Out': record.auto_clocked_out ? 'Yes' : 'No',
+      };
+    });
+
+    downloadCSV(exportData, `attendance-daily-${format(new Date(), 'yyyy-MM-dd')}.csv`);
+  };
+
+  const handleExportWeekly = () => {
+    const weekEnd = new Date(selectedWeekStart);
+    weekEnd.setDate(weekEnd.getDate() + 6);
+    const weekEndStr = weekEnd.toISOString().split('T')[0];
+    
+    // Filter records for the selected week
+    const weekRecords = allAttendance.filter(r => 
+      r.work_date >= selectedWeekStart && r.work_date <= weekEndStr
+    );
+    
+    const reports = generateWeeklyReport(weekRecords, uniqueUsers, selectedWeekStart, weekEndStr);
+    
+    const exportData = reports.map(r => ({
+      'Employee Name': r.employee,
+      'Email': r.email,
+      'Week': `${format(parseISO(r.weekStart), 'MMM dd')} - ${format(parseISO(r.weekEnd), 'MMM dd, yyyy')}`,
+      'Days Worked': r.totalDays,
+      'Total Hours': r.totalHours.toFixed(2),
+      'Overtime Hours': r.overtimeHours.toFixed(2),
+      'Undertime Hours': r.undertimeHours.toFixed(2),
+      'Absent Days': r.absentDays,
+      'Avg Hours/Day': r.avgHoursPerDay.toFixed(2),
+    }));
+
+    downloadCSV(exportData, `attendance-weekly-${selectedWeekStart}.csv`);
+  };
+
+  const handleExportMonthly = () => {
+    const monthRecords = allAttendance.filter(r => r.work_date.startsWith(selectedMonth));
+    const reports = generateMonthlyReport(monthRecords, uniqueUsers, selectedMonth);
+    
+    const exportData = reports.map(r => ({
+      'Employee Name': r.employee,
+      'Email': r.email,
+      'Month': format(parseISO(`${r.month}-01`), 'MMMM yyyy'),
+      'Days Worked': r.totalDays,
+      'Completed Days': r.completedDays,
+      'Total Hours': r.totalHours.toFixed(2),
+      'Overtime Hours': r.overtimeHours.toFixed(2),
+      'Undertime Hours': r.undertimeHours.toFixed(2),
+      'Absent Days': r.absentDays,
+      'Avg Hours/Day': r.avgHoursPerDay.toFixed(2),
+    }));
+
+    downloadCSV(exportData, `attendance-monthly-${selectedMonth}.csv`);
+  };
+
   const handleForceClockOut = async (recordId: string, userEmail: string) => {
-    if (!confirm(`Force clock out for ${userEmail}?`)) return;
+    if (!confirm(`Force clock out for ${userEmail}? This will clock them out at the current time.`)) return;
     
     try {
       const record = allAttendance.find(r => r.id === recordId);
       if (!record) return;
       
       const clockOutTime = new Date().toISOString();
-      const hoursWorked = (new Date(clockOutTime).getTime() - new Date(record.clock_in_time).getTime()) / (60 * 60 * 1000);
+      let hoursWorked = (new Date(clockOutTime).getTime() - new Date(record.clock_in_time).getTime()) / (60 * 60 * 1000);
+      
+      // Cap at max hours
+      hoursWorked = Math.min(hoursWorked, SHIFT_CONFIG.MAX_SHIFT_HOURS);
       
       const { error } = await supabase
         .from('attendance_sessions')
         .update({ 
           clock_out_time: clockOutTime,
+          duration_hours: hoursWorked,
+          auto_clocked_out: true,
         })
         .eq('id', recordId);
       
       if (error) throw error;
       
-      // Refetch data
-      queryClient.invalidateQueries({ queryKey: queryKeys.attendance.list({ dateRange, selectedUser }) });
-      
-      alert(`Forced clock out for ${userEmail}`);
+      queryClient.invalidateQueries({ queryKey: queryKeys.attendance.all() });
+      alert(`Successfully clocked out ${userEmail}. Hours: ${hoursWorked.toFixed(2)}`);
     } catch (error: any) {
       alert(`Error: ${error.message}`);
     }
   };
 
-  const handleExportMonthly = () => {
-    const exportData = monthlyStats.map((stat) => ({
-      'Employee Name': stat.name,
-      'Email': stat.email,
-      'Days Worked': stat.totalDays,
-      'Total Hours': stat.totalHours.toFixed(2),
-      'Overtime Hours': stat.overtimeHours.toFixed(2),
-      'Undertime Hours': stat.undertimeHours.toFixed(2),
-      'Absent/Incomplete': stat.incompleteDays,
-    }));
-
-    if (!exportData || exportData.length === 0) return;
-    
-    // ✅ DAY 3 FIX: Add array bounds check
-    const firstRow = exportData[0];
-    if (!firstRow) return;
-    
-    const headers = Object.keys(firstRow).map(escapeCSV).join(',');
-    const rows = exportData.map(row => Object.values(row).map(escapeCSV).join(','));
-    const csv = [headers, ...rows].join('\n');
-    // ✅ Add UTF-8 BOM so Excel opens with correct encoding
-    const BOM = '\uFEFF';
-    const blob = new Blob([BOM + csv], { type: 'text/csv;charset=utf-8;' });
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `attendance-report-${selectedMonth}.csv`;
-    a.click();
-    window.URL.revokeObjectURL(url);
-  };
+  // ============================================
+  // RENDER
+  // ============================================
 
   return (
     <div className="relative min-h-screen">
-      {/* Background Glow */}
+      {/* Background */}
       <div className="fixed inset-0 overflow-hidden pointer-events-none">
         <div className="absolute top-0 right-1/4 w-[500px] h-[500px] bg-brand-orange/5 rounded-full blur-3xl" />
       </div>
 
-      <div className="relative z-10 space-y-8 p-8">
+      <div className="relative z-10 space-y-6 p-6 lg:p-8">
         {/* Header */}
         <motion.div
           initial={{ opacity: 0, y: -20 }}
@@ -353,22 +422,22 @@ const ClockInOutPage: React.FC = () => {
           className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4"
         >
           <div>
-            <h1 className="text-4xl font-bold text-white mb-2 flex items-center gap-3">
+            <h1 className="text-3xl lg:text-4xl font-bold text-white mb-2 flex items-center gap-3">
               <Clock className="w-8 h-8 text-brand-orange" />
               Attendance Tracking
             </h1>
-            <p className="text-slate-400">
-              Available 24/7 - Clock in/out anytime
+            <p className="text-slate-400 text-sm">
+              Pakistan Time (PKT) • Work Date: <span className="text-white font-semibold">{format(parseISO(workDate), 'EEEE, MMM dd, yyyy')}</span>
             </p>
           </div>
 
-          {/* Current Time Display */}
+          {/* Time Display */}
           <div className="text-right">
-            <p className="text-5xl font-bold text-brand-orange font-mono">
+            <p className="text-4xl lg:text-5xl font-bold text-brand-orange font-mono">
               {format(currentTime, 'h:mm:ss a')}
             </p>
             <p className="text-slate-400 text-sm">
-              {format(currentTime, 'EEE, MMM dd, yyyy')}
+              {format(currentTime, 'EEEE, MMM dd, yyyy')} (PKT)
             </p>
           </div>
         </motion.div>
@@ -380,606 +449,622 @@ const ClockInOutPage: React.FC = () => {
             animate={{ opacity: 1 }}
             className="p-4 bg-red-500/10 border border-red-500/20 rounded-xl text-red-400 flex items-center gap-3"
           >
-            <AlertCircle className="w-5 h-5" />
-            {error}
+            <AlertCircle className="w-5 h-5 flex-shrink-0" />
+            <span>{error}</span>
           </motion.div>
         )}
 
-        {/* ✅ ADD THIS: Active Session Warning Banner */}
+        {/* Auto Clock-Out Warning */}
+        {autoClockOutWarning && minutesUntilAutoClockOut !== null && (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="p-4 bg-yellow-500/10 border border-yellow-500/30 rounded-xl"
+          >
+            <div className="flex items-center gap-3">
+              <AlertTriangle className="w-6 h-6 text-yellow-400 flex-shrink-0" />
+              <div>
+                <p className="text-yellow-400 font-semibold">Auto Clock-Out Warning!</p>
+                <p className="text-yellow-400/80 text-sm">
+                  You will be automatically clocked out in <span className="font-bold">{minutesUntilAutoClockOut} minutes</span> 
+                  {' '}(at {format(autoClockOutTime!, 'h:mm a')}). Please clock out manually if you're done working.
+                </p>
+              </div>
+            </div>
+          </motion.div>
+        )}
+
+        {/* Active Session Banner */}
         {activeSession && (
           <motion.div
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
-            className="p-6 bg-blue-500/10 border border-blue-500/30 rounded-xl"
+            className="p-5 bg-blue-500/10 border border-blue-500/30 rounded-xl"
           >
             <div className="flex items-start gap-4">
-              <div className="flex-shrink-0">
-                <Clock className="w-6 h-6 text-blue-400" />
-              </div>
+              <div className="w-3 h-3 bg-blue-400 rounded-full animate-pulse mt-1.5" />
               <div className="flex-1">
                 <h3 className="text-lg font-semibold text-blue-400 mb-2">
-                  Active Session in Progress
+                  Active Session
                 </h3>
-                <div className="space-y-2 text-sm text-slate-300">
-                  <p>
-                    <span className="font-semibold">Work Date:</span>{' '}
-                    {format(parseISO(activeSession.work_date), 'EEEE, MMMM dd, yyyy')}
-                  </p>
-                  <p>
-                    <span className="font-semibold">Clocked In:</span>{' '}
-                    {format(parseISO(activeSession.clock_in_time), 'h:mm:ss a')}
-                  </p>
-                  <p>
-                    <span className="font-semibold">Hours Active:</span>{' '}
-                    {(() => {
-                      const hours = (currentTime.getTime() - new Date(activeSession.clock_in_time).getTime()) / (60 * 60 * 1000);
-                      return `${hours.toFixed(2)}h`;
-                    })()}
-                  </p>
-                  
-                  {/* Warning for long sessions */}
-                  {(() => {
-                    const hoursActive = (currentTime.getTime() - new Date(activeSession.clock_in_time).getTime()) / (60 * 60 * 1000);
-                    if (hoursActive > 12) {
-                      return (
-                        <div className="mt-3 p-3 bg-yellow-500/10 border border-yellow-500/30 rounded-lg">
-                          <p className="text-yellow-400 font-semibold flex items-center gap-2">
-                            <AlertCircle className="w-4 h-4" />
-                            You've been clocked in for over 12 hours. Don't forget to clock out!
-                          </p>
-                        </div>
-                      );
-                    }
-                    return null;
-                  })()}
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 text-sm">
+                  <div>
+                    <span className="text-slate-400">Work Date:</span>
+                    <p className="text-white font-semibold">{format(parseISO(activeSession.work_date), 'MMM dd, yyyy')}</p>
+                  </div>
+                  <div>
+                    <span className="text-slate-400">Clocked In:</span>
+                    <p className="text-white font-semibold">{format(parseISO(activeSession.clock_in_time), 'h:mm:ss a')}</p>
+                  </div>
+                  <div>
+                    <span className="text-slate-400">Hours Active:</span>
+                    <p className="text-white font-semibold">{currentSessionHours.toFixed(2)}h</p>
+                  </div>
+                  <div>
+                    <span className="text-slate-400">Auto Clock-Out:</span>
+                    <p className="text-white font-semibold">{autoClockOutTime ? format(autoClockOutTime, 'h:mm a') : '—'}</p>
+                  </div>
                 </div>
               </div>
             </div>
           </motion.div>
         )}
 
-        {/* ✅ ADD THIS: Shift Information Panel */}
-        <motion.div
-          variants={cardVariants}
-          initial="hidden"
-          animate="visible"
-          className="bg-slate-900/40 backdrop-blur-xl border border-white/10 rounded-2xl p-6"
-        >
-          <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
-            <Clock className="w-5 h-5 text-brand-orange" />
-            Shift Information
-          </h3>
-          
-          <div className="space-y-3 text-sm">
-            <div className="flex justify-between items-center p-3 bg-slate-800/30 rounded-lg">
-              <span className="text-slate-400">Current Work Date:</span>
-              <span className="text-white font-semibold">
-                {(() => {
-                  const now = new Date();
-                  const currentHour = now.getHours();
-                  const workDateObj = new Date(now);
-                  
-                  if (currentHour < SHIFT_CONFIG.SHIFT_CUTOFF_HOUR) {
-                    workDateObj.setDate(workDateObj.getDate() - 1);
-                  }
-                  
-                  return format(workDateObj, 'EEEE, MMM dd');
-                })()}
-              </span>
-            </div>
-            
-            <div className="flex justify-between items-center p-3 bg-slate-800/30 rounded-lg">
-              <span className="text-slate-400">Shift Cutoff Time:</span>
-              <span className="text-white font-semibold">
-                {SHIFT_CONFIG.SHIFT_CUTOFF_HOUR}:00 AM
-              </span>
-            </div>
-            
-            <div className="p-3 bg-blue-500/5 border border-blue-500/20 rounded-lg">
-              <p className="text-xs text-blue-400">
-                <strong>Note:</strong> Clock-ins before {SHIFT_CONFIG.SHIFT_CUTOFF_HOUR}:00 AM 
-                count as the previous day's shift.
-              </p>
-            </div>
-          </div>
-        </motion.div>
-
-        {/* CLOCK IN/OUT SECTION */}
+        {/* Main Clock Section */}
         <motion.div
           variants={cardVariants}
           initial="hidden"
           animate="visible"
           className="grid grid-cols-1 lg:grid-cols-3 gap-6"
         >
-          {/* Main Clock Button */}
-           <div className="lg:col-span-2">
-             <SpotlightCard className="p-8 text-center">
-                <div className="mb-6">
-                  <p className="text-slate-400 mb-2">Current Status</p>
-                  <p className="text-3xl font-bold text-white">
-                    {isClockedIn ? '🟢 CLOCKED IN' : '⚫ CLOCKED OUT'}
+          {/* Clock In/Out Card */}
+          <div className="lg:col-span-2">
+            <SpotlightCard className="p-6 lg:p-8">
+              {/* Status */}
+              <div className="text-center mb-6">
+                <p className="text-slate-400 mb-2 text-sm uppercase tracking-wide">Current Status</p>
+                <div className="flex items-center justify-center gap-3">
+                  <div className={`w-4 h-4 rounded-full ${isClockedIn ? 'bg-emerald-400 animate-pulse' : 'bg-slate-600'}`} />
+                  <p className="text-2xl lg:text-3xl font-bold text-white">
+                    {isClockedIn ? 'CLOCKED IN' : 'CLOCKED OUT'}
                   </p>
                 </div>
+              </div>
 
-                {todaySessions.length > 0 && (
-                  <div className="space-y-4 mb-8 bg-slate-800/30 rounded-xl p-4">
-                    {/* Session List */}
-                    {todaySessions.map(session => (
-                      <div key={session.id} className="flex justify-between items-center text-sm">
-                        <span className="text-slate-400">
-                          {format(parseISO(session.clock_in_time), 'h:mm a')} → {session.clock_out_time ? format(parseISO(session.clock_out_time), 'h:mm a') : 'Now'}
-                        </span>
-                        <span className="text-white font-mono">
-                          {session.clock_out_time
-                            ? `${session.duration_hours.toFixed(2)}h`
-                            : '...'}
+              {/* Session History */}
+              {todaySessions.length > 0 && (
+                <div className="mb-6 bg-slate-800/30 rounded-xl p-4 space-y-3">
+                  <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-3">Today's Sessions</p>
+                  {todaySessions.map((session, idx) => (
+                    <div key={session.id} className="flex justify-between items-center text-sm py-2 border-b border-slate-700/50 last:border-0">
+                      <div className="flex items-center gap-2">
+                        <span className="text-slate-500 text-xs">#{idx + 1}</span>
+                        <span className="text-slate-300">
+                          {format(parseISO(session.clock_in_time), 'h:mm a')}
+                          <ChevronRight className="w-3 h-3 inline mx-1 text-slate-500" />
+                          {session.clock_out_time ? format(parseISO(session.clock_out_time), 'h:mm a') : 
+                            <span className="text-blue-400">Active</span>}
                         </span>
                       </div>
-                    ))}
-                    {/* Total Hours */}
-                    <div className="flex justify-between items-center">
-                      <span className="text-slate-400 font-bold">Total Hours:</span>
-                      <span className="text-brand-orange font-bold text-lg">
-                        {totalHoursWorked.toFixed(2)}h
+                      <span className="text-white font-mono font-semibold">
+                        {session.clock_out_time 
+                          ? `${session.duration_hours?.toFixed(2) || '0.00'}h`
+                          : `${currentSessionHours.toFixed(2)}h`}
                       </span>
                     </div>
-                    {isClockedIn && (
-                      <div className="flex justify-between items-center pt-2 border-t border-slate-700">
-                        <span className="text-slate-400">Time Remaining:</span>
-                        <span className="text-blue-400 font-bold">
-                          {getTimeRemaining()}
-                        </span>
+                  ))}
+                  
+                  {/* Totals */}
+                  <div className="pt-3 border-t border-slate-700 space-y-2">
+                    <div className="flex justify-between items-center">
+                      <span className="text-slate-400 font-semibold">Total Hours:</span>
+                      <span className="text-brand-orange font-bold text-xl">{totalHoursToday.toFixed(2)}h</span>
+                    </div>
+                    {isClockedIn && timeRemainingHours > 0 && (
+                      <div className="flex justify-between items-center">
+                        <span className="text-slate-400">Remaining for 8h:</span>
+                        <span className="text-blue-400 font-semibold">{timeRemainingHours.toFixed(2)}h</span>
                       </div>
                     )}
+                    <div className="flex justify-between items-center">
+                      <span className="text-slate-400">Status:</span>
+                      <StatusBadge status={todayStatus} />
+                    </div>
                   </div>
-                )}
-
-                <div className="flex gap-4">
-                   <button
-                     onClick={handleClockIn}
-                     disabled={isClockedIn || isClockingIn}
-                     className={`flex-1 py-4 px-6 rounded-xl font-bold text-lg transition-all flex items-center justify-center gap-2 focus-ring ${
-                       isClockedIn
-                         ? 'bg-slate-700 text-slate-400 cursor-not-allowed'
-                         : 'bg-gradient-to-r from-emerald-500 to-teal-500 text-white hover:shadow-lg hover:shadow-emerald-500/20'
-                     }`}
-                     aria-label={isClockedIn ? "Already clocked in" : "Clock in"}
-                   >
-                     <LogIn className="w-5 h-5" />
-                     Clock In
-                   </button>
-
-                   <button
-                     onClick={handleClockOut}
-                     disabled={!isClockedIn || isClockingOut}
-                     className={`flex-1 py-4 px-6 rounded-xl font-bold text-lg transition-all flex items-center justify-center gap-2 focus-ring ${
-                       !isClockedIn
-                         ? 'bg-slate-700 text-slate-400 cursor-not-allowed'
-                         : 'bg-gradient-to-r from-red-500 to-rose-500 text-white hover:shadow-lg hover:shadow-red-500/20'
-                     }`}
-                     aria-label={!isClockedIn ? "Already clocked out" : "Clock out"}
-                   >
-                     <LogOut className="w-5 h-5" />
-                     Clock Out
-                   </button>
-                 </div>
-                </SpotlightCard>
                 </div>
+              )}
 
-                {/* Status Cards */}
-                <div className="space-y-4">
-                {/* Today Status */}
-                <SpotlightCard className="p-6">
-                <div className="flex items-center gap-3 mb-4">
-                  <CheckCircle className="w-5 h-5 text-blue-400" />
-                  <h3 className="text-sm font-semibold text-slate-400 uppercase">Status</h3>
+              {/* Progress Bar */}
+              <div className="mb-6">
+                <div className="flex justify-between text-sm mb-2">
+                  <span className="text-slate-400">Progress</span>
+                  <span className="text-white font-semibold">{totalHoursToday.toFixed(1)}h / {SHIFT_CONFIG.REQUIRED_HOURS}h</span>
                 </div>
-                <p className="text-2xl font-bold text-white mb-2">
-                  {isClockedIn ? 'Clocked In' : 'Clocked Out'}
-                </p>
-                <p className="text-xs text-slate-500">
-                  {activeSession
-                    ? `Since: ${format(parseISO(activeSession.clock_in_time), 'h:mm a')}`
-                    : 'Ready to clock in'}
-                </p>
-              </SpotlightCard>
-
-              {/* Time Display */}
-              <SpotlightCard className="p-6">
-                <div className="flex items-center gap-3 mb-4">
-                  <TrendingUp className="w-5 h-5 text-purple-400" />
-                  <h3 className="text-sm font-semibold text-slate-400 uppercase">Hours</h3>
-                </div>
-                <p className="text-2xl font-bold text-white">
-                  {totalHoursWorked.toFixed(1)}h / {SHIFT_CONFIG.REQUIRED_HOURS}h
-                </p>
-                <div className="w-full bg-slate-700 rounded-full h-2 mt-3 overflow-hidden">
+                <div className="w-full bg-slate-700 rounded-full h-3 overflow-hidden">
                   <div
-                    className="bg-gradient-to-r from-brand-orange to-orange-600 h-full transition-all"
-                    style={{
-                      width: `${Math.min((totalHoursWorked / SHIFT_CONFIG.REQUIRED_HOURS) * 100, 100)}%`,
-                    }}
+                    className={`h-full transition-all duration-500 ${
+                      totalHoursToday >= SHIFT_CONFIG.OVERTIME_THRESHOLD
+                        ? 'bg-gradient-to-r from-purple-500 to-purple-600'
+                        : totalHoursToday >= SHIFT_CONFIG.REQUIRED_HOURS
+                        ? 'bg-gradient-to-r from-emerald-500 to-emerald-600'
+                        : 'bg-gradient-to-r from-brand-orange to-orange-600'
+                    }`}
+                    style={{ width: `${Math.min((totalHoursToday / SHIFT_CONFIG.REQUIRED_HOURS) * 100, 125)}%` }}
                   />
                 </div>
-              </SpotlightCard>
-            </div>
-          </motion.div>
+                <div className="flex justify-between text-xs text-slate-500 mt-1">
+                  <span>0h</span>
+                  <span className="text-orange-400">{SHIFT_CONFIG.UNDERTIME_THRESHOLD}h</span>
+                  <span className="text-emerald-400">{SHIFT_CONFIG.REQUIRED_HOURS}h</span>
+                  <span className="text-purple-400">{SHIFT_CONFIG.OVERTIME_THRESHOLD}h+</span>
+                </div>
+              </div>
 
-        {/* ADMIN SECTION */}
-        {isAdmin && (
+              {/* Clock Buttons */}
+              <div className="flex gap-4">
+                <button
+                  onClick={handleClockIn}
+                  disabled={isClockedIn || isClockingIn}
+                  className={`flex-1 py-4 px-6 rounded-xl font-bold text-lg transition-all flex items-center justify-center gap-2 ${
+                    isClockedIn
+                      ? 'bg-slate-700 text-slate-400 cursor-not-allowed'
+                      : 'bg-gradient-to-r from-emerald-500 to-teal-500 text-white hover:shadow-lg hover:shadow-emerald-500/20 hover:scale-[1.02]'
+                  }`}
+                >
+                  {isClockingIn ? (
+                    <RefreshCw className="w-5 h-5 animate-spin" />
+                  ) : (
+                    <LogIn className="w-5 h-5" />
+                  )}
+                  Clock In
+                </button>
+
+                <button
+                  onClick={handleClockOut}
+                  disabled={!isClockedIn || isClockingOut}
+                  className={`flex-1 py-4 px-6 rounded-xl font-bold text-lg transition-all flex items-center justify-center gap-2 ${
+                    !isClockedIn
+                      ? 'bg-slate-700 text-slate-400 cursor-not-allowed'
+                      : 'bg-gradient-to-r from-red-500 to-rose-500 text-white hover:shadow-lg hover:shadow-red-500/20 hover:scale-[1.02]'
+                  }`}
+                >
+                  {isClockingOut ? (
+                    <RefreshCw className="w-5 h-5 animate-spin" />
+                  ) : (
+                    <LogOut className="w-5 h-5" />
+                  )}
+                  Clock Out
+                </button>
+              </div>
+            </SpotlightCard>
+          </div>
+
+          {/* Info Cards */}
           <div className="space-y-4">
-            {/* Tabs */}
-            <div className="flex gap-2 border-b border-white/10">
-              <button
-                onClick={() => setAdminTab('daily')}
-                className={`px-4 py-3 font-semibold transition-all focus-ring rounded ${
-                  adminTab === 'daily'
-                    ? 'text-brand-orange border-b-2 border-brand-orange'
-                    : 'text-slate-400 hover:text-white'
-                }`}
-              >
-                <Users className="w-4 h-4 inline mr-2" />
-                Daily Records
-              </button>
+            {/* Shift Info */}
+            <SpotlightCard className="p-5">
+              <div className="flex items-center gap-3 mb-4">
+                <Timer className="w-5 h-5 text-brand-orange" />
+                <h3 className="text-sm font-semibold text-slate-400 uppercase tracking-wide">Shift Rules</h3>
+              </div>
+              <div className="space-y-3 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-slate-400">Required:</span>
+                  <span className="text-white font-semibold">{SHIFT_CONFIG.REQUIRED_HOURS}h</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-400">Overtime after:</span>
+                  <span className="text-purple-400 font-semibold">{SHIFT_CONFIG.OVERTIME_THRESHOLD}h</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-400">Undertime below:</span>
+                  <span className="text-orange-400 font-semibold">{SHIFT_CONFIG.UNDERTIME_THRESHOLD}h</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-400">Auto clock-out:</span>
+                  <span className="text-yellow-400 font-semibold">{SHIFT_CONFIG.MAX_SHIFT_HOURS}h</span>
+                </div>
+                <div className="pt-2 border-t border-slate-700">
+                  <p className="text-xs text-slate-500">
+                    Day cutoff: {SHIFT_CONFIG.SHIFT_CUTOFF_HOUR}:00 AM PKT
+                  </p>
+                </div>
+              </div>
+            </SpotlightCard>
 
-              <button
-                onClick={() => setAdminTab('monthly')}
-                className={`px-4 py-3 font-semibold transition-all focus-ring rounded ${
-                  adminTab === 'monthly'
-                    ? 'text-brand-orange border-b-2 border-brand-orange'
-                    : 'text-slate-400 hover:text-white'
-                }`}
-              >
-                <Download className="w-4 h-4 inline mr-2" />
-                Monthly Report
-              </button>
+            {/* Quick Stats */}
+            <SpotlightCard className="p-5">
+              <div className="flex items-center gap-3 mb-4">
+                <TrendingUp className="w-5 h-5 text-purple-400" />
+                <h3 className="text-sm font-semibold text-slate-400 uppercase tracking-wide">Today</h3>
+              </div>
+              <div className="space-y-3">
+                <div className="flex justify-between items-center">
+                  <span className="text-slate-400">Status:</span>
+                  <StatusBadge status={todayStatus} size="sm" />
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-400">Sessions:</span>
+                  <span className="text-white font-semibold">{todaySessions.length}</span>
+                </div>
+                {totalHoursToday >= SHIFT_CONFIG.OVERTIME_THRESHOLD && (
+                  <div className="flex justify-between">
+                    <span className="text-slate-400">Overtime:</span>
+                    <span className="text-purple-400 font-semibold">
+                      +{(totalHoursToday - SHIFT_CONFIG.REQUIRED_HOURS).toFixed(2)}h
+                    </span>
+                  </div>
+                )}
+              </div>
+            </SpotlightCard>
+          </div>
+        </motion.div>
+
+        {/* Admin Section */}
+        {isAdmin && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className="space-y-4"
+          >
+            {/* Tab Navigation */}
+            <div className="flex gap-2 border-b border-white/10 pb-2">
+              {[
+                { key: 'daily', label: 'Daily Records', icon: Calendar },
+                { key: 'weekly', label: 'Weekly Report', icon: CalendarDays },
+                { key: 'monthly', label: 'Monthly Report', icon: FileSpreadsheet },
+              ].map(({ key, label, icon: Icon }) => (
+                <button
+                  key={key}
+                  onClick={() => setAdminTab(key as any)}
+                  className={`px-4 py-2.5 font-semibold transition-all rounded-lg flex items-center gap-2 ${
+                    adminTab === key
+                      ? 'text-brand-orange bg-brand-orange/10'
+                      : 'text-slate-400 hover:text-white hover:bg-white/5'
+                  }`}
+                >
+                  <Icon className="w-4 h-4" />
+                  {label}
+                </button>
+              ))}
             </div>
 
             {/* Daily Records Tab */}
             {adminTab === 'daily' && (
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                className="relative group"
-              >
-                <div className="absolute -inset-0.5 bg-gradient-to-r from-blue-500 to-cyan-500 rounded-2xl opacity-0 group-hover:opacity-30 blur transition duration-500" />
+              <div className="space-y-4">
+                {/* Filters */}
+                <div className="bg-slate-900/40 backdrop-blur-xl border border-white/10 rounded-xl p-4 space-y-4">
+                  {/* Quick Filters */}
+                  <div className="flex gap-2 flex-wrap">
+                    <button onClick={filterToday} className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-lg transition-colors">
+                      Today
+                    </button>
+                    <button onClick={filterThisWeek} className="px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white text-sm font-semibold rounded-lg transition-colors">
+                      This Week
+                    </button>
+                    <button onClick={filterThisMonth} className="px-3 py-1.5 bg-teal-600 hover:bg-teal-700 text-white text-sm font-semibold rounded-lg transition-colors">
+                      This Month
+                    </button>
+                  </div>
 
-                <div className="relative bg-slate-900/40 backdrop-blur-xl border border-white/10 rounded-2xl overflow-hidden">
-                   {/* Quick Filter Buttons */}
-                   <div className="p-6 border-b border-white/10 space-y-4">
-                     <div className="flex gap-2 flex-wrap">
-                       <button
-                         onClick={filterToday}
-                         className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-lg transition-colors"
-                       >
-                         Today
-                       </button>
-                       <button
-                         onClick={filterThisWeek}
-                         className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white text-sm font-semibold rounded-lg transition-colors"
-                       >
-                         This Week
-                       </button>
-                     </div>
+                  {/* Date Range & User Filter */}
+                  <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                    <div className="lg:col-span-2">
+                      <DateRangeFilter value={dateRange} onChange={setDateRange} />
+                    </div>
+                    <select
+                      value={selectedUser}
+                      onChange={(e) => setSelectedUser(e.target.value)}
+                      className="px-4 py-2.5 bg-slate-900/40 border border-white/10 rounded-xl text-white focus:outline-none focus:border-brand-orange"
+                    >
+                      <option value="">All Employees</option>
+                      {uniqueUsers.map((u) => (
+                        <option key={u.email} value={u.email}>{u.name}</option>
+                      ))}
+                    </select>
+                  </div>
 
-                     {/* Filters */}
-                     <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-                       <div className="lg:col-span-2">
-                         <DateRangeFilter value={dateRange} onChange={setDateRange} />
-                       </div>
+                  {/* Export Button */}
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm text-slate-400">
+                      {allAttendance.length} records found
+                    </span>
+                    <button
+                      onClick={handleExportDaily}
+                      disabled={allAttendance.length === 0}
+                      className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white rounded-lg font-semibold transition-all disabled:opacity-50"
+                    >
+                      <Download className="w-4 h-4" />
+                      Export Daily CSV
+                    </button>
+                  </div>
+                </div>
 
-                       <select
-                         value={selectedUser}
-                         onChange={(e) => setSelectedUser(e.target.value)}
-                         className="px-4 py-2.5 bg-slate-900/40 backdrop-blur-xl border border-white/10 rounded-xl text-white focus:outline-none focus:border-brand-orange transition-all"
-                       >
-                         <option value="">All Employees</option>
-                         {uniqueUsers.map((u) => (
-                           <option key={u.email} value={u.email}>
-                             {u.name} ({u.email})
-                           </option>
-                         ))}
-                       </select>
-                     </div>
-
-                     {/* Export Button */}
-                     <div className="flex justify-end">
-                       <button
-                         onClick={handleExportDaily}
-                         disabled={allAttendance.length === 0}
-                         className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white rounded-lg font-semibold transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                       >
-                         <Download className="w-4 h-4" />
-                         Export to CSV
-                       </button>
-                     </div>
-                     </div>
-
-                  {/* Table */}
+                {/* Table */}
+                <div className="bg-slate-900/40 backdrop-blur-xl border border-white/10 rounded-xl overflow-hidden">
                   <div className="overflow-x-auto">
                     <table className="w-full">
                       <thead>
                         <tr className="bg-slate-900/50 border-b border-slate-800">
-                          <th className="text-left text-slate-400 font-semibold p-4 text-sm">
-                            Employee
-                          </th>
-                          <th className="text-left text-slate-400 font-semibold p-4 text-sm">
-                            Date
-                          </th>
-                          <th className="text-left text-slate-400 font-semibold p-4 text-sm">
-                            Clock In
-                          </th>
-                          <th className="text-left text-slate-400 font-semibold p-4 text-sm">
-                            Clock Out
-                          </th>
-                          <th className="text-left text-slate-400 font-semibold p-4 text-sm">
-                            Hours
-                          </th>
-                          <th className="text-left text-slate-400 font-semibold p-4 text-sm">
-                            Status
-                          </th>
+                          <th className="text-left text-slate-400 font-semibold p-4 text-sm">Employee</th>
+                          <th className="text-left text-slate-400 font-semibold p-4 text-sm">Date</th>
+                          <th className="text-left text-slate-400 font-semibold p-4 text-sm">Clock In</th>
+                          <th className="text-left text-slate-400 font-semibold p-4 text-sm">Clock Out</th>
+                          <th className="text-left text-slate-400 font-semibold p-4 text-sm">Hours</th>
+                          <th className="text-left text-slate-400 font-semibold p-4 text-sm">Status</th>
+                          <th className="text-left text-slate-400 font-semibold p-4 text-sm">Action</th>
                         </tr>
                       </thead>
                       <tbody>
-                        <AnimatePresence>
-                          {allAttendance.length === 0 ? (
-                            <tr>
-                              <td colSpan={6} className="text-center py-12 text-slate-500">
-                                <Calendar className="w-12 h-12 mx-auto mb-3 text-slate-600" />
-                                <p>No attendance records found</p>
-                              </td>
-                            </tr>
-                          ) : (
-                            allAttendance.map((record, index) => (
-                              <motion.tr
-                                key={record.id}
-                                initial={{ opacity: 0 }}
-                                animate={{ opacity: 1 }}
-                                exit={{ opacity: 0 }}
-                                transition={{ delay: index * 0.02 }}
-                                className="border-b border-slate-800 hover:bg-slate-800/30 transition-colors"
-                              >
+                        {allAttendance.length === 0 ? (
+                          <tr>
+                            <td colSpan={7} className="text-center py-12 text-slate-500">
+                              <Calendar className="w-12 h-12 mx-auto mb-3 text-slate-600" />
+                              <p>No attendance records found</p>
+                            </td>
+                          </tr>
+                        ) : (
+                          allAttendance.map((record) => {
+                            const hours = record.clock_out_time 
+                              ? record.duration_hours || 0
+                              : (Date.now() - new Date(record.clock_in_time).getTime()) / (60 * 60 * 1000);
+                            const status = determineStatus(hours, !record.clock_out_time);
+                            
+                            return (
+                              <tr key={record.id} className="border-b border-slate-800 hover:bg-slate-800/30 transition-colors">
                                 <td className="p-4">
-                                  <div>
-                                    <p className="text-white font-medium">{record.user_name}</p>
-                                    <p className="text-xs text-slate-500">{record.user_email}</p>
-                                  </div>
+                                  <p className="text-white font-medium">{record.user_name}</p>
+                                  <p className="text-xs text-slate-500">{record.user_email}</p>
                                 </td>
-
                                 <td className="p-4">
-                                  <p className="text-white font-medium">
-                                    {format(parseISO(record.work_date), 'MMM dd, yyyy')}
-                                  </p>
+                                  <p className="text-white">{format(parseISO(record.work_date), 'MMM dd, yyyy')}</p>
+                                  <p className="text-xs text-slate-500">{format(parseISO(record.work_date), 'EEEE')}</p>
                                 </td>
-
-                                <td className="p-4">
-                                   <p className="text-white">
-                                     {format(parseISO(record.clock_in_time), 'h:mm:ss a')}
-                                   </p>
-                                 </td>
-
-                                 <td className="p-4">
-                                   <p className="text-white">
-                                     {record.clock_out_time
-                                       ? format(parseISO(record.clock_out_time), 'h:mm:ss a')
-                                       : '—'}
-                                   </p>
-                                 </td>
-
-                                <td className="p-4">
-                                  <p className="text-white font-semibold">
-                                    {(() => {
-                                      let hours = record.clock_out_time 
-                                        ? record.duration_hours
-                                        : (new Date().getTime() - new Date(record.clock_in_time).getTime()) / (60 * 60 * 1000);
-                                      if (!hours) hours = 0;
-                                      if (hours < 1) {
-                                        const minutes = Math.round(hours * 60);
-                                        return `${minutes}m`;
-                                      }
-                                      return `${hours.toFixed(2)}h`;
-                                    })()}
-                                  </p>
+                                <td className="p-4 text-white">{format(parseISO(record.clock_in_time), 'h:mm:ss a')}</td>
+                                <td className="p-4 text-white">
+                                  {record.clock_out_time ? format(parseISO(record.clock_out_time), 'h:mm:ss a') : '—'}
+                                  {record.auto_clocked_out && (
+                                    <span className="ml-2 text-xs text-yellow-400">(Auto)</span>
+                                  )}
                                 </td>
-
-                                <td className="p-4 flex items-center gap-2">
-                                  <div>
-                                    {(() => {
-                                      // Map old "LATE" status to correct status
-                                      let correctedStatus;
-                                      if (record.duration_hours === 0) correctedStatus = 'INCOMPLETE';
-                                      else if (record.duration_hours >= SHIFT_CONFIG.OVERTIME_THRESHOLD) correctedStatus = 'OVERTIME';
-                                      else if (record.duration_hours < SHIFT_CONFIG.UNDERTIME_THRESHOLD) correctedStatus = 'UNDERTIME';
-                                      else correctedStatus = 'COMPLETED';
-                                      
-                                      return <StatusBadge status={correctedStatus} />;
-                                    })()}
-                                  </div>
+                                <td className="p-4">
+                                  <p className="text-white font-semibold">{hours.toFixed(2)}h</p>
+                                </td>
+                                <td className="p-4">
+                                  <StatusBadge status={status} size="sm" />
+                                </td>
+                                <td className="p-4">
                                   {!record.clock_out_time && (
                                     <button
                                       onClick={() => handleForceClockOut(record.id, record.user_email)}
-                                      className="px-2 py-1 bg-red-600 hover:bg-red-700 text-white text-xs font-semibold rounded transition-colors whitespace-nowrap"
+                                      className="px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white text-xs font-semibold rounded-lg transition-colors"
                                     >
                                       Force Out
                                     </button>
                                   )}
                                 </td>
-                              </motion.tr>
-                            ))
-                          )}
-                        </AnimatePresence>
+                              </tr>
+                            );
+                          })
+                        )}
                       </tbody>
                     </table>
                   </div>
                 </div>
-              </motion.div>
+              </div>
+            )}
+
+            {/* Weekly Report Tab */}
+            {adminTab === 'weekly' && (
+              <div className="space-y-4">
+                <div className="bg-slate-900/40 backdrop-blur-xl border border-white/10 rounded-xl p-4">
+                  <div className="flex flex-wrap gap-4 items-center justify-between">
+                    <div className="flex items-center gap-4">
+                      <label className="text-slate-400 text-sm">Week Starting:</label>
+                      <input
+                        type="date"
+                        value={selectedWeekStart}
+                        onChange={(e) => {
+                          setSelectedWeekStart(e.target.value);
+                          // Also update date range for query
+                          const weekEnd = new Date(e.target.value);
+                          weekEnd.setDate(weekEnd.getDate() + 6);
+                          setDateRange({
+                            startDate: e.target.value,
+                            endDate: weekEnd.toISOString().split('T')[0],
+                          });
+                        }}
+                        className="px-4 py-2 bg-slate-900/40 border border-white/10 rounded-xl text-white focus:outline-none focus:border-brand-orange"
+                      />
+                    </div>
+                    <button
+                      onClick={handleExportWeekly}
+                      disabled={uniqueUsers.length === 0}
+                      className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white rounded-lg font-semibold transition-all disabled:opacity-50"
+                    >
+                      <Download className="w-4 h-4" />
+                      Export Weekly CSV
+                    </button>
+                  </div>
+                </div>
+
+                {/* Weekly Summary Table */}
+                <div className="bg-slate-900/40 backdrop-blur-xl border border-white/10 rounded-xl overflow-hidden">
+                  <div className="overflow-x-auto">
+                    <table className="w-full">
+                      <thead>
+                        <tr className="bg-slate-900/50 border-b border-slate-800">
+                          <th className="text-left text-slate-400 font-semibold p-4 text-sm">Employee</th>
+                          <th className="text-center text-slate-400 font-semibold p-4 text-sm">Days</th>
+                          <th className="text-center text-slate-400 font-semibold p-4 text-sm">Total Hours</th>
+                          <th className="text-center text-slate-400 font-semibold p-4 text-sm">Overtime</th>
+                          <th className="text-center text-slate-400 font-semibold p-4 text-sm">Undertime</th>
+                          <th className="text-center text-slate-400 font-semibold p-4 text-sm">Absent</th>
+                          <th className="text-center text-slate-400 font-semibold p-4 text-sm">Avg/Day</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {(() => {
+                          const weekEnd = new Date(selectedWeekStart);
+                          weekEnd.setDate(weekEnd.getDate() + 6);
+                          const reports = generateWeeklyReport(
+                            allAttendance, 
+                            uniqueUsers, 
+                            selectedWeekStart, 
+                            weekEnd.toISOString().split('T')[0]
+                          );
+                          
+                          if (reports.length === 0) {
+                            return (
+                              <tr>
+                                <td colSpan={7} className="text-center py-12 text-slate-500">
+                                  <CalendarDays className="w-12 h-12 mx-auto mb-3 text-slate-600" />
+                                  <p>No data for this week</p>
+                                </td>
+                              </tr>
+                            );
+                          }
+                          
+                          return reports.map((stat) => (
+                            <tr key={stat.email} className="border-b border-slate-800 hover:bg-slate-800/30 transition-colors">
+                              <td className="p-4">
+                                <p className="text-white font-medium">{stat.employee}</p>
+                                <p className="text-xs text-slate-500">{stat.email}</p>
+                              </td>
+                              <td className="p-4 text-center text-white font-bold">{stat.totalDays}</td>
+                              <td className="p-4 text-center text-white font-bold">{stat.totalHours.toFixed(1)}h</td>
+                              <td className="p-4 text-center">
+                                <span className={stat.overtimeHours > 0 ? 'text-purple-400 font-bold' : 'text-slate-500'}>
+                                  {stat.overtimeHours.toFixed(1)}h
+                                </span>
+                              </td>
+                              <td className="p-4 text-center">
+                                <span className={stat.undertimeHours > 0 ? 'text-orange-400 font-bold' : 'text-slate-500'}>
+                                  {stat.undertimeHours.toFixed(1)}h
+                                </span>
+                              </td>
+                              <td className="p-4 text-center">
+                                <span className={stat.absentDays > 0 ? 'text-red-400 font-bold' : 'text-slate-500'}>
+                                  {stat.absentDays}
+                                </span>
+                              </td>
+                              <td className="p-4 text-center text-slate-300">{stat.avgHoursPerDay.toFixed(1)}h</td>
+                            </tr>
+                          ));
+                        })()}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
             )}
 
             {/* Monthly Report Tab */}
             {adminTab === 'monthly' && (
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                className="space-y-6"
-              >
-                {/* Month Selector & Export */}
-                <div className="flex gap-4 items-center">
-                  <input
-                    type="month"
-                    value={selectedMonth}
-                    onChange={(e) => setSelectedMonth(e.target.value)}
-                    className="px-4 py-2.5 bg-slate-900/40 backdrop-blur-xl border border-white/10 rounded-xl text-white focus:outline-none focus:border-brand-orange transition-all"
-                  />
-
-                  <button
-                    onClick={handleExportMonthly}
-                    disabled={monthlyStats.length === 0}
-                    className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-brand-orange to-orange-600 hover:from-orange-600 hover:to-brand-orange text-white rounded-xl font-semibold transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    <Download className="w-4 h-4" />
-                    Export Report
-                  </button>
+              <div className="space-y-4">
+                <div className="bg-slate-900/40 backdrop-blur-xl border border-white/10 rounded-xl p-4">
+                  <div className="flex flex-wrap gap-4 items-center justify-between">
+                    <div className="flex items-center gap-4">
+                      <label className="text-slate-400 text-sm">Month:</label>
+                      <input
+                        type="month"
+                        value={selectedMonth}
+                        onChange={(e) => {
+                          setSelectedMonth(e.target.value);
+                          // Update date range for query
+                          const [year, month] = e.target.value.split('-').map(Number);
+                          const firstDay = new Date(year, month - 1, 1);
+                          const lastDay = new Date(year, month, 0);
+                          setDateRange({
+                            startDate: firstDay.toISOString().split('T')[0],
+                            endDate: lastDay.toISOString().split('T')[0],
+                          });
+                        }}
+                        className="px-4 py-2 bg-slate-900/40 border border-white/10 rounded-xl text-white focus:outline-none focus:border-brand-orange"
+                      />
+                    </div>
+                    <button
+                      onClick={handleExportMonthly}
+                      disabled={uniqueUsers.length === 0}
+                      className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-brand-orange to-orange-600 hover:from-orange-600 hover:to-brand-orange text-white rounded-lg font-semibold transition-all disabled:opacity-50"
+                    >
+                      <Download className="w-4 h-4" />
+                      Export Monthly CSV
+                    </button>
+                  </div>
                 </div>
 
                 {/* Monthly Summary Table */}
-                <div className="relative group">
-                  <div className="absolute -inset-0.5 bg-gradient-to-r from-emerald-500 to-teal-500 rounded-2xl opacity-0 group-hover:opacity-30 blur transition duration-500" />
-
-                  <div className="relative bg-slate-900/40 backdrop-blur-xl border border-white/10 rounded-2xl overflow-hidden">
-                    <div className="overflow-x-auto">
-                      <table className="w-full">
-                        <thead>
-                          <tr className="bg-slate-900/50 border-b border-slate-800">
-                            <th className="text-left text-slate-400 font-semibold p-4 text-sm">
-                              Employee
-                            </th>
-                            <th className="text-center text-slate-400 font-semibold p-4 text-sm">
-                              Days Worked
-                            </th>
-                            <th className="text-center text-slate-400 font-semibold p-4 text-sm">
-                              Total Hours
-                            </th>
-                            <th className="text-center text-slate-400 font-semibold p-4 text-sm">
-                              Overtime
-                            </th>
-                            <th className="text-center text-slate-400 font-semibold p-4 text-sm">
-                              Undertime
-                            </th>
-                            <th className="text-center text-slate-400 font-semibold p-4 text-sm">
-                              Absent
-                            </th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          <AnimatePresence>
-                            {monthlyStats.length === 0 ? (
+                <div className="bg-slate-900/40 backdrop-blur-xl border border-white/10 rounded-xl overflow-hidden">
+                  <div className="overflow-x-auto">
+                    <table className="w-full">
+                      <thead>
+                        <tr className="bg-slate-900/50 border-b border-slate-800">
+                          <th className="text-left text-slate-400 font-semibold p-4 text-sm">Employee</th>
+                          <th className="text-center text-slate-400 font-semibold p-4 text-sm">Days Worked</th>
+                          <th className="text-center text-slate-400 font-semibold p-4 text-sm">Completed</th>
+                          <th className="text-center text-slate-400 font-semibold p-4 text-sm">Total Hours</th>
+                          <th className="text-center text-slate-400 font-semibold p-4 text-sm">Overtime</th>
+                          <th className="text-center text-slate-400 font-semibold p-4 text-sm">Undertime</th>
+                          <th className="text-center text-slate-400 font-semibold p-4 text-sm">Absent</th>
+                          <th className="text-center text-slate-400 font-semibold p-4 text-sm">Avg/Day</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {(() => {
+                          const reports = generateMonthlyReport(allAttendance, uniqueUsers, selectedMonth);
+                          
+                          if (reports.length === 0) {
+                            return (
                               <tr>
-                                <td colSpan={6} className="text-center py-12 text-slate-500">
-                                  <Calendar className="w-12 h-12 mx-auto mb-3 text-slate-600" />
-                                  <p>No data for {selectedMonth}</p>
+                                <td colSpan={8} className="text-center py-12 text-slate-500">
+                                  <FileSpreadsheet className="w-12 h-12 mx-auto mb-3 text-slate-600" />
+                                  <p>No data for {format(parseISO(`${selectedMonth}-01`), 'MMMM yyyy')}</p>
                                 </td>
                               </tr>
-                            ) : (
-                              monthlyStats.map((stat, index) => (
-                                <motion.tr
-                                  key={stat.email}
-                                  initial={{ opacity: 0 }}
-                                  animate={{ opacity: 1 }}
-                                  exit={{ opacity: 0 }}
-                                  transition={{ delay: index * 0.02 }}
-                                  className="border-b border-slate-800 hover:bg-slate-800/30 transition-colors"
-                                >
-                                  <td className="p-4">
-                                    <div>
-                                      <p className="text-white font-medium">{stat.name}</p>
-                                      <p className="text-xs text-slate-500">{stat.email}</p>
-                                    </div>
-                                  </td>
-
-                                  <td className="p-4 text-center">
-                                    <p className="text-white font-bold">{stat.totalDays}</p>
-                                  </td>
-
-                                  <td className="p-4 text-center">
-                                    <p className="text-white font-bold">
-                                      {stat.totalHours.toFixed(1)}h
-                                    </p>
-                                  </td>
-
-                                  <td className="p-4 text-center">
-                                    <p
-                                      className={`font-bold ${
-                                        stat.overtimeHours > 0 ? 'text-emerald-400' : 'text-slate-400'
-                                      }`}
-                                    >
-                                      {stat.overtimeHours.toFixed(1)}h
-                                    </p>
-                                  </td>
-
-                                  <td className="p-4 text-center">
-                                    <p
-                                      className={`font-bold ${
-                                        stat.undertimeHours > 0 ? 'text-orange-400' : 'text-slate-400'
-                                      }`}
-                                    >
-                                      {stat.undertimeHours.toFixed(1)}h
-                                    </p>
-                                  </td>
-
-                                  <td className="p-4 text-center">
-                                    <p
-                                      className={`font-bold ${
-                                        stat.incompleteDays > 0 ? 'text-yellow-400' : 'text-slate-400'
-                                      }`}
-                                    >
-                                      {stat.incompleteDays}
-                                    </p>
-                                  </td>
-                                </motion.tr>
-                              ))
-                            )}
-                          </AnimatePresence>
-                        </tbody>
-                      </table>
-                    </div>
+                            );
+                          }
+                          
+                          return reports.map((stat) => (
+                            <tr key={stat.email} className="border-b border-slate-800 hover:bg-slate-800/30 transition-colors">
+                              <td className="p-4">
+                                <p className="text-white font-medium">{stat.employee}</p>
+                                <p className="text-xs text-slate-500">{stat.email}</p>
+                              </td>
+                              <td className="p-4 text-center text-white font-bold">{stat.totalDays}</td>
+                              <td className="p-4 text-center">
+                                <span className="text-emerald-400 font-bold">{stat.completedDays}</span>
+                              </td>
+                              <td className="p-4 text-center text-white font-bold">{stat.totalHours.toFixed(1)}h</td>
+                              <td className="p-4 text-center">
+                                <span className={stat.overtimeHours > 0 ? 'text-purple-400 font-bold' : 'text-slate-500'}>
+                                  {stat.overtimeHours.toFixed(1)}h
+                                </span>
+                              </td>
+                              <td className="p-4 text-center">
+                                <span className={stat.undertimeHours > 0 ? 'text-orange-400 font-bold' : 'text-slate-500'}>
+                                  {stat.undertimeHours.toFixed(1)}h
+                                </span>
+                              </td>
+                              <td className="p-4 text-center">
+                                <span className={stat.absentDays > 0 ? 'text-red-400 font-bold' : 'text-slate-500'}>
+                                  {stat.absentDays}
+                                </span>
+                              </td>
+                              <td className="p-4 text-center text-slate-300">{stat.avgHoursPerDay.toFixed(1)}h</td>
+                            </tr>
+                          ));
+                        })()}
+                      </tbody>
+                    </table>
                   </div>
                 </div>
-              </motion.div>
+              </div>
             )}
-          </div>
+          </motion.div>
         )}
       </div>
     </div>
-  );
-};
-
-// ============================================================================
-// STATUS BADGE COMPONENT
-// ============================================================================
-const StatusBadge: React.FC<{ status: string }> = ({ status }) => {
-  const getColors = (status: string) => {
-    switch (status) {
-      case 'ON_TIME':
-        return 'bg-emerald-500/20 text-emerald-400';
-      case 'COMPLETED':
-        return 'bg-emerald-500/20 text-emerald-400';
-      case 'LATE':
-        return 'bg-red-500/20 text-red-400';
-      case 'OVERTIME':
-        return 'bg-purple-500/20 text-purple-400';
-      case 'UNDERTIME':
-        return 'bg-orange-500/20 text-orange-400';
-      case 'INCOMPLETE':
-        return 'bg-yellow-500/20 text-yellow-400';
-      default:
-        return 'bg-slate-500/20 text-slate-400';
-    }
-  };
-
-  return (
-    <span className={`px-3 py-1.5 rounded-lg text-xs font-bold ${getColors(status)}`}>
-      {status}
-    </span>
   );
 };
 

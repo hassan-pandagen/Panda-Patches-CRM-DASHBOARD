@@ -383,10 +383,12 @@ export const createOrder = async (orderData: any, userEmail: string) => {
     // Step 2: Validate data integrity
     try {
       // ✅ Validate against schema (soft validation - warns but continues)
+      console.log('[DEBUG] Validating order data:', orderData);
       await validateData(orderSchema, orderData);
       logger.info('[Order Service] Data validation passed');
     } catch (validationError: any) {
       // Log the warning but don't throw - allows minor issues to pass
+      console.error('[DEBUG] Validation error details:', validationError.message);
       logger.warn('[Order Service] Data validation warning:', validationError.errors || validationError);
       // Continue anyway - service layer has fallback protection
     }

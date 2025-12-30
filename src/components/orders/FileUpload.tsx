@@ -22,6 +22,9 @@ interface FileUploadSectionProps {
   // ✅ NEW PROP: Function to handle moving file to another list
   onMoveFile?: (url: string) => void;
   moveLabel?: string;
+  
+  // ✅ NEW: Callback to notify parent when uploads start/stop
+  onUploadStateChange?: (isUploading: boolean) => void;
 }
 
 const FileUploadSection: React.FC<FileUploadSectionProps> = ({
@@ -32,6 +35,7 @@ const FileUploadSection: React.FC<FileUploadSectionProps> = ({
   onUrlsChange,
   onMoveFile,
   moveLabel,
+  onUploadStateChange,
 }) => {
   const [isDragActive, setIsDragActive] = useState(false);
   // ✅ DAY 4 FIX: Track upload errors
@@ -43,65 +47,73 @@ const FileUploadSection: React.FC<FileUploadSectionProps> = ({
     async (files: FileList | null) => {
       if (!files) return;
 
+      // ✅ NOTIFY PARENT: Upload starting
+      onUploadStateChange?.(true);
+
       const newUrls: string[] = [];
       const errors: string[] = [];
 
-      for (const file of Array.from(files)) {
-        try {
-          // ✅ DAY 4 FIX: Validate file before upload
-          if (!file.name) {
-            errors.push("File name is missing");
-            continue;
+      try {
+        for (const file of Array.from(files)) {
+          try {
+            // ✅ DAY 4 FIX: Validate file before upload
+            if (!file.name) {
+              errors.push("File name is missing");
+              continue;
+            }
+
+            const fileExt = file.name.split(".").pop();
+            if (!fileExt) {
+              errors.push(`${file.name} has no file extension`);
+              continue;
+            }
+
+            const fileName = `${Math.random()
+              .toString(36)
+              .substring(2)}_${Date.now()}.${fileExt}`;
+            const filePath = `${folderPath}/${fileName}`;
+
+            const { error, data: uploadData } = await supabase.storage
+              .from(bucketName)
+              .upload(filePath, file);
+
+            if (error) {
+              logger.error(`[FileUpload] Upload failed for ${file.name}`, error);
+              errors.push(`Failed to upload ${file.name}: ${error.message}`);
+              continue;
+            }
+
+            const { data } = supabase.storage
+              .from(bucketName)
+              .getPublicUrl(filePath);
+            if (!data?.publicUrl) {
+              errors.push(`Failed to get public URL for ${file.name}`);
+              continue;
+            }
+
+            newUrls.push(data.publicUrl);
+          } catch (err: any) {
+            logger.error(
+              `[FileUpload] Unexpected error uploading ${file.name}`,
+              err
+            );
+            errors.push(`Unexpected error: ${err.message}`);
           }
-
-          const fileExt = file.name.split(".").pop();
-          if (!fileExt) {
-            errors.push(`${file.name} has no file extension`);
-            continue;
-          }
-
-          const fileName = `${Math.random()
-            .toString(36)
-            .substring(2)}_${Date.now()}.${fileExt}`;
-          const filePath = `${folderPath}/${fileName}`;
-
-          const { error, data: uploadData } = await supabase.storage
-            .from(bucketName)
-            .upload(filePath, file);
-
-          if (error) {
-            logger.error(`[FileUpload] Upload failed for ${file.name}`, error);
-            errors.push(`Failed to upload ${file.name}: ${error.message}`);
-            continue;
-          }
-
-          const { data } = supabase.storage
-            .from(bucketName)
-            .getPublicUrl(filePath);
-          if (!data?.publicUrl) {
-            errors.push(`Failed to get public URL for ${file.name}`);
-            continue;
-          }
-
-          newUrls.push(data.publicUrl);
-        } catch (err: any) {
-          logger.error(
-            `[FileUpload] Unexpected error uploading ${file.name}`,
-            err
-          );
-          errors.push(`Unexpected error: ${err.message}`);
         }
-      }
 
-      // ✅ DAY 4 FIX: Report errors
-      if (errors.length > 0) {
-        setUploadErrors(errors);
-        logger.warn(`[FileUpload] ${errors.length} file(s) failed to upload`);
-      }
+        // ✅ DAY 4 FIX: Report errors
+        if (errors.length > 0) {
+          setUploadErrors(errors);
+          logger.warn(`[FileUpload] ${errors.length} file(s) failed to upload`);
+        }
 
-      onUrlsChange([...urls, ...newUrls]);
+        onUrlsChange([...urls, ...newUrls]);
+      } finally {
+        // ✅ NOTIFY PARENT: Upload finished (whether success or error)
+        onUploadStateChange?.(false);
+      }
     },
-    [bucketName, folderPath, urls, onUrlsChange]
+    [bucketName, folderPath, urls, onUrlsChange, onUploadStateChange]
   );
 
   const handleDragOver = (e: React.DragEvent) => {
