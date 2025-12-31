@@ -58,70 +58,16 @@ export const safeISODate = (dateString: any): string | null => {
   return date.toISOString();
 };
 
-/**
- * Safely access array index.
- * Returns null if array is invalid or index doesn't exist.
- */
-export const safeArrayAccess = <T>(
-  array: T[] | null | undefined, 
-  index: number
-): T | null => {
-  if (!Array.isArray(array)) return null;
-  if (index < 0 || index >= array.length) return null;
-  return array[index];
-};
-
-/**
- * Safely get first element of array.
- */
-export const safeFirst = <T>(array: T[] | null | undefined): T | null => {
-  return safeArrayAccess(array, 0);
-};
-
-/**
- * Ensure a value is a valid email or return empty string.
- */
-export const safeEmail = (value: any): string => {
-  const str = safeString(value);
-  // Basic email validation
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(str) ? str : '';
-};
-
-/**
- * Truncate text safely with ellipsis.
- */
-export const safeTruncate = (
-  value: any, 
-  maxLength: number, 
-  ellipsis = '...'
-): string => {
-  const str = safeString(value);
-  if (str.length <= maxLength) return str;
-  return str.slice(0, maxLength - ellipsis.length) + ellipsis;
-};
-
-/**
- * Format currency safely.
- */
-export const safeCurrency = (
-  value: any, 
-  currency = 'USD', 
-  locale = 'en-US'
-): string => {
-  const num = safeNumber(value);
-  return new Intl.NumberFormat(locale, {
-    style: 'currency',
-    currency
-  }).format(num);
-};
-
-/**
- * Parse JSON safely - returns null on error instead of throwing.
- */
-export const safeJSONParse = <T = any>(jsonString: any): T | null => {
-  try {
-    return JSON.parse(safeString(jsonString));
-  } catch {
-    return null;
-  }
-};
+// REMOVED: Unused utility functions
+// - safeArrayAccess: never imported
+// - safeFirst: never imported (was only used by safeArrayAccess)
+// - safeEmail: never imported
+// - safeTruncate: never imported
+// - safeCurrency: never imported
+// - safeJSONParse: never imported
+//
+// ACTIVE FUNCTIONS (keep these):
+// - safeString
+// - safeNumber
+// - safeDate
+// - safeISODate

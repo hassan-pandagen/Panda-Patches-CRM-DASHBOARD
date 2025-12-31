@@ -216,23 +216,30 @@ export const useClockInOut = () => {
   const { user } = useAuth();
   const queryClient = useQueryClient();
 
-  // Query: Today's shift history
+  // Query: Today's shift history - OPTIMIZED for performance
+  // Reduced refetch frequency to minimize main thread blocking
+  // staleTime: 2 minutes (was 30s)
+  // refetchInterval: 2 minutes (was 60s)
   const { data: todaySessions = [], isLoading: isLoadingHistory } = useQuery({
     queryKey: queryKeys.attendance.today(user?.id),
     queryFn: () => fetchTodayAttendance(user?.id),
     enabled: !!user?.id,
-    staleTime: 1000 * 30,
-    refetchInterval: 1000 * 60,
+    staleTime: 1000 * 60 * 2, // 2 minutes (was 30s)
+    refetchInterval: 1000 * 60 * 2, // 2 minutes (was 60s)
+    refetchOnWindowFocus: false, // Don't refetch on tab switch
   });
 
-  // Query: Active session status
+  // Query: Active session status - OPTIMIZED for performance
+  // Increased stale time to reduce background refetches
+  // staleTime: 1 minute (was 0)
+  // refetchInterval: 1 minute (was 30s)
   const { data: activeSession, isLoading: isLoadingStatus } = useQuery({
     queryKey: ['attendance', 'active', user?.id],
     queryFn: () => fetchCurrentActiveSession(user?.id),
     enabled: !!user?.id,
-    staleTime: 0,
-    refetchOnWindowFocus: true,
-    refetchInterval: 1000 * 30,
+    staleTime: 1000 * 60, // 1 minute (was 0 - immediately stale)
+    refetchOnWindowFocus: false, // Don't refetch on tab switch
+    refetchInterval: 1000 * 60, // 1 minute (was 30s)
   });
 
   const isClockedIn = !!activeSession;
@@ -318,12 +325,11 @@ export const useClockInOut = () => {
       // Cap hours at max shift hours if somehow exceeded
       const cappedHours = Math.min(hoursWorked, SHIFT_CONFIG.MAX_SHIFT_HOURS);
 
-      // Update session
+      // Update session (duration_hours is auto-calculated by database)
       const { data: updatedData, error: updateError } = await supabase
         .from('attendance_sessions')
         .update({ 
           clock_out_time: clockOutTime.toISOString(),
-          duration_hours: cappedHours,
         })
         .eq('id', currentActive.id)
         .select()

@@ -147,38 +147,8 @@ export class SlidingWindowRateLimiter {
   }
 }
 
-/**
- * Debounce function for input events
- */
-export function debounce<T extends (...args: any[]) => any>(
-  fn: T,
-  delayMs: number
-): (...args: Parameters<T>) => void {
-  let timeoutId: NodeJS.Timeout;
-
-  return (...args: Parameters<T>) => {
-    clearTimeout(timeoutId);
-    timeoutId = setTimeout(() => fn(...args), delayMs);
-  };
-}
-
-/**
- * Throttle function for frequent events
- */
-export function throttle<T extends (...args: any[]) => any>(
-  fn: T,
-  delayMs: number
-): (...args: Parameters<T>) => void {
-  let lastCallTime = 0;
-
-  return (...args: Parameters<T>) => {
-    const now = Date.now();
-    if (now - lastCallTime >= delayMs) {
-      lastCallTime = now;
-      fn(...args);
-    }
-  };
-}
+// NOTE: debounce and throttle are provided by src/utils/debounce.ts
+// Use: import { debounce, throttle } from '../utils/debounce';
 
 // Common rate limiters (singleton instances)
 export const formSubmitLimiter = new RateLimiter(1000); // 1 submission per second

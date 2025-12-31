@@ -1,76 +1,42 @@
-import React from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { OrderStatus } from '../../types';
-import { getStatusInfo } from '../../constants/statusInfo';
+// src/components/ui/StatusBadge.tsx
+// Memoized status badge component to prevent unnecessary re-renders
+
+import React, { memo, useMemo } from 'react';
 
 interface StatusBadgeProps {
-  status: OrderStatus;
+  status: string;
   size?: 'sm' | 'md';
-  showIcon?: boolean;
-  tooltip?: string;
-  animated?: boolean;
-  className?: string;
 }
 
-const sizeClasses = {
-  sm: 'px-2.5 py-1 text-xs',
-  md: 'px-3 py-1.5 text-sm',
-};
+const StatusBadge = memo<StatusBadgeProps>(({ status, size = 'md' }) => {
+  const colors = useMemo(() => {
+    switch (status) {
+      case 'COMPLETED':
+        return 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30';
+      case 'OVERTIME':
+        return 'bg-purple-500/20 text-purple-400 border-purple-500/30';
+      case 'UNDERTIME':
+        return 'bg-orange-500/20 text-orange-400 border-orange-500/30';
+      case 'INCOMPLETE':
+        return 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30';
+      case 'ABSENT':
+        return 'bg-red-500/20 text-red-400 border-red-500/30';
+      case 'ACTIVE':
+        return 'bg-blue-500/20 text-blue-400 border-blue-500/30';
+      default:
+        return 'bg-slate-500/20 text-slate-400 border-slate-500/30';
+    }
+  }, [status]);
 
-const StatusBadge: React.FC<StatusBadgeProps> = ({
-  status,
-  size = 'sm',
-  showIcon = true,
-  tooltip,
-  animated = true,
-  className = '',
-}) => {
-  const { label, icon: Icon, color } = getStatusInfo(status);
-
-  const isPending = (status === OrderStatus.NEW_ORDER || status === OrderStatus.AWAITING_APPROVAL) && animated;
-  const isInProduction = status === OrderStatus.IN_PRODUCTION && animated;
+  const sizeClasses = size === 'sm' ? 'px-2 py-1 text-xs' : 'px-3 py-1.5 text-xs';
 
   return (
-    <div
-      className={`group relative inline-flex items-center gap-2 font-semibold rounded-full border backdrop-blur-sm transition-all duration-300 ${sizeClasses[size]} ${color} ${className}`}
-      title={tooltip}
-      aria-label={`Status: ${label}`}
-    >
-      {showIcon && (
-        <AnimatePresence>
-          <motion.div
-            key={status}
-            initial={{ opacity: 0, scale: 0.5 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ duration: 0.3 }}
-          >
-            <Icon
-              className={`
-                ${size === 'sm' ? 'h-3.5 w-3.5' : 'h-4 w-4'}
-                ${isInProduction ? 'animate-spin' : ''}
-              `}
-            />
-          </motion.div>
-        </AnimatePresence>
-      )}
-
-      {/* Pulsing dot for Pending status */}
-      {isPending && (
-        <span className="relative flex h-2 w-2">
-          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-current opacity-75"></span>
-          <span className="relative inline-flex rounded-full h-2 w-2 bg-current"></span>
-        </span>
-      )}
-
-      <span>{label}</span>
-
-      {tooltip && (
-        <div className="absolute bottom-full left-1/2 mb-2 -translate-x-1/2 whitespace-nowrap rounded-md bg-slate-800 px-2 py-1 text-xs text-white opacity-0 transition-opacity group-hover:opacity-100">
-          {tooltip}
-        </div>
-      )}
-    </div>
+    <span className={`${sizeClasses} rounded-lg font-bold border ${colors}`}>
+      {status}
+    </span>
   );
-};
+});
+
+StatusBadge.displayName = 'StatusBadge';
 
 export default StatusBadge;

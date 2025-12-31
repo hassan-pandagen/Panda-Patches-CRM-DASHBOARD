@@ -3,6 +3,7 @@ import { Order, UserRole } from '../../types';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import { supabase } from '../../services/supabaseClient';
+import { deleteFile } from '../../services/storageService';
 import { updateOrder } from '../../services/orderService';
 import { Upload, Download, Trash2, FileText, Loader2, Eye } from 'lucide-react';
 import { OptimizedImage } from '../ui/OptimizedImage';
@@ -75,16 +76,14 @@ const ProductionFiles: React.FC<ProductionFilesProps> = ({ order, onUpdate }) =>
         if (!window.confirm('Are you sure you want to delete this file?')) return;
 
         try {
-            const filePath = new URL(urlToDelete).pathname.split('/order-attachments/')[1];
-            const { error } = await supabase.storage.from('order-attachments').remove([filePath]);
-            if (error) throw error;
+            // Use centralized storage service for file deletion
+            await deleteFile(urlToDelete);
 
             const updatedUrls = (order.productionFileUrls || []).filter((url: string) => url !== urlToDelete);
             const updatedOrder = { ...order, productionFileUrls: updatedUrls };
             const savedOrder = await updateOrder(updatedOrder);
             onUpdate(savedOrder);
         } catch (error: any) {
-            // ✅ DAY 3 FIX: Replace alert() with toast
             const errorMsg = `Failed to delete file: ${error.message}`;
             toast.error(errorMsg);
         }

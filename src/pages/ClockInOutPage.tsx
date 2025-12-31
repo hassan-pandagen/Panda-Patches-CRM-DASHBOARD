@@ -51,6 +51,8 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../services/supabaseClient';
 import { queryKeys } from '../constants/queryKeys';
 import SpotlightCard from '../components/ui/SpotlightCard';
+import StatusBadge from '../components/ui/StatusBadge';
+import { debounce } from '../utils/debounce';
 
 // ============================================
 // ANIMATION VARIANTS
@@ -75,35 +77,7 @@ const cardVariants = {
 // ============================================
 // HELPER COMPONENTS
 // ============================================
-
-const StatusBadge: React.FC<{ status: string; size?: 'sm' | 'md' }> = ({ status, size = 'md' }) => {
-  const getColors = (status: string) => {
-    switch (status) {
-      case 'COMPLETED':
-        return 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30';
-      case 'OVERTIME':
-        return 'bg-purple-500/20 text-purple-400 border-purple-500/30';
-      case 'UNDERTIME':
-        return 'bg-orange-500/20 text-orange-400 border-orange-500/30';
-      case 'INCOMPLETE':
-        return 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30';
-      case 'ABSENT':
-        return 'bg-red-500/20 text-red-400 border-red-500/30';
-      case 'ACTIVE':
-        return 'bg-blue-500/20 text-blue-400 border-blue-500/30';
-      default:
-        return 'bg-slate-500/20 text-slate-400 border-slate-500/30';
-    }
-  };
-
-  const sizeClasses = size === 'sm' ? 'px-2 py-1 text-xs' : 'px-3 py-1.5 text-xs';
-
-  return (
-    <span className={`${sizeClasses} rounded-lg font-bold border ${getColors(status)}`}>
-      {status}
-    </span>
-  );
-};
+// StatusBadge is now imported from '../components/ui/StatusBadge' for better performance
 
 const StatCard: React.FC<{
   icon: React.ReactNode;
@@ -230,25 +204,33 @@ const ClockInOutPage: React.FC = () => {
   }, [autoClockOutTime, currentTime]);
 
   // ============================================
-  // HANDLERS
+  // HANDLERS - OPTIMIZED WITH DEBOUNCING
   // ============================================
 
-  const handleClockIn = async () => {
-    await clockIn();
-    queryClient.invalidateQueries({ queryKey: queryKeys.attendance.all() });
-  };
+  // Debounced clock in handler (100ms) to prevent multiple rapid clicks
+  const handleClockIn = useCallback(
+    debounce(async () => {
+      await clockIn();
+      queryClient.invalidateQueries({ queryKey: queryKeys.attendance.all() });
+    }, 100),
+    [clockIn, queryClient]
+  );
 
-  const handleClockOut = async () => {
-    await clockOut();
-    queryClient.invalidateQueries({ queryKey: queryKeys.attendance.all() });
-  };
+  // Debounced clock out handler (100ms) to prevent multiple rapid clicks
+  const handleClockOut = useCallback(
+    debounce(async () => {
+      await clockOut();
+      queryClient.invalidateQueries({ queryKey: queryKeys.attendance.all() });
+    }, 100),
+    [clockOut, queryClient]
+  );
 
-  const filterToday = () => {
+  const filterToday = useCallback(() => {
     const today = calculateWorkDate(new Date());
     setDateRange({ startDate: today, endDate: today });
-  };
+  }, []);
 
-  const filterThisWeek = () => {
+  const filterThisWeek = useCallback(() => {
     const today = new Date();
     const weekStart = startOfWeek(today, { weekStartsOn: 1 });
     const weekEnd = endOfWeek(today, { weekStartsOn: 1 });
@@ -256,9 +238,9 @@ const ClockInOutPage: React.FC = () => {
       startDate: weekStart.toISOString().split('T')[0],
       endDate: weekEnd.toISOString().split('T')[0],
     });
-  };
+  }, []);
 
-  const filterThisMonth = () => {
+  const filterThisMonth = useCallback(() => {
     const today = new Date();
     const monthStart = startOfMonth(today);
     const monthEnd = endOfMonth(today);
@@ -266,7 +248,7 @@ const ClockInOutPage: React.FC = () => {
       startDate: monthStart.toISOString().split('T')[0],
       endDate: monthEnd.toISOString().split('T')[0],
     });
-  };
+  }, []);
 
   // ============================================
   // EXPORT FUNCTIONS
