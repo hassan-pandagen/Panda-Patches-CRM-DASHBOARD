@@ -715,7 +715,7 @@ const ClockInOutPage: React.FC = () => {
             {adminTab === 'daily' && (
               <div className="space-y-4">
                 {/* Filters */}
-                <div className="bg-slate-900/40 backdrop-blur-xl border border-white/10 rounded-xl p-4 space-y-4">
+                <div className="bg-slate-900/40 backdrop-blur-xl border border-white/10 rounded-xl p-4 space-y-4 relative z-20">
                   {/* Quick Filters */}
                   <div className="flex gap-2 flex-wrap">
                     <button onClick={filterToday} className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-lg transition-colors">
@@ -763,7 +763,7 @@ const ClockInOutPage: React.FC = () => {
                 </div>
 
                 {/* Table */}
-                <div className="bg-slate-900/40 backdrop-blur-xl border border-white/10 rounded-xl overflow-hidden">
+                <div className="bg-slate-900/40 backdrop-blur-xl border border-white/10 rounded-xl overflow-hidden relative z-10">
                   <div className="overflow-x-auto">
                     <table className="w-full">
                       <thead>
