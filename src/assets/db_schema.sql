@@ -310,7 +310,7 @@ CREATE INDEX IF NOT EXISTS idx_performance_metrics_user_id ON public.performance
 
 -- SECTION 5: FUNCTIONS & TRIGGERS
 -- -----------------------------------------------------------------
-CREATE SEQUENCE IF NOT EXISTS public.order_number_seq START 10001;
+CREATE SEQUENCE IF NOT EXISTS public.order_number_seq START 10001 INCREMENT BY 1;
 CREATE SEQUENCE IF NOT EXISTS public.quote_number_seq START 1;
 
 CREATE OR REPLACE FUNCTION public.generate_order_number()
@@ -585,7 +585,7 @@ $$;
 CREATE OR REPLACE FUNCTION public.get_user_email()
 RETURNS text LANGUAGE sql SECURITY DEFINER STABLE AS $$
   SELECT COALESCE(
-    (SELECT email FROM public.user_profiles WHERE id = auth.uid() LIMIT 1),
+    (SELECT email FROM auth.users WHERE id = auth.uid() LIMIT 1),
     ''
   );
 $$;
@@ -593,7 +593,9 @@ $$;
 CREATE OR REPLACE FUNCTION public.is_admin()
 RETURNS boolean LANGUAGE sql SECURITY DEFINER STABLE AS $$
   SELECT COALESCE(
-    (SELECT role FROM public.user_profiles WHERE id = auth.uid() LIMIT 1) = 'ADMIN',
+    (SELECT role FROM public.user_profiles 
+     WHERE id = auth.uid() 
+     LIMIT 1) = 'ADMIN',
     false
   );
 $$;

@@ -102,6 +102,8 @@ const AllOrdersPage: React.FC = () => {
             // Map snake_case DB columns to camelCase for frontend
             return (data || []).map(mapDbToOrder);
         },
+        staleTime: 0, // Always refetch when returning to tab (RLS policy may have changed)
+        gcTime: 1000 * 60 * 5, // Keep in cache for 5 minutes
     });
 
     // --- OVERDUE LOGIC ---
