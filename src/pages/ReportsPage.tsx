@@ -194,23 +194,30 @@ const SalesReportComponent: React.FC<ReportComponentProps> = ({ orders }) => {
   );
 
   const revenueTrend = useMemo(() => {
-    const dailyRevenue = new Map<string, number>();
+    const dailyRevenue = new Map<string, { revenue: number; timestamp: number }>();
     for (const order of orders) {
       if (order.createdAt) {
-        const date = new Date(order.createdAt).toLocaleDateString("en-US", {
+        const dateObj = new Date(order.createdAt);
+        const formattedDate = dateObj.toLocaleDateString("en-US", {
           month: "short",
           day: "numeric",
         });
+        const timestamp = dateObj.getTime();
+        const existing = dailyRevenue.get(formattedDate) || { revenue: 0, timestamp };
         dailyRevenue.set(
-          date,
-          (dailyRevenue.get(date) || 0) + (order.orderAmount || 0)
-        ); // Use masked amount
+          formattedDate,
+          {
+            revenue: existing.revenue + (order.orderAmount || 0),
+            timestamp: Math.min(existing.timestamp, timestamp) // Keep earliest timestamp for the day
+          }
+        );
       }
     }
-    return Array.from(dailyRevenue.entries(), ([date, revenue]) => ({
+    return Array.from(dailyRevenue.entries(), ([date, data]) => ({
       date,
-      revenue,
-    })).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+      revenue: data.revenue,
+      timestamp: data.timestamp,
+    })).sort((a, b) => a.timestamp - b.timestamp);
   }, [orders]);
 
   const agentPerformance = useMemo(() => {
