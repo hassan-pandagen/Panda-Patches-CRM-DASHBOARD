@@ -196,7 +196,7 @@ export default function NotificationBell() {
         <div className="relative" ref={dropdownRef}>
             <button
                 onClick={() => setOpen(!open)}
-                className={`relative p-2 rounded-xl transition-all duration-200 ${open ? 'bg-brand-orange/10 text-brand-orange' : 'text-slate-400 hover:bg-brand-orange/10 hover:text-brand-orange'
+                className={`relative p-2 rounded-xl transition-all duration-200 ${open ? 'bg-white/10 text-white' : 'text-slate-400 hover:bg-white/5 hover:text-white'
                     }`}
             >
                 <Bell className="w-5 h-5" />
@@ -217,11 +217,11 @@ export default function NotificationBell() {
                             )}
                         </div>
                         {activeNotifications.length > 0 && (
-                            <button 
+                            <button
                                 onClick={markAllRead}
-                                className="text-xs text-slate-400 hover:text-brand-orange hover:bg-brand-orange/10 flex items-center gap-1.5 px-2 py-1 rounded-lg transition-all duration-200"
+                                className="text-xs text-slate-400 hover:text-white flex items-center gap-1 transition-colors"
                             >
-                                <CheckCircle2 className="w-3.5 h-3.5" /> Mark all read
+                                <CheckCircle2 className="w-3 h-3" /> Mark all read
                             </button>
                         )}
                     </div>
@@ -235,16 +235,16 @@ export default function NotificationBell() {
                             </div>
                         ) : (
                             <ul className="divide-y divide-white/5">
-                              {activeNotifications.map((n) => (
-                                <li key={n.id} className="relative group bg-transparent hover:bg-slate-800/40 transition-all">
-                                  <div className="flex items-start pr-10"> {/* Padding right for the dismiss button */}
+                                {activeNotifications.map((n) => (
+                                    <li key={n.id} className="relative group bg-transparent hover:bg-white/5 transition-colors">
+                                        <div className="flex items-start pr-10"> {/* Padding right for the dismiss button */}
                                             <Link
                                                 to={`/order/${n.orderNumber}`}
                                                 onClick={() => setOpen(false)}
                                                 className="flex-1 p-4 block"
                                             >
                                                 <div className="flex items-start gap-3">
-                                                    <NotificationStatusBadge status={n.type as OrderStatus | 'URGENT'} size="sm" groupHover={true} />
+                                                    <NotificationStatusBadge status={n.type as OrderStatus | 'URGENT'} size="sm" />
 
                                                     <div>
                                                         <p className="text-sm text-slate-200 leading-snug mb-1">
@@ -263,7 +263,7 @@ export default function NotificationBell() {
                                                     e.stopPropagation();
                                                     markAsRead(n.id);
                                                 }}
-                                                className="absolute top-4 right-4 p-2 text-slate-500 hover:text-brand-orange hover:bg-brand-orange/10 rounded-lg transition-all opacity-50 group-hover:opacity-100 focus:opacity-100"
+                                                className="absolute top-4 right-4 p-1.5 text-slate-500 hover:text-green-400 hover:bg-green-400/10 rounded-full transition-all opacity-0 group-hover:opacity-100 focus:opacity-100"
                                                 title="Mark as read"
                                             >
                                                 <Check className="w-4 h-4" />

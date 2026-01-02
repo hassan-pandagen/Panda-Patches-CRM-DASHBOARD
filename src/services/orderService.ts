@@ -265,20 +265,33 @@ export const triggerStatusEmail = async (order: Order, statusToCheck: string) =>
   switch (statusToCheck) {
     case OrderStatus.NEW_ORDER:
       if (SENDGRID_TEMPLATES.CUSTOMER_NEW_ORDER) requests.push({ to: order.customerEmail, template_id: SENDGRID_TEMPLATES.CUSTOMER_NEW_ORDER, isInternal: false });
-      if (SENDGRID_TEMPLATES.INTERNAL_NEW_ORDER) internalEmails.forEach(email => requests.push({ to: email, template_id: SENDGRID_TEMPLATES.INTERNAL_NEW_ORDER, isInternal: true, cc: DESIGN_TEAM_CC }));
+      if (SENDGRID_TEMPLATES.INTERNAL_NEW_ORDER && internalEmails.length > 0) {
+        // CC approach: send one email with others in CC to save SendGrid quota
+        const ccEmails = internalEmails.slice(1).join(',');
+        requests.push({ to: internalEmails[0], template_id: SENDGRID_TEMPLATES.INTERNAL_NEW_ORDER, isInternal: true, cc: [DESIGN_TEAM_CC, ccEmails].filter(Boolean).join(',') });
+      }
       break;
     case OrderStatus.AWAITING_APPROVAL:
       if (SENDGRID_TEMPLATES.CUSTOMER_MOCKUP_READY) requests.push({ to: order.customerEmail, template_id: SENDGRID_TEMPLATES.CUSTOMER_MOCKUP_READY, isInternal: false });
-      if (SENDGRID_TEMPLATES.INTERNAL_REVISION_REQUESTED) internalEmails.forEach(email => requests.push({ to: email, template_id: SENDGRID_TEMPLATES.INTERNAL_REVISION_REQUESTED, isInternal: true, cc: DESIGN_TEAM_CC }));
+      if (SENDGRID_TEMPLATES.INTERNAL_REVISION_REQUESTED && internalEmails.length > 0) {
+        const ccEmails = internalEmails.slice(1).join(',');
+        requests.push({ to: internalEmails[0], template_id: SENDGRID_TEMPLATES.INTERNAL_REVISION_REQUESTED, isInternal: true, cc: [DESIGN_TEAM_CC, ccEmails].filter(Boolean).join(',') });
+      }
       break;
     case OrderStatus.REVISION_REQUESTED:
       if (SENDGRID_TEMPLATES.CUSTOMER_REVISION_IN_PROGRESS) requests.push({ to: order.customerEmail, template_id: SENDGRID_TEMPLATES.CUSTOMER_REVISION_IN_PROGRESS, isInternal: false });
-      if (SENDGRID_TEMPLATES.INTERNAL_REVISION_REQUESTED) internalEmails.forEach(email => requests.push({ to: email, template_id: SENDGRID_TEMPLATES.INTERNAL_REVISION_REQUESTED, isInternal: true, cc: DESIGN_TEAM_CC }));
+      if (SENDGRID_TEMPLATES.INTERNAL_REVISION_REQUESTED && internalEmails.length > 0) {
+        const ccEmails = internalEmails.slice(1).join(',');
+        requests.push({ to: internalEmails[0], template_id: SENDGRID_TEMPLATES.INTERNAL_REVISION_REQUESTED, isInternal: true, cc: [DESIGN_TEAM_CC, ccEmails].filter(Boolean).join(',') });
+      }
       break;
     case OrderStatus.IN_PRODUCTION:
     case OrderStatus.APPROVED:
       if (SENDGRID_TEMPLATES.CUSTOMER_PRODUCTION_START) requests.push({ to: order.customerEmail, template_id: SENDGRID_TEMPLATES.CUSTOMER_PRODUCTION_START, isInternal: false });
-      if (SENDGRID_TEMPLATES.INTERNAL_PRODUCTION_START) internalEmails.forEach(email => requests.push({ to: email, template_id: SENDGRID_TEMPLATES.INTERNAL_PRODUCTION_START, isInternal: true, cc: DESIGN_TEAM_CC }));
+      if (SENDGRID_TEMPLATES.INTERNAL_PRODUCTION_START && internalEmails.length > 0) {
+        const ccEmails = internalEmails.slice(1).join(',');
+        requests.push({ to: internalEmails[0], template_id: SENDGRID_TEMPLATES.INTERNAL_PRODUCTION_START, isInternal: true, cc: [DESIGN_TEAM_CC, ccEmails].filter(Boolean).join(',') });
+      }
       break;
     case OrderStatus.QUALITY_ASSURANCE:
       if (SENDGRID_TEMPLATES.INTERNAL_QUALITY_ASSURANCE) requests.push({ to: order.customerEmail, template_id: SENDGRID_TEMPLATES.INTERNAL_QUALITY_ASSURANCE, isInternal: false });
