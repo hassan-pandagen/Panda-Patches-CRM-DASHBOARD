@@ -310,8 +310,13 @@ CREATE INDEX IF NOT EXISTS idx_performance_metrics_user_id ON public.performance
 
 -- SECTION 5: FUNCTIONS & TRIGGERS
 -- -----------------------------------------------------------------
+-- Create sequences if they don't exist, then ensure correct INCREMENT
 CREATE SEQUENCE IF NOT EXISTS public.order_number_seq START 10001 INCREMENT BY 1;
-CREATE SEQUENCE IF NOT EXISTS public.quote_number_seq START 1;
+CREATE SEQUENCE IF NOT EXISTS public.quote_number_seq START 1 INCREMENT BY 1;
+
+-- Ensure existing sequences have correct INCREMENT (fixes issue #2: odd number generation)
+ALTER SEQUENCE public.order_number_seq INCREMENT BY 1;
+ALTER SEQUENCE public.quote_number_seq INCREMENT BY 1;
 
 CREATE OR REPLACE FUNCTION public.generate_order_number()
 RETURNS TRIGGER AS $$
@@ -952,32 +957,47 @@ GRANT SELECT ON public.sales_agent_reports TO authenticated;
 
 -- SECTION 8: TRIGGERS
 -- -----------------------------------------------------------------
+-- IMPORTANT: Using ENABLE ALWAYS to ensure triggers fire regardless of session_replication_role
+-- This prevents triggers from being disabled when schema is run via Supabase migrations/SQL Editor
+
 DROP TRIGGER IF EXISTS trigger_generate_order_number ON public.orders;
 CREATE TRIGGER trigger_generate_order_number BEFORE INSERT ON public.orders FOR EACH ROW EXECUTE FUNCTION public.generate_order_number();
+ALTER TABLE public.orders ENABLE ALWAYS TRIGGER trigger_generate_order_number;
 
 DROP TRIGGER IF EXISTS trigger_generate_quote_number ON public.quotes;
 CREATE TRIGGER trigger_generate_quote_number BEFORE INSERT ON public.quotes FOR EACH ROW EXECUTE FUNCTION public.generate_quote_number();
+ALTER TABLE public.quotes ENABLE ALWAYS TRIGGER trigger_generate_quote_number;
 
 DROP TRIGGER IF EXISTS trigger_handle_updated_at ON public.orders;
 CREATE TRIGGER trigger_handle_updated_at BEFORE UPDATE ON public.orders FOR EACH ROW EXECUTE FUNCTION public.handle_updated_at();
+ALTER TABLE public.orders ENABLE ALWAYS TRIGGER trigger_handle_updated_at;
 
 DROP TRIGGER IF EXISTS trigger_check_production_updates ON public.orders;
 CREATE TRIGGER trigger_check_production_updates BEFORE UPDATE ON public.orders FOR EACH ROW EXECUTE FUNCTION public.check_production_updates();
+ALTER TABLE public.orders ENABLE ALWAYS TRIGGER trigger_check_production_updates;
 
 DROP TRIGGER IF EXISTS trigger_log_order_changes ON public.orders;
 CREATE TRIGGER trigger_log_order_changes AFTER UPDATE ON public.orders FOR EACH ROW EXECUTE FUNCTION public.log_order_changes();
+ALTER TABLE public.orders ENABLE ALWAYS TRIGGER trigger_log_order_changes;
 
-DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
-CREATE TRIGGER on_auth_user_created AFTER INSERT ON auth.users FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
+-- ❌ SKIPPED: Cannot create trigger on auth.users (permission denied)
+-- The trigger on auth.users already exists from initial setup
+-- If needed, configure via Supabase Dashboard → Authentication → Hooks
+-- DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
+-- CREATE TRIGGER on_auth_user_created AFTER INSERT ON auth.users FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
+-- ALTER TABLE auth.users ENABLE ALWAYS TRIGGER on_auth_user_created;
 
 DROP TRIGGER IF EXISTS trigger_update_attendance_summary ON public.attendance_sessions;
 CREATE TRIGGER trigger_update_attendance_summary AFTER INSERT OR UPDATE OR DELETE ON public.attendance_sessions FOR EACH ROW EXECUTE FUNCTION public.recalculate_attendance_summary();
+ALTER TABLE public.attendance_sessions ENABLE ALWAYS TRIGGER trigger_update_attendance_summary;
 
 DROP TRIGGER IF EXISTS trigger_validate_clock_in ON public.attendance_sessions;
 CREATE TRIGGER trigger_validate_clock_in BEFORE INSERT ON public.attendance_sessions FOR EACH ROW EXECUTE FUNCTION public.validate_clock_in();
+ALTER TABLE public.attendance_sessions ENABLE ALWAYS TRIGGER trigger_validate_clock_in;
 
 DROP TRIGGER IF EXISTS trigger_attendance_updated_at ON public.attendance_sessions;
 CREATE TRIGGER trigger_attendance_updated_at BEFORE UPDATE ON public.attendance_sessions FOR EACH ROW EXECUTE FUNCTION public.handle_attendance_updated_at();
+ALTER TABLE public.attendance_sessions ENABLE ALWAYS TRIGGER trigger_attendance_updated_at;
 
 -- SECTION 9: VERIFICATION
 -- -----------------------------------------------------------------

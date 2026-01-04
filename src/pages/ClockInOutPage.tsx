@@ -164,6 +164,35 @@ const ClockInOutPage: React.FC = () => {
     return () => clearInterval(timer);
   }, []);
 
+  // ✅ AUTO CLOCK-OUT: Runs when anyone loads the Clock In/Out page
+  // NOTE: This is a client-side solution that depends on user activity
+  // FUTURE UPGRADE: When Supabase Pro is purchased, migrate to pg_cron for true 24/7 automation
+  // See: setup_auto_clockout_cron.sql for Supabase Pro setup instructions
+  useEffect(() => {
+    const autoCloseStale = async () => {
+      try {
+        const { data, error } = await supabase.rpc('auto_close_stale_sessions');
+        if (error) throw error;
+
+        if (data?.sessions_closed > 0) {
+          console.log(`✅ Auto-closed ${data.sessions_closed} stale session(s) over 10 hours`);
+          // Refresh all attendance data
+          queryClient.invalidateQueries({ queryKey: ['attendance'] });
+        }
+      } catch (err) {
+        console.error('❌ Auto clock-out check failed:', err);
+      }
+    };
+
+    // Run immediately when page loads
+    autoCloseStale();
+
+    // Run every 10 minutes while user is on page (catches edge cases)
+    const interval = setInterval(autoCloseStale, 10 * 60 * 1000);
+
+    return () => clearInterval(interval);
+  }, [queryClient]);
+
   // Permissions check
   const isAdmin = role === 'ADMIN' && !permissions?.attendance_clock_only;
 

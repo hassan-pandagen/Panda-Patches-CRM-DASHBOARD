@@ -25,18 +25,19 @@ export const useQueryPrefetch = () => {
 
   /**
    * Prefetch orders for /orders page
-   * Loads latest 50 orders
+   * Loads ALL orders (same as AllOrdersPage query to prevent cache mismatch)
    */
   const prefetchOrders = async () => {
     try {
       await queryClient.prefetchQuery({
         queryKey: queryKeys.orders.all(),
         queryFn: async () => {
+          // ✅ CRITICAL: Must match AllOrdersPage.tsx query exactly
+          // Using same columns: id, order_number, customer_name, customer_email, design_name, status, created_at, sales_agent, order_amount
           const { data, error } = await supabase
             .from('orders')
-            .select('*')
-            .order('created_at', { ascending: false })
-            .limit(50);
+            .select('id, order_number, customer_name, customer_email, design_name, status, created_at, sales_agent, order_amount')
+            .order('created_at', { ascending: false });
 
           if (error) throw error;
           return (data || []).map(mapDbToOrder);
