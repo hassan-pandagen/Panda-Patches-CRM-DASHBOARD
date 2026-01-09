@@ -99,12 +99,9 @@ export default function Dashboard() {
     null
   );
 
-  // Helper function to convert local date to YYYY-MM-DD string
+  // Helper function to convert local date to ISO string (YYYY-MM-DDTHH:mm:ss.SSSZ)
   const getLocalDateString = (date: Date): string => {
-    const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const day = String(date.getDate()).padStart(2, '0');
-    return `${year}-${month}-${day}`;
+    return date.toISOString();
   };
 
   // Calculate the active date range
@@ -122,7 +119,10 @@ export default function Dashboard() {
     } else if (dateView === "week") {
       startDate.setDate(endDate.getDate() - 7);
     } else {
-      startDate.setMonth(endDate.getMonth() - 1);
+      // Full calendar month: 1st to last day
+      startDate.setDate(1);
+      endDate.setMonth(endDate.getMonth() + 1);
+      endDate.setDate(0);
     }
 
     return {
@@ -156,20 +156,11 @@ export default function Dashboard() {
         throw new Error("Not authenticated");
       }
 
-      // Parse dates in local timezone, not UTC
-      const startParts = activeDateRange.startDate.split('-');
-      const start = new Date(parseInt(startParts[0]), parseInt(startParts[1]) - 1, parseInt(startParts[2]));
-      start.setHours(0, 0, 0, 0);
-      
-      const endParts = activeDateRange.endDate.split('-');
-      const end = new Date(parseInt(endParts[0]), parseInt(endParts[1]) - 1, parseInt(endParts[2]));
-      end.setHours(23, 59, 59, 999);
-
       let query = supabase
          .from("orders")
          .select("*")
-         .gte("created_at", start.toISOString())
-         .lte("created_at", end.toISOString());
+         .gte("created_at", activeDateRange.startDate)
+         .lte("created_at", activeDateRange.endDate);
 
       // ✅ FIX ADDED HERE: Force filter by email if not Admin
       // This ensures sales agents ONLY see their own rows, regardless of RLS speed.

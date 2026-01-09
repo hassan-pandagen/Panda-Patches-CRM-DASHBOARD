@@ -19,10 +19,12 @@ import SpotlightCard from '../components/ui/SpotlightCard';
 import StatusBadge from '../components/ui/StatusBadge';
 
 // Icons (Check already imported below)
-import { Edit, Trash2, ShieldAlert, ArrowLeft, Lock, MapPin, Smartphone, Maximize, Check, XCircle, AlertTriangle, Copy, FileText, Upload } from 'lucide-react';
+import { Edit, Trash2, ShieldAlert, ArrowLeft, Lock, MapPin, Smartphone, Maximize, Check, XCircle, AlertTriangle, Copy, FileText, Upload, Package, X } from 'lucide-react';
 
 // 1. Import the new component
 import OrderTimeline from '../components/orders/OrderTimeline';
+import ShippingLabelModal from '../components/orders/ShippingLabelModal';
+import OptimizedImage from '../components/ui/OptimizedImage';
 
 // --- CONFIRMATION MODAL ---
 const ConfirmationModal: React.FC<{
@@ -62,6 +64,8 @@ const OrderPage: React.FC = () => {
     const [isDeleteModalOpen, setIsDeleteModalOpen] = React.useState(false);
     const { toast } = useToast();
     const [isInvoiceModalOpen, setIsInvoiceModalOpen] = React.useState(false);
+    const [isShippingLabelModalOpen, setIsShippingLabelModalOpen] = React.useState(false);
+    const [previewUrl, setPreviewUrl] = React.useState<string | null>(null);
     const [isProcessing, setIsProcessing] = React.useState(false);
     const [productionFiles, setProductionFiles] = React.useState<string[]>([]);
     const [isEditingProduction, setIsEditingProduction] = React.useState(false);
@@ -240,6 +244,44 @@ const OrderPage: React.FC = () => {
                 order={order}
             />
 
+            <ShippingLabelModal
+                isOpen={isShippingLabelModalOpen}
+                onClose={() => setIsShippingLabelModalOpen(false)}
+                order={order}
+            />
+
+            {/* Image Preview Modal */}
+            {previewUrl && (
+                <div
+                    className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+                    onClick={() => setPreviewUrl(null)}
+                >
+                    <div
+                        className="bg-slate-900 rounded-lg border border-white/10 max-w-4xl max-h-[85vh] overflow-auto"
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        <div className="p-4 border-b border-white/10 flex items-center justify-between">
+                            <h3 className="text-sm font-semibold text-white">
+                                Image Preview
+                            </h3>
+                            <button
+                                onClick={() => setPreviewUrl(null)}
+                                className="p-1 text-slate-400 hover:text-white hover:bg-white/10 rounded transition-colors"
+                            >
+                                <X className="w-5 h-5" />
+                            </button>
+                        </div>
+                        <div className="p-4 flex items-center justify-center">
+                            <OptimizedImage
+                                src={previewUrl}
+                                alt="Image Preview"
+                                className="max-w-full max-h-[70vh] rounded"
+                            />
+                        </div>
+                    </div>
+                </div>
+            )}
+
             <div className="p-6 max-w-7xl mx-auto space-y-6">
                 {/* --- HEADER & APPROVAL SECTION --- */}
                 <div className="space-y-4">
@@ -272,6 +314,18 @@ const OrderPage: React.FC = () => {
                                 <Copy size={16} />
                                 <span className="hidden sm:inline">Repeat Order</span>
                             </Button>
+
+                            {/* --- SHIPPING LABEL BUTTON --- */}
+                            <Button
+                                variant="secondary"
+                                size="md"
+                                onClick={() => setIsShippingLabelModalOpen(true)}
+                                className="bg-green-500/10 text-green-400 border-green-500/20 hover:bg-green-500/20 hover:border-green-500/30"
+                            >
+                                <Package size={16} />
+                                <span className="hidden sm:inline">Shipping Label</span>
+                            </Button>
+
                             <Button
                                 variant="secondary"
                                 size="md"
@@ -425,19 +479,16 @@ const OrderPage: React.FC = () => {
                                     </div>
                                 )}
 
-                                {/* Reference Images - Mockups or Customer Attachments */}
-                                {(order.mockupUrls?.length || 0) > 0 || (order.customerAttachmentUrls?.length || 0) > 0 ? (
+                                {/* Mockup Images Section */}
+                                {(order.mockupUrls?.length || 0) > 0 && (
                                     <div className="mt-6 pt-6 border-t border-slate-700/50">
-                                        <p className="text-xs font-medium text-slate-400 uppercase mb-4">Reference Images</p>
+                                        <p className="text-xs font-medium text-slate-400 uppercase mb-4">Mockups / Proofs</p>
                                         <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-                                            {/* Mockup Images */}
                                             {order.mockupUrls?.map((url, idx) => (
-                                                <a
+                                                <button
                                                     key={`mockup-${idx}`}
-                                                    href={url}
-                                                    target="_blank"
-                                                    rel="noopener noreferrer"
-                                                    className="relative group overflow-hidden rounded-lg border border-slate-600 hover:border-brand-orange transition-all"
+                                                    onClick={() => setPreviewUrl(url)}
+                                                    className="relative group overflow-hidden rounded-lg border border-slate-600 hover:border-brand-orange transition-all cursor-pointer"
                                                 >
                                                     <img
                                                         src={url}
@@ -448,17 +499,22 @@ const OrderPage: React.FC = () => {
                                                         }}
                                                     />
                                                     <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors" />
-                                                </a>
+                                                </button>
                                             ))}
+                                        </div>
+                                    </div>
+                                )}
 
-                                            {/* Customer Reference Images */}
+                                {/* Customer Reference Images Section */}
+                                {(order.customerAttachmentUrls?.length || 0) > 0 && (
+                                    <div className="mt-6 pt-6 border-t border-slate-700/50">
+                                        <p className="text-xs font-medium text-slate-400 uppercase mb-4">Customer References</p>
+                                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
                                             {order.customerAttachmentUrls?.map((url, idx) => (
-                                                <a
+                                                <button
                                                     key={`customer-${idx}`}
-                                                    href={url}
-                                                    target="_blank"
-                                                    rel="noopener noreferrer"
-                                                    className="relative group overflow-hidden rounded-lg border border-slate-600 hover:border-brand-orange transition-all"
+                                                    onClick={() => setPreviewUrl(url)}
+                                                    className="relative group overflow-hidden rounded-lg border border-slate-600 hover:border-brand-orange transition-all cursor-pointer"
                                                 >
                                                     <img
                                                         src={url}
@@ -469,11 +525,11 @@ const OrderPage: React.FC = () => {
                                                         }}
                                                     />
                                                     <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors" />
-                                                </a>
+                                                </button>
                                             ))}
                                         </div>
                                     </div>
-                                ) : null}
+                                )}
 
                                 {/* Production Files - Inline Editing for Production Users */}
                                 {isEditingProduction && !isAdmin && (

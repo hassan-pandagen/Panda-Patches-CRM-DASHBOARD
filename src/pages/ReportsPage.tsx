@@ -918,27 +918,61 @@ const ReportsPage: React.FC = () => {
 
    const [searchParams, setSearchParams] = useSearchParams();
    
-   // Calculate default range (last 30 days like Dashboard "month" view, not just last 7 days)
+   // Calculate default range (full calendar month)
    const getDefaultReportsRange = (): DateRange => {
      const endDate = new Date();
      const startDate = new Date();
-     startDate.setMonth(endDate.getMonth() - 1);
      
-     // Format dates in local timezone, not UTC
-     const formatLocalDate = (date: Date) => {
-       const year = date.getFullYear();
-       const month = String(date.getMonth() + 1).padStart(2, '0');
-       const day = String(date.getDate()).padStart(2, '0');
-       return `${year}-${month}-${day}`;
-     };
+     // Full calendar month: 1st to last day
+     startDate.setDate(1);
+     startDate.setHours(0, 0, 0, 0);
+     endDate.setMonth(endDate.getMonth() + 1);
+     endDate.setDate(0);
+     endDate.setHours(23, 59, 59, 999);
      
      return {
-       startDate: formatLocalDate(startDate),
-       endDate: formatLocalDate(endDate),
+       startDate: startDate.toISOString(),
+       endDate: endDate.toISOString(),
      };
    };
    
    const [dateRange, setDateRange] = React.useState<DateRange>(getDefaultReportsRange);
+   const [dateView, setDateView] = React.useState<"today" | "week" | "month">("month");
+
+   // Helper function to convert local date to ISO string (YYYY-MM-DDTHH:mm:ss.SSSZ)
+   const getLocalDateString = (date: Date): string => {
+     return date.toISOString();
+   };
+
+   // Handle date view change
+   const handleDateViewChange = (view: "today" | "week" | "month") => {
+     setDateView(view);
+
+     const endDate = new Date();
+     const startDate = new Date();
+
+     if (view === "today") {
+       startDate.setHours(0, 0, 0, 0);
+       endDate.setHours(23, 59, 59, 999);
+     } else if (view === "week") {
+       startDate.setDate(endDate.getDate() - 7);
+     } else {
+       // Full calendar month: 1st to last day
+       startDate.setDate(1);
+       endDate.setMonth(endDate.getMonth() + 1);
+       endDate.setDate(0);
+     }
+
+     setDateRange({
+       startDate: getLocalDateString(startDate),
+       endDate: getLocalDateString(endDate),
+     });
+   };
+
+   // Update dateView when custom range is changed
+   const handleCustomDateRange = (range: DateRange) => {
+     setDateRange(range);
+   };
 
   // --- 1. DYNAMIC TAB GENERATION (The Clean UI Fix) ---
   const availableReports = useMemo(() => {
@@ -1004,29 +1038,13 @@ const ReportsPage: React.FC = () => {
     queryKey: queryKeys.orders.report(dateRange.startDate, dateRange.endDate),
     queryFn: async () => {
       if (!user) return [];
-      
-      // Account for local timezone offset (Pakistan is UTC+5)
-      const getTimezoneOffset = () => {
-        const date = new Date();
-        return date.getTimezoneOffset() * 60 * 1000; // Convert to milliseconds
-      };
-      
-      const offset = getTimezoneOffset();
-      
-      const startDate = new Date(dateRange.startDate);
-      startDate.setHours(0, 0, 0, 0);
-      startDate.setTime(startDate.getTime() - offset); // Adjust for timezone
-      
-      const endDate = new Date(dateRange.endDate);
-      endDate.setHours(23, 59, 59, 999);
-      endDate.setTime(endDate.getTime() - offset); // Adjust for timezone
 
       // 1. Query the TABLE (snake_case source)
       let query = supabase
         .from("orders")
         .select("*")
-        .gte("created_at", startDate.toISOString()) // 2. Filter using SNAKE_CASE
-        .lte("created_at", endDate.toISOString()); // 2. Filter using SNAKE_CASE
+        .gte("created_at", dateRange.startDate)
+        .lte("created_at", dateRange.endDate);
 
       // Filter by sales agent if not Admin (same logic as Dashboard)
       if (role !== UserRole.ADMIN && user?.email) {
@@ -1099,7 +1117,24 @@ const ReportsPage: React.FC = () => {
           </div>
 
           <div className="flex flex-col sm:flex-row items-center gap-4">
-            <DateRangeFilter value={dateRange} onChange={setDateRange} />
+            {/* Date View Buttons */}
+            <div className="flex items-center gap-2 bg-slate-800/50 border border-slate-700 rounded-lg p-1">
+              {["today", "week", "month"].map((view) => (
+                <button
+                  key={view}
+                  onClick={() => handleDateViewChange(view as "today" | "week" | "month")}
+                  className={`px-3 py-1.5 rounded text-sm font-medium transition-all ${
+                    dateView === view
+                      ? "bg-brand-orange text-white shadow-lg shadow-brand-orange/20"
+                      : "text-slate-300 hover:text-white hover:bg-slate-700"
+                  }`}
+                >
+                  {view.charAt(0).toUpperCase() + view.slice(1)}
+                </button>
+              ))}
+            </div>
+
+            <DateRangeFilter value={dateRange} onChange={handleCustomDateRange} />
             {csvConfig && (
               <CSVLink
                 {...csvConfig}

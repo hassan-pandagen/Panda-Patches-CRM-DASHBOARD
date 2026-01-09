@@ -21,8 +21,12 @@ export const useDashboardMetrics = (orders: Order[]) => {
       (acc, order) => {
         const orderAmount = Number(order.orderAmount) || 0;
         const amountPaid = Number(order.amountPaid) || 0;
-        const amountRemaining = Number(order.amountRemaining) || 0;
-        const isPending = amountRemaining > 0 && ![OrderStatus.CANCELLED, OrderStatus.REFUNDED].includes(order.status as OrderStatus);
+        // Calculate remaining instead of relying on potentially stale amountRemaining
+        const amountRemaining = Math.max(0, orderAmount - amountPaid);
+        // Pending Payment = not fully paid AND not cancelled/refunded
+        const isPending = amountRemaining > 0.01 &&
+          order.status !== OrderStatus.CANCELLED &&
+          order.status !== OrderStatus.REFUNDED;
         const isUrgentAndActive = order.isUrgent && ![OrderStatus.COMPLETED, OrderStatus.SHIPPED, OrderStatus.DELIVERED].includes(order.status as OrderStatus);
 
         acc.totalRevenue += orderAmount;

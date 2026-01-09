@@ -1,7 +1,7 @@
 // src/components/ui/OptimizedImage.tsx
 // ✅ UPGRADE: Image optimization with WebP fallback
 
-import React from 'react';
+import React, { ImgHTMLAttributes } from 'react';
 
 interface OptimizedImageProps extends Omit<ImgHTMLAttributes<HTMLImageElement>, 'src'> {
   src: string;

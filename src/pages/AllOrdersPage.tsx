@@ -94,7 +94,7 @@ const AllOrdersPage: React.FC = () => {
             // Reduces data transfer by ~60% per order
             const { data, error } = await supabase
                 .from('orders')
-                .select('id, order_number, customer_name, customer_email, design_name, status, created_at, sales_agent, order_amount')
+                .select('id, order_number, customer_name, customer_email, design_name, status, created_at, sales_agent, order_amount, amount_paid')
                 .order('created_at', { ascending: false });
 
             if (error) throw new Error(error.message);
@@ -149,7 +149,14 @@ const AllOrdersPage: React.FC = () => {
         if (activeFilter === 'OVERDUE') {
             filtered = overdueOrders.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()); // Oldest first
         } else if (activeFilter === 'PAYMENT_PENDING') {
-            filtered = filtered.filter(o => o.amountRemaining > 0.01 && o.status !== 'CANCELLED' && o.status !== 'REFUNDED');
+            // Calculate remaining dynamically: orderAmount - amountPaid
+            // Only show orders that are not fully paid (remaining > $0.01)
+            filtered = filtered.filter(o => {
+                const orderAmount = Number(o.orderAmount) || 0;
+                const amountPaid = Number(o.amountPaid) || 0;
+                const remaining = Math.max(0, orderAmount - amountPaid);
+                return remaining > 0.01 && o.status !== 'CANCELLED' && o.status !== 'REFUNDED';
+            });
         } else if (activeFilter === 'URGENT') {
             // ✅ Show urgent orders that are still active (not shipped, delivered, completed, or cancelled)
             filtered = filtered.filter(o => o.isUrgent === true && !['SHIPPED', 'DELIVERED', 'COMPLETED', 'CANCELLED', 'REFUNDED'].includes(o.status) && !isOrderOverdue(o));
