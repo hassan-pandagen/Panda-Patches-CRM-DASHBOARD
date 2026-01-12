@@ -9,7 +9,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../hooks/useToast';
 import { queryKeys } from '../constants/queryKeys';
 import InvoiceModal from '../components/invoices/InvoiceModal';
-import { mapDbToOrder } from '../services/orderService';
+import { mapDbToOrder, triggerStatusEmail } from '../services/orderService';
 import FileUploadSection from '../components/orders/FileUpload';
 
 // UI Components
@@ -19,7 +19,7 @@ import SpotlightCard from '../components/ui/SpotlightCard';
 import StatusBadge from '../components/ui/StatusBadge';
 
 // Icons (Check already imported below)
-import { Edit, Trash2, ShieldAlert, ArrowLeft, Lock, MapPin, Smartphone, Maximize, Check, XCircle, AlertTriangle, Copy, FileText, Upload, Package, X } from 'lucide-react';
+import { Edit, Trash2, ShieldAlert, ArrowLeft, Lock, MapPin, Smartphone, Maximize, Check, XCircle, AlertTriangle, Copy, FileText, Upload, Package, X, Mail } from 'lucide-react';
 
 // 1. Import the new component
 import OrderTimeline from '../components/orders/OrderTimeline';
@@ -223,6 +223,21 @@ const OrderPage: React.FC = () => {
         onError: (err) => {
             // REPLACED ALERT WITH TOAST
             toast.error('Delete Failed', err.message);
+        }
+    });
+
+    // --- RESEND EMAIL MUTATION ---
+    const resendEmailMutation = useMutation({
+        mutationFn: async ({ order, status }: { order: Order; status: string }) => {
+            console.log(`📧 Manually resending email for order ${order.orderNumber} with status ${status}`);
+            await triggerStatusEmail(order, status);
+        },
+        onSuccess: () => {
+            toast.success('Email Sent', 'The order confirmation email has been resent to the customer.');
+        },
+        onError: (err: any) => {
+            console.error('❌ Email resend failed:', err);
+            toast.error('Email Failed', err.message || 'Failed to send email. Check console for details.');
         }
     });
 

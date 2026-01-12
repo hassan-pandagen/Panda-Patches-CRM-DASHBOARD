@@ -217,3 +217,47 @@ input:-webkit-autofill:active {
   -webkit-text-fill-color: #e2e8f0 !important; /* slate-200 for light text */
   transition: background-color 5000s ease-in-out 0s;
 }
+
+/* 11. Print Styles - Hide Navigation & Show Only Content */
+@media print {
+  /* Hide the sidebar navigation */
+  nav,
+  aside,
+  .sidebar,
+  [data-sidebar] {
+    display: none !important;
+  }
+
+  /* Hide the modal backdrop and show only label content */
+  body {
+    background: white !important;
+    color: black !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  /* Remove ALL page margins and headers/footers */
+  @page {
+    margin: 0 !important;
+    size: auto;
+  }
+
+  /* Hide any header/footer elements that might be auto-generated */
+  header,
+  footer,
+  [role="banner"],
+  [role="contentinfo"] {
+    display: none !important;
+  }
+
+  /* Force grid to stay 2 columns on print */
+  .grid-cols-1.md\:grid-cols-2 {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+
+  /* Ensure shipping label prints correctly */
+  .shipping-label-print {
+    width: 100%;
+    max-width: 100%;
+  }
+}

@@ -12,6 +12,17 @@ interface ShippingLabelModalProps {
 const ShippingLabelModal: React.FC<ShippingLabelModalProps> = ({ isOpen, onClose, order }) => {
     if (!isOpen) return null;
 
+    // Set document title for print preview (removes URL from header)
+    React.useEffect(() => {
+        if (isOpen) {
+            const originalTitle = document.title;
+            document.title = `Shipping Label - ${order.orderNumber}`;
+            return () => {
+                document.title = originalTitle;
+            };
+        }
+    }, [isOpen, order.orderNumber]);
+
     // Format the shipping address for better display
     const formatAddress = (address: string) => {
         if (!address) return 'No address provided';
@@ -22,35 +33,27 @@ const ShippingLabelModal: React.FC<ShippingLabelModalProps> = ({ isOpen, onClose
     const referenceImage = order.mockupUrls?.[0] || order.customerAttachmentUrls?.[0];
 
     return (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-            <div className="bg-slate-800 border border-slate-700 rounded-2xl max-w-4xl w-full shadow-2xl max-h-[90vh] overflow-y-auto">
-                {/* Header */}
-                <div className="sticky top-0 bg-slate-800 border-b border-slate-700 p-6 flex items-center justify-between z-10">
-                    <div className="flex items-center gap-3">
-                        <div className="p-2 bg-brand-orange/10 rounded-lg">
-                            <Package className="w-6 h-6 text-brand-orange" />
-                        </div>
-                        <h2 className="text-2xl font-bold text-white">Shipping Label</h2>
-                    </div>
-                    <button
-                        onClick={onClose}
-                        className="p-2 hover:bg-slate-700 rounded-lg transition-colors"
-                    >
-                        <X className="w-6 h-6 text-slate-400" />
-                    </button>
-                </div>
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4 print:fixed print:inset-0 print:bg-white print:p-0 print:m-0 print:block">
+            <div className="bg-slate-800 border border-slate-700 rounded-2xl max-w-4xl w-full shadow-2xl max-h-[90vh] overflow-y-auto print:bg-white print:border-0 print:rounded-none print:max-w-full print:max-h-full print:shadow-none print:overflow-visible print:m-0 print:p-0 relative">
+                {/* Close Button - Only show on screen, not in print */}
+                <button
+                    onClick={onClose}
+                    className="absolute top-4 right-4 z-20 p-2 bg-slate-700 hover:bg-slate-600 rounded-lg transition-colors print:hidden"
+                >
+                    <X className="w-6 h-6 text-slate-300" />
+                </button>
 
                 {/* Label Content */}
-                <div className="p-8 space-y-6">
+                <div className="p-8 space-y-6 print:p-4 print:space-y-0">
                     {/* Shipping Label Card */}
-                    <div className="bg-white rounded-xl p-8 text-black border-4 border-dashed border-slate-300">
+                    <div className="bg-white rounded-xl p-8 text-black border-4 border-dashed border-slate-300 print:border-4 print:rounded-none print:p-6">
                         {/* Company Header */}
                         <div className="text-center border-b-2 border-black pb-4 mb-6">
                             <h1 className="text-3xl font-bold">PANDA PATCHES</h1>
                             <p className="text-sm mt-1">Custom Patches & Embroidery</p>
                         </div>
 
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 print:grid-cols-2">
                             {/* Left Column - Shipping Details */}
                             <div className="space-y-4">
                                 {/* Order Number */}
@@ -129,22 +132,10 @@ const ShippingLabelModal: React.FC<ShippingLabelModalProps> = ({ isOpen, onClose
                                 <p className="text-sm font-medium">{order.instructions}</p>
                             </div>
                         )}
-
-                        {/* Barcode Placeholder */}
-                        <div className="mt-6 flex justify-center">
-                            <div className="bg-slate-100 px-6 py-3 rounded border-2 border-slate-300">
-                                <div className="flex gap-1 mb-2">
-                                    {[...Array(12)].map((_, i) => (
-                                        <div key={i} className="w-1 h-16 bg-black" style={{ width: i % 2 === 0 ? '2px' : '4px' }} />
-                                    ))}
-                                </div>
-                                <p className="text-center text-xs font-mono font-bold">{order.orderNumber}</p>
-                            </div>
-                        </div>
                     </div>
 
                     {/* Print Instructions */}
-                    <div className="bg-slate-700/50 rounded-lg p-4 text-center">
+                    <div className="bg-slate-700/50 rounded-lg p-4 text-center print:hidden">
                         <p className="text-slate-300 text-sm">
                             Use Ctrl+P (Windows) or Cmd+P (Mac) to print this shipping label
                         </p>
