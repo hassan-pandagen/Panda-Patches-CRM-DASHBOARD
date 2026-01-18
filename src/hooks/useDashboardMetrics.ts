@@ -29,8 +29,16 @@ export const useDashboardMetrics = (orders: Order[]) => {
           order.status !== OrderStatus.REFUNDED;
         const isUrgentAndActive = order.isUrgent && ![OrderStatus.COMPLETED, OrderStatus.SHIPPED, OrderStatus.DELIVERED].includes(order.status as OrderStatus);
 
-        acc.totalRevenue += orderAmount;
-        acc.totalCollected += amountPaid;
+        // Count revenue from all orders except cancelled
+        // For refunded orders, use originalAmount (what customer paid before refund)
+        // This shows true revenue impact including costs already paid
+        if (order.status !== OrderStatus.CANCELLED) {
+          const revenue = order.status === OrderStatus.REFUNDED
+            ? ((order as any).originalAmount || orderAmount)
+            : orderAmount;
+          acc.totalRevenue += revenue;
+          acc.totalCollected += amountPaid;
+        }
 
         if (isPending) {
           acc.actionablePendingAmount += amountRemaining;

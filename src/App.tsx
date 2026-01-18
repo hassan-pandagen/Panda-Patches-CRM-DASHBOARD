@@ -29,6 +29,7 @@ const UserManagementPage = lazy(() => import('@/pages/UserManagementPage'));
 const CustomerHistoryPage = lazy(() => import('@/pages/CustomerHistoryPage'));
 const ClockInOutPage = lazy(() => import('@/pages/ClockInOutPage'));
 const PerformanceMetricsPage = lazy(() => import('@/pages/PerformanceMetricsPage'));
+const BulkCostEntryPage = lazy(() => import('@/pages/BulkCostEntryPage'));
 
 // Protection
 import ProtectedRoute from './ProtectedRoute';
@@ -73,6 +74,7 @@ const App: React.FC = () => {
               
               {/* Admin */}
               <Route element={<ErrorBoundary><AdminRoute /></ErrorBoundary>}>
+                <Route path="/bulk-cost-entry" element={<BulkCostEntryPage />} />
                 <Route path="/user-management" element={<UserManagementPage />} />
                 <Route path="/performance-metrics" element={<PerformanceMetricsPage />} />
               </Route>

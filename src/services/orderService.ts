@@ -51,27 +51,27 @@ const toSnakeCase = (data: any): any => {
   return snakeCaseObject;
 };
 
-// ... (KEEP YOUR SENDGRID_TEMPLATES AND EMAIL CONSTANTS EXACTLY AS THEY ARE) ...
+// ✅ UPDATED TO AWS SES TEMPLATE IDS (Migrated from SendGrid)
 const SENDGRID_TEMPLATES = {
   // --- NEW ORDERS ---
-  CUSTOMER_NEW_ORDER: 'd-fcd19c2e3d2d42a4b0e1bf3087179c7d',
-  INTERNAL_NEW_ORDER: 'd-c74e2abd9bb54b79b994aa53b654c374',
+  CUSTOMER_NEW_ORDER: 'CUSTOMER_NEW_ORDER',
+  INTERNAL_NEW_ORDER: 'INTERNAL_NEW_ORDER',
 
   // --- DESIGN PROCESS ---
-  CUSTOMER_MOCKUP_READY: 'd-cd4d1a58a70d457ebd254d93e09ded5b',
-  CUSTOMER_REVISION_IN_PROGRESS: 'd-4c34e0002d9a43b091798fde84d36c59',
-  INTERNAL_REVISION_REQUESTED: 'd-27bef8642f23433ea5ee8471887c8d61',
-  
+  CUSTOMER_MOCKUP_READY: 'CUSTOMER_MOCKUP_READY',
+  CUSTOMER_REVISION_IN_PROGRESS: 'CUSTOMER_REVISION_IN_PROGRESS',
+  INTERNAL_REVISION_REQUESTED: 'PRODUCTION_TEAM_REVISION',
+
   // --- PRODUCTION ---
-  CUSTOMER_PRODUCTION_START: 'd-0dcf24e7ef3b4195b24ab4dfdf53cde8',
-  INTERNAL_QUALITY_ASSURANCE: 'd-70206008ac7c47fbb87585bcc60e59ce',
-  INTERNAL_PRODUCTION_START: 'd-0a3e1e4cc4a74b49baf0de6b03823cef',
-  
+  CUSTOMER_PRODUCTION_START: 'CUSTOMER_PRODUCTION_STARTED',
+  INTERNAL_QUALITY_ASSURANCE: 'QUALITY_ASSURANCE',
+  INTERNAL_PRODUCTION_START: 'INTERNAL_START_PRODUCTION',
+
   // --- FULFILLMENT ---
-  CUSTOMER_SHIPPED: 'd-30f79e97452342a7a2a42a3237a47479',
-  CUSTOMER_DELIVERED: 'd-d0ab08ed143e4a62900c257d63167630', 
-  CUSTOMER_FEEDBACK: 'd-563b0533e1d94a1bb830129a440c254b',  
-  CUSTOMER_REFUNDED: 'd-8da31b3c8aca485cb82103af044e6ba7',
+  CUSTOMER_SHIPPED: 'CUSTOMER_SHIPPED',
+  CUSTOMER_DELIVERED: 'CUSTOMER_DELIVERED',
+  CUSTOMER_FEEDBACK: 'CUSTOMER_FEEDBACK_REQUEST',
+  CUSTOMER_REFUNDED: 'CUSTOMER_REFUND_ISSUED',
 };
 
 const PRODUCTION_MANAGER_EMAILS = [
@@ -81,7 +81,7 @@ const PRODUCTION_MANAGER_EMAILS = [
 ];
 
 // ✅ PVC Vendor Email (separate routing)
-const PVC_VENDOR_EMAIL = 'arsalan.ali.khan.85@gmail.com';
+const PVC_VENDOR_EMAIL = 'Arsalan.ali.khan.85@gmail.com';
 
 // ✅ Design Team CC (for internal emails only)
 const DESIGN_TEAM_CC = 'design@pandapatches.com';
@@ -264,49 +264,50 @@ export const triggerStatusEmail = async (order: Order, statusToCheck: string) =>
 
   switch (statusToCheck) {
     case OrderStatus.NEW_ORDER:
-      if (SENDGRID_TEMPLATES.CUSTOMER_NEW_ORDER) requests.push({ to: order.customerEmail, template_id: SENDGRID_TEMPLATES.CUSTOMER_NEW_ORDER, isInternal: false });
+      // Customer email with CC to hello@pandapatches.com
+      if (SENDGRID_TEMPLATES.CUSTOMER_NEW_ORDER) requests.push({ to: order.customerEmail, template_id: SENDGRID_TEMPLATES.CUSTOMER_NEW_ORDER, isInternal: false, cc: 'hello@pandapatches.com' });
+      // Internal email with all production team in CC
       if (SENDGRID_TEMPLATES.INTERNAL_NEW_ORDER && internalEmails.length > 0) {
-        // CC approach: send one email with others in CC to save SendGrid quota
         const ccEmails = internalEmails.slice(1).join(',');
-        requests.push({ to: internalEmails[0], template_id: SENDGRID_TEMPLATES.INTERNAL_NEW_ORDER, isInternal: true, cc: [DESIGN_TEAM_CC, ccEmails].filter(Boolean).join(',') });
+        requests.push({ to: internalEmails[0], template_id: SENDGRID_TEMPLATES.INTERNAL_NEW_ORDER, isInternal: true, cc: [DESIGN_TEAM_CC, ccEmails, 'hello@pandapatches.com'].filter(Boolean).join(',') });
       }
       break;
     case OrderStatus.AWAITING_APPROVAL:
-      if (SENDGRID_TEMPLATES.CUSTOMER_MOCKUP_READY) requests.push({ to: order.customerEmail, template_id: SENDGRID_TEMPLATES.CUSTOMER_MOCKUP_READY, isInternal: false });
+      if (SENDGRID_TEMPLATES.CUSTOMER_MOCKUP_READY) requests.push({ to: order.customerEmail, template_id: SENDGRID_TEMPLATES.CUSTOMER_MOCKUP_READY, isInternal: false, cc: 'hello@pandapatches.com' });
       if (SENDGRID_TEMPLATES.INTERNAL_REVISION_REQUESTED && internalEmails.length > 0) {
         const ccEmails = internalEmails.slice(1).join(',');
-        requests.push({ to: internalEmails[0], template_id: SENDGRID_TEMPLATES.INTERNAL_REVISION_REQUESTED, isInternal: true, cc: [DESIGN_TEAM_CC, ccEmails].filter(Boolean).join(',') });
+        requests.push({ to: internalEmails[0], template_id: SENDGRID_TEMPLATES.INTERNAL_REVISION_REQUESTED, isInternal: true, cc: [DESIGN_TEAM_CC, ccEmails, 'hello@pandapatches.com'].filter(Boolean).join(',') });
       }
       break;
     case OrderStatus.REVISION_REQUESTED:
-      if (SENDGRID_TEMPLATES.CUSTOMER_REVISION_IN_PROGRESS) requests.push({ to: order.customerEmail, template_id: SENDGRID_TEMPLATES.CUSTOMER_REVISION_IN_PROGRESS, isInternal: false });
+      if (SENDGRID_TEMPLATES.CUSTOMER_REVISION_IN_PROGRESS) requests.push({ to: order.customerEmail, template_id: SENDGRID_TEMPLATES.CUSTOMER_REVISION_IN_PROGRESS, isInternal: false, cc: 'hello@pandapatches.com' });
       if (SENDGRID_TEMPLATES.INTERNAL_REVISION_REQUESTED && internalEmails.length > 0) {
         const ccEmails = internalEmails.slice(1).join(',');
-        requests.push({ to: internalEmails[0], template_id: SENDGRID_TEMPLATES.INTERNAL_REVISION_REQUESTED, isInternal: true, cc: [DESIGN_TEAM_CC, ccEmails].filter(Boolean).join(',') });
+        requests.push({ to: internalEmails[0], template_id: SENDGRID_TEMPLATES.INTERNAL_REVISION_REQUESTED, isInternal: true, cc: [DESIGN_TEAM_CC, ccEmails, 'hello@pandapatches.com'].filter(Boolean).join(',') });
       }
       break;
     case OrderStatus.IN_PRODUCTION:
     case OrderStatus.APPROVED:
-      if (SENDGRID_TEMPLATES.CUSTOMER_PRODUCTION_START) requests.push({ to: order.customerEmail, template_id: SENDGRID_TEMPLATES.CUSTOMER_PRODUCTION_START, isInternal: false });
+      if (SENDGRID_TEMPLATES.CUSTOMER_PRODUCTION_START) requests.push({ to: order.customerEmail, template_id: SENDGRID_TEMPLATES.CUSTOMER_PRODUCTION_START, isInternal: false, cc: 'hello@pandapatches.com' });
       if (SENDGRID_TEMPLATES.INTERNAL_PRODUCTION_START && internalEmails.length > 0) {
         const ccEmails = internalEmails.slice(1).join(',');
-        requests.push({ to: internalEmails[0], template_id: SENDGRID_TEMPLATES.INTERNAL_PRODUCTION_START, isInternal: true, cc: [DESIGN_TEAM_CC, ccEmails].filter(Boolean).join(',') });
+        requests.push({ to: internalEmails[0], template_id: SENDGRID_TEMPLATES.INTERNAL_PRODUCTION_START, isInternal: true, cc: [DESIGN_TEAM_CC, ccEmails, 'hello@pandapatches.com'].filter(Boolean).join(',') });
       }
       break;
     case OrderStatus.QUALITY_ASSURANCE:
-      if (SENDGRID_TEMPLATES.INTERNAL_QUALITY_ASSURANCE) requests.push({ to: order.customerEmail, template_id: SENDGRID_TEMPLATES.INTERNAL_QUALITY_ASSURANCE, isInternal: false });
+      if (SENDGRID_TEMPLATES.INTERNAL_QUALITY_ASSURANCE) requests.push({ to: order.customerEmail, template_id: SENDGRID_TEMPLATES.INTERNAL_QUALITY_ASSURANCE, isInternal: false, cc: 'hello@pandapatches.com' });
       break;
     case OrderStatus.SHIPPED:
-      if (SENDGRID_TEMPLATES.CUSTOMER_SHIPPED) requests.push({ to: order.customerEmail, template_id: SENDGRID_TEMPLATES.CUSTOMER_SHIPPED, isInternal: false });
+      if (SENDGRID_TEMPLATES.CUSTOMER_SHIPPED) requests.push({ to: order.customerEmail, template_id: SENDGRID_TEMPLATES.CUSTOMER_SHIPPED, isInternal: false, cc: 'hello@pandapatches.com' });
       break;
     case OrderStatus.DELIVERED:
-      if (SENDGRID_TEMPLATES.CUSTOMER_DELIVERED) requests.push({ to: order.customerEmail, template_id: SENDGRID_TEMPLATES.CUSTOMER_DELIVERED, isInternal: false });
+      if (SENDGRID_TEMPLATES.CUSTOMER_DELIVERED) requests.push({ to: order.customerEmail, template_id: SENDGRID_TEMPLATES.CUSTOMER_DELIVERED, isInternal: false, cc: 'hello@pandapatches.com' });
       break;
     case OrderStatus.FEEDBACK:
-      if (SENDGRID_TEMPLATES.CUSTOMER_FEEDBACK) requests.push({ to: order.customerEmail, template_id: SENDGRID_TEMPLATES.CUSTOMER_FEEDBACK, isInternal: false });
+      if (SENDGRID_TEMPLATES.CUSTOMER_FEEDBACK) requests.push({ to: order.customerEmail, template_id: SENDGRID_TEMPLATES.CUSTOMER_FEEDBACK, isInternal: false, cc: 'hello@pandapatches.com' });
       break;
     case OrderStatus.REFUNDED:
-      if (SENDGRID_TEMPLATES.CUSTOMER_REFUNDED) requests.push({ to: order.customerEmail, template_id: SENDGRID_TEMPLATES.CUSTOMER_REFUNDED, isInternal: false });
+      if (SENDGRID_TEMPLATES.CUSTOMER_REFUNDED) requests.push({ to: order.customerEmail, template_id: SENDGRID_TEMPLATES.CUSTOMER_REFUNDED, isInternal: false, cc: 'hello@pandapatches.com' });
       break;
   }
 
@@ -328,8 +329,8 @@ export const triggerStatusEmail = async (order: Order, statusToCheck: string) =>
         dynamic_data: emailData
       };
 
-      // ✅ Add CC for internal emails only
-      if (req.isInternal && req.cc) {
+      // ✅ Add CC for all emails (both customer and internal)
+      if (req.cc) {
         emailPayload.cc = req.cc;
       }
 

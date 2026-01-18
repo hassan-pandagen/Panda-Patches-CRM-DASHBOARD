@@ -39,6 +39,7 @@ import {
   ChevronDown,
   FileText,
   ShieldAlert,
+  Package,
 } from "lucide-react";
 import { motion, Variants } from "framer-motion";
 import { TooltipProps } from "recharts";
@@ -50,6 +51,8 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { CSVLink } from "react-csv";
 import ProfitLossReportComponent from "../components/Reports/ProfitLossReportComponent";
 import CancellationChart from "../components/Reports/CancellationChart";
+import IncomeStatementReport from "../components/Reports/IncomeStatementReport";
+import ProductMixAnalysis from "../components/Reports/ProductMixAnalysis";
 import { SOURCE_COLORS, PATCH_TYPE_COLORS } from "../constants/colors";
 
 const containerVariants: Variants = {
@@ -170,8 +173,14 @@ const SalesReportComponent: React.FC<ReportComponentProps> = ({ orders }) => {
   }, [orders]);
 
   // SAFEGUARDS: If DB sends NULL (masked), treat as 0
+  // For refunded orders, use originalAmount to show true revenue impact
   const totalNetRevenue = useMemo(
-    () => orders.reduce((sum, order) => sum + (order.orderAmount || 0), 0),
+    () => orders.reduce((sum, order) => {
+      const revenue = order.status === 'REFUNDED'
+        ? ((order as any).originalAmount || order.orderAmount || 0)
+        : (order.orderAmount || 0);
+      return sum + revenue;
+    }, 0),
     [orders]
   );
   const totalCollected = useMemo(
@@ -547,7 +556,12 @@ const LeadSourceReportComponent: React.FC<ReportComponentProps> = ({
   const navigate = useNavigate();
 
   const totalRevenue = useMemo(
-    () => orders.reduce((sum, order) => sum + (order.orderAmount || 0), 0),
+    () => orders.reduce((sum, order) => {
+      const revenue = order.status === 'REFUNDED'
+        ? ((order as any).originalAmount || order.orderAmount || 0)
+        : (order.orderAmount || 0);
+      return sum + revenue;
+    }, 0),
     [orders]
   );
 
@@ -911,7 +925,9 @@ type ReportType =
   | "production"
   | "leadSource"
   | "profitLoss"
-  | "quality";
+  | "quality"
+  | "incomeStatement"
+  | "productMix";
 
 const ReportsPage: React.FC = () => {
    const { user, role, permissions, isLoading: isAuthLoading } = useAuth();
@@ -984,6 +1000,8 @@ const ReportsPage: React.FC = () => {
         { key: "sales", label: "Sales", icon: TrendingUp },
         { key: "production", label: "Production", icon: Zap },
         { key: "quality", label: "Quality & Refunds", icon: ShieldAlert },
+        { key: "productMix", label: "Product Mix", icon: Package },
+        { key: "incomeStatement", label: "Income Statement", icon: DollarSign },
         { key: "profitLoss", label: "Profit & Loss", icon: FileText },
         { key: "leadSource", label: "Lead Source", icon: Share2 },
       ];
@@ -1179,6 +1197,12 @@ const ReportsPage: React.FC = () => {
           )}
           {activeReport === "leadSource" && (
             <LeadSourceReportComponent orders={filteredOrders} />
+          )}
+          {activeReport === "productMix" && (
+            <ProductMixAnalysis orders={filteredOrders} />
+          )}
+          {activeReport === "incomeStatement" && (
+            <IncomeStatementReport orders={filteredOrders} />
           )}
           {activeReport === "profitLoss" && (
             <ProfitLossReportComponent orders={filteredOrders} />

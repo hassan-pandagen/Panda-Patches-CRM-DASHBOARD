@@ -125,13 +125,6 @@ const ShippingLabelModal: React.FC<ShippingLabelModalProps> = ({ isOpen, onClose
                             </div>
                         </div>
 
-                        {/* Footer with Special Instructions if any */}
-                        {order.instructions && (
-                            <div className="mt-6 pt-4 border-t-2 border-slate-300">
-                                <p className="text-xs font-bold uppercase text-slate-600 mb-2">Special Instructions</p>
-                                <p className="text-sm font-medium">{order.instructions}</p>
-                            </div>
-                        )}
                     </div>
 
                     {/* Print Instructions */}

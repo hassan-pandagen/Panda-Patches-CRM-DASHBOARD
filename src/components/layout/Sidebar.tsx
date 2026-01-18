@@ -11,6 +11,7 @@ import {
   PlusCircle,
   Clock,
   Activity,
+  DollarSign,
 } from "lucide-react";
 import { useAuth } from "../../contexts/AuthContext";
 import { useQueryPrefetch } from "../../hooks/useQueryPrefetch";
@@ -162,6 +163,11 @@ const Sidebar: React.FC = () => {
         {isAdmin && (
           <>
             <div className="my-2 border-t border-white/10 mx-2" />
+            <SidebarItem
+              to="/bulk-cost-entry"
+              label="Bulk Cost Entry"
+              icon={<DollarSign className="w-5 h-5" />}
+            />
             <SidebarItem
               to="/user-management"
               label="User Management"

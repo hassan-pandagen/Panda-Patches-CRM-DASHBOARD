@@ -3,7 +3,7 @@ import { PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer } from 'recha
 import { Order } from '../../types';
 import SpotlightCard from '../ui/SpotlightCard';
 import { useNavigate } from 'react-router-dom';
-import { AlertCircle, Ban, ArrowRight } from 'lucide-react';
+import { AlertCircle, Ban, ArrowRight, CheckCircle } from 'lucide-react';
 
 interface CancellationChartProps {
   orders: Order[];
@@ -34,10 +34,10 @@ const CancellationChart: React.FC<CancellationChartProps> = ({ orders }) => {
   const navigate = useNavigate();
 
   // 2. Process Data
-  const { 
-    cancelData, refundData, 
-    totalCancelCount, totalRefundCount, 
-    lostRevenueCancel, lostRevenueRefund 
+  const {
+    cancelData, refundData,
+    totalCancelCount, totalRefundCount,
+    lostRevenueCancel, lostRevenueRefund
   } = useMemo(() => {
     const cancels: Record<string, number> = {};
     const refunds: Record<string, number> = {};
@@ -50,12 +50,12 @@ const CancellationChart: React.FC<CancellationChartProps> = ({ orders }) => {
       // Use originalAmount so we see the lost value
       const amount = (order as any).originalAmount || order.orderAmount || 0;
 
-      if (order.status === 'CANCELLED') {
+      if (order.status === 'CANCELLED' || order.status === 'CANCELED') {
         const reason = order.reasonCategory || 'Unspecified';
         cancels[reason] = (cancels[reason] || 0) + 1;
         cancelLost += amount;
         cCount++;
-      } else if (order.status === 'REFUNDED') {
+      } else if (order.status === 'REFUNDED' || order.status === 'REFUND') {
         const reason = order.reasonCategory || 'Unspecified';
         refunds[reason] = (refunds[reason] || 0) + 1;
         refundLost += amount;
@@ -75,13 +75,24 @@ const CancellationChart: React.FC<CancellationChartProps> = ({ orders }) => {
 
   if (totalCancelCount === 0 && totalRefundCount === 0) {
     return (
-      <SpotlightCard className="p-6">
-        <h3 className="text-lg font-semibold text-white mb-6">Quality & Refunds</h3>
-        <div className="h-64 flex flex-col items-center justify-center text-gray-500">
-          <p className="text-lg font-medium">No Data Available</p>
-          <p className="text-sm">You have 0 cancelled or refunded orders.</p>
-        </div>
-      </SpotlightCard>
+      <div className="space-y-6">
+        <SpotlightCard className="p-6">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="p-2 bg-emerald-500/10 rounded-lg">
+              <CheckCircle className="w-6 h-6 text-emerald-400" />
+            </div>
+            <div>
+              <h3 className="text-xl font-semibold text-white">Quality & Refunds</h3>
+              <p className="text-sm text-slate-400">Track cancellations and refunds</p>
+            </div>
+          </div>
+          <div className="h-64 flex flex-col items-center justify-center text-slate-500 bg-slate-800/30 rounded-xl border border-slate-700">
+            <CheckCircle className="w-12 h-12 text-emerald-500 mb-3" />
+            <p className="text-lg font-semibold text-white">Perfect! No Issues Found</p>
+            <p className="text-sm text-slate-400 mt-1">You have 0 cancelled or refunded orders in this period.</p>
+          </div>
+        </SpotlightCard>
+      </div>
     );
   }
 

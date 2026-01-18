@@ -94,7 +94,7 @@ const AllOrdersPage: React.FC = () => {
             // Reduces data transfer by ~60% per order
             const { data, error } = await supabase
                 .from('orders')
-                .select('id, order_number, customer_name, customer_email, design_name, status, created_at, sales_agent, order_amount, amount_paid')
+                .select('id, order_number, customer_name, customer_email, design_name, status, created_at, sales_agent, order_amount, amount_paid, is_urgent')
                 .order('created_at', { ascending: false });
 
             if (error) throw new Error(error.message);
@@ -293,6 +293,7 @@ const AllOrdersPage: React.FC = () => {
                     <FilterTab active={activeFilter === 'DELIVERED'} label="Delivered" count={getCount('DELIVERED')} onClick={() => setActiveFilter('DELIVERED')} />
                     <FilterTab active={activeFilter === 'QUALITY_ASSURANCE'} label="Quality Assurance" count={getCount('QUALITY_ASSURANCE')} onClick={() => setActiveFilter('QUALITY_ASSURANCE')} />
                     <FilterTab active={activeFilter === 'CANCELLED'} label="Cancelled" count={getCount('CANCELLED')} onClick={() => setActiveFilter('CANCELLED')} />
+                    <FilterTab active={activeFilter === 'REFUNDED'} label="Refunds" count={getCount('REFUNDED')} onClick={() => setActiveFilter('REFUNDED')} />
                 </div>
             </SpotlightCard>
 
