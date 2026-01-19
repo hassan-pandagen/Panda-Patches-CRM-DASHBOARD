@@ -210,15 +210,14 @@ const buildEmailHTML = (templateId: string, data: any): string => {
     </tbody>
   </table>
 
-  <!-- QUOTE NUMBER -->
+  <!-- ORDER/QUOTE NUMBER -->
   <table class="module" role="module" data-type="text" border="0" cellpadding="0" cellspacing="0" width="100%" style="table-layout: fixed;">
     <tbody>
       <tr>
         <td style="padding:0px 20px 10px 20px; line-height:22px; text-align:inherit;" height="100%" valign="top" bgcolor="" role="module-content">
           <div>
             <div style="font-family: inherit; text-align: center">
-              <span style="font-size: 16px; font-family: 'lucida sans unicode', 'lucida grande', sans-serif">${templateId.includes('QUOTE') || templateId.includes('d-') ? 'Quote Number:' : 'Order Number:'} &nbsp;</span>
-              <span style="font-size: 16px; color: #fb6e1d; font-family: 'lucida sans unicode', 'lucida grande', sans-serif">${data.quote_number || data.order_number || 'N/A'}</span>
+              ${data.quote_number ? `<span style="font-size: 16px; font-family: 'lucida sans unicode', 'lucida grande', sans-serif">Quote Number: &nbsp;</span><span style="font-size: 16px; color: #fb6e1d; font-family: 'lucida sans unicode', 'lucida grande', sans-serif">${data.quote_number}</span>` : `<span style="font-size: 16px; font-family: 'lucida sans unicode', 'lucida grande', sans-serif">Order Number: &nbsp;</span><span style="font-size: 16px; color: #fb6e1d; font-family: 'lucida sans unicode', 'lucida grande', sans-serif">${data.order_number || 'N/A'}</span>`}
             </div>
           </div>
         </td>
@@ -233,9 +232,10 @@ const buildEmailHTML = (templateId: string, data: any): string => {
         <td style="padding:20px 20px 10px 20px; line-height:22px; text-align:inherit;" height="100%" valign="top" bgcolor="" role="module-content">
           <div>
             <div style="font-family: inherit; text-align: inherit">
-              <span style="font-size: 18px; font-family: 'lucida sans unicode', 'lucida grande', sans-serif">Hi </span>
-              <span style="font-size: 18px; color: #fb6e1d; font-family: 'lucida sans unicode', 'lucida grande', sans-serif">${data.customer_name || 'Customer'}</span>
-              <span style="font-size: 18px; font-family: 'lucida sans unicode', 'lucida grande', sans-serif">,&nbsp;</span>
+              ${templateId.includes('INTERNAL') ?
+                `<span style="font-size: 18px; font-family: 'lucida sans unicode', 'lucida grande', sans-serif">Hi </span><span style="font-size: 18px; color: #fb6e1d; font-family: 'lucida sans unicode', 'lucida grande', sans-serif">Team</span><span style="font-size: 18px; font-family: 'lucida sans unicode', 'lucida grande', sans-serif">,&nbsp;</span>` :
+                `<span style="font-size: 18px; font-family: 'lucida sans unicode', 'lucida grande', sans-serif">Hi </span><span style="font-size: 18px; color: #fb6e1d; font-family: 'lucida sans unicode', 'lucida grande', sans-serif">${data.customer_name || 'Customer'}</span><span style="font-size: 18px; font-family: 'lucida sans unicode', 'lucida grande', sans-serif">,&nbsp;</span>`
+              }
             </div>
             <div style="font-family: inherit; text-align: inherit"><br></div>
             <div style="font-family: inherit; text-align: inherit">
