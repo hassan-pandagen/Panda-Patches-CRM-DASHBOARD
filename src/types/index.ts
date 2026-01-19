@@ -201,3 +201,15 @@ export interface Quote {
    mockupUrls?: string[];
    customerAttachmentUrls?: string[];
 }
+
+// --- MONTHLY COSTS TYPE ---
+export interface MonthlyCost {
+  id: number;
+  monthYear: string; // Format: "YYYY-MM" (e.g., "2026-01")
+  category: string;
+  amount: number;
+  notes: string | null;
+  addedBy: string | null;
+  createdAt: string;
+  updatedAt: string;
+}

@@ -78,4 +78,11 @@ export const queryKeys = {
     details: () => [...queryKeys.quotes.all(), 'single'] as const,
     single: (quoteNumber: string) => [...queryKeys.quotes.details(), quoteNumber] as const,
   },
+
+  // All keys related to monthly costs
+  monthlyCosts: {
+    all: () => ['monthly-costs'] as const,
+    month: (monthYear: string) => [...queryKeys.monthlyCosts.all(), monthYear] as const,
+    range: (start: string, end: string) => [...queryKeys.monthlyCosts.all(), 'range', { start, end }] as const,
+  },
 };

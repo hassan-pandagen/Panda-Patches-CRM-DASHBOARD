@@ -27,6 +27,7 @@ import {
   Legend,
 } from "recharts";
 import { mapDbToOrder } from "../services/orderService";
+import { getMonthlyCostsForRange } from "../services/monthlyCostsService";
 import {
   DollarSign,
   TrendingUp,
@@ -1076,6 +1077,16 @@ const ReportsPage: React.FC = () => {
     enabled: !!user && !isAuthLoading && availableReports.length > 0,
   });
 
+  // Fetch monthly costs for the date range
+  const monthStart = dateRange.startDate.substring(0, 7); // "YYYY-MM"
+  const monthEnd = dateRange.endDate.substring(0, 7);
+
+  const { data: monthlyCosts = [] } = useQuery({
+    queryKey: queryKeys.monthlyCosts.range(monthStart, monthEnd),
+    queryFn: () => getMonthlyCostsForRange(monthStart, monthEnd),
+    enabled: !!user && !isAuthLoading && availableReports.length > 0,
+  });
+
   // CSV Export Logic
   const csvConfig = useMemo(() => {
     if (!permissions?.reports_view_financials && activeReport !== "production")
@@ -1202,7 +1213,7 @@ const ReportsPage: React.FC = () => {
             <ProductMixAnalysis orders={filteredOrders} />
           )}
           {activeReport === "incomeStatement" && (
-            <IncomeStatementReport orders={filteredOrders} />
+            <IncomeStatementReport orders={filteredOrders} monthlyCosts={monthlyCosts} />
           )}
           {activeReport === "profitLoss" && (
             <ProfitLossReportComponent orders={filteredOrders} />

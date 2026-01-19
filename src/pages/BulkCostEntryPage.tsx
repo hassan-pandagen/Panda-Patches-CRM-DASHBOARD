@@ -4,10 +4,13 @@ import { supabase } from '../services/supabaseClient';
 import { Order, OrderStatus } from '../types';
 import { mapDbToOrder } from '../services/orderService';
 import { queryKeys } from '../constants/queryKeys';
+import { getMonthlyCosts, upsertMonthlyCost } from '../services/monthlyCostsService';
 import Spinner from '../components/ui/Spinner';
 import { DollarSign, Save, Calculator, Filter, Download, TrendingUp } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { CSVLink } from 'react-csv';
+import MonthFilterButtons from '../components/BulkCosts/MonthFilterButtons';
+import MonthlyExpensePanel from '../components/BulkCosts/MonthlyExpensePanel';
 
 interface CostEntry {
   orderId: number;
@@ -20,10 +23,13 @@ interface CostEntry {
 const BulkCostEntryPage: React.FC = () => {
   const queryClient = useQueryClient();
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
-  const [dateFilter, setDateFilter] = useState<'today' | 'week' | 'month' | 'all'>('month');
-  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear());
+  const [selectedMonth, setSelectedMonth] = useState<number>(new Date().getMonth() + 1); // 1-12
   const [editedCosts, setEditedCosts] = useState<Record<number, CostEntry>>({});
   const [savingIds, setSavingIds] = useState<Set<number>>(new Set());
+
+  // Format month-year for queries
+  const monthYear = `${selectedYear}-${String(selectedMonth).padStart(2, '0')}`;
 
   // Fetch all orders
   const { data: orders = [], isLoading } = useQuery({
@@ -39,32 +45,32 @@ const BulkCostEntryPage: React.FC = () => {
     },
   });
 
+  // Fetch monthly costs
+  const { data: monthlyCosts = [] } = useQuery({
+    queryKey: queryKeys.monthlyCosts.month(monthYear),
+    queryFn: () => getMonthlyCosts(monthYear),
+  });
+
+  // Monthly costs mutation
+  const updateMonthlyCostMutation = useMutation({
+    mutationFn: upsertMonthlyCost,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.monthlyCosts.all() });
+    },
+  });
+
   // Filter orders
   const filteredOrders = useMemo(() => {
     let result = orders;
 
-    // Date filter
-    if (dateFilter !== 'all') {
-      const now = new Date();
-      const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-
-      result = result.filter(order => {
-        const orderDate = new Date(order.createdAt);
-
-        if (dateFilter === 'today') {
-          return orderDate >= today;
-        } else if (dateFilter === 'week') {
-          const weekAgo = new Date(today);
-          weekAgo.setDate(weekAgo.getDate() - 7);
-          return orderDate >= weekAgo;
-        } else if (dateFilter === 'month') {
-          // Current calendar month
-          const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-          return orderDate >= monthStart;
-        }
-        return true;
-      });
-    }
+    // Filter by selected month/year
+    result = result.filter(order => {
+      const orderDate = new Date(order.createdAt);
+      return (
+        orderDate.getFullYear() === selectedYear &&
+        orderDate.getMonth() + 1 === selectedMonth
+      );
+    });
 
     // Status filter
     if (statusFilter !== 'ALL') {
@@ -79,17 +85,8 @@ const BulkCostEntryPage: React.FC = () => {
       }
     }
 
-    // Search filter
-    if (searchQuery) {
-      const query = searchQuery.toLowerCase();
-      result = result.filter(o =>
-        o.orderNumber.toLowerCase().includes(query) ||
-        o.customerName.toLowerCase().includes(query)
-      );
-    }
-
     return result;
-  }, [orders, dateFilter, statusFilter, searchQuery]);
+  }, [orders, selectedYear, selectedMonth, statusFilter]);
 
   // Calculate totals and profit
   const stats = useMemo(() => {
@@ -345,52 +342,36 @@ const BulkCostEntryPage: React.FC = () => {
           </motion.div>
         </div>
 
-        {/* Filters */}
-        <div className="bg-slate-900/40 backdrop-blur-xl border border-white/10 rounded-2xl p-4">
-          <div className="flex flex-col sm:flex-row gap-4">
-            {/* Date Filter Buttons */}
-            <div className="flex items-center gap-2 bg-slate-800/50 border border-slate-700 rounded-lg p-1">
-              {(['today', 'week', 'month', 'all'] as const).map((filter) => (
-                <button
-                  key={filter}
-                  onClick={() => setDateFilter(filter)}
-                  className={`px-3 py-1.5 rounded text-sm font-medium transition-all ${
-                    dateFilter === filter
-                      ? 'bg-brand-orange text-white shadow-lg shadow-brand-orange/20'
-                      : 'text-slate-300 hover:text-white hover:bg-slate-700'
-                  }`}
+        {/* Month Filter Buttons */}
+        <MonthFilterButtons
+          selectedYear={selectedYear}
+          selectedMonth={selectedMonth}
+          onYearChange={setSelectedYear}
+          onMonthChange={setSelectedMonth}
+        />
+
+        {/* Split-screen Layout */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Left: Orders Table (2/3 width) */}
+          <div className="lg:col-span-2">
+            {/* Status Filter */}
+            <div className="bg-slate-900/40 backdrop-blur-xl border border-white/10 rounded-2xl p-4 mb-4">
+              <div className="flex items-center gap-2">
+                <Filter className="w-5 h-5 text-slate-400" />
+                <select
+                  value={statusFilter}
+                  onChange={(e) => setStatusFilter(e.target.value)}
+                  className="px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-brand-orange"
                 >
-                  {filter.charAt(0).toUpperCase() + filter.slice(1)}
-                </button>
-              ))}
+                  <option value="ALL">All Status</option>
+                  <option value="COMPLETED_SHIPPED">Completed/Shipped</option>
+                  <option value={OrderStatus.IN_PRODUCTION}>In Production</option>
+                </select>
+              </div>
             </div>
 
-            <div className="flex-1">
-              <input
-                type="text"
-                placeholder="Search by order number or customer..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-brand-orange"
-              />
-            </div>
-            <div className="flex items-center gap-2">
-              <Filter className="w-5 h-5 text-slate-400" />
-              <select
-                value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value)}
-                className="px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-brand-orange"
-              >
-                <option value="ALL">All Status</option>
-                <option value="COMPLETED_SHIPPED">Completed/Shipped</option>
-                <option value={OrderStatus.IN_PRODUCTION}>In Production</option>
-              </select>
-            </div>
-          </div>
-        </div>
-
-        {/* Table */}
-        <div className="bg-slate-900/40 backdrop-blur-xl border border-white/10 rounded-2xl overflow-hidden">
+            {/* Table */}
+            <div className="bg-slate-900/40 backdrop-blur-xl border border-white/10 rounded-2xl overflow-hidden">
           <div className="overflow-x-auto max-h-[600px]">
             <table className="w-full min-w-[1400px]">
               <thead className="bg-slate-800/50 border-b border-white/10 sticky top-0 z-10">
@@ -490,6 +471,17 @@ const BulkCostEntryPage: React.FC = () => {
               No orders found matching your filters
             </div>
           )}
+            </div>
+          </div>
+
+          {/* Right: Monthly Expense Panel (1/3 width) */}
+          <div className="lg:col-span-1">
+            <MonthlyExpensePanel
+              monthYear={monthYear}
+              monthlyCosts={monthlyCosts}
+              onSave={updateMonthlyCostMutation.mutateAsync}
+            />
+          </div>
         </div>
       </div>
     </div>

@@ -1,11 +1,12 @@
 import React, { useMemo } from 'react';
-import { Order, OrderStatus } from '../../types';
+import { Order, OrderStatus, MonthlyCost } from '../../types';
 import { DollarSign, TrendingDown, TrendingUp, Minus, Plus, FileText, AlertCircle } from 'lucide-react';
 import { motion, Variants } from 'framer-motion';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, BarChart, Bar, Cell } from 'recharts';
 
 interface IncomeStatementReportProps {
   orders: Order[];
+  monthlyCosts?: MonthlyCost[];
 }
 
 // --- ANIMATIONS ---
@@ -68,7 +69,7 @@ const FinancialTooltip = ({ active, payload, label }: any) => {
   return null;
 };
 
-const IncomeStatementReport: React.FC<IncomeStatementReportProps> = ({ orders }) => {
+const IncomeStatementReport: React.FC<IncomeStatementReportProps> = ({ orders, monthlyCosts = [] }) => {
   // Calculate Income Statement Metrics
   const incomeStatement = useMemo(() => {
     // 1. GROSS REVENUE (All orders including cancelled/refunded)
@@ -103,7 +104,17 @@ const IncomeStatementReport: React.FC<IncomeStatementReportProps> = ({ orders })
 
     // 6. OPERATING EXPENSES
     const marketingCosts = validOrders.reduce((sum, order) => sum + (order.marketingCost || 0), 0);
-    const totalOperatingExpenses = marketingCosts;
+
+    // Monthly operating expenses
+    const monthlyOperatingExpenses = monthlyCosts.reduce((sum, cost) => sum + cost.amount, 0);
+
+    // Aggregate monthly costs by category
+    const monthlyCostsByCategory = monthlyCosts.reduce((acc, cost) => {
+      acc[cost.category] = (acc[cost.category] || 0) + cost.amount;
+      return acc;
+    }, {} as Record<string, number>);
+
+    const totalOperatingExpenses = marketingCosts + monthlyOperatingExpenses;
 
     // 7. NET PROFIT
     const netProfit = grossProfit - totalOperatingExpenses;
@@ -129,6 +140,8 @@ const IncomeStatementReport: React.FC<IncomeStatementReportProps> = ({ orders })
       totalCOGS,
       grossProfit,
       marketingCosts,
+      monthlyOperatingExpenses,
+      monthlyCostsByCategory,
       totalOperatingExpenses,
       netProfit,
       grossProfitMargin,
@@ -138,7 +151,7 @@ const IncomeStatementReport: React.FC<IncomeStatementReportProps> = ({ orders })
       refundedCount,
       validOrdersCount,
     };
-  }, [orders]);
+  }, [orders, monthlyCosts]);
 
   // Daily Trend Data
   const dailyTrend = useMemo(() => {
@@ -282,10 +295,31 @@ const IncomeStatementReport: React.FC<IncomeStatementReportProps> = ({ orders })
             <div className="mt-6">
               <p className="text-sm font-semibold text-slate-400 uppercase mb-2">Operating Expenses</p>
               <StatRow
-                label="Marketing & Advertising"
+                label="Marketing & Advertising (Order-Level)"
                 value={incomeStatement.marketingCosts}
                 isNegative={true}
               />
+
+              {/* Monthly operating expenses by category */}
+              {Object.entries(incomeStatement.monthlyCostsByCategory).map(([category, amount]) => (
+                <StatRow
+                  key={category}
+                  label={category}
+                  value={amount}
+                  isNegative={true}
+                />
+              ))}
+
+              {incomeStatement.monthlyOperatingExpenses > 0 && (
+                <StatRow
+                  label="Total Monthly Expenses"
+                  value={incomeStatement.monthlyOperatingExpenses}
+                  isSubtotal={false}
+                  isNegative={true}
+                  className="bg-purple-500/5 px-3 rounded-lg mt-2"
+                />
+              )}
+
               <StatRow
                 label="Total Operating Expenses"
                 value={incomeStatement.totalOperatingExpenses}
