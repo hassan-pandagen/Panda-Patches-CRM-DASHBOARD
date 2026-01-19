@@ -236,8 +236,8 @@ export const prepareEmailData = (order: Order, triggerStatus: string) => {
     carrier: order.shippingCarrier,
     tracking_number: order.shippingTrackingNumber,
     tracking_link: trackingUrl,
-    
-    order_link: `${window.location.origin}/order/${order.orderNumber}`,
+
+    order_link: `https://portal.pandapatches.com/order/${order.orderNumber}`,
     sales_agent_name: order.salesAgent || "Panda Team"
   };
 };

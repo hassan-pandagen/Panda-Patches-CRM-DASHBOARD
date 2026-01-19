@@ -329,7 +329,7 @@ const buildEmailHTML = (templateId: string, data: any): string => {
                         <td style="padding:18px 0px 18px 0px; line-height:22px; text-align:inherit;" height="100%" valign="top" bgcolor="" role="module-content">
                           <div>
                             <div style="font-family: inherit; text-align: center">
-                              <span style="font-family: 'lucida sans unicode', 'lucida grande', sans-serif; font-size: 18px;">Quote Number: ${data.quote_number || data.order_number || 'N/A'}</span>
+                              <span style="font-family: 'lucida sans unicode', 'lucida grande', sans-serif; font-size: 18px;">${data.quote_number ? 'Quote' : 'Order'} Number: ${data.quote_number || data.order_number || 'N/A'}</span>
                             </div>
                             <div style="font-family: inherit; text-align: center"><br></div>
                             ${data.design_name ? `
@@ -389,6 +389,29 @@ const buildEmailHTML = (templateId: string, data: any): string => {
     </tbody>
   </table>
 
+  ${templateId.includes('INTERNAL') && data.order_link ? `
+  <!-- VIEW CRM BUTTON (Internal Emails Only) -->
+  <table border="0" cellpadding="0" cellspacing="0" class="module" data-type="button" role="module" style="table-layout: fixed;" width="100%">
+    <tbody>
+      <tr>
+        <td align="center" bgcolor="" class="outer-td" style="padding:20px 0px 20px 0px;">
+          <table border="0" cellpadding="0" cellspacing="0" class="wrapper-mobile" style="text-align:center;">
+            <tbody>
+              <tr>
+                <td align="center" bgcolor="#FB6E1D" class="inner-td" style="border-radius:6px; font-size:16px; text-align:center; background-color:inherit;">
+                  <a href="${data.order_link}" style="background-color:#FB6E1D; border:1px solid #FB6E1D; border-color:#FB6E1D; border-radius:6px; border-width:1px; color:#ffffff; display:inline-block; font-size:16px; font-weight:bold; letter-spacing:0px; line-height:normal; padding:16px 40px 16px 40px; text-align:center; text-decoration:none; border-style:solid; font-family: 'lucida sans unicode', 'lucida grande', sans-serif;" target="_blank">
+                    VIEW IN CRM PORTAL →
+                  </a>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </td>
+      </tr>
+    </tbody>
+  </table>
+  ` : ''}
+
   <!-- CLOSING MESSAGE -->
   <table class="module" role="module" data-type="text" border="0" cellpadding="0" cellspacing="0" width="100%" style="table-layout: fixed;">
     <tbody>
@@ -396,7 +419,7 @@ const buildEmailHTML = (templateId: string, data: any): string => {
         <td style="padding:18px 0px 18px 0px; line-height:22px; text-align:inherit;" height="100%" valign="top" bgcolor="" role="module-content">
           <div>
             <div style="font-family: inherit; text-align: left">
-              <span style="font-size: 18px; font-family: 'lucida sans unicode', 'lucida grande', sans-serif">&nbsp;Once you approve this quote, we will proceed with your order immediately.</span>
+              <span style="font-size: 18px; font-family: 'lucida sans unicode', 'lucida grande', sans-serif">&nbsp;${data.quote_number ? 'Once you approve this quote, we will proceed with your order immediately.' : 'We\'re working on your order and will keep you updated on its progress.'}</span>
             </div>
             <div style="font-family: inherit; text-align: left"><br></div>
             <div style="font-family: inherit; text-align: left">
