@@ -1,25 +1,38 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { z } from "https://deno.land/x/zod@v3.22.4/mod.ts";
 
 const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Origin': 'https://portal.pandapatches.com',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-Deno.serve(async (req: Request) => {
-  if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
+// ✅ BACKEND VALIDATION: Zod schema for update user
+const updateUserSchema = z.object({
+  user_id: z.string()
+    .uuid("Invalid user ID format"),
 
-  try {
-    const supabaseAdmin = createClient(
-      Deno.env.get('SUPABASE_URL')!,
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
-    );
+  email: z.string()
+    .email("Invalid email format")
+    .max(255, "Email too long")
+    .optional(),
 
-    const { user_id, email, password, full_name, role, permissions } = await req.json();
-    
-    if (!user_id) throw new Error("User ID is required");
+  password: z.string()
+    .min(8, "Password must be at least 8 characters")
+    .max(72, "Password too long")
+    .regex(/[A-Z]/, "Password must contain at least one uppercase letter")
+    .regex(/[0-9]/, "Password must contain at least one number")
+    .optional(),
 
-    // ✅ SECURITY FIX: Validate permission object structure
-    const VALID_PERMISSIONS = new Set([
+  full_name: z.string()
+    .min(1, "Full name cannot be empty")
+    .max(100, "Full name too long"),
+
+  role: z.enum(['USER', 'ADMIN', 'PRODUCTION', 'AGENT'], {
+    errorMap: () => ({ message: "Role must be USER, ADMIN, PRODUCTION, or AGENT" })
+  }),
+
+  permissions: z.record(
+    z.enum([
       'users_manage',
       'orders_create',
       'orders_view_all',
@@ -30,20 +43,25 @@ Deno.serve(async (req: Request) => {
       'reports_view_financials',
       'shipping_view',
       'attendance_clock_only'
-    ]);
+    ]),
+    z.boolean()
+  ).optional()
+});
 
-    if (permissions && typeof permissions === 'object') {
-      for (const key of Object.keys(permissions)) {
-        if (!VALID_PERMISSIONS.has(key)) {
-          throw new Error(`Invalid permission: ${key}. Allowed: ${Array.from(VALID_PERMISSIONS).join(', ')}`);
-        }
-        if (typeof permissions[key] !== 'boolean') {
-          throw new Error(`Permission ${key} must be boolean, got ${typeof permissions[key]}`);
-        }
-      }
-    } else if (permissions) {
-      throw new Error("Permissions must be an object");
-    }
+Deno.serve(async (req: Request) => {
+  if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
+
+  try {
+    const supabaseAdmin = createClient(
+      Deno.env.get('SUPABASE_URL')!,
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+    );
+
+    // Parse and validate request body
+    const body = await req.json();
+    const validatedData = updateUserSchema.parse(body);
+
+    const { user_id, email, password, full_name, role, permissions } = validatedData;
 
     // 1. Update Auth (Email/Password/Metadata)
     const authAttributes: any = {
@@ -78,6 +96,22 @@ Deno.serve(async (req: Request) => {
     );
 
   } catch (error: any) {
+    // Handle Zod validation errors
+    if (error.name === 'ZodError') {
+      const validationErrors = error.errors.map((err: any) => ({
+        field: err.path.join('.'),
+        message: err.message
+      }));
+      return new Response(
+        JSON.stringify({
+          error: 'Validation failed',
+          details: validationErrors
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
+      );
+    }
+
+    // Handle other errors
     return new Response(
       JSON.stringify({ error: error.message }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }

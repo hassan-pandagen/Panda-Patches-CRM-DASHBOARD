@@ -24,3 +24,6 @@ yarn-error.log*
 
 .vercel
 .env*.local
+
+# Database schema backup (local reference only, actual DB is in Supabase)
+src/assets/db_schema.sql

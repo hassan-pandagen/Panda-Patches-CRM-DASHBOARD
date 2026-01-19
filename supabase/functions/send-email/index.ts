@@ -5,11 +5,36 @@
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { encode } from "https://deno.land/std@0.168.0/encoding/base64.ts";
+import { z } from "https://deno.land/x/zod@v3.22.4/mod.ts";
 
 const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Origin': 'https://portal.pandapatches.com',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
+
+// ✅ BACKEND VALIDATION: Zod schema for email requests
+const sendEmailSchema = z.object({
+  to: z.string()
+    .email("Invalid recipient email format")
+    .max(255, "Email too long"),
+
+  template_id: z.string()
+    .min(1, "Template ID is required")
+    .max(100, "Template ID too long"),
+
+  dynamic_data: z.record(z.any()),
+
+  cc: z.string()
+    .optional()
+    .refine(
+      (val) => {
+        if (!val) return true;
+        const emails = val.split(',').map(e => e.trim());
+        return emails.every(email => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email));
+      },
+      { message: "CC contains invalid email format" }
+    )
+});
 
 // 1. Helper: Get Clean Filename
 const getFileName = (url: string) => {
@@ -510,7 +535,11 @@ serve(async (req) => {
       throw new Error('ZEPTOMAIL_API_KEY not configured. Run: supabase secrets set ZEPTOMAIL_API_KEY=your_key');
     }
 
-    const { to, template_id, dynamic_data, cc } = await req.json();
+    // Parse and validate request body
+    const body = await req.json();
+    const validatedData = sendEmailSchema.parse(body);
+
+    const { to, template_id, dynamic_data, cc } = validatedData;
     const attachments = [];
     const inlineAttachments = [];
 
@@ -707,7 +736,24 @@ serve(async (req) => {
     return new Response(JSON.stringify({ success: true }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 });
 
   } catch (error: any) {
-    // Return 200 even on error so Frontend doesn't spin, but log it.
+    // Handle Zod validation errors with proper 400 status
+    if (error.name === 'ZodError') {
+      const validationErrors = error.errors.map((err: any) => ({
+        field: err.path.join('.'),
+        message: err.message
+      }));
+      console.error("Validation Error:", validationErrors);
+      return new Response(
+        JSON.stringify({
+          success: false,
+          error: 'Validation failed',
+          details: validationErrors
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
+      );
+    }
+
+    // Return 200 even on other errors so Frontend doesn't spin, but log it.
     console.error("Edge Function Error:", error.message);
     return new Response(JSON.stringify({ success: false, error: error.message }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 });
   }
