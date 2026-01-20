@@ -204,6 +204,15 @@ const AllOrdersPage: React.FC = () => {
         setActiveFilter('ALL');
     };
 
+    const handleFilterChange = (filter: string) => {
+        // Clear ids parameter when changing filters
+        const newParams = new URLSearchParams(searchParams);
+        newParams.delete('ids');
+        setSearchParams(newParams);
+        setActiveFilter(filter);
+        setCurrentPage(1); // Reset to first page
+    };
+
     // --- SKELETON LOADING ---
     if (isLoading) return (
         <div className="space-y-6 min-h-screen pb-10">
@@ -276,24 +285,24 @@ const AllOrdersPage: React.FC = () => {
 
                 {/* EXPANDED FILTER TABS */}
                 <div className="flex items-center gap-2 overflow-x-auto pb-2 no-scrollbar">
-                    <FilterTab active={activeFilter === 'ALL'} label="All Orders" count={orders.length} onClick={() => setActiveFilter('ALL')} />
-                    <FilterTab active={activeFilter === 'URGENT'} label="Urgent" count={urgentCount} onClick={() => setActiveFilter('URGENT')} isUrgent={true} />
-                    <FilterTab active={activeFilter === 'OVERDUE'} label="Overdue" count={overdueCount} onClick={() => setActiveFilter('OVERDUE')} isUrgent={true} />
+                    <FilterTab active={activeFilter === 'ALL'} label="All Orders" count={orders.length} onClick={() => handleFilterChange('ALL')} />
+                    <FilterTab active={activeFilter === 'URGENT'} label="Urgent" count={urgentCount} onClick={() => handleFilterChange('URGENT')} isUrgent={true} />
+                    <FilterTab active={activeFilter === 'OVERDUE'} label="Overdue" count={overdueCount} onClick={() => handleFilterChange('OVERDUE')} isUrgent={true} />
 
                     <div className="w-px h-6 bg-slate-600 mx-2 shrink-0" />
 
-                    <FilterTab active={activeFilter === 'NEW_ORDER'} label="New" count={getCount('NEW_ORDER')} onClick={() => setActiveFilter('NEW_ORDER')} />
-                    <FilterTab active={activeFilter === 'AWAITING_CUSTOMER_APPROVAL'} label="Awaiting Approval" count={getCount('AWAITING_CUSTOMER_APPROVAL')} onClick={() => setActiveFilter('AWAITING_CUSTOMER_APPROVAL')} />
-                    <FilterTab active={activeFilter === 'IN_PRODUCTION'} label="In Production" count={getCount('IN_PRODUCTION')} onClick={() => setActiveFilter('IN_PRODUCTION')} />
-                    <FilterTab active={activeFilter === 'REVISION_REQUESTED'} label="Revision" count={getCount('REVISION_REQUESTED')} onClick={() => setActiveFilter('REVISION_REQUESTED')} />
+                    <FilterTab active={activeFilter === 'NEW_ORDER'} label="New" count={getCount('NEW_ORDER')} onClick={() => handleFilterChange('NEW_ORDER')} />
+                    <FilterTab active={activeFilter === 'AWAITING_CUSTOMER_APPROVAL'} label="Awaiting Approval" count={getCount('AWAITING_CUSTOMER_APPROVAL')} onClick={() => handleFilterChange('AWAITING_CUSTOMER_APPROVAL')} />
+                    <FilterTab active={activeFilter === 'IN_PRODUCTION'} label="In Production" count={getCount('IN_PRODUCTION')} onClick={() => handleFilterChange('IN_PRODUCTION')} />
+                    <FilterTab active={activeFilter === 'REVISION_REQUESTED'} label="Revision" count={getCount('REVISION_REQUESTED')} onClick={() => handleFilterChange('REVISION_REQUESTED')} />
 
                     <div className="w-px h-6 bg-slate-600 mx-2 shrink-0" />
 
-                    <FilterTab active={activeFilter === 'SHIPPED'} label="Shipped" count={getCount('SHIPPED')} onClick={() => setActiveFilter('SHIPPED')} />
-                    <FilterTab active={activeFilter === 'DELIVERED'} label="Delivered" count={getCount('DELIVERED')} onClick={() => setActiveFilter('DELIVERED')} />
-                    <FilterTab active={activeFilter === 'QUALITY_ASSURANCE'} label="Quality Assurance" count={getCount('QUALITY_ASSURANCE')} onClick={() => setActiveFilter('QUALITY_ASSURANCE')} />
-                    <FilterTab active={activeFilter === 'CANCELLED'} label="Cancelled" count={getCount('CANCELLED')} onClick={() => setActiveFilter('CANCELLED')} />
-                    <FilterTab active={activeFilter === 'REFUNDED'} label="Refunds" count={getCount('REFUNDED')} onClick={() => setActiveFilter('REFUNDED')} />
+                    <FilterTab active={activeFilter === 'SHIPPED'} label="Shipped" count={getCount('SHIPPED')} onClick={() => handleFilterChange('SHIPPED')} />
+                    <FilterTab active={activeFilter === 'DELIVERED'} label="Delivered" count={getCount('DELIVERED')} onClick={() => handleFilterChange('DELIVERED')} />
+                    <FilterTab active={activeFilter === 'QUALITY_ASSURANCE'} label="Quality Assurance" count={getCount('QUALITY_ASSURANCE')} onClick={() => handleFilterChange('QUALITY_ASSURANCE')} />
+                    <FilterTab active={activeFilter === 'CANCELLED'} label="Cancelled" count={getCount('CANCELLED')} onClick={() => handleFilterChange('CANCELLED')} />
+                    <FilterTab active={activeFilter === 'REFUNDED'} label="Refunds" count={getCount('REFUNDED')} onClick={() => handleFilterChange('REFUNDED')} />
                 </div>
             </SpotlightCard>
 

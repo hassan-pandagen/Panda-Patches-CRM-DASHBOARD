@@ -129,6 +129,11 @@ export const mapDbToOrder = (data: any): Order => {
   const shippingCost = toNumber(data.shippingCost ?? data.shipping_cost);
   const marketingCost = toNumber(data.marketingCost ?? data.marketing_cost);
   const patchesQuantity = toNumber(data.patchesQuantity ?? data.patches_quantity);
+  const status = data.status;
+
+  // Calculate profit: For refunded orders, profit is negative (all costs are losses)
+  const totalCosts = productionCost + shippingCost + marketingCost;
+  const profit = status === 'REFUNDED' ? -totalCosts : orderAmount - totalCosts;
 
   return {
     id: data.id,
@@ -137,23 +142,23 @@ export const mapDbToOrder = (data: any): Order => {
     customerEmail: data.customerEmail ?? data.customer_email,
     customerPhone: data.customerPhone ?? data.customer_phone,
     customerProfileUrl: data.customerProfileUrl ?? data.customer_profile_url,
-    
+
     shippingAddress: data.shippingAddress ?? data.shipping_address,
     shippingTrackingNumber: data.shippingTrackingNumber ?? data.shipping_tracking_number,
     shippingCarrier: data.shippingCarrier ?? data.shipping_carrier,
-    
+
     designName: data.designName ?? data.design_name,
     patchesType: data.patchesType ?? data.patches_type,
     patchesQuantity: patchesQuantity,
     designSize: data.designSize ?? data.design_size,
     designBacking: data.designBacking ?? data.design_backing,
     instructions: data.instructions,
-    
+
     orderAmount, amountPaid, productionCost, shippingCost, marketingCost,
-    profit: orderAmount - productionCost - shippingCost - marketingCost,
+    profit,
     amountRemaining: orderAmount - amountPaid,
 
-    status: data.status,
+    status,
     reasonCategory: data.reasonCategory ?? data.reason_category,
     reasonDetails: data.reasonDetails ?? data.reason_details,
     isUrgent: data.isUrgent ?? data.is_urgent,

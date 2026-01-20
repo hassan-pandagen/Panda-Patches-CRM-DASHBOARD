@@ -90,10 +90,8 @@ const IncomeStatementReport: React.FC<IncomeStatementReportProps> = ({ orders, m
     const netRevenue = grossRevenue - totalDeductions;
 
     // 4. COST OF GOODS SOLD (COGS)
-    const validOrders = orders.filter(o =>
-      o.status !== OrderStatus.CANCELLED &&
-      o.status !== OrderStatus.REFUNDED
-    );
+    // Include costs from refunded orders - they are real losses even though revenue was returned
+    const validOrders = orders.filter(o => o.status !== OrderStatus.CANCELLED);
 
     const productionCosts = validOrders.reduce((sum, order) => sum + (order.productionCost || 0), 0);
     const shippingCosts = validOrders.reduce((sum, order) => sum + (order.shippingCost || 0), 0);
@@ -103,6 +101,7 @@ const IncomeStatementReport: React.FC<IncomeStatementReportProps> = ({ orders, m
     const grossProfit = netRevenue - totalCOGS;
 
     // 6. OPERATING EXPENSES
+    // Include marketing costs from refunded orders - they are real losses
     const marketingCosts = validOrders.reduce((sum, order) => sum + (order.marketingCost || 0), 0);
 
     // Monthly operating expenses
@@ -156,17 +155,20 @@ const IncomeStatementReport: React.FC<IncomeStatementReportProps> = ({ orders, m
   // Daily Trend Data
   const dailyTrend = useMemo(() => {
     const dailyData = orders.reduce((acc, order) => {
-      if (order.createdAt && order.status !== OrderStatus.CANCELLED && order.status !== OrderStatus.REFUNDED) {
+      if (order.createdAt && order.status !== OrderStatus.CANCELLED) {
         const date = new Date(order.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
         if (!acc[date]) acc[date] = { revenue: 0, costs: 0, profit: 0 };
 
-        acc[date].revenue += (order.orderAmount || 0);
+        // For refunded orders: revenue is negative (money returned), but costs are still positive (losses)
+        const revenue = order.status === OrderStatus.REFUNDED ? -(order.orderAmount || 0) : (order.orderAmount || 0);
         const orderCosts = (order.productionCost || 0) + (order.shippingCost || 0) + (order.marketingCost || 0);
+
+        acc[date].revenue += revenue;
         acc[date].costs += orderCosts;
-        acc[date].profit += (order.orderAmount || 0) - orderCosts;
+        acc[date].profit += revenue - orderCosts;
       }
       return acc;
-    }, {} as Record<string, { revenue: number, costs: number, profit: number }>);
+    }, {} as Record<string, { revenue: number, costs: number, profit: 0 }>);
 
     return Object.entries(dailyData)
       .map(([date, data]) => ({ date, ...data }))
