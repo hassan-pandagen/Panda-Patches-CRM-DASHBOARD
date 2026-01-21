@@ -9,6 +9,10 @@ A professional-grade, full-stack Customer Relationship Management (CRM) applicat
 - ✅ **Complex Order Workflows:** Full lifecycle (NEW_ORDER → DELIVERED) with status tracking, history logs, and notifications
 - ✅ **Multi-User RBAC:** Role-based permissions (ADMIN, SALES, PRODUCTION) with granular access control
 - ✅ **Customer Intelligence:** Duplicate detection, lifetime value tracking, comprehensive order history
+- ✅ **Advanced Reporting:** Real-time analytics dashboard with revenue, profit margins, order trends, lead source analysis
+- ✅ **Performance Monitoring:** Built-in APM tracking API calls, operations, and render times with admin metrics dashboard
+- ✅ **Attendance & Time Tracking:** Clock in/out system with shift management, daily/weekly/monthly reports, CSV export (Pakistan timezone support)
+- ✅ **Cost Management:** Bulk cost entry with monthly expense tracking, profit calculations, and financial reports
 - ✅ **Offline-First Architecture:** Service Worker, OfflineManager, automatic sync on reconnect
 - ✅ **Production Monitoring:** Sentry error tracking with proxy tunnel, performance insights
 - ✅ **100% TypeScript:** Type-safe codebase with zero import inconsistencies
@@ -39,6 +43,7 @@ A professional-grade, full-stack Customer Relationship Management (CRM) applicat
 - **Smart Customer Recognition:** Intelligent duplicate detection by email/phone, instant history lookup, lifetime value calculation
 - **Customer 360° View:** Comprehensive customer profile with LTV, order history, communication logs, and behavioral insights
 - **Automated Notifications:** Email notifications via Supabase Edge Functions + SendGrid on order status changes
+- **Transaction Email Integration:** Automated receipt and confirmation emails sent to customers on order transactions and status updates
 
 ### Technical Capabilities
 - **Input Validation Service:** Schema-based validation (Zod) with field-level error reporting
@@ -47,14 +52,42 @@ A professional-grade, full-stack Customer Relationship Management (CRM) applicat
 - **Offline-First Architecture:** Service Worker caching, automatic sync on reconnection, conflict resolution
 - **Secure File Management:** Encrypted uploads to Supabase Storage for design files (`.DST`, `.EMB`)
 - **Production Monitoring:** Sentry integration with proxy tunnel for error tracking and performance monitoring
+- **Smart Caching Strategy:** Optimized query caching with TanStack Query, asset caching headers (31536000s for static files), reduced data transfer
+- **Security Hardening:** XSS protection via React escaping, CSRF tokens, secure auth state management, Row-Level Security (RLS) policies
 
 ### User Experience (2025 Standard)
-- **Admin Dashboard:** Centralized management (users, settings, dynamic logo upload)
+- **Admin Dashboard:** Centralized management (users, settings, dynamic logo upload, performance metrics)
 - **Spotlight Design System:** Unified SpotlightCard component with mouse-tracking lighting effects across entire app
 - **Brand-Focused Accessibility:** Orange focus rings on all interactive elements (Tab navigation), keyboard shortcuts
 - **Professional UI/UX:** Tailwind CSS "Panda Theme", Framer Motion animations, responsive design, empty states with CTAs
 - **Accessibility:** Full keyboard navigation (Tab/Enter), ARIA labels, screen reader optimized, semantic HTML
 - **Real-time Updates:** TanStack Query for server state, optimistic updates, background sync
+- **Advanced Order Search:** Search orders by Order ID, Customer Name, Design Name, Phone, or Email for instant lookup
+- **Design Visibility:** Design names displayed on order cards for quick visual reference without opening order details
+- **Multi-Page Analytics:** Comprehensive reports (revenue, profit margins, lead sources), quote management with PDF export
+- **Clock In/Out Dashboard:** Employee attendance tracking with shift status, daily/weekly/monthly reports, CSV export
+- **Bulk Cost Management:** Streamlined monthly cost entry with expense categorization and profit calculations
+
+---
+
+## 📄 All Pages & Features
+
+| Page | Feature | User Role |
+|------|---------|-----------|
+| **Dashboard** | Sales KPIs, recent orders, revenue metrics, production pipeline status | All |
+| **All Orders** | Order management with filtering (status, urgency, overdue), pagination, search by ID/customer/design | SALES, ADMIN |
+| **Order Details** | Full order lifecycle, history timeline, communication logs, file attachments, status updates | SALES, ADMIN, PRODUCTION |
+| **New Order** | Create orders with customer detection, design upload, automatic profit calculation | SALES, ADMIN |
+| **Edit Order** | Modify order details, update status, manage costs, attach files | SALES, ADMIN, PRODUCTION |
+| **Quotes** | Quote management with PDF generation, quote-to-order conversion, archival | SALES, ADMIN |
+| **Reports** | Revenue analysis, profit trends, lead source breakdown, status distribution charts, date range filtering | ADMIN |
+| **Performance Metrics** | APM tracking (API calls, operations, renders), slowest operations, metrics export, auto-refresh | ADMIN |
+| **Clock In/Out** | Attendance tracking, shift status, daily/weekly/monthly reports, CSV export, Pakistan timezone support | All |
+| **Bulk Cost Entry** | Monthly cost management (production, shipping, marketing), profit margin calculation, status filtering | ADMIN, PRODUCTION |
+| **Customer History** | Customer profile with LTV, order history, communication timeline, lifetime insights | SALES, ADMIN |
+| **User Management** | Create/edit users, assign roles (ADMIN, SALES, PRODUCTION), manage permissions | ADMIN |
+| **Settings** | Logo upload, business configuration, user preferences | ADMIN |
+| **Search Results** | Global search across orders, customers, quotes with filtered results | All |
 
 ---
 
@@ -74,7 +107,56 @@ A professional-grade, full-stack Customer Relationship Management (CRM) applicat
   - **Serverless Functions:** Supabase Edge Functions (for email sending)
 
 - **Email Service:**
-  - **Provider:** SendGrid
+   - **Provider:** SendGrid
+   - **Automation:** Transaction emails, order confirmations, status updates
+
+- **Monitoring & Observability:**
+   - **Error Tracking:** Sentry with proxy tunnel
+   - **Performance Monitoring:** Custom APM service (API, operations, renders)
+   - **Logging:** Structured logging with timestamp and severity levels
+
+---
+
+## 🔧 Advanced Services
+
+### 1. **API Interceptor Service** (`src/services/apiInterceptor.ts`)
+- Automatic retry logic with exponential backoff
+- Timeout handling (30-second default)
+- Request/response logging
+- Error aggregation and reporting to Sentry
+- Network error recovery
+
+### 2. **Validation Service** (`src/services/validation.ts`)
+- Zod schema-based validation
+- Field-level error reporting
+- Password strength validation
+- Email/phone format validation
+- Order form validation with custom rules
+
+### 3. **Rate Limiting Service** (`src/services/rateLimiter.ts`)
+- Debounced API calls
+- Form submission protection
+- Search query throttling
+- Configurable limits per function
+
+### 4. **Performance Monitor** (`src/services/performanceMonitor.ts`)
+- API call timing
+- Component render timing
+- Operation duration tracking
+- Database query profiling
+- Metrics storage in Supabase
+
+### 5. **Offline Manager** (`src/services/offlineManager.ts`)
+- Service Worker integration
+- Automatic sync on reconnection
+- Cache management
+- Conflict resolution for offline changes
+
+### 6. **Storage Service** (`src/services/storageService.ts`)
+- Encrypted file uploads
+- Design file management (`.DST`, `.EMB`)
+- Secure Supabase Storage integration
+- File URL generation and signing
 
 ---
 
