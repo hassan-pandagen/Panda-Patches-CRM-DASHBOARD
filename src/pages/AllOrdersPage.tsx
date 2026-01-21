@@ -383,6 +383,12 @@ const AllOrdersPage: React.FC = () => {
                                                         <span className="font-mono font-medium text-slate-200">{order.orderNumber}</span>
                                                         <span className="w-1 h-1 rounded-full bg-slate-500" />
                                                         <span className="text-slate-400">{order.patchesType || 'Custom Patch'}</span>
+                                                        {order.designName && (
+                                                            <>
+                                                                <span className="w-1 h-1 rounded-full bg-slate-500" />
+                                                                <span className="text-slate-400">{order.designName}</span>
+                                                            </>
+                                                        )}
                                                         {order.salesAgent && (
                                                             <>
                                                                 <span className="w-1 h-1 rounded-full bg-slate-500" />
