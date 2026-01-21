@@ -175,7 +175,8 @@ const AllOrdersPage: React.FC = () => {
                     o.customerName.toLowerCase().includes(query) ||
                     o.orderNumber.toLowerCase().includes(query) ||
                     (o.salesAgent && o.salesAgent.toLowerCase().includes(query)) ||
-                    (o.customerEmail && o.customerEmail.toLowerCase().includes(query));
+                    (o.customerEmail && o.customerEmail.toLowerCase().includes(query)) ||
+                    (o.designName && o.designName.toLowerCase().includes(query));
 
                 const cleanPhone = (o.customerPhone || '').replace(/\D/g, '');
                 const matchesPhone = digitQuery.length > 2 && cleanPhone.includes(digitQuery);
@@ -276,7 +277,7 @@ const AllOrdersPage: React.FC = () => {
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-5 h-5" />
                     <input
                         type="text"
-                        placeholder="Search by Order ID, Name, Phone (e.g. 300123), or Email..."
+                        placeholder="Search by Order ID, Name, Design, Phone (e.g. 300123), or Email..."
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
                         className="w-full bg-slate-800/50 border border-slate-600 text-white text-sm rounded-xl pl-10 pr-4 py-3 focus:ring-2 focus:ring-brand-orange/50 focus:border-brand-orange transition-all placeholder-slate-400 focus-ring"
