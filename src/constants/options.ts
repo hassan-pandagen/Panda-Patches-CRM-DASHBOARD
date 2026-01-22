@@ -1,5 +1,10 @@
 export const COURIER_OPTIONS: string[] = ['FedEx', 'DHL', 'UPS', 'Other'];
-export const PATCHES_TYPE_OPTIONS: string[] = ['Embroidered', 'Woven', 'Chenille', 'PVC', 'Leather', 'Printed'];
+export const PATCHES_TYPE_OPTIONS: string[] = [
+  'Embroidered', 'PVC', 'Woven', 'Chenille', 'Leather',
+  '3D Embroidery Puff', '3D Embroidery Transfer', 'Chenille Transfer',
+  'Sequin Patch', 'Sublimation Patch', 'DTF Transfer',
+  'Silicone Transfer', 'High Density Transfer'
+];
 export const DESIGN_BACKING_OPTIONS: string[] = ['Iron-on', 'Velcro', 'Adhesive', 'None'];
 export const LEAD_SOURCE_OPTIONS: string[] = [
   'Google',

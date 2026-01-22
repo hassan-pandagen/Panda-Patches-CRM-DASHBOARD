@@ -6,6 +6,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { createQuote } from '../services/quoteService';
 import { Quote } from '../types/index';
 import { queryKeys } from '../constants/queryKeys';
+import { PATCHES_TYPE_OPTIONS } from '../constants/index';
 import Button from '../components/ui/Button';
 import SpotlightCard from '../components/ui/SpotlightCard';
 import UnsavedChangesModal from "../components/ui/UnsavedChangesModal";
@@ -286,11 +287,10 @@ const NewQuotePage: React.FC = () => {
                   }}
                 >
                   <option value="">Select type...</option>
-                  <option value="Embroidered">Embroidered</option>
-                  <option value="Woven">Woven</option>
-                  <option value="PVC">PVC</option>
-                  <option value="Printed">Printed</option>
-                </select>
+                  {PATCHES_TYPE_OPTIONS.map(type => (
+                    <option key={type} value={type}>{type}</option>
+                  ))}
+                  </select>
               </div>
 
               <div>

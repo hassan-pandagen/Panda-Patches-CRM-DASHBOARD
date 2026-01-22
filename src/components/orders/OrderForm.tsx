@@ -9,7 +9,7 @@ import { useToast } from '../../hooks/useToast';
 import Spinner from '../ui/Spinner';
 import FileUploadSection from './FileUpload'; 
 import Textarea from '../ui/Textarea'; 
-import { LEAD_SOURCE_OPTIONS } from '../../constants/index';
+import { LEAD_SOURCE_OPTIONS, PATCHES_TYPE_OPTIONS } from '../../constants/index';
 import { supabase } from '../../services/supabaseClient';
 import { logger } from '../../services/logger';
 import { History, UserCheck, ExternalLink } from 'lucide-react';
@@ -320,7 +320,7 @@ const OrderForm: React.FC<OrderFormProps> = ({
   const profit = orderAmount - (productionCost + shippingCost + marketingCost);
   const watchedStatus = watch('status');
 
-  const patchTypes = ["Embroidered", "PVC", "Woven", "Chenille", "Leather", "3D Embroidery Puff", "3D Embroidery Transfer", "Chenille Transfer", "Sequin Patch", "Sublimation Patch", "DTF Transfer", "Silicone Transfer", "High Density Transfer"];
+  const patchTypes = PATCHES_TYPE_OPTIONS;
   const shippingCarriers = ["FedEx", "DHL", "UPS", "USPS", "Other"];
   const backingOptions = ["Iron on", "Sew on", "Sticker", "Velcro"];
   

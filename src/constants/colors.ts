@@ -6,6 +6,14 @@ export const PATCH_TYPE_COLORS: Record<string, string> = {
     'Chenille': '#F59E0B', // Amber
     'Printed': '#EC4899', // Pink
     'Bullion': '#EAB308', // Yellow
+    '3D Embroidery Puff': '#6366F1', // Indigo
+    '3D Embroidery Transfer': '#0EA5E9', // Sky Blue
+    'Chenille Transfer': '#A78BFA', // Violet
+    'Sequin Patch': '#FB7185', // Rose
+    'Sublimation Patch': '#14B8A6', // Teal
+    'DTF Transfer': '#F97316', // Orange
+    'Silicone Transfer': '#EF4444', // Red
+    'High Density Transfer': '#84CC16', // Lime
     'Unknown': '#64748B' // Slate
 };
   

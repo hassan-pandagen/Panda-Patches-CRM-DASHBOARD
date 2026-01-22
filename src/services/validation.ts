@@ -2,6 +2,7 @@
 
 import { z } from 'zod';
 import { logger } from './logger';
+import { PATCHES_TYPE_OPTIONS } from '../constants/index';
 
 // ============ ORDER SCHEMAS ============
 
@@ -47,7 +48,7 @@ export const orderSchema = z.object({
   customerProfileUrl: z.string().url().optional().nullable(),
   
   designName: z.string().optional(),
-  patchesType: z.string().optional(),
+  patchesType: z.enum(PATCHES_TYPE_OPTIONS as [string, ...string[]]).optional(),
   designSize: z.string().optional(),
   designBacking: z.string().optional(),
   instructions: z.string().optional(),
