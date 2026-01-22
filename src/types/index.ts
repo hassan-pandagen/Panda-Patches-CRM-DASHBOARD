@@ -65,6 +65,7 @@ export interface Order {
   designSize?: string;
   patchesType?: string;
   designBacking?: string;
+  borderType?: string;
   instructions?: string;
   isUrgent: boolean;
   isUrgentApproved?: boolean;

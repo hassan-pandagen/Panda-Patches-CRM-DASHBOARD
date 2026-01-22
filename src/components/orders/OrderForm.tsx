@@ -53,6 +53,7 @@ export interface SaveData {
   patchesType?: string;
   designSize?: string;
   designBacking?: string;
+  borderType?: string;
   instructions?: string;
   orderAmount: number;
   amountPaid: number;
@@ -406,18 +407,30 @@ const OrderForm: React.FC<OrderFormProps> = ({
 
       <FormSectionWrapper title="Design & Product">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-10">
-          <div className="md:col-span-2">
+          {/* Row 1: Design Name | Border Type | Quantity */}
+          <div>
             <label className="block text-sm font-medium text-slate-300">Design Name</label>
             <input type="text" {...register('designName')} className="mt-1 block w-full bg-slate-800 border-slate-600 rounded-md text-white focus:ring-brand-orange focus:border-brand-orange" />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-300">Border Type</label>
+            <select {...register('borderType')} className="mt-1 block w-full bg-slate-800 border-slate-600 rounded-md text-white focus:ring-brand-orange focus:border-brand-orange">
+              <option value="" disabled hidden>Select...</option>
+              <option value="Merrow Border">Merrow Border</option>
+              <option value="Embroidery Border">Embroidery Border</option>
+              <option value="Laser Cut">Laser Cut</option>
+            </select>
           </div>
           <div>
             <label className="block text-sm font-medium text-slate-300">Quantity</label>
             <input type="number" {...register('patchesQuantity', { required: true, min: 1, valueAsNumber: true })} className="mt-1 block w-full bg-slate-800 border-slate-600 rounded-md text-white focus:ring-brand-orange focus:border-brand-orange" />
           </div>
+
+          {/* Row 2: Patch Type | Size | Backing */}
           <div>
             <label className="block text-sm font-medium text-slate-300">Patch Type</label>
             <select {...register('patchesType')} className="mt-1 block w-full bg-slate-800 border-slate-600 rounded-md text-white focus:ring-brand-orange focus:border-brand-orange">
-              <option value="">Select...</option>
+              <option value="" disabled hidden>Select...</option>
               {patchTypes.map(t => <option key={t} value={t}>{t}</option>)}
             </select>
           </div>
@@ -428,7 +441,7 @@ const OrderForm: React.FC<OrderFormProps> = ({
           <div>
             <label className="block text-sm font-medium text-slate-300">Backing</label>
             <select {...register('designBacking')} className="mt-1 block w-full bg-slate-800 border-slate-600 rounded-md text-white focus:ring-brand-orange focus:border-brand-orange">
-              <option value="">Select...</option>
+              <option value="" disabled hidden>Select...</option>
               {backingOptions.map(b => <option key={b} value={b}>{b}</option>)}
             </select>
           </div>
@@ -457,7 +470,7 @@ const OrderForm: React.FC<OrderFormProps> = ({
           <div>
             <label className="block text-sm font-medium text-slate-300">Carrier</label>
             <select {...register('shippingCarrier')} className="mt-1 block w-full bg-slate-800 border-slate-600 rounded-md text-white focus:ring-brand-orange focus:border-brand-orange">
-              <option value="">Select...</option>
+              <option value="" disabled hidden>Select...</option>
               {shippingCarriers.map(c => <option key={c} value={c}>{c}</option>)}
             </select>
           </div>
@@ -575,7 +588,7 @@ const OrderForm: React.FC<OrderFormProps> = ({
                   : 'border-slate-600'
               }`}
             >
-              <option value="">-- Select Status --</option>
+              <option value="" disabled hidden>-- Select Status --</option>
               {/* ✅ FIX: Use the manually defined list to guarantee order and inclusion */}
               {statusOptions.map(s => <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>)}
             </select>
@@ -589,7 +602,7 @@ const OrderForm: React.FC<OrderFormProps> = ({
           <div>
             <label className="block text-sm font-medium text-slate-300">Lead Source</label>
             <select {...register('leadSource')} className="mt-1 block w-full bg-slate-800 border-slate-600 rounded-md text-white focus:ring-brand-orange focus:border-brand-orange">
-              <option value="">Select...</option>
+              <option value="" disabled hidden>Select...</option>
               {LEAD_SOURCE_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
             </select>
           </div>

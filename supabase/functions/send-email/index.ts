@@ -356,6 +356,12 @@ const buildEmailHTML = (templateId: string, data: any): string => {
                               </div>
                               <div style="font-family: inherit; text-align: center"><br></div>
                             ` : ''}
+                            ${data.border_type ? `
+                              <div style="font-family: inherit; text-align: center">
+                                <span style="font-family: 'lucida sans unicode', 'lucida grande', sans-serif; font-size: 18px;">Border Type: ${data.border_type}</span>
+                              </div>
+                              <div style="font-family: inherit; text-align: center"><br></div>
+                            ` : ''}
                             ${data.instructions ? `
                               <div style="font-family: inherit; text-align: center">
                                 <span style="font-family: 'lucida sans unicode', 'lucida grande', sans-serif; font-size: 18px;">Special Instruction: ${data.instructions}</span>

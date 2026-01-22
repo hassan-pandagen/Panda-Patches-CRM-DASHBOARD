@@ -152,6 +152,7 @@ export const mapDbToOrder = (data: any): Order => {
     patchesQuantity: patchesQuantity,
     designSize: data.designSize ?? data.design_size,
     designBacking: data.designBacking ?? data.design_backing,
+    borderType: data.borderType ?? data.border_type,
     instructions: data.instructions,
 
     orderAmount, amountPaid, productionCost, shippingCost, marketingCost,
@@ -231,6 +232,7 @@ export const prepareEmailData = (order: Order, triggerStatus: string) => {
     patch_type: order.patchesType,
     backing: order.designBacking,
     size: order.designSize,
+    border_type: order.borderType || "",
     instructions: order.instructions || '',
     
     total_price: `$${(order.orderAmount || 0).toLocaleString()}`,
