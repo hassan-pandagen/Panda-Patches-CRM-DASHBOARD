@@ -58,6 +58,7 @@ CREATE TABLE IF NOT EXISTS public.orders (
     shipping_attachment_urls text[],
     design_size text,
     design_backing text,
+    border_type text,
     patches_type text,
     patches_quantity integer DEFAULT 0,
     revision_notes text,
