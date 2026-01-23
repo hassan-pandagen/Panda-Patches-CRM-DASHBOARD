@@ -15,6 +15,9 @@ export const PATCH_TYPE_COLORS: Record<string, string> = {
     'DTF Transfer': '#F97316', // Orange
     'Silicone Transfer': '#EF4444', // Red
     'High Density Transfer': '#84CC16', // Lime
+    'TPU+Chenille': '#D97706', // Copper
+    'TPU+Embroidery': '#D946EF', // Fuchsia
+    'TPU+Sublimation': '#7C3AED', // Purple
     'Unknown': '#64748B' // Slate
 };
   
