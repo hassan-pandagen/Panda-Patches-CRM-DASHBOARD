@@ -11,6 +11,7 @@ export const PATCH_TYPE_COLORS: Record<string, string> = {
     'Chenille Transfer': '#A78BFA', // Violet
     'Sequin Patch': '#FB7185', // Rose
     'Sublimation Patch': '#14B8A6', // Teal
+    'Sublimation+Embroidery': '#EC9706', // Amber/Gold
     'DTF Transfer': '#F97316', // Orange
     'Silicone Transfer': '#EF4444', // Red
     'High Density Transfer': '#84CC16', // Lime
