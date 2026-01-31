@@ -944,6 +944,13 @@ const ReportsPage: React.FC = () => {
      return `${year}-${month}-${day}`;
    };
 
+   // Helper to get the next day (for exclusive end date queries)
+   const getNextDay = (dateStr: string): string => {
+     const date = new Date(dateStr);
+     date.setDate(date.getDate() + 1);
+     return formatDateOnly(date);
+   };
+
    // Calculate default range (full calendar month)
    const getDefaultReportsRange = (): DateRange => {
      const now = new Date();
@@ -1065,11 +1072,12 @@ const ReportsPage: React.FC = () => {
       if (!user) return [];
 
       // 1. Query the TABLE (snake_case source)
+      // Use .lt() with next day to include ALL orders on the end date
       let query = supabase
         .from("orders")
         .select("*")
         .gte("created_at", dateRange.startDate)
-        .lte("created_at", dateRange.endDate);
+        .lt("created_at", getNextDay(dateRange.endDate));
 
       // Filter by sales agent if not Admin (same logic as Dashboard)
       if (role !== UserRole.ADMIN && user?.email) {

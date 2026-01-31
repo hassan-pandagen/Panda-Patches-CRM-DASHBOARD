@@ -107,6 +107,13 @@ export default function Dashboard() {
     return `${year}-${month}-${day}`;
   };
 
+  // Helper to get the next day (for exclusive end date queries)
+  const getNextDay = (dateStr: string): string => {
+    const date = new Date(dateStr);
+    date.setDate(date.getDate() + 1);
+    return formatDateOnly(date);
+  };
+
   // Calculate the active date range
   const activeDateRange = useMemo(() => {
     if (dateView === "custom" && customDateRange) {
@@ -168,11 +175,13 @@ export default function Dashboard() {
         throw new Error("Not authenticated");
       }
 
+      // Use .lt() with next day to include ALL orders on the end date
+      // Example: endDate "2026-01-31" → lt("2026-02-01") includes all Jan 31 orders
       let query = supabase
          .from("orders")
          .select("*")
          .gte("created_at", activeDateRange.startDate)
-         .lte("created_at", activeDateRange.endDate);
+         .lt("created_at", getNextDay(activeDateRange.endDate));
 
       // ✅ FIX ADDED HERE: Force filter by email if not Admin
       // This ensures sales agents ONLY see their own rows, regardless of RLS speed.
