@@ -7,6 +7,7 @@ const corsHeaders = {
 };
 
 // ✅ BACKEND VALIDATION: Zod schema for update user
+// All fields except user_id are optional to support partial updates (e.g., password-only reset)
 const updateUserSchema = z.object({
   user_id: z.string()
     .uuid("Invalid user ID format"),
@@ -17,19 +18,18 @@ const updateUserSchema = z.object({
     .optional(),
 
   password: z.string()
-    .min(8, "Password must be at least 8 characters")
+    .min(6, "Password must be at least 6 characters")
     .max(72, "Password too long")
-    .regex(/[A-Z]/, "Password must contain at least one uppercase letter")
-    .regex(/[0-9]/, "Password must contain at least one number")
     .optional(),
 
   full_name: z.string()
     .min(1, "Full name cannot be empty")
-    .max(100, "Full name too long"),
+    .max(100, "Full name too long")
+    .optional(),
 
   role: z.enum(['USER', 'ADMIN', 'PRODUCTION', 'AGENT'], {
     errorMap: () => ({ message: "Role must be USER, ADMIN, PRODUCTION, or AGENT" })
-  }),
+  }).optional(),
 
   permissions: z.record(
     z.enum([
@@ -63,32 +63,44 @@ Deno.serve(async (req: Request) => {
 
     const { user_id, email, password, full_name, role, permissions } = validatedData;
 
-    // 1. Update Auth (Email/Password/Metadata)
-    const authAttributes: any = {
-      user_metadata: { full_name, role, permissions }
-    };
+    // 1. Update Auth - only include fields that are provided
+    const authAttributes: any = {};
+
+    // Only update metadata if any metadata fields are provided
+    if (full_name || role || permissions) {
+      authAttributes.user_metadata = {};
+      if (full_name) authAttributes.user_metadata.full_name = full_name;
+      if (role) authAttributes.user_metadata.role = role;
+      if (permissions) authAttributes.user_metadata.permissions = permissions;
+    }
+
     if (email) authAttributes.email = email;
     if (password && password.trim() !== "") authAttributes.password = password;
 
-    const { error: authError } = await supabaseAdmin.auth.admin.updateUserById(
-      user_id, 
-      authAttributes
-    );
+    // Only call updateUserById if there's something to update in auth
+    if (Object.keys(authAttributes).length > 0) {
+      const { error: authError } = await supabaseAdmin.auth.admin.updateUserById(
+        user_id,
+        authAttributes
+      );
+      if (authError) throw authError;
+    }
 
-    if (authError) throw authError;
+    // 2. Update Database Profile - only if profile fields are provided
+    const profileUpdate: any = {};
+    if (full_name) profileUpdate.full_name = full_name;
+    if (role) profileUpdate.role = role;
+    if (permissions) profileUpdate.permissions = permissions;
+    if (email) profileUpdate.email = email;
 
-    // 2. Update Database Profile
-    const { error: profileError } = await supabaseAdmin
-      .from('user_profiles')
-      .update({
-        full_name,
-        role,
-        permissions,
-        ...(email ? { email } : {})
-      })
-      .eq('id', user_id);
+    if (Object.keys(profileUpdate).length > 0) {
+      const { error: profileError } = await supabaseAdmin
+        .from('user_profiles')
+        .update(profileUpdate)
+        .eq('id', user_id);
 
-    if (profileError) throw profileError;
+      if (profileError) throw profileError;
+    }
 
     return new Response(
       JSON.stringify({ message: "User updated successfully" }),

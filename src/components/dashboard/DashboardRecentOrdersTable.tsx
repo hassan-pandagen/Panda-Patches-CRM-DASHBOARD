@@ -1,6 +1,7 @@
 import React from 'react';
 import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
+import { CheckCircle } from 'lucide-react';
 import { Order, OrderStatus } from '../../types';
 import StatusBadge from '../ui/StatusBadge';
 import Skeleton from '../ui/Skeleton';
@@ -51,6 +52,20 @@ const TableRow: React.FC<TableRowProps> = ({ order }) => {
       <td className="whitespace-nowrap px-6 py-4 text-left font-bold text-emerald-400 w-32">
         ${(order.orderAmount || 0).toLocaleString()}
       </td>
+
+      {/* Pending - Show checkmark if fully paid */}
+      <td className="whitespace-nowrap px-6 py-4 text-left font-medium w-28">
+        {(order.amountRemaining ?? 0) <= 0.01 ? (
+          <span className="inline-flex items-center gap-1 text-green-400">
+            <CheckCircle className="w-4 h-4" />
+            <span className="text-xs">Paid</span>
+          </span>
+        ) : (
+          <span className="text-amber-400 font-bold">
+            ${(order.amountRemaining ?? 0).toLocaleString()}
+          </span>
+        )}
+      </td>
     </motion.tr>
   );
 };
@@ -59,7 +74,7 @@ const TableSkeleton: React.FC = () => (
   <tbody>
     {Array.from({ length: 5 }).map((_, i) => (
       <tr key={i} className="border-b border-slate-800">
-        {Array.from({ length: 6 }).map((_, j) => (
+        {Array.from({ length: 7 }).map((_, j) => (
           <td key={j} className="px-6 py-4"><Skeleton height={20} className="bg-slate-700/50" /></td>
         ))}
       </tr>
@@ -85,6 +100,7 @@ const DashboardRecentOrdersTable: React.FC<DashboardRecentOrdersTableProps> = ({
     { key: 'salesAgent', label: 'Sales Agent', width: 'w-auto' },
     { key: 'status', label: 'Status', width: 'w-36' },
     { key: 'orderAmount', label: 'Amount', width: 'w-32', align: 'left' },
+    { key: 'amountRemaining', label: 'Pending', width: 'w-28', align: 'left' },
   ] as const;
 
   return (
@@ -120,7 +136,7 @@ const DashboardRecentOrdersTable: React.FC<DashboardRecentOrdersTableProps> = ({
               <tbody className="divide-y divide-white/5 bg-slate-900/20">
                 {orders.length === 0 ? (
                   <tr>
-                      <td colSpan={6} className="text-center py-16">
+                      <td colSpan={7} className="text-center py-16">
                           <div className="flex flex-col items-center justify-center text-slate-500">
                               <p className="text-lg font-medium">No recent orders</p>
                               <p className="text-sm">New orders will appear here</p>

@@ -25,6 +25,7 @@ import {
     ChevronLeft,
     ChevronRight,
     X,
+    CheckCircle,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -411,6 +412,28 @@ const AllOrdersPage: React.FC = () => {
                                                     <span className="text-[10px] text-slate-400 uppercase tracking-wider font-bold mb-1">Amount</span>
                                                     {canViewFinancials ? (
                                                         <span className="text-white font-bold text-base tracking-tight">${order.orderAmount.toLocaleString()}</span>
+                                                    ) : (
+                                                        <div className="flex items-center gap-1 text-slate-500">
+                                                            <Lock className="w-3 h-3" />
+                                                            <span className="text-xs">Hidden</span>
+                                                        </div>
+                                                    )}
+                                                </div>
+
+                                                {/* PENDING COLUMN */}
+                                                <div className="flex flex-col items-end min-w-[90px]">
+                                                    <span className="text-[10px] text-slate-400 uppercase tracking-wider font-bold mb-1">Pending</span>
+                                                    {canViewFinancials ? (
+                                                        (order.amountRemaining ?? 0) <= 0.01 ? (
+                                                            <span className="inline-flex items-center gap-1 text-green-400">
+                                                                <CheckCircle className="w-4 h-4" />
+                                                                <span className="text-xs font-bold">Paid</span>
+                                                            </span>
+                                                        ) : (
+                                                            <span className="text-amber-400 font-bold text-base tracking-tight">
+                                                                ${(order.amountRemaining ?? 0).toLocaleString()}
+                                                            </span>
+                                                        )
                                                     ) : (
                                                         <div className="flex items-center gap-1 text-slate-500">
                                                             <Lock className="w-3 h-3" />

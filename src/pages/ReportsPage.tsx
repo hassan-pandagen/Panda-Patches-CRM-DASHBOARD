@@ -174,13 +174,14 @@ const SalesReportComponent: React.FC<ReportComponentProps> = ({ orders }) => {
   }, [orders]);
 
   // SAFEGUARDS: If DB sends NULL (masked), treat as 0
-  // For refunded orders, use originalAmount to show true revenue impact
+  // Net Revenue = Excludes refunded and cancelled orders (matches Dashboard calculation)
   const totalNetRevenue = useMemo(
     () => orders.reduce((sum, order) => {
-      const revenue = order.status === 'REFUNDED'
-        ? ((order as any).originalAmount || order.orderAmount || 0)
-        : (order.orderAmount || 0);
-      return sum + revenue;
+      // Exclude refunded and cancelled orders from revenue
+      if (order.status === 'REFUNDED' || order.status === 'CANCELLED') {
+        return sum;
+      }
+      return sum + (order.orderAmount || 0);
     }, 0),
     [orders]
   );
@@ -262,7 +263,7 @@ const SalesReportComponent: React.FC<ReportComponentProps> = ({ orders }) => {
           onClick={() => navigate("/orders")}
         >
           <SimpleStatCard
-            title="Total Revenue"
+            title="Net Revenue"
             value={totalNetRevenue}
             prefix="$"
             icon={<DollarSign className="w-6 h-6 text-brand-orange" />}
@@ -935,54 +936,59 @@ const ReportsPage: React.FC = () => {
 
    const [searchParams, setSearchParams] = useSearchParams();
    
+   // Helper function to format date as YYYY-MM-DD (matches DateRangeFilter)
+   const formatDateOnly = (date: Date): string => {
+     const year = date.getFullYear();
+     const month = String(date.getMonth() + 1).padStart(2, '0');
+     const day = String(date.getDate()).padStart(2, '0');
+     return `${year}-${month}-${day}`;
+   };
+
    // Calculate default range (full calendar month)
    const getDefaultReportsRange = (): DateRange => {
-     const endDate = new Date();
-     const startDate = new Date();
-     
-     // Full calendar month: 1st to last day
-     startDate.setDate(1);
-     startDate.setHours(0, 0, 0, 0);
-     endDate.setMonth(endDate.getMonth() + 1);
-     endDate.setDate(0);
-     endDate.setHours(23, 59, 59, 999);
-     
+     const now = new Date();
+     const year = now.getFullYear();
+     const month = now.getMonth();
+
+     // First day of current month
+     const startDate = new Date(year, month, 1);
+     // Last day of current month (day 0 of next month)
+     const endDate = new Date(year, month + 1, 0);
+
      return {
-       startDate: startDate.toISOString(),
-       endDate: endDate.toISOString(),
+       startDate: formatDateOnly(startDate),
+       endDate: formatDateOnly(endDate),
      };
    };
-   
+
    const [dateRange, setDateRange] = React.useState<DateRange>(getDefaultReportsRange);
    const [dateView, setDateView] = React.useState<"today" | "week" | "month">("month");
-
-   // Helper function to convert local date to ISO string (YYYY-MM-DDTHH:mm:ss.SSSZ)
-   const getLocalDateString = (date: Date): string => {
-     return date.toISOString();
-   };
 
    // Handle date view change
    const handleDateViewChange = (view: "today" | "week" | "month") => {
      setDateView(view);
 
-     const endDate = new Date();
-     const startDate = new Date();
+     const now = new Date();
+     let startDate: Date;
+     let endDate: Date;
 
      if (view === "today") {
-       startDate.setHours(0, 0, 0, 0);
-       endDate.setHours(23, 59, 59, 999);
+       startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+       endDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
      } else if (view === "week") {
-       startDate.setDate(endDate.getDate() - 7);
+       endDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+       startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 7);
      } else {
-       // Full calendar month: 1st to last day
-       startDate.setDate(1);
-       endDate.setMonth(endDate.getMonth() + 1);
-       endDate.setDate(0);
+       // Full calendar month: 1st to last day of CURRENT month
+       const year = now.getFullYear();
+       const month = now.getMonth();
+       startDate = new Date(year, month, 1);
+       endDate = new Date(year, month + 1, 0); // Day 0 of next month = last day of current month
      }
 
      setDateRange({
-       startDate: getLocalDateString(startDate),
-       endDate: getLocalDateString(endDate),
+       startDate: formatDateOnly(startDate),
+       endDate: formatDateOnly(endDate),
      });
    };
 

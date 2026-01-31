@@ -8,7 +8,7 @@ import { encode } from "https://deno.land/std@0.168.0/encoding/base64.ts";
 import { z } from "https://deno.land/x/zod@v3.22.4/mod.ts";
 
 const corsHeaders = {
-  'Access-Control-Allow-Origin': 'https://portal.pandapatches.com',
+  'Access-Control-Allow-Origin': '*', // Allow all origins (including localhost)
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
@@ -362,7 +362,7 @@ const buildEmailHTML = (templateId: string, data: any): string => {
                               </div>
                               <div style="font-family: inherit; text-align: center"><br></div>
                             ` : ''}
-                            ${data.instructions ? `
+                            ${templateId.includes('INTERNAL') && data.instructions ? `
                               <div style="font-family: inherit; text-align: center">
                                 <span style="font-family: 'lucida sans unicode', 'lucida grande', sans-serif; font-size: 18px;">Special Instruction: ${data.instructions}</span>
                               </div>

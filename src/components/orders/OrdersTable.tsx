@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { format } from 'date-fns';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Order, OrderStatus } from '@/types';
-import { Calendar, ArrowDown, ArrowUp, Mail, Phone, ExternalLink, ChevronRight } from 'lucide-react';
+import { Calendar, ArrowDown, ArrowUp, Mail, Phone, ExternalLink, ChevronRight, CheckCircle } from 'lucide-react';
 import StatusBadge from '@/components/ui/StatusBadge';
 import { useAuth } from '@/contexts/AuthContext'; // 1. Import Auth
 
@@ -17,7 +17,8 @@ const TableSkeleton: React.FC = () => (
         <td className="px-6 py-4"><div className="h-4 bg-slate-700 rounded w-32 animate-pulse"></div></td>
         <td className="px-6 py-4"><div className="h-4 bg-slate-700 rounded w-28 animate-pulse"></div></td>
         <td className="px-6 py-4"><div className="h-6 bg-slate-700 rounded-full w-32 animate-pulse"></div></td>
-        <td className="px-6 py-4 text-right"><div className="h-4 bg-slate-700 rounded w-16 animate-pulse ml-auto"></div></td>
+        <td className="px-6 py-4"><div className="h-4 bg-slate-700 rounded w-16 animate-pulse"></div></td>
+        <td className="px-6 py-4"><div className="h-4 bg-slate-700 rounded w-16 animate-pulse"></div></td>
       </tr>
     ))}
   </tbody>
@@ -100,7 +101,8 @@ const OrdersTable: React.FC<OrdersTableProps> = ({ orders, isLoading = false }) 
             <SortableHeader sortField="salesAgent">Sales Agent</SortableHeader>
             <SortableHeader sortField="status">Status</SortableHeader>
             <SortableHeader sortField="orderAmount">Amount</SortableHeader>
-            
+            <SortableHeader sortField="amountRemaining">Pending</SortableHeader>
+
             {/* 3. ONLY SHOW PROFIT HEADER IF ADMIN */}
             {isAdmin && (
                <SortableHeader sortField="profit">Profit</SortableHeader>
@@ -181,6 +183,20 @@ const OrdersTable: React.FC<OrdersTableProps> = ({ orders, isLoading = false }) 
                     <td className="px-6 py-4"><StatusBadge status={order.status as OrderStatus} /></td>
                     <td className="px-6 py-4 text-left font-medium text-emerald-400 font-mono">
                         ${(order.orderAmount ?? 0).toLocaleString()}
+                    </td>
+
+                    {/* PENDING COLUMN - Show checkmark if fully paid, otherwise show pending amount */}
+                    <td className="px-6 py-4 text-left font-medium font-mono">
+                      {(order.amountRemaining ?? 0) <= 0.01 ? (
+                        <span className="inline-flex items-center gap-1 text-green-400">
+                          <CheckCircle className="w-4 h-4" />
+                          <span className="text-xs">Paid</span>
+                        </span>
+                      ) : (
+                        <span className="text-amber-400">
+                          ${(order.amountRemaining ?? 0).toLocaleString()}
+                        </span>
+                      )}
                     </td>
 
                     {/* 4. ONLY SHOW PROFIT CELL IF ADMIN */}

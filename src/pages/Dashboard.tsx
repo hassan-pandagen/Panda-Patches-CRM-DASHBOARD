@@ -99,9 +99,12 @@ export default function Dashboard() {
     null
   );
 
-  // Helper function to convert local date to ISO string (YYYY-MM-DDTHH:mm:ss.SSSZ)
-  const getLocalDateString = (date: Date): string => {
-    return date.toISOString();
+  // Helper function to convert date to YYYY-MM-DD format (matches DateRangeFilter)
+  const formatDateOnly = (date: Date): string => {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
   };
 
   // Calculate the active date range
@@ -118,16 +121,25 @@ export default function Dashboard() {
       endDate.setHours(23, 59, 59, 999);
     } else if (dateView === "week") {
       startDate.setDate(endDate.getDate() - 7);
+      startDate.setHours(0, 0, 0, 0);
+      endDate.setHours(23, 59, 59, 999);
     } else {
-      // Full calendar month: 1st to last day
-      startDate.setDate(1);
-      endDate.setMonth(endDate.getMonth() + 1);
-      endDate.setDate(0);
+      // Full calendar month: 1st to last day of CURRENT month
+      // Must capture year/month first to avoid date overflow when day is 31
+      const year = startDate.getFullYear();
+      const month = startDate.getMonth();
+
+      startDate.setFullYear(year, month, 1);
+      startDate.setHours(0, 0, 0, 0);
+
+      // Get last day of current month: day 0 of next month = last day of current month
+      endDate.setFullYear(year, month + 1, 0);
+      endDate.setHours(23, 59, 59, 999);
     }
 
     return {
-      startDate: getLocalDateString(startDate),
-      endDate: getLocalDateString(endDate),
+      startDate: formatDateOnly(startDate),
+      endDate: formatDateOnly(endDate),
     };
   }, [dateView, customDateRange]);
 
@@ -285,9 +297,9 @@ export default function Dashboard() {
           animate="visible"
           className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6"
         >
-          {/* 1. Total Revenue - Orange Gradient */}
+          {/* 1. Net Revenue - Orange Gradient (Excludes refunded orders) */}
           <DashboardStatCard
-            title="Total Revenue"
+            title="Net Revenue"
             value={totalRevenue}
             prefix="$"
             icon={<DollarSign className="w-6 h-6 text-brand-orange" />}
