@@ -5,6 +5,7 @@ import { createBrowserRouter, RouterProvider } from 'react-router-dom';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { ToastProvider } from './constants/ToastContext';
 import { SpeedInsights } from '@vercel/speed-insights/react';
+import { Analytics } from '@vercel/analytics/react';
 import { AuthProvider } from './contexts/AuthContext';
 import { ChunkErrorBoundary } from './components/ChunkErrorBoundary';
 import { ErrorBoundary } from './components/ErrorBoundary';
@@ -143,5 +144,6 @@ ReactDOM.createRoot(rootElement).render(
       </ChunkErrorBoundary>
     </ErrorBoundary>
     <SpeedInsights />
+    <Analytics />
   </React.StrictMode>
 );

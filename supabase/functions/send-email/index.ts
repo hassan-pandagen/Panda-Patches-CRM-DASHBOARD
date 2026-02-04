@@ -99,6 +99,90 @@ const getTemplateMessage = (templateId: string): string => {
   return messages[templateId] || 'Thank you for your order! Our team is working on your custom patches.';
 };
 
+// 3b. Helper: Get Closing Message based on Template ID
+const getClosingMessage = (templateId: string, data: any): string => {
+  // Quote templates get special message
+  if (data.quote_number) {
+    return 'Once you approve this quote, we will proceed with your order immediately.';
+  }
+
+  const closingMessages: Record<string, string> = {
+    // Delivered - celebratory & feedback request
+    'CUSTOMER_DELIVERED': 'We hope we did justice to your vision! We\'d love to hear your feedback.',
+
+    // Shipped - excitement about delivery
+    'CUSTOMER_SHIPPED': 'We can\'t wait for you to receive your patches! Let us know if you have any questions.',
+
+    // Feedback request
+    'CUSTOMER_FEEDBACK_REQUEST': 'Your feedback helps us improve and serve you better.',
+
+    // Refund - apologetic tone
+    'CUSTOMER_REFUND_ISSUED': 'We apologize for any inconvenience. Please let us know if you need anything else.',
+  };
+
+  return closingMessages[templateId] || 'We\'re working on your order and will keep you updated on its progress.';
+};
+
+// 3c. Helper: Get Section Header based on Template ID
+const getSectionHeader = (templateId: string, data: any): string => {
+  if (data.quote_number) {
+    return 'Quote Details';
+  }
+
+  const headers: Record<string, string> = {
+    'CUSTOMER_SHIPPED': 'Shipping Details',
+    'CUSTOMER_DELIVERED': 'Delivery Confirmation',
+    'CUSTOMER_REFUND_ISSUED': 'Refund Details',
+    'CUSTOMER_FEEDBACK_REQUEST': 'Your Order',
+  };
+
+  return headers[templateId] || 'Order Information';
+};
+
+// 3d. Helper: Get Sign-off based on Template ID
+const getSignOff = (templateId: string): { greeting: string; team: string } => {
+  // Internal emails - more casual
+  if (templateId.includes('INTERNAL')) {
+    return {
+      greeting: 'Best,',
+      team: 'CRM System'
+    };
+  }
+
+  // Refund emails - apologetic
+  if (templateId === 'CUSTOMER_REFUND_ISSUED') {
+    return {
+      greeting: 'We appreciate your understanding,',
+      team: 'Panda Patches Team'
+    };
+  }
+
+  // Default
+  return {
+    greeting: 'Thank you,',
+    team: 'Panda Patches Team'
+  };
+};
+
+// 3e. Helper: Should show full order details?
+const shouldShowFullDetails = (templateId: string): boolean => {
+  // These templates don't need full order specs
+  const minimalDetailsTemplates = [
+    'CUSTOMER_SHIPPED',
+    'CUSTOMER_DELIVERED',
+    'CUSTOMER_FEEDBACK_REQUEST',
+    'CUSTOMER_REFUND_ISSUED',
+  ];
+
+  return !minimalDetailsTemplates.includes(templateId);
+};
+
+// 3f. Helper: Should show Instagram promo?
+const shouldShowInstagramPromo = (templateId: string): boolean => {
+  // Hide for internal emails only
+  return !templateId.includes('INTERNAL');
+};
+
 // 4. Helper: Build Email HTML from Template ID and Data
 const buildEmailHTML = (templateId: string, data: any): string => {
   // Get template-specific message if not provided in data
@@ -256,6 +340,7 @@ const buildEmailHTML = (templateId: string, data: any): string => {
     </tbody>
   </table>
 
+  ${shouldShowFullDetails(templateId) ? `
   <!-- ORDER INFORMATION HEADER (Yellow on Black) -->
   <table class="module" role="module" data-type="text" border="0" cellpadding="0" cellspacing="0" width="100%" style="table-layout: fixed;">
     <tbody>
@@ -263,7 +348,7 @@ const buildEmailHTML = (templateId: string, data: any): string => {
         <td style="padding:40px 0px 40px 40px; line-height:22px; text-align:inherit; background-color:#080808;" height="100%" valign="top" bgcolor="#080808" role="module-content">
           <div>
             <div style="font-family: inherit; text-align: center">
-              <span style="font-size: 28px; color: #dcff70; font-family: 'lucida sans unicode', 'lucida grande', sans-serif"><strong>Order Information</strong></span>
+              <span style="font-size: 28px; color: #dcff70; font-family: 'lucida sans unicode', 'lucida grande', sans-serif"><strong>${getSectionHeader(templateId, data)}</strong></span>
             </div>
           </div>
         </td>
@@ -381,7 +466,9 @@ const buildEmailHTML = (templateId: string, data: any): string => {
       </tr>
     </tbody>
   </table>
+  ` : ''}
 
+  ${shouldShowInstagramPromo(templateId) ? `
   <!-- INSTAGRAM GALLERY IMAGE -->
   <table class="wrapper" role="module" data-type="image" border="0" cellpadding="0" cellspacing="0" width="100%" style="table-layout: fixed;">
     <tbody>
@@ -394,6 +481,7 @@ const buildEmailHTML = (templateId: string, data: any): string => {
       </tr>
     </tbody>
   </table>
+  ` : ''}
 
   ${templateId.includes('INTERNAL') && data.order_link ? `
   <!-- VIEW CRM BUTTON (Internal Emails Only) -->
@@ -425,14 +513,14 @@ const buildEmailHTML = (templateId: string, data: any): string => {
         <td style="padding:18px 0px 18px 0px; line-height:22px; text-align:inherit;" height="100%" valign="top" bgcolor="" role="module-content">
           <div>
             <div style="font-family: inherit; text-align: left">
-              <span style="font-size: 18px; font-family: 'lucida sans unicode', 'lucida grande', sans-serif">&nbsp;${data.quote_number ? 'Once you approve this quote, we will proceed with your order immediately.' : 'We\'re working on your order and will keep you updated on its progress.'}</span>
+              <span style="font-size: 18px; font-family: 'lucida sans unicode', 'lucida grande', sans-serif">&nbsp;${getClosingMessage(templateId, data)}</span>
             </div>
             <div style="font-family: inherit; text-align: left"><br></div>
             <div style="font-family: inherit; text-align: left">
-              <span style="font-size: 18px; font-family: 'lucida sans unicode', 'lucida grande', sans-serif">&nbsp;Thank you,&nbsp;</span>
+              <span style="font-size: 18px; font-family: 'lucida sans unicode', 'lucida grande', sans-serif">&nbsp;${getSignOff(templateId).greeting}&nbsp;</span>
             </div>
             <div style="font-family: inherit; text-align: left">
-              <span style="font-size: 18px; font-family: 'lucida sans unicode', 'lucida grande', sans-serif"><strong>&nbsp;Panda Patches Team</strong></span>
+              <span style="font-size: 18px; font-family: 'lucida sans unicode', 'lucida grande', sans-serif"><strong>&nbsp;${getSignOff(templateId).team}</strong></span>
             </div>
           </div>
         </td>
@@ -646,7 +734,9 @@ serve(async (req) => {
 
     // --- C. SEND VIA ZEPTOMAIL REST API ---
     // Build recipient list
-    const toAddresses = [{ email_address: { address: to, name: processedData.customer_name || 'Customer' } }];
+    // For internal emails, use "Team" as the recipient name, not customer name
+    const recipientName = template_id.includes('INTERNAL') ? 'Team' : (processedData.customer_name || 'Customer');
+    const toAddresses = [{ email_address: { address: to, name: recipientName } }];
 
     // ✅ ALWAYS add hello@pandapatches.com to CC for record-keeping
     const ccAddresses = ['hello@pandapatches.com'];
