@@ -21,6 +21,7 @@ export const PATCH_TYPE_COLORS: Record<string, string> = {
     'Glitter+Embroidery': '#FBBF24', // Amber
     'Glitter+Chenille': '#FCD34D', // Yellow
     'Glitter+Embroidery 3D': '#F59E0B', // Orange
+    'DST Service': '#06B6D4', // Cyan
     'Unknown': '#64748B' // Slate
 };
   
