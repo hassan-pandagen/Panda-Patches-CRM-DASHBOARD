@@ -331,6 +331,24 @@ const buildEmailHTML = (templateId: string, data: any): string => {
     </tbody>
   </table>
 
+  ${templateId.includes('INTERNAL') && data.sales_agent ? `
+  <!-- SALES AGENT INFO (Internal Emails Only) -->
+  <table class="module" role="module" data-type="text" border="0" cellpadding="0" cellspacing="0" width="100%" style="table-layout: fixed;">
+    <tbody>
+      <tr>
+        <td style="padding:15px 20px 15px 20px; line-height:22px; text-align:center; background-color:#fff3e6; border-left: 4px solid #fb6e1d;" height="100%" valign="top" bgcolor="#fff3e6" role="module-content">
+          <div>
+            <div style="font-family: inherit; text-align: center">
+              <span style="font-size: 15px; font-family: 'lucida sans unicode', 'lucida grande', sans-serif; color: #666;">📞 Contact Sales Agent: </span>
+              <span style="font-size: 17px; color: #fb6e1d; font-family: 'lucida sans unicode', 'lucida grande', sans-serif; font-weight: bold">${data.sales_agent}</span>
+            </div>
+          </div>
+        </td>
+      </tr>
+    </tbody>
+  </table>
+  ` : ''}
+
   <!-- SPACER -->
   <table class="module" role="module" data-type="spacer" border="0" cellpadding="0" cellspacing="0" width="100%" style="table-layout: fixed;">
     <tbody>

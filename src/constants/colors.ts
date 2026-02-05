@@ -18,6 +18,9 @@ export const PATCH_TYPE_COLORS: Record<string, string> = {
     'TPU+Chenille': '#D97706', // Copper
     'TPU+Embroidery': '#D946EF', // Fuchsia
     'TPU+Sublimation': '#7C3AED', // Purple
+    'Glitter+Embroidery': '#FBBF24', // Amber
+    'Glitter+Chenille': '#FCD34D', // Yellow
+    'Glitter+Embroidery 3D': '#F59E0B', // Orange
     'Unknown': '#64748B' // Slate
 };
   
