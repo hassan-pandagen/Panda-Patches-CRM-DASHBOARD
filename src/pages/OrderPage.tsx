@@ -156,6 +156,7 @@ const OrderPage: React.FC = () => {
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: queryKeys.orders.single(orderNumber) });
+            queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.all() });
             toast.success('Production Files Saved', 'Files have been updated successfully.');
             setIsEditingProduction(false);
         },
@@ -190,8 +191,8 @@ const OrderPage: React.FC = () => {
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: queryKeys.orders.single(orderNumber) });
-            queryClient.invalidateQueries({ queryKey: queryKeys.orders.urgent() }); // Refresh notifications
-            // REPLACED ALERT WITH TOAST
+            queryClient.invalidateQueries({ queryKey: queryKeys.orders.urgent() });
+            queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.all() });
             toast.success('Urgent status updated successfully', 'The order priority has been changed.');
             setIsProcessing(false);
         },
@@ -216,8 +217,8 @@ const OrderPage: React.FC = () => {
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: queryKeys.orders.all() });
+            queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.all() });
             navigate('/orders');
-            // REPLACED ALERT WITH TOAST
             toast.success('Order Deleted', `Order ${order?.orderNumber} has been permanently removed.`);
         },
         onError: (err) => {

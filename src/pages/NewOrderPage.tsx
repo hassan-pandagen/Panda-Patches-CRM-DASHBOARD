@@ -125,7 +125,7 @@ const NewOrderPage: React.FC = () => {
       // ✅ SUCCESS SEQUENCE
       showSuccess(`Order ${newOrder.orderNumber} created successfully!`);
       await queryClient.invalidateQueries({ queryKey: queryKeys.orders.all() });
-      await queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.table('', '') });
+      await queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.all() });
 
       setAllowNavigation(true);
       setIsDirty(false);

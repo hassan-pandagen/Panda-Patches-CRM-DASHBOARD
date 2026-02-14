@@ -7,27 +7,35 @@ export const useSupabaseRealtime = () => {
   const queryClient = useQueryClient();
 
   useEffect(() => {
-    // ✅ Subscribe to orders table changes
+    // Subscribe to orders table changes
     const ordersSubscription = supabase
       .channel('orders-channel')
       .on(
         'postgres_changes',
         {
-          event: '*', // Listen to all events: INSERT, UPDATE, DELETE
+          event: '*',
           schema: 'public',
           table: 'orders',
         },
         (payload) => {
-          console.log('📊 Orders updated:', payload);
-          // Invalidate all order-related queries
+          console.log('[Realtime] Orders updated:', payload.eventType);
           queryClient.invalidateQueries({ queryKey: queryKeys.orders.all() });
           queryClient.invalidateQueries({ queryKey: queryKeys.orders.lists() });
+          queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.all() });
+          queryClient.invalidateQueries({ queryKey: queryKeys.quotes.all() });
         }
       )
-      .subscribe();
+      .subscribe((status, err) => {
+        if (status === 'SUBSCRIBED') {
+          console.log('[Realtime] Orders subscription active');
+        } else if (status === 'CHANNEL_ERROR') {
+          console.error('[Realtime] Orders channel error:', err);
+        } else if (status === 'TIMED_OUT') {
+          console.warn('[Realtime] Orders subscription timed out — retrying...');
+        }
+      });
 
-    // ✅ Subscribe to users table changes (if you have a public.users table)
-    // Note: auth.users is protected and cannot be used for realtime
+    // Subscribe to users table changes
     let usersSubscription: any = null;
     try {
       usersSubscription = supabase
@@ -40,17 +48,20 @@ export const useSupabaseRealtime = () => {
             table: 'users',
           },
           (payload) => {
-            console.log('👤 Users updated:', payload);
-            // Invalidate user-related queries
+            console.log('[Realtime] Users updated:', payload.eventType);
             queryClient.invalidateQueries({ queryKey: ['users'] });
           }
         )
-        .subscribe();
+        .subscribe((status, err) => {
+          if (status === 'CHANNEL_ERROR') {
+            console.warn('[Realtime] Users channel error:', err);
+          }
+        });
     } catch (error) {
-      console.warn('⚠️ Could not subscribe to users table:', error);
+      console.warn('[Realtime] Could not subscribe to users table:', error);
     }
 
-    // ✅ Subscribe to order_history table (activity logs)
+    // Subscribe to order_history table (activity logs)
     const historySubscription = supabase
       .channel('order-history-channel')
       .on(
@@ -61,17 +72,28 @@ export const useSupabaseRealtime = () => {
           table: 'order_history',
         },
         (payload) => {
-          console.log('📝 Activity logged:', payload);
-          // Invalidate order history queries
-          queryClient.invalidateQueries({ queryKey: queryKeys.orders.history() });
+          console.log('[Realtime] Activity logged');
+          // Invalidate all order history queries (without specific ID to catch all)
+          queryClient.invalidateQueries({
+            predicate: (query) =>
+              Array.isArray(query.queryKey) &&
+              query.queryKey[0] === 'orders' &&
+              query.queryKey.includes('history'),
+          });
         }
       )
-      .subscribe();
+      .subscribe((status, err) => {
+        if (status === 'SUBSCRIBED') {
+          console.log('[Realtime] Order history subscription active');
+        } else if (status === 'CHANNEL_ERROR') {
+          console.error('[Realtime] Order history channel error:', err);
+        }
+      });
 
     // Cleanup subscriptions on unmount
     return () => {
       supabase.removeChannel(ordersSubscription);
-      supabase.removeChannel(usersSubscription);
+      if (usersSubscription) supabase.removeChannel(usersSubscription);
       supabase.removeChannel(historySubscription);
     };
   }, [queryClient]);

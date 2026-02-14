@@ -9,6 +9,7 @@ import {
   Sparkles,
   ShieldCheck,
   MessageSquare,
+  RotateCcw,
   LucideProps,
 } from 'lucide-react';
 import { OrderStatus } from '../types';
@@ -49,6 +50,11 @@ export const STATUS_INFO_MAP: Record<OrderStatus, StatusInfo> = {
     label: 'QA',
     icon: ShieldCheck,
     color: 'text-yellow-400 bg-yellow-500/10 border-yellow-500/20',
+  },
+  [OrderStatus.REMAKE]: {
+    label: 'Remake',
+    icon: RotateCcw,
+    color: 'text-amber-500 bg-amber-500/10 border-amber-500/20',
   },
   [OrderStatus.COMPLETED]: {
     label: 'Completed',

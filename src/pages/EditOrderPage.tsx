@@ -91,16 +91,19 @@ const EditOrderPage: React.FC = () => {
     onSuccess: async () => {
       console.log('✅ Save successful, invalidating queries...');
       
-      // ✅ FIX 1: Invalidate all related queries
+      // ✅ FIX 1: Invalidate all related queries including dashboard
       await Promise.all([
-        queryClient.invalidateQueries({ 
-          queryKey: queryKeys.orders.single(orderNumber) 
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.orders.single(orderNumber)
         }),
-        queryClient.invalidateQueries({ 
-          queryKey: queryKeys.orders.history(orderNumber) 
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.orders.history(orderNumber)
         }),
-        queryClient.invalidateQueries({ 
-          queryKey: queryKeys.orders.lists() 
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.orders.lists()
+        }),
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.dashboard.all()
         }),
       ]);
 

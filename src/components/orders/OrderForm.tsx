@@ -336,7 +336,9 @@ const OrderForm: React.FC<OrderFormProps> = ({
     OrderStatus.REVISION_REQUESTED,
     OrderStatus.APPROVED,
     OrderStatus.IN_PRODUCTION,
-    OrderStatus.QUALITY_ASSURANCE, // <-- The missing status
+    OrderStatus.QUALITY_ASSURANCE,
+    OrderStatus.REMAKE,
+    OrderStatus.COMPLETED,
     OrderStatus.SHIPPED,
     OrderStatus.DELIVERED,
     OrderStatus.FEEDBACK,

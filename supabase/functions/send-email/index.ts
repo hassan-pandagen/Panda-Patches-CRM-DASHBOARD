@@ -67,6 +67,10 @@ const getEmailSubject = (templateId: string, data: any): string => {
     'INTERNAL_START_PRODUCTION': `[INTERNAL] Start Production - ${orderNumber}`,
     'PRODUCTION_TEAM_REVISION': `[INTERNAL] Revision Requested - ${orderNumber}`,
     'QUALITY_ASSURANCE': `[INTERNAL] QA Check - ${orderNumber}`,
+
+    // Remake templates
+    'CUSTOMER_REMAKE': `We're Making It Right - ${orderNumber}`,
+    'INTERNAL_REMAKE': `[URGENT] Remake Required - ${orderNumber}`,
   };
 
   return subjects[templateId] || `Update from Panda Patches - ${orderNumber}`;
@@ -94,6 +98,10 @@ const getTemplateMessage = (templateId: string): string => {
     'INTERNAL_START_PRODUCTION': 'Internal: Order approved by customer. Begin production immediately.',
     'PRODUCTION_TEAM_REVISION': 'Production Team: Customer has requested revisions. Please review the feedback and update the mockup.',
     'QUALITY_ASSURANCE': 'Quality Assurance: Order ready for final QA check before shipping.',
+
+    // Remake templates
+    'CUSTOMER_REMAKE': 'We sincerely apologize for the inconvenience with your order. Our production team did not meet the quality standards you deserved. This is entirely our fault, and we take full responsibility. We are remaking your custom patches at absolutely no extra cost to you. Your satisfaction is our top priority, and we will make this right.',
+    'INTERNAL_REMAKE': 'URGENT REMAKE REQUIRED: The customer was not satisfied with the patches we produced. This order needs to be remade immediately. Please contact the sales agent to get full details about what the customer wants changed. Review all specifications carefully and ask questions if anything is unclear. This is our second chance to get it right - quality check everything before shipping.',
   };
 
   return messages[templateId] || 'Thank you for your order! Our team is working on your custom patches.';
@@ -101,6 +109,11 @@ const getTemplateMessage = (templateId: string): string => {
 
 // 3b. Helper: Get Closing Message based on Template ID
 const getClosingMessage = (templateId: string, data: any): string => {
+  // Internal emails - no closing message needed
+  if (templateId.includes('INTERNAL')) {
+    return '';
+  }
+
   // Quote templates get special message
   if (data.quote_number) {
     return 'Once you approve this quote, we will proceed with your order immediately.';
@@ -118,6 +131,9 @@ const getClosingMessage = (templateId: string, data: any): string => {
 
     // Refund - apologetic tone
     'CUSTOMER_REFUND_ISSUED': 'We apologize for any inconvenience. Please let us know if you need anything else.',
+
+    // Remake - apologetic and reassuring
+    'CUSTOMER_REMAKE': 'We truly appreciate your patience and understanding. We promise the new patches will be exactly what you envisioned. We will keep you updated throughout the remake process.',
   };
 
   return closingMessages[templateId] || 'We\'re working on your order and will keep you updated on its progress.';
@@ -153,6 +169,14 @@ const getSignOff = (templateId: string): { greeting: string; team: string } => {
   if (templateId === 'CUSTOMER_REFUND_ISSUED') {
     return {
       greeting: 'We appreciate your understanding,',
+      team: 'Panda Patches Team'
+    };
+  }
+
+  // Remake emails - very apologetic
+  if (templateId === 'CUSTOMER_REMAKE') {
+    return {
+      greeting: 'Our sincerest apologies,',
       team: 'Panda Patches Team'
     };
   }
@@ -331,7 +355,7 @@ const buildEmailHTML = (templateId: string, data: any): string => {
     </tbody>
   </table>
 
-  ${templateId.includes('INTERNAL') && data.sales_agent ? `
+  ${templateId.includes('INTERNAL') && data.sales_agent_name ? `
   <!-- SALES AGENT INFO (Internal Emails Only) -->
   <table class="module" role="module" data-type="text" border="0" cellpadding="0" cellspacing="0" width="100%" style="table-layout: fixed;">
     <tbody>
@@ -340,7 +364,30 @@ const buildEmailHTML = (templateId: string, data: any): string => {
           <div>
             <div style="font-family: inherit; text-align: center">
               <span style="font-size: 15px; font-family: 'lucida sans unicode', 'lucida grande', sans-serif; color: #666;">📞 Contact Sales Agent: </span>
-              <span style="font-size: 17px; color: #fb6e1d; font-family: 'lucida sans unicode', 'lucida grande', sans-serif; font-weight: bold">${data.sales_agent}</span>
+              <span style="font-size: 17px; color: #fb6e1d; font-family: 'lucida sans unicode', 'lucida grande', sans-serif; font-weight: bold">${data.sales_agent_name}</span>
+            </div>
+          </div>
+        </td>
+      </tr>
+    </tbody>
+  </table>
+  ` : ''}
+
+  ${templateId === 'INTERNAL_REMAKE' && data.instructions ? `
+  <!-- REMAKE INSTRUCTIONS (INTERNAL_REMAKE Only) -->
+  <table class="module" role="module" data-type="text" border="0" cellpadding="0" cellspacing="0" width="100%" style="table-layout: fixed;">
+    <tbody>
+      <tr>
+        <td style="padding:20px; line-height:26px; text-align:left; background-color:#fff8e1; border-left: 5px solid #ff9800; border-radius: 4px; margin: 10px 0;" height="100%" valign="top" bgcolor="#fff8e1" role="module-content">
+          <div>
+            <div style="font-family: inherit; text-align: center; margin-bottom: 10px;">
+              <span style="font-size: 20px; font-family: 'lucida sans unicode', 'lucida grande', sans-serif; color: #e65100; font-weight: bold;">⚠️ REMAKE INSTRUCTIONS FROM SALES AGENT ⚠️</span>
+            </div>
+            <div style="font-family: inherit; text-align: center; background-color: #ffffff; padding: 15px; border-radius: 4px; border: 2px solid #ff9800;">
+              <span style="font-size: 18px; font-family: 'lucida sans unicode', 'lucida grande', sans-serif; color: #000; font-weight: bold; line-height: 1.6;">${data.instructions}</span>
+            </div>
+            <div style="font-family: inherit; text-align: center; margin-top: 10px;">
+              <span style="font-size: 14px; font-family: 'lucida sans unicode', 'lucida grande', sans-serif; color: #d84315; font-style: italic;">Contact the sales agent if you need clarification on these requirements.</span>
             </div>
           </div>
         </td>
@@ -524,6 +571,7 @@ const buildEmailHTML = (templateId: string, data: any): string => {
   </table>
   ` : ''}
 
+  ${getClosingMessage(templateId, data) ? `
   <!-- CLOSING MESSAGE -->
   <table class="module" role="module" data-type="text" border="0" cellpadding="0" cellspacing="0" width="100%" style="table-layout: fixed;">
     <tbody>
@@ -545,6 +593,7 @@ const buildEmailHTML = (templateId: string, data: any): string => {
       </tr>
     </tbody>
   </table>
+  ` : ''}
 
   <!-- SPACER -->
   <table class="module" role="module" data-type="spacer" border="0" cellpadding="0" cellspacing="0" width="100%" style="table-layout: fixed;">
@@ -682,6 +731,8 @@ serve(async (req) => {
     const processedData = JSON.parse(JSON.stringify(dynamic_data));
 
     console.log(`📧 Processing email for: ${to} using template: ${template_id}`);
+    console.log(`📧 Sales Agent Name: ${processedData.sales_agent_name || 'NOT FOUND'}`);
+    console.log(`📧 Available data fields:`, Object.keys(processedData));
 
     // --- A. PROCESS WINNER (The Lightbox Image) ---
     if (processedData.winner_file && processedData.winner_file.url) {

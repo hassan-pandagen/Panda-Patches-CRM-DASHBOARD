@@ -195,7 +195,10 @@ export default function Dashboard() {
       return (data || []).map(mapDbToOrder);
     },
     enabled: !!user && !authLoading,
-    staleTime: 60000,
+    staleTime: 1000 * 15,               // 15 seconds — dashboard should always feel fresh
+    refetchOnMount: 'always',            // Always refetch when navigating to dashboard
+    refetchOnWindowFocus: true,          // Refetch when user returns to tab
+    refetchInterval: 1000 * 60 * 2,     // Poll every 2 minutes as a safety net
   });
 
   // Calculate metrics

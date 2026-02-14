@@ -1,7 +1,6 @@
 // Core hooks
 export { useDebounce } from './useDebounce';
 export { useWarnIfUnsaved } from './useWarnIfUnsaved';
-export { useRealtimeOrders } from './useRealtimeOrders';
 
 // UI/UX hooks
 export { useToast } from './useToast';

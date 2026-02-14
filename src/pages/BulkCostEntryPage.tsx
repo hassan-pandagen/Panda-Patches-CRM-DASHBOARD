@@ -56,6 +56,7 @@ const BulkCostEntryPage: React.FC = () => {
     mutationFn: upsertMonthlyCost,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.monthlyCosts.all() });
+      queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.all() });
     },
   });
 
@@ -153,6 +154,7 @@ const BulkCostEntryPage: React.FC = () => {
     },
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: queryKeys.orders.all() });
+      queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.all() });
       // Remove from edited state after successful save
       setEditedCosts(prev => {
         const newState = { ...prev };

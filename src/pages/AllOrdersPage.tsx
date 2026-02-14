@@ -103,10 +103,10 @@ const AllOrdersPage: React.FC = () => {
             // Map snake_case DB columns to camelCase for frontend
             return (data || []).map(mapDbToOrder);
         },
-        staleTime: 1000 * 30, // Data fresh for 30 seconds (good balance)
+        staleTime: 0, // Always consider data stale - refetch on every access
         gcTime: 1000 * 60 * 5, // Keep in cache for 5 minutes
         refetchOnMount: true, // Always refetch when component mounts
-        refetchOnWindowFocus: false, // Don't refetch on tab focus (prevents flash)
+        refetchOnWindowFocus: true, // Refetch on tab focus for fresh data
     });
 
     // --- OVERDUE LOGIC ---
