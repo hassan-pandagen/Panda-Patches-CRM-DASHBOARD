@@ -497,14 +497,25 @@ export const updateOrderDetails = async (
   
   const dbPayload = toSnakeCase(updates);
 
-  const { data, error } = await supabase
+  // Optimistic locking: only update if the row hasn't been modified since we loaded it
+  let query = supabase
     .from('orders')
     .update(dbPayload)
-    .eq('id', orderId)
-    .select()
-    .single();
+    .eq('id', orderId);
+
+  if (oldOrder.updatedAt) {
+    query = query.eq('updated_at', oldOrder.updatedAt);
+  }
+
+  const { data, error } = await query.select().single();
 
   if (error) {
+    // PGRST116 = "No rows found" - means updated_at changed (concurrent edit)
+    if (error.code === 'PGRST116') {
+      throw new Error(
+        'This order was modified by another user. Please refresh the page and try again.'
+      );
+    }
     logger.error('[Order Service] Database error', error);
     throw error;
   }

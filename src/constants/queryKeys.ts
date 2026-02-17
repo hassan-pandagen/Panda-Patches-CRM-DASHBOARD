@@ -31,6 +31,7 @@ export const queryKeys = {
     lists: () => [...queryKeys.attendance.all(), 'list'] as const,
     list: (filters: object) => [...queryKeys.attendance.lists(), filters] as const,
     today: (userId?: string) => [...queryKeys.attendance.lists(), 'today', { userId }] as const,
+    active: (userId?: string) => [...queryKeys.attendance.all(), 'active', userId] as const,
   },
 
   // All keys related to the main dashboard
@@ -52,7 +53,12 @@ export const queryKeys = {
 
   // All keys related to user profiles (single user)
   user: {
-    profile: () => ['user', 'profile'] as const,
+    profile: (userId?: string) => ['profile', userId] as const,
+  },
+
+  // All keys related to performance metrics
+  performanceMetrics: {
+    all: () => ['performance-metrics'] as const,
   },
 
   // All keys related to search

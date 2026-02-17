@@ -5,6 +5,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../services/supabaseClient';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../hooks/useToast';
+import { queryKeys } from '../constants/queryKeys';
 
 interface PerformanceMetric {
   name: string;
@@ -31,18 +32,18 @@ const PerformanceMetricsPage: React.FC = () => {
   const [sortBy, setSortBy] = useState<'duration' | 'recent'>('recent');
 
   const { data: metrics = [], isLoading, refetch } = useQuery({
-    queryKey: ['performance-metrics'],
+    queryKey: queryKeys.performanceMetrics.all(),
     queryFn: async () => {
       const { data, error } = await supabase
         .from('performance_metrics')
         .select('*')
         .order('created_at', { ascending: false })
-        .limit(500); // Limit to last 500 metrics to keep it snappy
+        .limit(500);
       if (error) throw error;
       return data;
     },
     enabled: role === 'ADMIN',
-    refetchInterval: 5000, // Auto-refresh every 5 seconds
+    refetchInterval: 1000 * 60, // Auto-refresh every 60 seconds (was 5s = 4,800 queries/day)
   });
 
   const clearMetricsMutation = useMutation({
@@ -51,7 +52,7 @@ const PerformanceMetricsPage: React.FC = () => {
       if (error) throw error;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['performance-metrics'] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.performanceMetrics.all() });
       success('All performance metrics have been cleared.');
     },
     onError: (err: any) => {

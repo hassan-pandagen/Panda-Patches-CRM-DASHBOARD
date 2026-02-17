@@ -11,6 +11,7 @@ class OfflineManager {
   private listeners: Set<OfflineListener> = new Set();
   private isOnline: boolean = navigator.onLine;
   private swRegistration: ServiceWorkerRegistration | null = null;
+  private connectionCheckInterval: ReturnType<typeof setInterval> | null = null;
 
   constructor() {
     // Listen to online/offline events
@@ -20,9 +21,22 @@ class OfflineManager {
     // Also periodically check connection
     // Only run the interval check in Production to save resources in Dev
     if (import.meta.env.PROD) {
-      setInterval(() => this.checkConnection(), 30000); 
+      this.connectionCheckInterval = setInterval(() => this.checkConnection(), 30000);
     }
   }
+
+  /**
+   * Cleanup all listeners and intervals to prevent memory leaks
+   */
+  destroy = () => {
+    window.removeEventListener('online', this.handleOnline);
+    window.removeEventListener('offline', this.handleOffline);
+    if (this.connectionCheckInterval) {
+      clearInterval(this.connectionCheckInterval);
+      this.connectionCheckInterval = null;
+    }
+    this.listeners.clear();
+  };
 
   /**
    * Register the service worker

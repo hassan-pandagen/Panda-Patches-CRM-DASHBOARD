@@ -4,6 +4,7 @@ import { User, Session } from '@supabase/supabase-js';
 import { useQuery, useQueryClient } from '@tanstack/react-query'; 
 import { supabase } from '../services/supabaseClient';
 import { UserRole, UserPermissions } from '../types';
+import { queryKeys } from '../constants/queryKeys';
 
 interface AuthContextType {
   user: User | null;
@@ -67,7 +68,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   // 2. Fetch Profile (FIXED: Added retries and safety checks)
   const { data: profile, isLoading: isProfileLoading, error: profileError } = useQuery({
-    queryKey: ['profile', user?.id],
+    queryKey: queryKeys.user.profile(user?.id),
     queryFn: async () => {
       if (!user?.id) return null;
       

@@ -4,17 +4,29 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*', // Allow all origins (including localhost)
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-};
+const ALLOWED_ORIGINS = [
+  'https://portal.pandapatches.com',
+  'https://panda-patches-crm-dashboard.vercel.app',
+];
 
-const createResponse = (body: any, status = 200) => {
+function isAllowedOrigin(origin: string): boolean {
+  return ALLOWED_ORIGINS.includes(origin) || origin.startsWith('http://localhost:');
+}
+
+function getCorsHeaders(req: Request) {
+  const origin = req.headers.get('origin') ?? '';
+  return {
+    'Access-Control-Allow-Origin': isAllowedOrigin(origin) ? origin : ALLOWED_ORIGINS[0],
+    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  };
+}
+
+const createResponse = (body: any, status = 200, headers: Record<string, string>) => {
   return new Response(
     JSON.stringify(body),
-    { 
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      status 
+    {
+      headers: { ...headers, 'Content-Type': 'application/json' },
+      status
     }
   );
 };
@@ -22,7 +34,7 @@ const createResponse = (body: any, status = 200) => {
 serve(async (req) => {
   // Handle CORS preflight
   if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders });
+    return new Response('ok', { headers: getCorsHeaders(req) });
   }
 
   try {
@@ -45,7 +57,7 @@ serve(async (req) => {
     
     const authHeader = req.headers.get('Authorization');
     if (!authHeader) {
-      return createResponse({ error: 'Missing authorization header' }, 401);
+      return createResponse({ error: 'Missing authorization header' }, 401, getCorsHeaders(req));
     }
 
     // Create client with user's token
@@ -59,10 +71,10 @@ serve(async (req) => {
     
     if (authError || !user) {
       console.error('Authentication failed:', authError?.message);
-      return createResponse({ 
+      return createResponse({
         error: 'Authentication failed',
-        details: authError?.message 
-      }, 401);
+        details: authError?.message
+      }, 401, getCorsHeaders(req));
     }
 
     console.log('✓ User authenticated:', user.email);
@@ -81,19 +93,19 @@ serve(async (req) => {
 
     if (profileError) {
       console.error('Failed to verify permissions:', profileError);
-      return createResponse({ 
+      return createResponse({
         error: 'Failed to verify permissions',
-        details: profileError.message 
-      }, 500);
+        details: profileError.message
+      }, 500, getCorsHeaders(req));
     }
 
     if (profile?.role !== 'ADMIN') {
       console.error('Permission denied for user:', profile?.email);
-      return createResponse({ 
+      return createResponse({
         error: 'Insufficient permissions',
         required: 'ADMIN',
         current: profile?.role || 'UNKNOWN'
-      }, 403);
+      }, 403, getCorsHeaders(req));
     }
 
     console.log('✓ Permissions verified: ADMIN');
@@ -106,33 +118,33 @@ serve(async (req) => {
     try {
       body = await req.json();
     } catch (e) {
-      return createResponse({ error: 'Invalid JSON in request body' }, 400);
+      return createResponse({ error: 'Invalid JSON in request body' }, 400, getCorsHeaders(req));
     }
 
     const { user_id } = body;
     
     if (!user_id) {
-      return createResponse({ 
+      return createResponse({
         error: 'Missing required field',
         field: 'user_id'
-      }, 400);
+      }, 400, getCorsHeaders(req));
     }
 
     // Validate UUID format
     const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
     if (!uuidRegex.test(user_id)) {
-      return createResponse({ 
+      return createResponse({
         error: 'Invalid user_id format',
         expected: 'UUID',
         received: user_id
-      }, 400);
+      }, 400, getCorsHeaders(req));
     }
 
     // Prevent self-deletion
     if (user_id === user.id) {
-      return createResponse({ 
+      return createResponse({
         error: 'Cannot delete your own account'
-      }, 400);
+      }, 400, getCorsHeaders(req));
     }
 
     console.log('✓ Request validated. Target user ID:', user_id);
@@ -149,10 +161,10 @@ serve(async (req) => {
 
     if (fetchError || !targetUser) {
       console.error('User not found:', user_id);
-      return createResponse({ 
+      return createResponse({
         error: 'User not found',
         user_id: user_id
-      }, 404);
+      }, 404, getCorsHeaders(req));
     }
 
     console.log('✓ Target user found:', targetUser.email);
@@ -249,10 +261,10 @@ serve(async (req) => {
 
     if (profileDeleteError) {
       console.error('Failed to delete user profile:', profileDeleteError);
-      return createResponse({ 
+      return createResponse({
         error: 'Failed to delete user profile',
-        details: profileDeleteError.message 
-      }, 500);
+        details: profileDeleteError.message
+      }, 500, getCorsHeaders(req));
     }
 
     console.log('✓ User profile deleted');
@@ -267,22 +279,22 @@ serve(async (req) => {
 
     if (deleteError) {
       console.error('Failed to delete auth user:', deleteError);
-      return createResponse({ 
+      return createResponse({
         error: 'Failed to delete user from authentication',
-        details: deleteError.message 
-      }, 500);
+        details: deleteError.message
+      }, 500, getCorsHeaders(req));
     }
 
     console.log('✓ Auth user deleted successfully');
     console.log('=== DELETE USER COMPLETED ===');
 
     // Success response
-    return createResponse({ 
+    return createResponse({
       success: true,
       message: 'User deleted successfully',
       deleted_user_email: targetUser.email,
       deleted_user_id: user_id
-    }, 200);
+    }, 200, getCorsHeaders(req));
 
   } catch (error: any) {
     console.error('=== UNEXPECTED ERROR ===');
@@ -290,10 +302,10 @@ serve(async (req) => {
     console.error('Error message:', error.message);
     console.error('Error stack:', error.stack);
     
-    return createResponse({ 
+    return createResponse({
       error: 'Internal server error',
       message: error.message,
       type: error.name
-    }, 500);
+    }, 500, getCorsHeaders(req));
   }
 });

@@ -1,10 +1,22 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { z } from "https://deno.land/x/zod@v3.22.4/mod.ts";
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*', // Allow all origins (including localhost)
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-};
+const ALLOWED_ORIGINS = [
+  'https://portal.pandapatches.com',
+  'https://panda-patches-crm-dashboard.vercel.app',
+];
+
+function isAllowedOrigin(origin: string): boolean {
+  return ALLOWED_ORIGINS.includes(origin) || origin.startsWith('http://localhost:');
+}
+
+function getCorsHeaders(req: Request) {
+  const origin = req.headers.get('origin') ?? '';
+  return {
+    'Access-Control-Allow-Origin': isAllowedOrigin(origin) ? origin : ALLOWED_ORIGINS[0],
+    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  };
+}
 
 // ✅ BACKEND VALIDATION: Zod schema for update user
 // All fields except user_id are optional to support partial updates (e.g., password-only reset)
@@ -49,7 +61,7 @@ const updateUserSchema = z.object({
 });
 
 Deno.serve(async (req: Request) => {
-  if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
+  if (req.method === 'OPTIONS') return new Response('ok', { headers: getCorsHeaders(req) });
 
   try {
     const supabaseAdmin = createClient(
@@ -104,7 +116,7 @@ Deno.serve(async (req: Request) => {
 
     return new Response(
       JSON.stringify({ message: "User updated successfully" }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
+      { headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' }, status: 200 }
     );
 
   } catch (error: any) {
@@ -119,14 +131,14 @@ Deno.serve(async (req: Request) => {
           error: 'Validation failed',
           details: validationErrors
         }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
+        { headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' }, status: 400 }
       );
     }
 
     // Handle other errors
     return new Response(
       JSON.stringify({ error: error.message }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
+      { headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' }, status: 400 }
     );
   }
 });

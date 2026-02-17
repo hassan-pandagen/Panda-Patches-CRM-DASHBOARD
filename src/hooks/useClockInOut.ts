@@ -234,7 +234,7 @@ export const useClockInOut = () => {
   // staleTime: 1 minute (was 0)
   // refetchInterval: 1 minute (was 30s)
   const { data: activeSession, isLoading: isLoadingStatus } = useQuery({
-    queryKey: ['attendance', 'active', user?.id],
+    queryKey: queryKeys.attendance.active(user?.id),
     queryFn: () => fetchCurrentActiveSession(user?.id),
     enabled: !!user?.id,
     staleTime: 1000 * 60, // 1 minute (was 0 - immediately stale)
@@ -286,14 +286,20 @@ export const useClockInOut = () => {
         .select()
         .single();
 
-      if (insertError) throw insertError;
+      // TOCTOU guard: catch unique constraint violation from concurrent tabs
+      if (insertError) {
+        if (insertError.code === '23505') {
+          throw new Error('You already have an active session (opened in another tab). Please refresh.');
+        }
+        throw insertError;
+      }
 
       return { workDate, clockInTime: now, session: newSession };
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.attendance.all() });
-      queryClient.invalidateQueries({ queryKey: ['attendance', 'active'] });
     },
+    retry: 1, // Network retry: retry once on transient failures
   });
 
   // ============================================
@@ -341,8 +347,8 @@ export const useClockInOut = () => {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.attendance.all() });
-      queryClient.invalidateQueries({ queryKey: ['attendance', 'active'] });
     },
+    retry: 1, // Network retry: retry once on transient failures
   });
 
   // ============================================

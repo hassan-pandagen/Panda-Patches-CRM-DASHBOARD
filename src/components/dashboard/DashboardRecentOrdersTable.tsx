@@ -10,7 +10,7 @@ interface TableRowProps {
   order: Order;
 }
 
-const TableRow: React.FC<TableRowProps> = ({ order }) => {
+const TableRow: React.FC<TableRowProps> = React.memo(({ order }) => {
   const navigate = useNavigate();
 
   return (
@@ -68,7 +68,9 @@ const TableRow: React.FC<TableRowProps> = ({ order }) => {
       </td>
     </motion.tr>
   );
-};
+});
+
+TableRow.displayName = 'TableRow';
 
 const TableSkeleton: React.FC = () => (
   <tbody>

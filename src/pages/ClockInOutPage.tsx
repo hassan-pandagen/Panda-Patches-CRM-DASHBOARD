@@ -52,7 +52,6 @@ import { supabase } from '../services/supabaseClient';
 import { queryKeys } from '../constants/queryKeys';
 import SpotlightCard from '../components/ui/SpotlightCard';
 import StatusBadge from '../components/ui/StatusBadge';
-import { debounce } from '../utils/debounce';
 
 // ============================================
 // ANIMATION VARIANTS
@@ -96,6 +95,31 @@ const StatCard: React.FC<{
   </div>
 );
 
+// Isolated live clock component - owns its own 1-second timer
+// Prevents the entire page from re-rendering every second
+const LiveClock: React.FC = React.memo(() => {
+  const [now, setNow] = useState(new Date());
+
+  useEffect(() => {
+    const timer = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const pktNow = getPakistanTime(now);
+
+  return (
+    <div className="text-right">
+      <p className="text-4xl lg:text-5xl font-bold text-brand-orange font-mono">
+        {format(pktNow, 'h:mm:ss a')}
+      </p>
+      <p className="text-slate-400 text-sm">
+        {format(pktNow, 'EEEE, MMM dd, yyyy')} (PKT)
+      </p>
+    </div>
+  );
+});
+LiveClock.displayName = 'LiveClock';
+
 // ============================================
 // MAIN COMPONENT
 // ============================================
@@ -109,6 +133,7 @@ const ClockInOutPage: React.FC = () => {
   const [selectedUser, setSelectedUser] = useState<string>('');
   const [adminTab, setAdminTab] = useState<'daily' | 'weekly' | 'monthly'>('daily');
   const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().slice(0, 7));
+  const [forceClockOutPending, setForceClockOutPending] = useState<string | null>(null);
   const [selectedWeekStart, setSelectedWeekStart] = useState(() => {
     const today = new Date();
     const weekStart = startOfWeek(today, { weekStartsOn: 1 });
@@ -158,9 +183,10 @@ const ClockInOutPage: React.FC = () => {
     enabled: role === 'ADMIN',
   });
 
-  // Update clock every second
+  // Update every 60s for auto clock-out countdown and active hours recalc
+  // The per-second clock display is handled by the isolated LiveClock component
   useEffect(() => {
-    const timer = setInterval(() => setCurrentTime(new Date()), 1000);
+    const timer = setInterval(() => setCurrentTime(new Date()), 60000);
     return () => clearInterval(timer);
   }, []);
 
@@ -236,23 +262,15 @@ const ClockInOutPage: React.FC = () => {
   // HANDLERS - OPTIMIZED WITH DEBOUNCING
   // ============================================
 
-  // Debounced clock in handler (100ms) to prevent multiple rapid clicks
-  const handleClockIn = useCallback(
-    debounce(async () => {
-      await clockIn();
-      queryClient.invalidateQueries({ queryKey: queryKeys.attendance.all() });
-    }, 100),
-    [clockIn, queryClient]
-  );
+  const handleClockIn = useCallback(async () => {
+    await clockIn();
+    queryClient.invalidateQueries({ queryKey: queryKeys.attendance.all() });
+  }, [clockIn, queryClient]);
 
-  // Debounced clock out handler (100ms) to prevent multiple rapid clicks
-  const handleClockOut = useCallback(
-    debounce(async () => {
-      await clockOut();
-      queryClient.invalidateQueries({ queryKey: queryKeys.attendance.all() });
-    }, 100),
-    [clockOut, queryClient]
-  );
+  const handleClockOut = useCallback(async () => {
+    await clockOut();
+    queryClient.invalidateQueries({ queryKey: queryKeys.attendance.all() });
+  }, [clockOut, queryClient]);
 
   const filterToday = useCallback(() => {
     const today = calculateWorkDate(new Date());
@@ -383,36 +401,40 @@ const ClockInOutPage: React.FC = () => {
     downloadCSV(exportData, `attendance-monthly-${selectedMonth}.csv`);
   };
 
-  const handleForceClockOut = async (recordId: string, userEmail: string) => {
+  const handleForceClockOut = useCallback(async (recordId: string, userEmail: string) => {
+    if (forceClockOutPending) return; // Debounce: prevent double-clicks
     if (!confirm(`Force clock out for ${userEmail}? This will clock them out at the current time.`)) return;
-    
+
+    setForceClockOutPending(recordId);
     try {
       const record = allAttendance.find(r => r.id === recordId);
       if (!record) return;
-      
+
       const clockOutTime = new Date().toISOString();
       let hoursWorked = (new Date(clockOutTime).getTime() - new Date(record.clock_in_time).getTime()) / (60 * 60 * 1000);
-      
+
       // Cap at max hours
       hoursWorked = Math.min(hoursWorked, SHIFT_CONFIG.MAX_SHIFT_HOURS);
-      
+
       const { error } = await supabase
         .from('attendance_sessions')
-        .update({ 
+        .update({
           clock_out_time: clockOutTime,
           duration_hours: hoursWorked,
           auto_clocked_out: true,
         })
         .eq('id', recordId);
-      
+
       if (error) throw error;
-      
+
       queryClient.invalidateQueries({ queryKey: queryKeys.attendance.all() });
       alert(`Successfully clocked out ${userEmail}. Hours: ${hoursWorked.toFixed(2)}`);
     } catch (error: any) {
       alert(`Error: ${error.message}`);
+    } finally {
+      setForceClockOutPending(null);
     }
-  };
+  }, [forceClockOutPending, allAttendance, queryClient]);
 
   // ============================================
   // RENDER
@@ -442,15 +464,8 @@ const ClockInOutPage: React.FC = () => {
             </p>
           </div>
 
-          {/* Time Display */}
-          <div className="text-right">
-            <p className="text-4xl lg:text-5xl font-bold text-brand-orange font-mono">
-              {format(currentTime, 'h:mm:ss a')}
-            </p>
-            <p className="text-slate-400 text-sm">
-              {format(currentTime, 'EEEE, MMM dd, yyyy')} (PKT)
-            </p>
-          </div>
+          {/* Time Display - isolated component to avoid full-page re-renders every second */}
+          <LiveClock />
         </motion.div>
 
         {/* Error Alert */}
@@ -848,9 +863,10 @@ const ClockInOutPage: React.FC = () => {
                                   {!record.clock_out_time && (
                                     <button
                                       onClick={() => handleForceClockOut(record.id, record.user_email)}
-                                      className="px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white text-xs font-semibold rounded-lg transition-colors"
+                                      disabled={forceClockOutPending === record.id}
+                                      className="px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white text-xs font-semibold rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                                     >
-                                      Force Out
+                                      {forceClockOutPending === record.id ? 'Closing...' : 'Force Out'}
                                     </button>
                                   )}
                                 </td>

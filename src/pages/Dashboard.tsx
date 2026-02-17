@@ -177,9 +177,10 @@ export default function Dashboard() {
 
       // Use .lt() with next day to include ALL orders on the end date
       // Example: endDate "2026-01-31" → lt("2026-02-01") includes all Jan 31 orders
+      // Select only columns needed for dashboard - avoids fetching large file URL arrays (50x data reduction)
       let query = supabase
          .from("orders")
-         .select("*")
+         .select("id, order_number, customer_name, customer_email, design_name, status, created_at, updated_at, sales_agent, order_amount, amount_paid, is_urgent, lead_source, patches_type")
          .gte("created_at", activeDateRange.startDate)
          .lt("created_at", getNextDay(activeDateRange.endDate));
 
@@ -195,8 +196,8 @@ export default function Dashboard() {
       return (data || []).map(mapDbToOrder);
     },
     enabled: !!user && !authLoading,
-    staleTime: 1000 * 15,               // 15 seconds — dashboard should always feel fresh
-    refetchOnMount: 'always',            // Always refetch when navigating to dashboard
+    staleTime: 1000 * 30,               // 30 seconds — balance between fresh data and API calls
+    refetchOnMount: true,                // Refetch when navigating to dashboard (but respects staleTime)
     refetchOnWindowFocus: true,          // Refetch when user returns to tab
     refetchInterval: 1000 * 60 * 2,     // Poll every 2 minutes as a safety net
   });

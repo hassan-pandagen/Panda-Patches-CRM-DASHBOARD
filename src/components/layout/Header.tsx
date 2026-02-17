@@ -5,7 +5,8 @@ import { User, LogOut, Settings, ChevronDown } from 'lucide-react';
 import NotificationBell from '../ui/NotificationBell'; // <--- Import the new component
 
 const Header: React.FC = () => {
-  const { user, role, signOut, profile } = useAuth();
+  const { user, role, signOut } = useAuth();
+  const fullName = user?.user_metadata?.full_name;
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -39,12 +40,12 @@ const Header: React.FC = () => {
             }`}
           >
             <div className="text-right hidden sm:block">
-              <p className="text-sm font-semibold text-white">{profile?.full_name || user?.email}</p>
-              <p className="text-xs text-slate-400">{profile?.role}</p>
+              <p className="text-sm font-semibold text-white">{fullName || user?.email}</p>
+              <p className="text-xs text-slate-400">{role}</p>
             </div>
             {/* Avatar */}
             <div className="w-10 h-10 rounded-full bg-gradient-to-br from-brand-orange to-orange-600 flex items-center justify-center shadow-lg shadow-brand-orange/20 text-white font-bold">
-              {profile?.full_name ? profile.full_name.charAt(0).toUpperCase() : <User className="w-5 h-5" />}
+              {fullName ? fullName.charAt(0).toUpperCase() : <User className="w-5 h-5" />}
             </div>
             <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform duration-200 ${isMenuOpen ? 'rotate-180' : ''}`} />
           </button>

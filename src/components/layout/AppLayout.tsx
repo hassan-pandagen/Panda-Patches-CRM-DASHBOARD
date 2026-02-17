@@ -9,26 +9,13 @@ const AppLayout: React.FC = () => {
 
   return (
     <div className="flex h-screen bg-[#0B1120] text-slate-200 overflow-hidden relative selection:bg-brand-orange/30">
-      {/* --- LAYER 1: AMBIENT ALIVE BACKGROUND --- */}
+      {/* --- LAYER 1: AMBIENT BACKGROUND (CSS animations - no JS repaints) --- */}
       <div className="fixed inset-0 z-0 overflow-hidden pointer-events-none">
-        {/* Top Left - Warm Glow (Breathing) */}
-        <motion.div
-          animate={{ scale: [1, 1.2, 1], opacity: [0.3, 0.5, 0.3] }}
-          transition={{ duration: 8, repeat: Infinity, ease: "easeInOut" }}
-          className="absolute -top-[20%] -left-[10%] w-[800px] h-[800px] bg-brand-orange/20 rounded-full blur-[120px]"
-        />
+        {/* Top Left - Warm Glow */}
+        <div className="absolute -top-[20%] -left-[10%] w-[800px] h-[800px] bg-brand-orange/20 rounded-full blur-[120px] opacity-40" />
 
-        {/* Bottom Right - Cool Glow (Breathing) */}
-        <motion.div
-          animate={{ scale: [1, 1.1, 1], opacity: [0.3, 0.4, 0.3] }}
-          transition={{
-            duration: 10,
-            repeat: Infinity,
-            ease: "easeInOut",
-            delay: 1,
-          }}
-          className="absolute -bottom-[20%] -right-[10%] w-[600px] h-[600px] bg-blue-600/20 rounded-full blur-[120px]"
-        />
+        {/* Bottom Right - Cool Glow */}
+        <div className="absolute -bottom-[20%] -right-[10%] w-[600px] h-[600px] bg-blue-600/20 rounded-full blur-[120px] opacity-35" />
 
         {/* Center - Subtle Fill */}
         <div className="absolute top-[20%] left-[30%] w-[600px] h-[600px] bg-purple-500/5 rounded-full blur-[150px]" />

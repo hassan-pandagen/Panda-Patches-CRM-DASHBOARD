@@ -1,6 +1,6 @@
 // src/pages/AllOrdersPage.tsx - ADDED ALL PIPELINE TABS
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useSearchParams, Link, useNavigate } from 'react-router-dom';
 import { supabase } from '../services/supabaseClient';
@@ -31,7 +31,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 
 
 
-const FilterTab = ({ active, label, count, onClick, isUrgent = false }: any) => (
+const FilterTab = React.memo(({ active, label, count, onClick, isUrgent = false }: any) => (
     <button
         onClick={onClick}
         className={`relative px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 flex items-center gap-2 whitespace-nowrap ${active
@@ -58,7 +58,8 @@ const FilterTab = ({ active, label, count, onClick, isUrgent = false }: any) => 
             />
         )}
     </button>
-);
+));
+FilterTab.displayName = 'FilterTab';
 
 const ITEMS_PER_PAGE = 15;
 
@@ -103,9 +104,9 @@ const AllOrdersPage: React.FC = () => {
             // Map snake_case DB columns to camelCase for frontend
             return (data || []).map(mapDbToOrder);
         },
-        staleTime: 0, // Always consider data stale - refetch on every access
+        staleTime: 1000 * 30, // 30 seconds - prevents unnecessary refetches on rapid navigation
         gcTime: 1000 * 60 * 5, // Keep in cache for 5 minutes
-        refetchOnMount: true, // Always refetch when component mounts
+        refetchOnMount: true, // Refetch when component mounts (respects staleTime)
         refetchOnWindowFocus: true, // Refetch on tab focus for fresh data
     });
 
@@ -206,14 +207,14 @@ const AllOrdersPage: React.FC = () => {
         setActiveFilter('ALL');
     };
 
-    const handleFilterChange = (filter: string) => {
+    const handleFilterChange = useCallback((filter: string) => {
         // Clear ids parameter when changing filters
         const newParams = new URLSearchParams(searchParams);
         newParams.delete('ids');
         setSearchParams(newParams);
         setActiveFilter(filter);
         setCurrentPage(1); // Reset to first page
-    };
+    }, [searchParams, setSearchParams]);
 
     // --- SKELETON LOADING ---
     if (isLoading) return (

@@ -22,7 +22,6 @@ export const useSupabaseRealtime = () => {
           queryClient.invalidateQueries({ queryKey: queryKeys.orders.all() });
           queryClient.invalidateQueries({ queryKey: queryKeys.orders.lists() });
           queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.all() });
-          queryClient.invalidateQueries({ queryKey: queryKeys.quotes.all() });
         }
       )
       .subscribe((status, err) => {
@@ -49,7 +48,7 @@ export const useSupabaseRealtime = () => {
           },
           (payload) => {
             console.log('[Realtime] Users updated:', payload.eventType);
-            queryClient.invalidateQueries({ queryKey: ['users'] });
+            queryClient.invalidateQueries({ queryKey: queryKeys.users.all() });
           }
         )
         .subscribe((status, err) => {

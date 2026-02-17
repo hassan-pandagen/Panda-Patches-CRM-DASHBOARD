@@ -7,10 +7,32 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { encode } from "https://deno.land/std@0.168.0/encoding/base64.ts";
 import { z } from "https://deno.land/x/zod@v3.22.4/mod.ts";
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*', // Allow all origins (including localhost)
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-};
+const ALLOWED_ORIGINS = [
+  'https://portal.pandapatches.com',
+  'https://panda-patches-crm-dashboard.vercel.app',
+];
+
+function isAllowedOrigin(origin: string): boolean {
+  return ALLOWED_ORIGINS.includes(origin) || origin.startsWith('http://localhost:');
+}
+
+function getCorsHeaders(req: Request) {
+  const origin = req.headers.get('origin') ?? '';
+  return {
+    'Access-Control-Allow-Origin': isAllowedOrigin(origin) ? origin : ALLOWED_ORIGINS[0],
+    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  };
+}
+
+function escapeHtml(str: string): string {
+  if (!str) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
 
 // ✅ BACKEND VALIDATION: Zod schema for email requests
 const sendEmailSchema = z.object({
@@ -210,7 +232,7 @@ const shouldShowInstagramPromo = (templateId: string): boolean => {
 // 4. Helper: Build Email HTML from Template ID and Data
 const buildEmailHTML = (templateId: string, data: any): string => {
   // Get template-specific message if not provided in data
-  const emailMessage = data.message || getTemplateMessage(templateId);
+  const emailMessage = escapeHtml(data.message || getTemplateMessage(templateId));
 
   // Use professional SendGrid-style template adapted for AWS SES
   return `<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
@@ -325,7 +347,7 @@ const buildEmailHTML = (templateId: string, data: any): string => {
         <td style="padding:0px 20px 10px 20px; line-height:22px; text-align:inherit;" height="100%" valign="top" bgcolor="" role="module-content">
           <div>
             <div style="font-family: inherit; text-align: center">
-              ${data.quote_number ? `<span style="font-size: 16px; font-family: 'lucida sans unicode', 'lucida grande', sans-serif">Quote Number: &nbsp;</span><span style="font-size: 16px; color: #fb6e1d; font-family: 'lucida sans unicode', 'lucida grande', sans-serif">${data.quote_number}</span>` : `<span style="font-size: 16px; font-family: 'lucida sans unicode', 'lucida grande', sans-serif">Order Number: &nbsp;</span><span style="font-size: 16px; color: #fb6e1d; font-family: 'lucida sans unicode', 'lucida grande', sans-serif">${data.order_number || 'N/A'}</span>`}
+              ${data.quote_number ? `<span style="font-size: 16px; font-family: 'lucida sans unicode', 'lucida grande', sans-serif">Quote Number: &nbsp;</span><span style="font-size: 16px; color: #fb6e1d; font-family: 'lucida sans unicode', 'lucida grande', sans-serif">${escapeHtml(data.quote_number)}</span>` : `<span style="font-size: 16px; font-family: 'lucida sans unicode', 'lucida grande', sans-serif">Order Number: &nbsp;</span><span style="font-size: 16px; color: #fb6e1d; font-family: 'lucida sans unicode', 'lucida grande', sans-serif">${escapeHtml(data.order_number || 'N/A')}</span>`}
             </div>
           </div>
         </td>
@@ -342,7 +364,7 @@ const buildEmailHTML = (templateId: string, data: any): string => {
             <div style="font-family: inherit; text-align: inherit">
               ${templateId.includes('INTERNAL') ?
                 `<span style="font-size: 18px; font-family: 'lucida sans unicode', 'lucida grande', sans-serif">Hi </span><span style="font-size: 18px; color: #fb6e1d; font-family: 'lucida sans unicode', 'lucida grande', sans-serif">Team</span><span style="font-size: 18px; font-family: 'lucida sans unicode', 'lucida grande', sans-serif">,&nbsp;</span>` :
-                `<span style="font-size: 18px; font-family: 'lucida sans unicode', 'lucida grande', sans-serif">Hi </span><span style="font-size: 18px; color: #fb6e1d; font-family: 'lucida sans unicode', 'lucida grande', sans-serif">${data.customer_name || 'Customer'}</span><span style="font-size: 18px; font-family: 'lucida sans unicode', 'lucida grande', sans-serif">,&nbsp;</span>`
+                `<span style="font-size: 18px; font-family: 'lucida sans unicode', 'lucida grande', sans-serif">Hi </span><span style="font-size: 18px; color: #fb6e1d; font-family: 'lucida sans unicode', 'lucida grande', sans-serif">${escapeHtml(data.customer_name || 'Customer')}</span><span style="font-size: 18px; font-family: 'lucida sans unicode', 'lucida grande', sans-serif">,&nbsp;</span>`
               }
             </div>
             <div style="font-family: inherit; text-align: inherit"><br></div>
@@ -364,7 +386,7 @@ const buildEmailHTML = (templateId: string, data: any): string => {
           <div>
             <div style="font-family: inherit; text-align: center">
               <span style="font-size: 15px; font-family: 'lucida sans unicode', 'lucida grande', sans-serif; color: #666;">📞 Contact Sales Agent: </span>
-              <span style="font-size: 17px; color: #fb6e1d; font-family: 'lucida sans unicode', 'lucida grande', sans-serif; font-weight: bold">${data.sales_agent_name}</span>
+              <span style="font-size: 17px; color: #fb6e1d; font-family: 'lucida sans unicode', 'lucida grande', sans-serif; font-weight: bold">${escapeHtml(data.sales_agent_name)}</span>
             </div>
           </div>
         </td>
@@ -384,7 +406,7 @@ const buildEmailHTML = (templateId: string, data: any): string => {
               <span style="font-size: 20px; font-family: 'lucida sans unicode', 'lucida grande', sans-serif; color: #e65100; font-weight: bold;">⚠️ REMAKE INSTRUCTIONS FROM SALES AGENT ⚠️</span>
             </div>
             <div style="font-family: inherit; text-align: center; background-color: #ffffff; padding: 15px; border-radius: 4px; border: 2px solid #ff9800;">
-              <span style="font-size: 18px; font-family: 'lucida sans unicode', 'lucida grande', sans-serif; color: #000; font-weight: bold; line-height: 1.6;">${data.instructions}</span>
+              <span style="font-size: 18px; font-family: 'lucida sans unicode', 'lucida grande', sans-serif; color: #000; font-weight: bold; line-height: 1.6;">${escapeHtml(data.instructions)}</span>
             </div>
             <div style="font-family: inherit; text-align: center; margin-top: 10px;">
               <span style="font-size: 14px; font-family: 'lucida sans unicode', 'lucida grande', sans-serif; color: #d84315; font-style: italic;">Contact the sales agent if you need clarification on these requirements.</span>
@@ -479,42 +501,42 @@ const buildEmailHTML = (templateId: string, data: any): string => {
                         <td style="padding:18px 0px 18px 0px; line-height:22px; text-align:inherit;" height="100%" valign="top" bgcolor="" role="module-content">
                           <div>
                             <div style="font-family: inherit; text-align: center">
-                              <span style="font-family: 'lucida sans unicode', 'lucida grande', sans-serif; font-size: 18px;">${data.quote_number ? 'Quote' : 'Order'} Number: ${data.quote_number || data.order_number || 'N/A'}</span>
+                              <span style="font-family: 'lucida sans unicode', 'lucida grande', sans-serif; font-size: 18px;">${data.quote_number ? 'Quote' : 'Order'} Number: ${escapeHtml(data.quote_number || data.order_number || 'N/A')}</span>
                             </div>
                             <div style="font-family: inherit; text-align: center"><br></div>
                             ${data.design_name ? `
                               <div style="font-family: inherit; text-align: center">
-                                <span style="font-family: 'lucida sans unicode', 'lucida grande', sans-serif; font-size: 18px;">Design Name: ${data.design_name}</span>
+                                <span style="font-family: 'lucida sans unicode', 'lucida grande', sans-serif; font-size: 18px;">Design Name: ${escapeHtml(data.design_name)}</span>
                               </div>
                               <div style="font-family: inherit; text-align: center"><br></div>
                             ` : ''}
                             ${data.patches_quantity || data.quantity ? `
                               <div style="font-family: inherit; text-align: center">
-                                <span style="font-family: 'lucida sans unicode', 'lucida grande', sans-serif; font-size: 18px;">Quantity: ${data.patches_quantity || data.quantity}</span>
+                                <span style="font-family: 'lucida sans unicode', 'lucida grande', sans-serif; font-size: 18px;">Quantity: ${escapeHtml(data.patches_quantity || data.quantity)}</span>
                               </div>
                               <div style="font-family: inherit; text-align: center"><br></div>
                             ` : ''}
                             ${data.patches_type || data.patch_type ? `
                               <div style="font-family: inherit; text-align: center">
-                                <span style="font-family: 'lucida sans unicode', 'lucida grande', sans-serif; font-size: 18px;">Patch Type: ${data.patches_type || data.patch_type}</span>
+                                <span style="font-family: 'lucida sans unicode', 'lucida grande', sans-serif; font-size: 18px;">Patch Type: ${escapeHtml(data.patches_type || data.patch_type)}</span>
                               </div>
                               <div style="font-family: inherit; text-align: center"><br></div>
                             ` : ''}
                             ${data.design_backing || data.backing ? `
                               <div style="font-family: inherit; text-align: center">
-                                <span style="font-family: 'lucida sans unicode', 'lucida grande', sans-serif; font-size: 18px;">Backing: ${data.design_backing || data.backing}</span>
+                                <span style="font-family: 'lucida sans unicode', 'lucida grande', sans-serif; font-size: 18px;">Backing: ${escapeHtml(data.design_backing || data.backing)}</span>
                               </div>
                               <div style="font-family: inherit; text-align: center"><br></div>
                             ` : ''}
                             ${data.border_type ? `
                               <div style="font-family: inherit; text-align: center">
-                                <span style="font-family: 'lucida sans unicode', 'lucida grande', sans-serif; font-size: 18px;">Border Type: ${data.border_type}</span>
+                                <span style="font-family: 'lucida sans unicode', 'lucida grande', sans-serif; font-size: 18px;">Border Type: ${escapeHtml(data.border_type)}</span>
                               </div>
                               <div style="font-family: inherit; text-align: center"><br></div>
                             ` : ''}
                             ${templateId.includes('INTERNAL') && data.instructions ? `
                               <div style="font-family: inherit; text-align: center">
-                                <span style="font-family: 'lucida sans unicode', 'lucida grande', sans-serif; font-size: 18px;">Special Instruction: ${data.instructions}</span>
+                                <span style="font-family: 'lucida sans unicode', 'lucida grande', sans-serif; font-size: 18px;">Special Instruction: ${escapeHtml(data.instructions)}</span>
                               </div>
                             ` : ''}
                           </div>
@@ -558,7 +580,7 @@ const buildEmailHTML = (templateId: string, data: any): string => {
             <tbody>
               <tr>
                 <td align="center" bgcolor="#FB6E1D" class="inner-td" style="border-radius:6px; font-size:16px; text-align:center; background-color:inherit;">
-                  <a href="${data.order_link}" style="background-color:#FB6E1D; border:1px solid #FB6E1D; border-color:#FB6E1D; border-radius:6px; border-width:1px; color:#ffffff; display:inline-block; font-size:16px; font-weight:bold; letter-spacing:0px; line-height:normal; padding:16px 40px 16px 40px; text-align:center; text-decoration:none; border-style:solid; font-family: 'lucida sans unicode', 'lucida grande', sans-serif;" target="_blank">
+                  <a href="${escapeHtml(data.order_link)}" style="background-color:#FB6E1D; border:1px solid #FB6E1D; border-color:#FB6E1D; border-radius:6px; border-width:1px; color:#ffffff; display:inline-block; font-size:16px; font-weight:bold; letter-spacing:0px; line-height:normal; padding:16px 40px 16px 40px; text-align:center; text-decoration:none; border-style:solid; font-family: 'lucida sans unicode', 'lucida grande', sans-serif;" target="_blank">
                     VIEW IN CRM PORTAL →
                   </a>
                 </td>
@@ -704,7 +726,7 @@ const fetchFile = async (url: string) => {
 };
 
 serve(async (req) => {
-  if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
+  if (req.method === 'OPTIONS') return new Response('ok', { headers: getCorsHeaders(req) });
 
   try {
     // ✅ CHECK: Verify ZeptoMail API credentials are configured
@@ -812,7 +834,10 @@ serve(async (req) => {
 
     // Add any additional CC emails from the request
     if (cc) {
-      const additionalCC = cc.split(',').map((email: string) => email.trim()).filter(Boolean);
+      const additionalCC = cc.split(',')
+        .map((email: string) => email.trim())
+        .filter(Boolean)
+        .filter((email: string) => !email.includes('\n') && !email.includes('\r')); // Prevent header injection
       ccAddresses.push(...additionalCC);
     }
 
@@ -921,7 +946,7 @@ serve(async (req) => {
 
     console.log(`✅ Email sent successfully via ZeptoMail to: ${to}`);
 
-    return new Response(JSON.stringify({ success: true }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 });
+    return new Response(JSON.stringify({ success: true }), { headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' }, status: 200 });
 
   } catch (error: any) {
     // Handle Zod validation errors with proper 400 status
@@ -937,12 +962,12 @@ serve(async (req) => {
           error: 'Validation failed',
           details: validationErrors
         }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
+        { headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' }, status: 400 }
       );
     }
 
     // Return 200 even on other errors so Frontend doesn't spin, but log it.
     console.error("Edge Function Error:", error.message);
-    return new Response(JSON.stringify({ success: false, error: error.message }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 });
+    return new Response(JSON.stringify({ success: false, error: error.message }), { headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' }, status: 200 });
   }
 });

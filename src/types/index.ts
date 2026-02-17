@@ -10,7 +10,9 @@ export interface GlobalSettings {
 
 export enum UserRole {
   ADMIN = 'ADMIN',
-  USER = 'USER'
+  USER = 'USER',
+  PRODUCTION = 'PRODUCTION',
+  AGENT = 'AGENT',
 }
 
 export enum OrderStatus {

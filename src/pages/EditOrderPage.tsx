@@ -114,14 +114,6 @@ const EditOrderPage: React.FC = () => {
         type: 'active'
       });
 
-      // ✅ FIX 3: Small delay to ensure database trigger has completed
-      setTimeout(async () => {
-        console.log('🔄 Second refetch after delay...');
-        await queryClient.refetchQueries({ 
-          queryKey: queryKeys.orders.history(orderNumber)
-        });
-      }, 500);
-
       setHasUnsavedChanges(false);
       success('Order Updated', 'Your changes have been saved successfully.');
 
