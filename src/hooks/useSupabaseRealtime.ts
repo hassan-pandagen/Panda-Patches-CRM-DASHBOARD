@@ -19,8 +19,8 @@ export const useSupabaseRealtime = () => {
         },
         (payload) => {
           console.log('[Realtime] Orders updated:', payload.eventType);
+          // Invalidate all order queries (paginated pages, counts, lists, singles)
           queryClient.invalidateQueries({ queryKey: queryKeys.orders.all() });
-          queryClient.invalidateQueries({ queryKey: queryKeys.orders.lists() });
           queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.all() });
         }
       )

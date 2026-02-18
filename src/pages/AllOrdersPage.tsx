@@ -1,7 +1,7 @@
-// src/pages/AllOrdersPage.tsx - ADDED ALL PIPELINE TABS
+// src/pages/AllOrdersPage.tsx - SERVER-SIDE PAGINATION & FILTERING
 
-import React, { useState, useMemo, useCallback } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { useQuery, keepPreviousData } from '@tanstack/react-query';
 import { useSearchParams, Link, useNavigate } from 'react-router-dom';
 import { supabase } from '../services/supabaseClient';
 import { Order, OrderStatus, UserRole } from '../types';
@@ -13,7 +13,7 @@ import { queryKeys } from '../constants/queryKeys';
 // UI Components
 import Button from '../components/ui/Button';
 import Skeleton from '../components/ui/Skeleton';
-import EmptyState from '../components/ui/EmptyState'; // Ensure this is imported
+import EmptyState from '../components/ui/EmptyState';
 import SpotlightCard from '../components/ui/SpotlightCard';
 import StatusBadge from '../components/ui/StatusBadge';
 import {
@@ -28,8 +28,6 @@ import {
     CheckCircle,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-
-
 
 const FilterTab = React.memo(({ active, label, count, onClick, isUrgent = false }: any) => (
     <button
@@ -63,6 +61,196 @@ FilterTab.displayName = 'FilterTab';
 
 const ITEMS_PER_PAGE = 15;
 
+// Statuses that are considered "closed" (not active)
+const CLOSED_STATUSES = ['SHIPPED', 'DELIVERED', 'COMPLETED', 'CANCELLED', 'REFUNDED'];
+
+// ============================================
+// CUSTOM HOOK: Debounced value
+// ============================================
+function useDebouncedValue<T>(value: T, delay: number): T {
+    const [debounced, setDebounced] = useState(value);
+    useEffect(() => {
+        const timer = setTimeout(() => setDebounced(value), delay);
+        return () => clearTimeout(timer);
+    }, [value, delay]);
+    return debounced;
+}
+
+// ============================================
+// SERVER-SIDE QUERY: Fetch paginated orders
+// ============================================
+async function fetchPaginatedOrders(params: {
+    page: number;
+    filter: string;
+    search: string;
+    salesAgent?: string;
+    leadSource?: string;
+    date?: string;
+    ids?: string;
+}): Promise<{ orders: Order[]; totalCount: number }> {
+    const { page, filter, search, salesAgent, leadSource, date, ids } = params;
+    const from = (page - 1) * ITEMS_PER_PAGE;
+    const to = from + ITEMS_PER_PAGE - 1;
+
+    const columns = 'id, order_number, customer_name, customer_email, design_name, status, created_at, sales_agent, order_amount, amount_paid, is_urgent';
+
+    // --- IDS drill-down (from dashboard click) ---
+    if (ids) {
+        const idList = ids.split(',').map(id => id.trim()).filter(Boolean);
+        const { data, error } = await supabase
+            .from('orders')
+            .select(columns, { count: 'exact' })
+            .in('order_number', idList)
+            .order('created_at', { ascending: false });
+
+        if (error) throw new Error(error.message);
+        return { orders: (data || []).map(mapDbToOrder), totalCount: data?.length || 0 };
+    }
+
+    // --- Build the base query ---
+    let query = supabase.from('orders').select(columns, { count: 'exact' });
+
+    // Apply drill-down params
+    if (salesAgent) query = query.eq('sales_agent', salesAgent);
+    if (leadSource) query = query.eq('lead_source', leadSource);
+    if (date) {
+        // Filter by date (full day range)
+        const dayStart = `${date}T00:00:00.000Z`;
+        const dayEnd = `${date}T23:59:59.999Z`;
+        query = query.gte('created_at', dayStart).lte('created_at', dayEnd);
+    }
+
+    // Apply status/special filters
+    if (filter === 'OVERDUE') {
+        // Overdue = open > 10 days AND not in closed statuses
+        const tenDaysAgo = new Date();
+        tenDaysAgo.setDate(tenDaysAgo.getDate() - 10);
+        query = query
+            .lt('created_at', tenDaysAgo.toISOString())
+            .not('status', 'in', `(${CLOSED_STATUSES.join(',')})`);
+        // Sort oldest first for overdue
+        query = query.order('created_at', { ascending: true });
+    } else if (filter === 'PAYMENT_PENDING') {
+        // Payment pending: order_amount > amount_paid, exclude cancelled/refunded
+        // Supabase doesn't support computed column filters, so we fetch more and filter
+        query = query
+            .not('status', 'in', '(CANCELLED,REFUNDED)')
+            .gt('order_amount', 0)
+            .order('created_at', { ascending: false });
+    } else if (filter === 'URGENT') {
+        // Urgent = is_urgent AND not closed AND not overdue (>10 days)
+        const tenDaysAgo = new Date();
+        tenDaysAgo.setDate(tenDaysAgo.getDate() - 10);
+        query = query
+            .eq('is_urgent', true)
+            .not('status', 'in', `(${CLOSED_STATUSES.join(',')})`)
+            .gte('created_at', tenDaysAgo.toISOString())
+            .order('created_at', { ascending: false });
+    } else if (filter !== 'ALL') {
+        // Direct status filter (NEW_ORDER, IN_PRODUCTION, etc.)
+        query = query.eq('status', filter);
+        query = query.order('created_at', { ascending: false });
+    } else {
+        query = query.order('created_at', { ascending: false });
+    }
+
+    // Apply search (server-side ilike across multiple columns)
+    if (search) {
+        query = query.or(
+            `customer_name.ilike.%${search}%,order_number.ilike.%${search}%,customer_email.ilike.%${search}%,design_name.ilike.%${search}%,sales_agent.ilike.%${search}%`
+        );
+    }
+
+    // PAYMENT_PENDING needs client-side filtering for the amount comparison
+    // Fetch all matching rows, filter, then manually paginate
+    if (filter === 'PAYMENT_PENDING') {
+        const { data, error, count } = await query;
+        if (error) throw new Error(error.message);
+
+        const allOrders = (data || []).map(mapDbToOrder);
+        const pendingOrders = allOrders.filter(o => {
+            const orderAmount = Number(o.orderAmount) || 0;
+            const amountPaid = Number(o.amountPaid) || 0;
+            return Math.max(0, orderAmount - amountPaid) > 0.01;
+        });
+
+        const paginated = pendingOrders.slice(from, to + 1);
+        return { orders: paginated, totalCount: pendingOrders.length };
+    }
+
+    // Apply pagination for all other filters
+    query = query.range(from, to);
+
+    const { data, error, count } = await query;
+    if (error) throw new Error(error.message);
+
+    return {
+        orders: (data || []).map(mapDbToOrder),
+        totalCount: count || 0,
+    };
+}
+
+// ============================================
+// SERVER-SIDE QUERY: Fetch tab counts (lightweight)
+// ============================================
+interface TabCounts {
+    total: number;
+    urgent: number;
+    overdue: number;
+    byStatus: Record<string, number>;
+    paymentPending: number;
+}
+
+async function fetchTabCounts(): Promise<TabCounts> {
+    // Single query: fetch only status, is_urgent, created_at, order_amount, amount_paid
+    // This is lightweight — no large text fields
+    const { data, error } = await supabase
+        .from('orders')
+        .select('status, is_urgent, created_at, order_amount, amount_paid');
+
+    if (error) throw new Error(error.message);
+
+    const rows = data || [];
+    const tenDaysAgo = new Date();
+    tenDaysAgo.setDate(tenDaysAgo.getDate() - 10);
+
+    const byStatus: Record<string, number> = {};
+    let urgent = 0;
+    let overdue = 0;
+    let paymentPending = 0;
+
+    for (const row of rows) {
+        // Count by status
+        byStatus[row.status] = (byStatus[row.status] || 0) + 1;
+
+        const isClosed = CLOSED_STATUSES.includes(row.status);
+        const createdAt = new Date(row.created_at);
+        const isOverdue = !isClosed && createdAt < tenDaysAgo;
+
+        if (isOverdue) overdue++;
+        if (row.is_urgent && !isClosed && !isOverdue) urgent++;
+
+        // Payment pending
+        if (!isClosed && row.status !== 'CANCELLED' && row.status !== 'REFUNDED') {
+            const orderAmount = Number(row.order_amount) || 0;
+            const amountPaid = Number(row.amount_paid) || 0;
+            if (Math.max(0, orderAmount - amountPaid) > 0.01) paymentPending++;
+        }
+    }
+
+    return {
+        total: rows.length,
+        urgent,
+        overdue,
+        byStatus,
+        paymentPending,
+    };
+}
+
+
+// ============================================
+// COMPONENT
+// ============================================
 const AllOrdersPage: React.FC = () => {
     const { role, permissions } = useAuth();
     const [searchParams, setSearchParams] = useSearchParams();
@@ -71,135 +259,76 @@ const AllOrdersPage: React.FC = () => {
     const [activeFilter, setActiveFilter] = useState<string>('ALL');
     const [currentPage, setCurrentPage] = useState(1);
 
+    // Debounce search by 300ms to avoid hammering the DB on every keystroke
+    const debouncedSearch = useDebouncedValue(searchQuery, 300);
+
     // --- URL PARAMS FOR DRILL-DOWN ---
-    const salesAgentParam = searchParams.get('salesAgent');
-    const leadSourceParam = searchParams.get('leadSource');
-    const dateParam = searchParams.get('date');
+    const salesAgentParam = searchParams.get('salesAgent') || undefined;
+    const leadSourceParam = searchParams.get('leadSource') || undefined;
+    const dateParam = searchParams.get('date') || undefined;
+    const idsParam = searchParams.get('ids') || undefined;
 
     const canViewFinancials = role === UserRole.ADMIN || permissions?.orders_edit_financials || permissions?.view_financials;
 
     // --- URL AUTO-FILTER ---
-    React.useEffect(() => {
+    useEffect(() => {
         const filterParam = searchParams.get('filter');
         if (filterParam) {
             setActiveFilter(filterParam);
             setCurrentPage(1);
         }
-    }, [searchParams], React.useEffect);
+    }, [searchParams]);
 
-    // --- DATA FETCHING ---
-    const { data: orders = [], isLoading, error } = useQuery({
-        queryKey: queryKeys.orders.all(),
-        queryFn: async () => {
-            // ✅ OPTIMIZATION: Select only columns needed for the table display
-            // Excludes large arrays: production_file_urls, shipping_attachment_urls, customer_attachment_urls, mockup_urls, redo_attachments
-            // Reduces data transfer by ~60% per order
-            const { data, error } = await supabase
-                .from('orders')
-                .select('id, order_number, customer_name, customer_email, design_name, status, created_at, sales_agent, order_amount, amount_paid, is_urgent')
-                .order('created_at', { ascending: false });
+    // Reset to page 1 only when search changes (filter reset is handled by handleFilterChange)
+    useEffect(() => {
+        setCurrentPage(1);
+    }, [debouncedSearch]);
 
-            if (error) throw new Error(error.message);
-
-            // Map snake_case DB columns to camelCase for frontend
-            return (data || []).map(mapDbToOrder);
-        },
-        staleTime: 1000 * 30, // 30 seconds - prevents unnecessary refetches on rapid navigation
-        gcTime: 1000 * 60 * 5, // Keep in cache for 5 minutes
-        refetchOnMount: true, // Refetch when component mounts (respects staleTime)
-        refetchOnWindowFocus: true, // Refetch on tab focus for fresh data
+    // ============================================
+    // QUERY 1: Tab counts (lightweight, cached separately)
+    // ============================================
+    const { data: counts } = useQuery({
+        queryKey: queryKeys.orders.counts(),
+        queryFn: fetchTabCounts,
+        staleTime: 1000 * 60, // 60 seconds — counts don't need to be super fresh
+        gcTime: 1000 * 60 * 5,
+        refetchOnWindowFocus: true,
     });
 
-    // --- OVERDUE LOGIC ---
-    const tenDaysAgo = React.useMemo(() => {
-        const date = new Date();
-        date.setDate(date.getDate() - 10);
-        return date;
-    }, []);
-
-    const isOrderOverdue = (order: Order) => {
-        const daysOpen = Math.floor((new Date().getTime() - new Date(order.createdAt).getTime()) / (1000 * 60 * 60 * 24));
-        return daysOpen > 10 && !['SHIPPED', 'DELIVERED', 'COMPLETED', 'CANCELLED', 'REFUNDED'].includes(order.status);
+    // ============================================
+    // QUERY 2: Paginated orders (the actual page data)
+    // ============================================
+    const queryParams = {
+        page: currentPage,
+        filter: activeFilter,
+        search: debouncedSearch,
+        salesAgent: salesAgentParam,
+        leadSource: leadSourceParam,
+        date: dateParam,
+        ids: idsParam,
     };
 
-    const overdueOrders = useMemo(() => {
-        return orders.filter(isOrderOverdue);
-    }, [orders]);
-    const overdueCount = overdueOrders.length;
+    const { data: pageData, isLoading, isFetching, error } = useQuery({
+        queryKey: queryKeys.orders.paginated(queryParams),
+        queryFn: () => fetchPaginatedOrders(queryParams),
+        staleTime: 1000 * 30, // 30s — revisiting same filter/page serves from cache instantly
+        gcTime: 1000 * 60 * 5,
+        refetchOnMount: true,
+        refetchOnWindowFocus: true,
+        placeholderData: keepPreviousData, // Keep showing old page while new page loads
+    });
 
-    // --- FILTERING LOGIC ---
-    const filteredOrders = useMemo(() => {
+    const orders = pageData?.orders || [];
+    const totalCount = pageData?.totalCount || 0;
+    const totalPages = Math.ceil(totalCount / ITEMS_PER_PAGE);
 
-        let filtered = orders;
+    // --- OVERDUE HELPER (for rendering badges) ---
+    const isOrderOverdue = (order: Order) => {
+        const daysOpen = Math.floor((new Date().getTime() - new Date(order.createdAt).getTime()) / (1000 * 60 * 60 * 24));
+        return daysOpen > 10 && !CLOSED_STATUSES.includes(order.status);
+    };
 
-        if (salesAgentParam) filtered = filtered.filter(o => o.salesAgent === salesAgentParam);
-        if (leadSourceParam) filtered = filtered.filter(o => o.leadSource === leadSourceParam);
-
-        if (dateParam) {
-            filtered = filtered.filter(o => {
-                if (!o.createdAt) return false;
-                const paramDateObj = new Date(dateParam);
-                const orderDateObj = new Date(o.createdAt);
-                return (
-                    paramDateObj.getDate() === orderDateObj.getDate() &&
-                    paramDateObj.getMonth() === orderDateObj.getMonth() &&
-                    paramDateObj.getFullYear() === orderDateObj.getFullYear()
-                );
-            });
-        }
-
-        if (activeFilter === 'OVERDUE') {
-            filtered = overdueOrders.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()); // Oldest first
-        } else if (activeFilter === 'PAYMENT_PENDING') {
-            // Calculate remaining dynamically: orderAmount - amountPaid
-            // Only show orders that are not fully paid (remaining > $0.01)
-            filtered = filtered.filter(o => {
-                const orderAmount = Number(o.orderAmount) || 0;
-                const amountPaid = Number(o.amountPaid) || 0;
-                const remaining = Math.max(0, orderAmount - amountPaid);
-                return remaining > 0.01 && o.status !== 'CANCELLED' && o.status !== 'REFUNDED';
-            });
-        } else if (activeFilter === 'URGENT') {
-            // ✅ Show urgent orders that are still active (not shipped, delivered, completed, or cancelled)
-            filtered = filtered.filter(o => o.isUrgent === true && !['SHIPPED', 'DELIVERED', 'COMPLETED', 'CANCELLED', 'REFUNDED'].includes(o.status) && !isOrderOverdue(o));
-        } else if (searchParams.get('ids')) {
-            const idList = searchParams.get('ids')!.split(',');
-            filtered = filtered.filter(order => idList.includes(order.orderNumber));
-        } else if (activeFilter !== 'ALL') {
-            filtered = filtered.filter(o => o.status === activeFilter);
-        }
-
-        if (searchQuery.trim()) {
-            const query = searchQuery.toLowerCase();
-            const digitQuery = query.replace(/\D/g, '');
-            filtered = filtered.filter(o => {
-                const matchesText =
-                    o.customerName.toLowerCase().includes(query) ||
-                    o.orderNumber.toLowerCase().includes(query) ||
-                    (o.salesAgent && o.salesAgent.toLowerCase().includes(query)) ||
-                    (o.customerEmail && o.customerEmail.toLowerCase().includes(query)) ||
-                    (o.designName && o.designName.toLowerCase().includes(query));
-
-                const cleanPhone = (o.customerPhone || '').replace(/\D/g, '');
-                const matchesPhone = digitQuery.length > 2 && cleanPhone.includes(digitQuery);
-
-                return matchesText || matchesPhone;
-            });
-        }
-
-        return filtered;
-    }, [orders, activeFilter, searchQuery, salesAgentParam, leadSourceParam, dateParam, overdueOrders, searchParams]);
-
-    // --- PAGINATION ---
-    const totalPages = Math.ceil(filteredOrders.length / ITEMS_PER_PAGE);
-    const paginatedOrders = filteredOrders.slice(
-        (currentPage - 1) * ITEMS_PER_PAGE,
-        currentPage * ITEMS_PER_PAGE
-    );
-
-    // --- COUNTS FOR TABS ---
-    const urgentCount = orders.filter(o => o.isUrgent && !['SHIPPED', 'DELIVERED', 'COMPLETED', 'CANCELLED', 'REFUNDED'].includes(o.status) && !isOrderOverdue(o)).length;
-    const getCount = (status: string) => orders.filter(o => o.status === status).length;
+    const getCount = (status: string) => counts?.byStatus?.[status] || 0;
 
     const clearDrillDown = () => {
         setSearchParams({});
@@ -208,16 +337,15 @@ const AllOrdersPage: React.FC = () => {
     };
 
     const handleFilterChange = useCallback((filter: string) => {
-        // Clear ids parameter when changing filters
         const newParams = new URLSearchParams(searchParams);
         newParams.delete('ids');
         setSearchParams(newParams);
         setActiveFilter(filter);
-        setCurrentPage(1); // Reset to first page
+        setCurrentPage(1);
     }, [searchParams, setSearchParams]);
 
-    // --- SKELETON LOADING ---
-    if (isLoading) return (
+    // --- SKELETON LOADING (only on initial load, not page transitions) ---
+    if (isLoading && !pageData) return (
         <div className="space-y-6 min-h-screen pb-10">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div><Skeleton width={150} height={36} className="mb-2" /><Skeleton width={300} height={20} /></div>
@@ -284,13 +412,19 @@ const AllOrdersPage: React.FC = () => {
                         onChange={(e) => setSearchQuery(e.target.value)}
                         className="w-full bg-slate-800/50 border border-slate-600 text-white text-sm rounded-xl pl-10 pr-4 py-3 focus:ring-2 focus:ring-brand-orange/50 focus:border-brand-orange transition-all placeholder-slate-400 focus-ring"
                     />
+                    {/* Fetching indicator */}
+                    {isFetching && (
+                        <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                            <div className="w-4 h-4 border-2 border-brand-orange/30 border-t-brand-orange rounded-full animate-spin" />
+                        </div>
+                    )}
                 </div>
 
                 {/* EXPANDED FILTER TABS */}
                 <div className="flex items-center gap-2 overflow-x-auto pb-2 no-scrollbar">
-                    <FilterTab active={activeFilter === 'ALL'} label="All Orders" count={orders.length} onClick={() => handleFilterChange('ALL')} />
-                    <FilterTab active={activeFilter === 'URGENT'} label="Urgent" count={urgentCount} onClick={() => handleFilterChange('URGENT')} isUrgent={true} />
-                    <FilterTab active={activeFilter === 'OVERDUE'} label="Overdue" count={overdueCount} onClick={() => handleFilterChange('OVERDUE')} isUrgent={true} />
+                    <FilterTab active={activeFilter === 'ALL'} label="All Orders" count={counts?.total || 0} onClick={() => handleFilterChange('ALL')} />
+                    <FilterTab active={activeFilter === 'URGENT'} label="Urgent" count={counts?.urgent || 0} onClick={() => handleFilterChange('URGENT')} isUrgent={true} />
+                    <FilterTab active={activeFilter === 'OVERDUE'} label="Overdue" count={counts?.overdue || 0} onClick={() => handleFilterChange('OVERDUE')} isUrgent={true} />
 
                     <div className="w-px h-6 bg-slate-600 mx-2 shrink-0" />
 
@@ -312,7 +446,7 @@ const AllOrdersPage: React.FC = () => {
             {/* --- ORDERS LIST --- */}
             <div className="space-y-3">
                 <AnimatePresence mode="wait">
-                    {paginatedOrders.length === 0 ? (
+                    {orders.length === 0 && !isFetching ? (
                         <EmptyState
                             title="No Orders Found"
                             description={
@@ -328,8 +462,7 @@ const AllOrdersPage: React.FC = () => {
                                 ) : null
                             }
                         />
-                    ) : (paginatedOrders.map((order, index) => {
-                        {/* 1. Calculate Days Open */ }
+                    ) : (orders.map((order, index) => {
                         const daysOpen = Math.floor((new Date().getTime() - new Date(order.createdAt).getTime()) / (1000 * 60 * 60 * 24));
                         const isOverdue = isOrderOverdue(order);
 
@@ -361,7 +494,6 @@ const AllOrdersPage: React.FC = () => {
                                                         <span className="text-white font-bold text-lg group-hover:text-brand-orange transition-colors">
                                                             {order.customerName}
                                                         </span>
-                                                        {/* ✅ NEW: THE RED BADGE */}
                                                         {isOverdue && (
                                                             <span className="flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-red-500 text-white animate-pulse">
                                                                 ⚠️ {daysOpen} DAYS OPEN
@@ -374,7 +506,6 @@ const AllOrdersPage: React.FC = () => {
                                                         )}
                                                     </div>
                                                     <div className="flex flex-wrap items-center gap-3 text-sm text-slate-300 mt-1">
-                                                        {/* ✅ REQUIREMENT FULFILLED: Date with icon and styling */}
                                                         {order.createdAt && (
                                                             <div className="flex items-center gap-1.5 text-cyan-400">
                                                                 <Calendar className="w-3.5 h-3.5" />
@@ -404,7 +535,7 @@ const AllOrdersPage: React.FC = () => {
                                             {/* RIGHT: Stats & Status */}
                                             <div className="flex items-center justify-between md:justify-end gap-6 md:gap-10 mt-2 md:mt-0 border-t md:border-t-0 border-white/5 pt-3 md:pt-0">
 
-                                                <div className="flex flex-col items-end min-w-[140px]"> {/* Increased width for statuses */}
+                                                <div className="flex flex-col items-end min-w-[140px]">
                                                     <span className="text-[10px] text-slate-400 uppercase tracking-wider font-bold mb-1">Status</span>
                                                     <StatusBadge status={order.status as OrderStatus} />
                                                 </div>
@@ -469,6 +600,7 @@ const AllOrdersPage: React.FC = () => {
 
                     <span className="text-slate-300 font-medium text-sm">
                         Page <span className="text-white font-bold">{currentPage}</span> of {totalPages}
+                        <span className="text-slate-500 ml-2">({totalCount} orders)</span>
                     </span>
 
                     <Button

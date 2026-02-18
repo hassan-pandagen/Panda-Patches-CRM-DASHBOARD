@@ -25,28 +25,40 @@ export const useQueryPrefetch = () => {
 
   /**
    * Prefetch orders for /orders page
-   * Loads ALL orders (same as AllOrdersPage query to prevent cache mismatch)
+   * Prefetches page 1 of ALL filter + the tab counts
    */
   const prefetchOrders = async () => {
     try {
+      // Prefetch tab counts (lightweight)
       await queryClient.prefetchQuery({
-        queryKey: queryKeys.orders.all(),
+        queryKey: queryKeys.orders.counts(),
         queryFn: async () => {
-          // ✅ CRITICAL: Must match AllOrdersPage.tsx query exactly
-          // Using same columns: id, order_number, customer_name, customer_email, design_name, status, created_at, sales_agent, order_amount
           const { data, error } = await supabase
             .from('orders')
-            .select('id, order_number, customer_name, customer_email, design_name, status, created_at, sales_agent, order_amount')
-            .order('created_at', { ascending: false });
-
+            .select('status, is_urgent, created_at, order_amount, amount_paid');
           if (error) throw error;
-          return (data || []).map(mapDbToOrder);
+          return data || [];
         },
-        staleTime: 60000, // 1 minute
+        staleTime: 15000,
+      });
+
+      // Prefetch page 1 of "ALL" filter
+      const params = { page: 1, filter: 'ALL', search: '' };
+      await queryClient.prefetchQuery({
+        queryKey: queryKeys.orders.paginated(params),
+        queryFn: async () => {
+          const { data, error, count } = await supabase
+            .from('orders')
+            .select('id, order_number, customer_name, customer_email, design_name, status, created_at, sales_agent, order_amount, amount_paid, is_urgent', { count: 'exact' })
+            .order('created_at', { ascending: false })
+            .range(0, 14);
+          if (error) throw error;
+          return { orders: (data || []).map(mapDbToOrder), totalCount: count || 0 };
+        },
+        staleTime: 15000,
       });
     } catch (error) {
       console.warn('Failed to prefetch orders:', error);
-      // Don't throw - let the actual page request handle errors
     }
   };
 
