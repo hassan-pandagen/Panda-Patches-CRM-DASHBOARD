@@ -12,7 +12,7 @@ import Textarea from '../ui/Textarea';
 import { LEAD_SOURCE_OPTIONS, PATCHES_TYPE_OPTIONS } from '../../constants/index';
 import { supabase } from '../../services/supabaseClient';
 import { logger } from '../../services/logger';
-import { History, UserCheck, ExternalLink } from 'lucide-react';
+import { History, UserCheck, ExternalLink, Copy } from 'lucide-react';
 
 const CANCELLATION_REASONS = [
   "Customer Ghosted / No Reply",
@@ -93,6 +93,12 @@ interface OrderFormProps {
 interface ExistingCustomerInfo {
   count: number;
   lastOrder: string;
+  // Auto-fill data
+  customerName?: string;
+  customerEmail?: string;
+  customerPhone?: string;
+  customerProfileUrl?: string;
+  shippingAddress?: string;
 }
 
 
@@ -240,20 +246,29 @@ const OrderForm: React.FC<OrderFormProps> = ({
       }
       setIsCheckingCustomer(true);
       try {
+        // Fetch customer details + count
         const { data, error, count } = await supabase
           .from('orders')
-          .select('created_at', { count: 'exact', head: false })
+          .select('created_at, customer_name, customer_email, customer_phone, customer_profile_url, shipping_address', { count: 'exact', head: false })
           .or(`customer_email.eq.${identifier},customer_phone.eq.${identifier}`)
           .order('created_at', { ascending: false })
           .limit(1);
 
         if (error) throw error;
 
-        if (count && count > 0) {
-          setExistingCustomer({
+        if (count && count > 0 && data[0]) {
+          const customerData = {
             count: count,
             lastOrder: new Date(data[0].created_at).toLocaleDateString(),
-          });
+            customerName: data[0].customer_name,
+            customerEmail: data[0].customer_email,
+            customerPhone: data[0].customer_phone || '',
+            customerProfileUrl: data[0].customer_profile_url || '',
+            shippingAddress: data[0].shipping_address || '',
+          };
+
+          setExistingCustomer(customerData);
+          // No automatic fill - user clicks button to fill
         } else {
           setExistingCustomer(null);
         }
@@ -273,7 +288,7 @@ const OrderForm: React.FC<OrderFormProps> = ({
     }, 750); // Debounce for 750ms
 
     return () => clearTimeout(handler);
-  }, [watchEmail, watchPhone, isNewOrder]);
+  }, [watchEmail, watchPhone, isNewOrder, setValue, watch]);
 
   const onSubmit = async (data: SaveData) => {
     console.log('📝 Form submitted with data:', data);
@@ -304,10 +319,35 @@ const OrderForm: React.FC<OrderFormProps> = ({
     }
   };
 
+  // Manual copy customer info handler
+  const handleCopyCustomerInfo = () => {
+    if (!existingCustomer) return;
+
+    // Fill all customer fields
+    if (existingCustomer.customerName) {
+      setValue('customerName', existingCustomer.customerName, { shouldDirty: true });
+    }
+    if (existingCustomer.customerEmail) {
+      setValue('customerEmail', existingCustomer.customerEmail, { shouldDirty: true });
+    }
+    if (existingCustomer.customerPhone) {
+      setValue('customerPhone', existingCustomer.customerPhone, { shouldDirty: true });
+    }
+    if (existingCustomer.customerProfileUrl) {
+      setValue('customerProfileUrl', existingCustomer.customerProfileUrl, { shouldDirty: true });
+    }
+    if (existingCustomer.shippingAddress) {
+      setValue('shippingAddress', existingCustomer.shippingAddress, { shouldDirty: true });
+    }
+
+    // Show success feedback
+    success('Customer info copied!');
+  };
+
   // Determine if the user can edit financials.
   // This is used for the Edit Order page. The New Order page controls this with the `showFinancials` prop.
-  const canEditFinancials = 
-    role === UserRole.ADMIN || 
+  const canEditFinancials =
+    role === UserRole.ADMIN ||
     permissions?.orders_edit_financials === true;
 
   // Financial Calcs
@@ -371,11 +411,21 @@ const OrderForm: React.FC<OrderFormProps> = ({
                 </div>
               </div>
               
-              <div className="text-right">
-                {/* ✅ THE FIX: Opens History in a NEW TAB so form data isn't lost */}
-                <a 
+              <div className="flex items-center gap-2">
+                {/* Copy Customer Info Button */}
+                <button
+                  type="button"
+                  onClick={handleCopyCustomerInfo}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-brand-orange hover:bg-orange-600 border border-orange-500/30 rounded-lg text-xs font-bold text-white transition-all group"
+                >
+                  <Copy className="w-3 h-3" />
+                  Copy Customer Info
+                </button>
+
+                {/* View History Link */}
+                <a
                   href={`/customers/${encodeURIComponent(watchEmail || watchPhone)}`}
-                  target="_blank" 
+                  target="_blank"
                   rel="noopener noreferrer"
                   className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-900/50 hover:bg-blue-600 border border-blue-500/30 rounded-lg text-xs font-bold text-blue-400 hover:text-white transition-all group"
                 >
