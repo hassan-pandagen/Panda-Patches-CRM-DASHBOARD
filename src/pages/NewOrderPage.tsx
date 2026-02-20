@@ -66,14 +66,49 @@ const NewOrderPage: React.FC = () => {
   const handleSave = async (payload: { current: SaveData; isNew: boolean; changes: any[] }) => {
     setIsSaving(true);
     setError(null);
-    
+
     try {
       // ✅ Extract the actual form data from the payload structure
       const formData = payload.current;
-      
+
+      // ✅ AUTO-DETECT REPEAT CUSTOMERS
+      // Check if this customer has ordered before (by email or phone)
+      let detectedLeadSource = formData.leadSource || '';
+
+      if (formData.customerEmail || formData.customerPhone) {
+        const { supabase } = await import('../services/supabaseClient');
+
+        // Build query to find existing orders with matching email or phone
+        let query = supabase
+          .from('orders')
+          .select('id')
+          .limit(1);
+
+        // Add filters for email or phone
+        const filters = [];
+        if (formData.customerEmail) {
+          filters.push(`customer_email.eq.${formData.customerEmail}`);
+        }
+        if (formData.customerPhone) {
+          filters.push(`customer_phone.eq.${formData.customerPhone}`);
+        }
+
+        if (filters.length > 0) {
+          query = query.or(filters.join(','));
+        }
+
+        const { data: existingOrders } = await query;
+
+        // If customer has ordered before, automatically set lead source to "Repeat Order"
+        if (existingOrders && existingOrders.length > 0) {
+          detectedLeadSource = 'Repeat Order';
+          console.log('🔄 Repeat customer detected! Auto-setting lead source to "Repeat Order"');
+        }
+      }
+
       // ✅ LAYER 4: Explicit Type Safety
       // Pass camelCase formData with explicit type casting, let service handle conversion
-      
+
       const sanitizedFormData = {
         // Required String Fields (with type casting to ensure strings)
         customerName: String(formData.customerName || ''),
@@ -103,9 +138,9 @@ const NewOrderPage: React.FC = () => {
         
         // Status (with explicit fallback)
         status: String(formData.status || OrderStatus.NEW_ORDER),
-        
-        // Lead & Urgency
-        leadSource: String(formData.leadSource || ''),
+
+        // Lead & Urgency (use auto-detected lead source for repeat customers)
+        leadSource: String(detectedLeadSource || ''),
         isUrgent: Boolean(formData.isUrgent),
         
         // Arrays (ensure they are arrays)

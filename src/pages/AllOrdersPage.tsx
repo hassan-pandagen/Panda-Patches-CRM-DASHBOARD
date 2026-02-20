@@ -267,6 +267,7 @@ const AllOrdersPage: React.FC = () => {
     const leadSourceParam = searchParams.get('leadSource') || undefined;
     const dateParam = searchParams.get('date') || undefined;
     const idsParam = searchParams.get('ids') || undefined;
+    const searchParam = searchParams.get('search') || undefined;
 
     const canViewFinancials = role === UserRole.ADMIN || permissions?.orders_edit_financials || permissions?.view_financials;
 
@@ -278,6 +279,13 @@ const AllOrdersPage: React.FC = () => {
             setCurrentPage(1);
         }
     }, [searchParams]);
+
+    // --- URL SEARCH PARAMETER ---
+    useEffect(() => {
+        if (searchParam) {
+            setSearchQuery(searchParam);
+        }
+    }, [searchParam]);
 
     // Reset to page 1 only when search changes (filter reset is handled by handleFilterChange)
     useEffect(() => {

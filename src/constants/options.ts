@@ -24,6 +24,7 @@ export const LEAD_SOURCE_OPTIONS: string[] = [
   'ChatGPT',
   'Tawk.to',
   'Referral',
+  'Repeat Order',
   'Direct',
   'Other' // Always include an "Other" for edge cases
 ];

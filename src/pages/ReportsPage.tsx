@@ -592,8 +592,195 @@ const LeadSourceReportComponent: React.FC<ReportComponentProps> = ({
     [leadSourceStats]
   );
 
+  // Repeat Customer Metrics
+  const repeatCustomerMetrics = useMemo(() => {
+    const customerOrders = new Map<string, Order[]>();
+
+    // Group orders by customer (using email or phone as identifier)
+    orders.forEach((order) => {
+      const identifier = order.customerEmail || order.customerPhone || '';
+      if (identifier) {
+        if (!customerOrders.has(identifier)) {
+          customerOrders.set(identifier, []);
+        }
+        customerOrders.get(identifier)!.push(order);
+      }
+    });
+
+    // Calculate metrics
+    const totalUniqueCustomers = customerOrders.size;
+    const repeatCustomers = Array.from(customerOrders.values()).filter(orders => orders.length > 1);
+    const totalRepeatCustomers = repeatCustomers.length;
+    const totalRepeatOrders = repeatCustomers.reduce((sum, orders) => sum + (orders.length - 1), 0); // Subtract 1 to count only additional orders
+    const repeatCustomerRate = totalUniqueCustomers > 0
+      ? (totalRepeatCustomers / totalUniqueCustomers) * 100
+      : 0;
+
+    // Calculate revenue from repeat orders
+    const repeatRevenue = repeatCustomers.reduce((sum, customerOrders) => {
+      // Sum all orders except the first one (the repeat orders)
+      const sortedOrders = customerOrders.sort((a, b) =>
+        new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+      );
+      return sum + sortedOrders.slice(1).reduce((orderSum, order) =>
+        orderSum + (order.orderAmount || 0), 0
+      );
+    }, 0);
+
+    // Build detailed customer list with their order info
+    const detailedCustomers = repeatCustomers.map((customerOrders) => {
+      const sortedOrders = [...customerOrders].sort((a, b) =>
+        new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+      );
+
+      // Get most common patch type
+      const patchTypeCounts = new Map<string, number>();
+      customerOrders.forEach(order => {
+        const type = order.patchesType || 'Unknown';
+        patchTypeCounts.set(type, (patchTypeCounts.get(type) || 0) + 1);
+      });
+      const favoritePatchType = Array.from(patchTypeCounts.entries())
+        .sort((a, b) => b[1] - a[1])[0]?.[0] || 'N/A';
+
+      const totalRevenue = customerOrders.reduce((sum, order) => sum + (order.orderAmount || 0), 0);
+
+      return {
+        customerName: sortedOrders[0].customerName,
+        customerEmail: sortedOrders[0].customerEmail,
+        customerPhone: sortedOrders[0].customerPhone,
+        orderCount: customerOrders.length,
+        totalRevenue,
+        favoritePatchType,
+        lastOrderDate: sortedOrders[sortedOrders.length - 1].createdAt,
+        orderNumbers: sortedOrders.map(o => o.orderNumber).join(', '),
+      };
+    }).sort((a, b) => b.orderCount - a.orderCount); // Sort by order count descending
+
+    return {
+      totalUniqueCustomers,
+      totalRepeatCustomers,
+      totalRepeatOrders,
+      repeatCustomerRate,
+      repeatRevenue,
+      detailedCustomers,
+    };
+  }, [orders]);
+
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    <div className="space-y-6">
+      {/* Repeat Customer Metrics Section */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="bg-slate-900/40 backdrop-blur-xl border border-white/10 rounded-2xl p-6 shadow-xl">
+          <div className="flex items-center gap-3 mb-2">
+            <div className="p-2 bg-blue-500/20 rounded-lg">
+              <Share2 className="w-5 h-5 text-blue-400" />
+            </div>
+            <h5 className="text-sm font-medium text-slate-400">Repeat Customers</h5>
+          </div>
+          <p className="text-3xl font-bold text-white">{repeatCustomerMetrics.totalRepeatCustomers}</p>
+          <p className="text-xs text-slate-500 mt-1">out of {repeatCustomerMetrics.totalUniqueCustomers} total</p>
+        </div>
+
+        <div className="bg-slate-900/40 backdrop-blur-xl border border-white/10 rounded-2xl p-6 shadow-xl">
+          <div className="flex items-center gap-3 mb-2">
+            <div className="p-2 bg-emerald-500/20 rounded-lg">
+              <TrendingUp className="w-5 h-5 text-emerald-400" />
+            </div>
+            <h5 className="text-sm font-medium text-slate-400">Repeat Orders</h5>
+          </div>
+          <p className="text-3xl font-bold text-white">{repeatCustomerMetrics.totalRepeatOrders}</p>
+          <p className="text-xs text-slate-500 mt-1">additional orders</p>
+        </div>
+
+        <div className="bg-slate-900/40 backdrop-blur-xl border border-white/10 rounded-2xl p-6 shadow-xl">
+          <div className="flex items-center gap-3 mb-2">
+            <div className="p-2 bg-purple-500/20 rounded-lg">
+              <Award className="w-5 h-5 text-purple-400" />
+            </div>
+            <h5 className="text-sm font-medium text-slate-400">Repeat Rate</h5>
+          </div>
+          <p className="text-3xl font-bold text-white">{repeatCustomerMetrics.repeatCustomerRate.toFixed(1)}%</p>
+          <p className="text-xs text-slate-500 mt-1">customer retention</p>
+        </div>
+
+        <div className="bg-slate-900/40 backdrop-blur-xl border border-white/10 rounded-2xl p-6 shadow-xl">
+          <div className="flex items-center gap-3 mb-2">
+            <div className="p-2 bg-amber-500/20 rounded-lg">
+              <DollarSign className="w-5 h-5 text-amber-400" />
+            </div>
+            <h5 className="text-sm font-medium text-slate-400">Repeat Revenue</h5>
+          </div>
+          <p className="text-3xl font-bold text-white">${repeatCustomerMetrics.repeatRevenue.toLocaleString()}</p>
+          <p className="text-xs text-slate-500 mt-1">from returning customers</p>
+        </div>
+      </div>
+
+      {/* Detailed Repeat Customer Breakdown */}
+      {repeatCustomerMetrics.detailedCustomers && repeatCustomerMetrics.detailedCustomers.length > 0 && (
+        <div className="bg-slate-900/40 backdrop-blur-xl border border-white/10 rounded-2xl p-6 shadow-xl">
+          <h4 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+            <Award className="w-5 h-5 text-brand-orange" />
+            Top Repeat Customers
+          </h4>
+          <div className="overflow-x-auto max-h-[500px] custom-scrollbar">
+            <table className="w-full text-left text-slate-200">
+              <thead className="text-xs font-bold text-slate-400 uppercase bg-slate-800/50 sticky top-0 tracking-wider">
+                <tr>
+                  <th className="px-4 py-4 rounded-tl-lg">Customer</th>
+                  <th className="px-4 py-4 text-center">Orders</th>
+                  <th className="px-4 py-4">Favorite Type</th>
+                  <th className="px-4 py-4 text-right">Revenue</th>
+                  <th className="px-4 py-4">Last Order</th>
+                  <th className="px-4 py-4 rounded-tr-lg text-center">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-white/5">
+                {repeatCustomerMetrics.detailedCustomers.map((customer, index) => (
+                  <tr
+                    key={index}
+                    className="hover:bg-white/5 transition-colors group"
+                  >
+                    <td className="px-4 py-3.5">
+                      <div className="flex flex-col">
+                        <span className="text-sm font-semibold text-white">{customer.customerName}</span>
+                        <span className="text-xs text-slate-400">{customer.customerEmail || customer.customerPhone}</span>
+                      </div>
+                    </td>
+                    <td className="px-4 py-3.5 text-center">
+                      <span className="inline-flex items-center justify-center px-2.5 py-1 bg-brand-orange/20 text-brand-orange rounded-full text-sm font-bold">
+                        {customer.orderCount}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3.5 text-sm text-slate-300">
+                      {customer.favoritePatchType}
+                    </td>
+                    <td className="px-4 py-3.5 text-right text-emerald-400 font-bold tracking-wide">
+                      ${customer.totalRevenue.toLocaleString()}
+                    </td>
+                    <td className="px-4 py-3.5 text-sm text-slate-400">
+                      {new Date(customer.lastOrderDate).toLocaleDateString()}
+                    </td>
+                    <td className="px-4 py-3.5 text-center">
+                      <button
+                        onClick={() => navigate(`/orders?search=${encodeURIComponent(customer.customerEmail || customer.customerPhone || '')}`)}
+                        className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-white text-xs font-medium rounded-lg transition-colors"
+                      >
+                        View Orders
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div className="mt-4 pt-4 border-t border-white/10 text-sm text-slate-400">
+            Showing {repeatCustomerMetrics.detailedCustomers.length} repeat customers sorted by order count
+          </div>
+        </div>
+      )}
+
+      {/* Lead Source Performance Section */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
       <div className="bg-slate-900/40 backdrop-blur-xl border border-white/10 rounded-2xl p-6 shadow-xl">
         <h4 className="text-lg font-semibold text-white mb-4">
           Performance by Source
@@ -707,6 +894,7 @@ const LeadSourceReportComponent: React.FC<ReportComponentProps> = ({
             </PieChart>
           </ResponsiveContainer>
         </div>
+      </div>
       </div>
     </div>
   );
