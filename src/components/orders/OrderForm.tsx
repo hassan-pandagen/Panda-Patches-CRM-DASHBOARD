@@ -471,6 +471,7 @@ const OrderForm: React.FC<OrderFormProps> = ({
               <option value="Merrow Border">Merrow Border</option>
               <option value="Embroidery Border">Embroidery Border</option>
               <option value="Laser Cut">Laser Cut</option>
+              <option value="No Border">No Border</option>
             </select>
           </div>
           <div>

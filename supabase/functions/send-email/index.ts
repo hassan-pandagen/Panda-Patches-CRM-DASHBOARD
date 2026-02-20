@@ -427,6 +427,49 @@ const buildEmailHTML = (templateId: string, data: any): string => {
     </tbody>
   </table>
 
+  ${templateId === 'CUSTOMER_SHIPPED' && data.tracking_number ? `
+  <!-- TRACKING INFORMATION (Shipped Emails Only) -->
+  <table class="module" role="module" data-type="text" border="0" cellpadding="0" cellspacing="0" width="100%" style="table-layout: fixed;">
+    <tbody>
+      <tr>
+        <td style="padding:25px 20px 25px 20px; line-height:26px; text-align:center; background-color:#fff8e1; border-left: 5px solid #fb6e1d; border-radius: 8px; margin: 20px 0;" height="100%" valign="top" bgcolor="#fff8e1" role="module-content">
+          <div>
+            <div style="font-family: inherit; text-align: center; margin-bottom: 15px;">
+              <span style="font-size: 22px; font-family: 'lucida sans unicode', 'lucida grande', sans-serif; color: #000; font-weight: bold;">📦 Tracking Information</span>
+            </div>
+            ${data.carrier ? `
+              <div style="font-family: inherit; text-align: center; margin-bottom: 10px;">
+                <span style="font-size: 16px; font-family: 'lucida sans unicode', 'lucida grande', sans-serif; color: #666;">Carrier: </span>
+                <span style="font-size: 18px; font-family: 'lucida sans unicode', 'lucida grande', sans-serif; color: #000; font-weight: bold;">${escapeHtml(data.carrier)}</span>
+              </div>
+            ` : ''}
+            <div style="font-family: inherit; text-align: center; margin-bottom: 15px;">
+              <span style="font-size: 16px; font-family: 'lucida sans unicode', 'lucida grande', sans-serif; color: #666;">Tracking Number: </span>
+              <span style="font-size: 18px; font-family: 'lucida sans unicode', 'lucida grande', sans-serif; color: #fb6e1d; font-weight: bold;">${escapeHtml(data.tracking_number)}</span>
+            </div>
+            ${data.tracking_link && data.tracking_link !== '#' ? `
+              <div style="font-family: inherit; text-align: center; margin-top: 20px;">
+                <a href="${escapeHtml(data.tracking_link)}" target="_blank" style="display: inline-block; background-color: #fb6e1d; color: #ffffff; padding: 12px 30px; border-radius: 6px; text-decoration: none; font-size: 16px; font-weight: bold; font-family: 'lucida sans unicode', 'lucida grande', sans-serif;">
+                  Track Your Package →
+                </a>
+              </div>
+            ` : ''}
+          </div>
+        </td>
+      </tr>
+    </tbody>
+  </table>
+
+  <!-- SPACER AFTER TRACKING -->
+  <table class="module" role="module" data-type="spacer" border="0" cellpadding="0" cellspacing="0" width="100%" style="table-layout: fixed;">
+    <tbody>
+      <tr>
+        <td style="padding:0px 0px 20px 0px;" role="module-content" bgcolor=""></td>
+      </tr>
+    </tbody>
+  </table>
+  ` : ''}
+
   ${shouldShowFullDetails(templateId) ? `
   <!-- ORDER INFORMATION HEADER (Yellow on Black) -->
   <table class="module" role="module" data-type="text" border="0" cellpadding="0" cellspacing="0" width="100%" style="table-layout: fixed;">

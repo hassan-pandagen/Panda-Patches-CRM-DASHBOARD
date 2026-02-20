@@ -6,7 +6,8 @@ export const PATCHES_TYPE_OPTIONS: string[] = [
   'Silicone Transfer', 'High Density Transfer',
   'TPU+Chenille', 'TPU+Embroidery', 'TPU+Sublimation',
   'Glitter+Embroidery', 'Glitter+Chenille', 'Glitter+Embroidery 3D',
-  'DST Service', 'Challenge Coin'
+  'DST Service', 'Challenge Coin',
+  'PVC Keychains', 'Embroidered Keychains', 'Leather Keychains'
 ];
 export const DESIGN_BACKING_OPTIONS: string[] = ['Iron-on', 'Velcro', 'Adhesive', 'None'];
 export const LEAD_SOURCE_OPTIONS: string[] = [

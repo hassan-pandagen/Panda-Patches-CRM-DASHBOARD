@@ -47,11 +47,8 @@ PHONE: ${order.customerPhone || 'N/A'}
 SHIPPING ADDRESS:
 ${formatAddress(order.shippingAddress)}
 
-CARRIER: ${order.shippingCarrier || 'Standard Shipping'}
-
 PRODUCT DETAILS:
 Patch Type: ${order.patchesType || 'Custom'}
-Backing: ${order.designBacking || 'N/A'}
 Quantity: ${order.patchesQuantity?.toLocaleString() || '0'} pieces
         `.trim();
 
@@ -81,8 +78,7 @@ Quantity: ${order.patchesQuantity?.toLocaleString() || '0'} pieces
     const getOrderNumberText = () => `Order: ${order.orderNumber}`;
     const getShipToText = () => `Ship To: ${order.customerName}\nPhone: ${order.customerPhone || 'N/A'}`;
     const getAddressText = () => `Address:\n${formatAddress(order.shippingAddress)}`;
-    const getCarrierText = () => `Carrier: ${order.shippingCarrier || 'Standard Shipping'}`;
-    const getProductDetailsText = () => `Patch Type: ${order.patchesType || 'Custom'}\nBacking: ${order.designBacking || 'N/A'}\nQuantity: ${order.patchesQuantity?.toLocaleString() || '0'} pieces`;
+    const getProductDetailsText = () => `Patch Type: ${order.patchesType || 'Custom'}\nQuantity: ${order.patchesQuantity?.toLocaleString() || '0'} pieces`;
 
     return (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4 print:fixed print:inset-0 print:bg-white print:p-0 print:m-0 print:block">
@@ -182,23 +178,6 @@ Quantity: ${order.patchesQuantity?.toLocaleString() || '0'} pieces
                                         {formatAddress(order.shippingAddress)}
                                     </p>
                                 </div>
-
-                                {/* Carrier */}
-                                <div className="relative group">
-                                    <button
-                                        onClick={() => copySection('Carrier', getCarrierText())}
-                                        className="absolute top-0 right-0 p-1.5 bg-slate-100 hover:bg-slate-200 rounded-md transition-colors opacity-0 group-hover:opacity-100 print:hidden"
-                                        title="Copy carrier info"
-                                    >
-                                        {copiedSection === 'Carrier' ? (
-                                            <Check className="w-4 h-4 text-green-600" />
-                                        ) : (
-                                            <Copy className="w-4 h-4 text-slate-600" />
-                                        )}
-                                    </button>
-                                    <p className="text-xs font-bold uppercase text-slate-600 mb-1">Carrier</p>
-                                    <p className="text-lg font-semibold">{order.shippingCarrier || 'Standard Shipping'}</p>
-                                </div>
                             </div>
 
                             {/* Right Column - Product Details & Image */}
@@ -233,11 +212,6 @@ Quantity: ${order.patchesQuantity?.toLocaleString() || '0'} pieces
                                     <div className="bg-slate-100 p-3 rounded-lg">
                                         <p className="text-xs font-bold uppercase text-slate-600 mb-1">Patch Type</p>
                                         <p className="text-lg font-semibold">{order.patchesType || 'Custom'}</p>
-                                    </div>
-
-                                    <div className="bg-slate-100 p-3 rounded-lg">
-                                        <p className="text-xs font-bold uppercase text-slate-600 mb-1">Backing</p>
-                                        <p className="text-lg font-semibold">{order.designBacking || 'N/A'}</p>
                                     </div>
 
                                     <div className="bg-slate-100 p-3 rounded-lg">
