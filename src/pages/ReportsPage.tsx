@@ -41,6 +41,7 @@ import {
   FileText,
   ShieldAlert,
   Package,
+  Calendar,
 } from "lucide-react";
 import { motion, Variants } from "framer-motion";
 import { TooltipProps } from "recharts";
@@ -76,6 +77,7 @@ const cardVariants: Variants = {
 interface ReportComponentProps {
   orders: Order[];
   role?: UserRole | null;
+  dateRange?: DateRange;
 }
 
 // --- UI COMPONENTS ---
@@ -143,7 +145,7 @@ const CustomTooltip: React.FC<TooltipProps<ValueType, NameType>> = ({
 };
 
 // --- 1. SALES REPORT (Visible to Admin & Sales Agent) ---
-const SalesReportComponent: React.FC<ReportComponentProps> = ({ orders }) => {
+const SalesReportComponent: React.FC<ReportComponentProps> = ({ orders, dateRange }) => {
   const navigate = useNavigate();
   const [userNames, setUserNames] = useState<Record<string, string>>({});
 
@@ -554,6 +556,7 @@ const LeadSourceTooltip = ({ active, payload, totalRevenue }: any) => {
 
 const LeadSourceReportComponent: React.FC<ReportComponentProps> = ({
   orders,
+  dateRange,
 }) => {
   const navigate = useNavigate();
 
@@ -668,6 +671,21 @@ const LeadSourceReportComponent: React.FC<ReportComponentProps> = ({
 
   return (
     <div className="space-y-6">
+      {/* Date Range Indicator for Repeat Customer Metrics */}
+      {dateRange && (
+        <div className="bg-blue-500/10 border border-blue-500/30 rounded-xl px-4 py-3 flex items-center gap-2">
+          <div className="flex items-center gap-2 text-blue-400">
+            <Calendar className="w-4 h-4" />
+            <span className="text-sm font-medium">
+              Showing repeat customer metrics for: {new Date(dateRange.startDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })} - {new Date(dateRange.endDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+            </span>
+          </div>
+          <span className="text-xs text-slate-400 ml-auto">
+            (Click "View Orders" to see all orders for a customer)
+          </span>
+        </div>
+      )}
+
       {/* Repeat Customer Metrics Section */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="bg-slate-900/40 backdrop-blur-xl border border-white/10 rounded-2xl p-6 shadow-xl">
@@ -762,7 +780,11 @@ const LeadSourceReportComponent: React.FC<ReportComponentProps> = ({
                     </td>
                     <td className="px-4 py-3.5 text-center">
                       <button
-                        onClick={() => navigate(`/orders?search=${encodeURIComponent(customer.customerEmail || customer.customerPhone || '')}`)}
+                        onClick={() => {
+                          // Use order IDs directly for 100% accuracy
+                          // This guarantees we show exactly the orders that were grouped together
+                          navigate(`/orders?ids=${encodeURIComponent(customer.orderNumbers)}`);
+                        }}
                         className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-white text-xs font-medium rounded-lg transition-colors"
                       >
                         View Orders
@@ -1403,13 +1425,13 @@ const ReportsPage: React.FC = () => {
           transition={{ duration: 0.3 }}
         >
           {activeReport === "sales" && (
-            <SalesReportComponent orders={filteredOrders} role={role} />
+            <SalesReportComponent orders={filteredOrders} role={role} dateRange={dateRange} />
           )}
           {activeReport === "production" && (
             <ProductionReportComponent orders={filteredOrders} />
           )}
           {activeReport === "leadSource" && (
-            <LeadSourceReportComponent orders={filteredOrders} />
+            <LeadSourceReportComponent orders={filteredOrders} dateRange={dateRange} />
           )}
           {activeReport === "productMix" && (
             <ProductMixAnalysis orders={filteredOrders} />
