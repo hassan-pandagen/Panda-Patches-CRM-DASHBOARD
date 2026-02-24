@@ -1100,15 +1100,17 @@ const ProductionReportComponent: React.FC<ReportComponentProps> = ({
             <BarChart
               data={patchTypeStats}
               layout="vertical"
-              margin={{ left: 10 }}
+              margin={{ left: 30, right: 20 }}
             >
               <XAxis type="number" stroke="#94A3B8" hide />
               <YAxis
                 type="category"
                 dataKey="name"
-                stroke="#cbd5e1"
-                width={90}
-                style={{ fontSize: "12px" }}
+                stroke="#e2e8f0"
+                width={170}
+                style={{ fontSize: "12px", fill: '#e2e8f0', fontWeight: 500 }}
+                tick={{ fill: '#e2e8f0' }}
+                interval={0}
               />
               <Tooltip
                 cursor={{ fill: "rgba(100, 116, 139, 0.1)" }}

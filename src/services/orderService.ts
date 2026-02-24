@@ -170,6 +170,8 @@ export const mapDbToOrder = (data: any): Order => {
     isUrgentApproved: data.isUrgentApproved ?? data.is_urgent_approved,
     leadSource: data.leadSource ?? data.lead_source,
     salesAgent: data.salesAgent ?? data.sales_agent,
+    assignedBy: data.assignedBy ?? data.assigned_by,
+    assignedAt: data.assignedAt ?? data.assigned_at,
     createdAt: data.createdAt ?? data.created_at,
     updatedAt: data.updatedAt ?? data.updated_at,
 

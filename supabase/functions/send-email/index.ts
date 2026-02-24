@@ -470,6 +470,35 @@ const buildEmailHTML = (templateId: string, data: any): string => {
   </table>
   ` : ''}
 
+  ${templateId === 'CUSTOMER_SHIPPED' && data.shipping_address ? `
+  <!-- SHIPPING ADDRESS (Shipped Emails Only) -->
+  <table class="module" role="module" data-type="text" border="0" cellpadding="0" cellspacing="0" width="100%" style="table-layout: fixed;">
+    <tbody>
+      <tr>
+        <td style="padding:25px 20px 25px 20px; line-height:26px; text-align:center; background-color:#e8f5e9; border-left: 5px solid #4caf50; border-radius: 8px; margin: 20px 0;" height="100%" valign="top" bgcolor="#e8f5e9" role="module-content">
+          <div>
+            <div style="font-family: inherit; text-align: center; margin-bottom: 15px;">
+              <span style="font-size: 22px; font-family: 'lucida sans unicode', 'lucida grande', sans-serif; color: #000; font-weight: bold;">📍 Shipping To</span>
+            </div>
+            <div style="font-family: inherit; text-align: center; background-color: #ffffff; padding: 15px; border-radius: 6px; margin: 10px 20px;">
+              <span style="font-size: 16px; font-family: 'lucida sans unicode', 'lucida grande', sans-serif; color: #000; white-space: pre-line; line-height: 1.6;">${escapeHtml(data.shipping_address)}</span>
+            </div>
+          </div>
+        </td>
+      </tr>
+    </tbody>
+  </table>
+
+  <!-- SPACER AFTER SHIPPING ADDRESS -->
+  <table class="module" role="module" data-type="spacer" border="0" cellpadding="0" cellspacing="0" width="100%" style="table-layout: fixed;">
+    <tbody>
+      <tr>
+        <td style="padding:0px 0px 20px 0px;" role="module-content" bgcolor=""></td>
+      </tr>
+    </tbody>
+  </table>
+  ` : ''}
+
   ${shouldShowFullDetails(templateId) ? `
   <!-- ORDER INFORMATION HEADER (Yellow on Black) -->
   <table class="module" role="module" data-type="text" border="0" cellpadding="0" cellspacing="0" width="100%" style="table-layout: fixed;">

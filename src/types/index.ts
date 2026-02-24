@@ -86,6 +86,8 @@ export interface Order {
   // --- Personnel & Sourcing ---
   salesAgent: string;
   leadSource?: string;
+  assignedBy?: string; // Email of admin who assigned this order
+  assignedAt?: string; // Timestamp when order was assigned
 
   // --- Notes & Attachments (Arrays of URLs) ---
   revisionNotes?: string;

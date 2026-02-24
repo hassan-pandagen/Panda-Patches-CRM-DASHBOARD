@@ -25,6 +25,7 @@ import { Edit, Trash2, ShieldAlert, ArrowLeft, Lock, MapPin, Smartphone, Maximiz
 import OrderTimeline from '../components/orders/OrderTimeline';
 import ShippingLabelModal from '../components/orders/ShippingLabelModal';
 import OptimizedImage from '../components/ui/OptimizedImage';
+import AssignOrderSection from '../components/orders/AssignOrderSection';
 
 // --- CONFIRMATION MODAL ---
 const ConfirmationModal: React.FC<{
@@ -627,6 +628,16 @@ const OrderPage: React.FC = () => {
                                 <div className="flex justify-between items-center"><p className="text-slate-400 text-sm">Lead Source</p><p className="font-medium text-white">{order.leadSource || 'N/A'}</p></div>
                             </div>
                         </SpotlightCard>
+
+                        {/* ASSIGNMENT SECTION */}
+                        <AssignOrderSection
+                            orderId={order.id}
+                            orderNumber={order.orderNumber}
+                            currentAgent={order.salesAgent}
+                            assignedBy={order.assignedBy}
+                            assignedAt={order.assignedAt}
+                            onAssignmentChange={() => refetch()}
+                        />
 
                         {/* FINANCIALS (Secured) */}
                         {canViewFinancials ? (

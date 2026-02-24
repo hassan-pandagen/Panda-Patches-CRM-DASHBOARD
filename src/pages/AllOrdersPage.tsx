@@ -87,8 +87,10 @@ async function fetchPaginatedOrders(params: {
     leadSource?: string;
     date?: string;
     ids?: string;
+    userRole?: UserRole | null;
+    userEmail?: string | null;
 }): Promise<{ orders: Order[]; totalCount: number }> {
-    const { page, filter, search, salesAgent, leadSource, date, ids } = params;
+    const { page, filter, search, salesAgent, leadSource, date, ids, userRole, userEmail } = params;
     const from = (page - 1) * ITEMS_PER_PAGE;
     const to = from + ITEMS_PER_PAGE - 1;
 
@@ -109,6 +111,11 @@ async function fetchPaginatedOrders(params: {
 
     // --- Build the base query ---
     let query = supabase.from('orders').select(columns, { count: 'exact' });
+
+    // Filter by sales agent for non-admin users (only see their assigned orders)
+    if (userRole !== UserRole.ADMIN && userEmail) {
+        query = query.eq('sales_agent', userEmail);
+    }
 
     // Apply drill-down params
     if (salesAgent) query = query.eq('sales_agent', salesAgent);
@@ -145,6 +152,11 @@ async function fetchPaginatedOrders(params: {
             .eq('is_urgent', true)
             .not('status', 'in', `(${CLOSED_STATUSES.join(',')})`)
             .gte('created_at', tenDaysAgo.toISOString())
+            .order('created_at', { ascending: false });
+    } else if (filter === 'UNASSIGNED') {
+        // Unassigned = sales_agent is NULL (not assigned to anyone yet)
+        query = query
+            .is('sales_agent', null)
             .order('created_at', { ascending: false });
     } else if (filter !== 'ALL') {
         // Direct status filter (NEW_ORDER, IN_PRODUCTION, etc.)
@@ -197,16 +209,17 @@ interface TabCounts {
     total: number;
     urgent: number;
     overdue: number;
+    unassigned: number;
     byStatus: Record<string, number>;
     paymentPending: number;
 }
 
 async function fetchTabCounts(): Promise<TabCounts> {
-    // Single query: fetch only status, is_urgent, created_at, order_amount, amount_paid
+    // Single query: fetch only status, is_urgent, created_at, order_amount, amount_paid, sales_agent
     // This is lightweight — no large text fields
     const { data, error } = await supabase
         .from('orders')
-        .select('status, is_urgent, created_at, order_amount, amount_paid');
+        .select('status, is_urgent, created_at, order_amount, amount_paid, sales_agent');
 
     if (error) throw new Error(error.message);
 
@@ -217,6 +230,7 @@ async function fetchTabCounts(): Promise<TabCounts> {
     const byStatus: Record<string, number> = {};
     let urgent = 0;
     let overdue = 0;
+    let unassigned = 0;
     let paymentPending = 0;
 
     for (const row of rows) {
@@ -230,6 +244,9 @@ async function fetchTabCounts(): Promise<TabCounts> {
         if (isOverdue) overdue++;
         if (row.is_urgent && !isClosed && !isOverdue) urgent++;
 
+        // Count unassigned orders
+        if (!row.sales_agent) unassigned++;
+
         // Payment pending
         if (!isClosed && row.status !== 'CANCELLED' && row.status !== 'REFUNDED') {
             const orderAmount = Number(row.order_amount) || 0;
@@ -242,6 +259,7 @@ async function fetchTabCounts(): Promise<TabCounts> {
         total: rows.length,
         urgent,
         overdue,
+        unassigned,
         byStatus,
         paymentPending,
     };
@@ -252,7 +270,7 @@ async function fetchTabCounts(): Promise<TabCounts> {
 // COMPONENT
 // ============================================
 const AllOrdersPage: React.FC = () => {
-    const { role, permissions } = useAuth();
+    const { user, role, permissions } = useAuth();
     const [searchParams, setSearchParams] = useSearchParams();
     const navigate = useNavigate();
     const [searchQuery, setSearchQuery] = useState('');
@@ -314,6 +332,8 @@ const AllOrdersPage: React.FC = () => {
         leadSource: leadSourceParam,
         date: dateParam,
         ids: idsParam,
+        userRole: role,
+        userEmail: user?.email || null,
     };
 
     const { data: pageData, isLoading, isFetching, error } = useQuery({
@@ -433,6 +453,7 @@ const AllOrdersPage: React.FC = () => {
                     <FilterTab active={activeFilter === 'ALL'} label="All Orders" count={counts?.total || 0} onClick={() => handleFilterChange('ALL')} />
                     <FilterTab active={activeFilter === 'URGENT'} label="Urgent" count={counts?.urgent || 0} onClick={() => handleFilterChange('URGENT')} isUrgent={true} />
                     <FilterTab active={activeFilter === 'OVERDUE'} label="Overdue" count={counts?.overdue || 0} onClick={() => handleFilterChange('OVERDUE')} isUrgent={true} />
+                    <FilterTab active={activeFilter === 'UNASSIGNED'} label="Unassigned" count={counts?.unassigned || 0} onClick={() => handleFilterChange('UNASSIGNED')} isUrgent={true} />
 
                     <div className="w-px h-6 bg-slate-600 mx-2 shrink-0" />
 
