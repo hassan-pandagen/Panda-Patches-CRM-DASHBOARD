@@ -1291,8 +1291,8 @@ const ReportsPage: React.FC = () => {
         .gte("created_at", dateRange.startDate)
         .lt("created_at", getNextDay(dateRange.endDate));
 
-      // Filter by sales agent if not Admin (same logic as Dashboard)
-      if (role !== UserRole.ADMIN && user?.email) {
+      // Filter by sales agent for sales agents only (PRODUCTION can see all orders)
+      if (role !== UserRole.ADMIN && role !== UserRole.PRODUCTION && user?.email) {
         query = query.eq("sales_agent", user.email);
       }
 

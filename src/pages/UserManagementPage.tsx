@@ -557,7 +557,9 @@ const UserManagementPage: React.FC = () => {
                   onChange={(e) => setFormData({...formData, role: e.target.value as UserRole})}
                   className="w-full px-4 py-2 bg-slate-800 border border-white/10 rounded-lg text-white focus:outline-none focus:border-brand-orange transition-colors"
                 >
-                  <option value={UserRole.USER}>User</option>
+                  <option value={UserRole.USER}>User (Sales Agent)</option>
+                  <option value={UserRole.AGENT}>Agent</option>
+                  <option value={UserRole.PRODUCTION}>Production</option>
                   <option value={UserRole.ADMIN}>Admin</option>
                 </select>
               </div>
@@ -672,7 +674,9 @@ const UserManagementPage: React.FC = () => {
                   onChange={(e) => setFormData({...formData, role: e.target.value as UserRole})}
                   className="w-full px-4 py-2 bg-slate-800 border border-white/10 rounded-lg text-white focus:outline-none focus:border-brand-orange transition-colors"
                 >
-                  <option value={UserRole.USER}>User</option>
+                  <option value={UserRole.USER}>User (Sales Agent)</option>
+                  <option value={UserRole.AGENT}>Agent</option>
+                  <option value={UserRole.PRODUCTION}>Production</option>
                   <option value={UserRole.ADMIN}>Admin</option>
                 </select>
               </div>

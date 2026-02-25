@@ -112,8 +112,9 @@ async function fetchPaginatedOrders(params: {
     // --- Build the base query ---
     let query = supabase.from('orders').select(columns, { count: 'exact' });
 
-    // Filter by sales agent for non-admin users (only see their assigned orders)
-    if (userRole !== UserRole.ADMIN && userEmail) {
+    // Filter by sales agent for sales agents only (AGENT/USER see only their assigned orders)
+    // ADMIN and PRODUCTION can see all orders
+    if (userRole !== UserRole.ADMIN && userRole !== UserRole.PRODUCTION && userEmail) {
         query = query.eq('sales_agent', userEmail);
     }
 

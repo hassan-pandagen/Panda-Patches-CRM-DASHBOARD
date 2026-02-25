@@ -48,6 +48,7 @@ const updateUserSchema = z.object({
       'users_manage',
       'orders_create',
       'orders_view_all',
+      'orders_view_own_only',
       'orders_change_status',
       'orders_edit_financials',
       'orders_edit_production',
