@@ -45,6 +45,7 @@ const FormSectionWrapper: React.FC<{ title: string; children: React.ReactNode }>
 export interface SaveData {
   customerName: string;
   customerEmail: string;
+  ccEmail?: string;
   customerPhone?: string;
   customerProfileUrl?: string;
   shippingAddress?: string;
@@ -63,6 +64,7 @@ export interface SaveData {
   leadSource?: string;
   status: string;
   isUrgent: boolean;
+  rushDate?: string;
   shippingCarrier?: string;
   shippingTrackingNumber?: string;
   // Files as simple string arrays
@@ -198,6 +200,7 @@ const OrderForm: React.FC<OrderFormProps> = ({
     status: initialData?.status || OrderStatus.NEW_ORDER,
     customerName: initialData?.customerName || '',
     customerEmail: initialData?.customerEmail || '',
+    ccEmail: initialData?.ccEmail || '',
     patchesQuantity: initialData?.patchesQuantity || 1,
     orderAmount: initialData?.orderAmount || 0,
     amountPaid: initialData?.amountPaid || 0,
@@ -205,6 +208,7 @@ const OrderForm: React.FC<OrderFormProps> = ({
     shippingCost: initialData?.shippingCost || 0,
     marketingCost: initialData?.marketingCost || 0,
     isUrgent: initialData?.isUrgent || false,
+    rushDate: initialData?.rushDate || '',
     mockupUrls: initialData?.mockupUrls || [],
     productionFileUrls: initialData?.productionFileUrls || [],
     shippingAttachmentUrls: initialData?.shippingAttachmentUrls || [],
@@ -447,6 +451,20 @@ const OrderForm: React.FC<OrderFormProps> = ({
             <input type="email" {...register('customerEmail', { required: 'Required' })} className="mt-1 block w-full bg-slate-800 border-slate-600 rounded-md text-white focus:ring-brand-orange focus:border-brand-orange" />
           </div>
           <div>
+            <label className="block text-sm font-medium text-slate-300">
+              CC Email <span className="text-slate-500 font-normal">(optional — 2nd contact)</span>
+            </label>
+            <input
+              type="email"
+              {...register('ccEmail', {
+                validate: (val) => !val || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(val) || 'Invalid email address'
+              })}
+              placeholder="e.g. manager@company.com"
+              className="mt-1 block w-full bg-slate-800 border-slate-600 rounded-md text-white focus:ring-brand-orange focus:border-brand-orange placeholder:text-slate-500"
+            />
+            {errors.ccEmail && <p className="text-red-400 text-xs mt-1">{errors.ccEmail.message}</p>}
+          </div>
+          <div>
             <label className="block text-sm font-medium text-slate-300">Phone</label>
             <input type="tel" {...register('customerPhone')} className="mt-1 block w-full bg-slate-800 border-slate-600 rounded-md text-white focus:ring-brand-orange focus:border-brand-orange" />
           </div>
@@ -659,11 +677,25 @@ const OrderForm: React.FC<OrderFormProps> = ({
               {LEAD_SOURCE_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
             </select>
           </div>
-          <div className="flex items-end pb-3">
+          <div className="flex flex-col gap-2 pb-3">
             <label className="flex items-center gap-2 cursor-pointer">
               <input type="checkbox" {...register('isUrgent')} className="h-5 w-5 rounded bg-slate-700 border-slate-600 text-brand-orange focus:ring-brand-orange" />
               <span className="text-sm font-bold text-slate-200">Mark as Urgent</span>
             </label>
+            {watch('isUrgent') && (
+              <div className="mt-1 p-3 bg-red-500/10 border border-red-500/30 rounded-lg">
+                <label className="block text-xs font-semibold text-red-400 mb-1.5 uppercase tracking-wide">
+                  🚨 Required Ship-By Date
+                </label>
+                <input
+                  type="date"
+                  {...register('rushDate', { required: watch('isUrgent') ? 'Ship-by date is required for urgent orders' : false })}
+                  min={new Date().toISOString().split('T')[0]}
+                  className="block w-full bg-slate-800 border-red-500/50 rounded-md text-white focus:ring-red-500 focus:border-red-500 text-sm px-3 py-2"
+                />
+                {errors.rushDate && <p className="text-red-400 text-xs mt-1">{errors.rushDate.message}</p>}
+              </div>
+            )}
           </div>
         </div>
         

@@ -144,6 +144,7 @@ export const mapDbToOrder = (data: any): Order => {
     orderNumber: data.orderNumber ?? data.order_number,
     customerName: data.customerName ?? data.customer_name,
     customerEmail: data.customerEmail ?? data.customer_email,
+    ccEmail: data.ccEmail ?? data.cc_email ?? undefined,
     customerPhone: data.customerPhone ?? data.customer_phone,
     customerProfileUrl: data.customerProfileUrl ?? data.customer_profile_url,
 
@@ -168,6 +169,7 @@ export const mapDbToOrder = (data: any): Order => {
     reasonDetails: data.reasonDetails ?? data.reason_details,
     isUrgent: data.isUrgent ?? data.is_urgent,
     isUrgentApproved: data.isUrgentApproved ?? data.is_urgent_approved,
+    rushDate: data.rushDate ?? data.rush_date ?? undefined,
     leadSource: data.leadSource ?? data.lead_source,
     salesAgent: data.salesAgent ?? data.sales_agent,
     assignedBy: data.assignedBy ?? data.assigned_by,
@@ -251,7 +253,10 @@ export const prepareEmailData = (order: Order, triggerStatus: string) => {
     tracking_link: trackingUrl,
 
     order_link: `https://portal.pandapatches.com/order/${order.orderNumber}`,
-    sales_agent_name: order.salesAgent || "Panda Team"
+    sales_agent_name: order.salesAgent || "Panda Team",
+
+    is_urgent: order.isUrgent || false,
+    rush_date: order.rushDate ? new Date(order.rushDate).toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }) : null,
   };
 };
 
@@ -274,11 +279,13 @@ export const triggerStatusEmail = async (order: Order, statusToCheck: string) =>
   const internalEmails = getInternalEmails(order.patchesType);
   // ✅ Generate unique thread ID for internal emails per order
   const internalThreadId = `order-${order.id}-internal@pandapatches.com`;
+  // CC email from order (secondary contact for companies with 2 recipients)
+  const customerCC = order.ccEmail && isValidEmail(order.ccEmail) ? order.ccEmail : null;
 
   switch (statusToCheck) {
     case OrderStatus.NEW_ORDER:
-      // Customer email with CC to hello@pandapatches.com
-      if (SENDGRID_TEMPLATES.CUSTOMER_NEW_ORDER) requests.push({ to: order.customerEmail, template_id: SENDGRID_TEMPLATES.CUSTOMER_NEW_ORDER, isInternal: false, cc: 'hello@pandapatches.com' });
+      // Customer email with CC to hello@pandapatches.com + secondary email if set
+      if (SENDGRID_TEMPLATES.CUSTOMER_NEW_ORDER) requests.push({ to: order.customerEmail, template_id: SENDGRID_TEMPLATES.CUSTOMER_NEW_ORDER, isInternal: false, cc: [customerCC, 'hello@pandapatches.com'].filter(Boolean).join(',') });
       // Internal email with all production team in CC
       if (SENDGRID_TEMPLATES.INTERNAL_NEW_ORDER && internalEmails.length > 0) {
         const ccEmails = internalEmails.slice(1).join(',');
@@ -286,14 +293,14 @@ export const triggerStatusEmail = async (order: Order, statusToCheck: string) =>
       }
       break;
     case OrderStatus.AWAITING_APPROVAL:
-      if (SENDGRID_TEMPLATES.CUSTOMER_MOCKUP_READY) requests.push({ to: order.customerEmail, template_id: SENDGRID_TEMPLATES.CUSTOMER_MOCKUP_READY, isInternal: false, cc: [DESIGN_TEAM_CC, 'hello@pandapatches.com'].filter(Boolean).join(',') });
+      if (SENDGRID_TEMPLATES.CUSTOMER_MOCKUP_READY) requests.push({ to: order.customerEmail, template_id: SENDGRID_TEMPLATES.CUSTOMER_MOCKUP_READY, isInternal: false, cc: [customerCC, DESIGN_TEAM_CC, 'hello@pandapatches.com'].filter(Boolean).join(',') });
       if (SENDGRID_TEMPLATES.INTERNAL_REVISION_REQUESTED && internalEmails.length > 0) {
         const ccEmails = internalEmails.slice(1).join(',');
         requests.push({ to: internalEmails[0], template_id: SENDGRID_TEMPLATES.INTERNAL_REVISION_REQUESTED, isInternal: true, cc: [DESIGN_TEAM_CC, ccEmails, 'hello@pandapatches.com'].filter(Boolean).join(',') });
       }
       break;
     case OrderStatus.REVISION_REQUESTED:
-      if (SENDGRID_TEMPLATES.CUSTOMER_REVISION_IN_PROGRESS) requests.push({ to: order.customerEmail, template_id: SENDGRID_TEMPLATES.CUSTOMER_REVISION_IN_PROGRESS, isInternal: false, cc: [DESIGN_TEAM_CC, 'hello@pandapatches.com'].filter(Boolean).join(',') });
+      if (SENDGRID_TEMPLATES.CUSTOMER_REVISION_IN_PROGRESS) requests.push({ to: order.customerEmail, template_id: SENDGRID_TEMPLATES.CUSTOMER_REVISION_IN_PROGRESS, isInternal: false, cc: [customerCC, DESIGN_TEAM_CC, 'hello@pandapatches.com'].filter(Boolean).join(',') });
       if (SENDGRID_TEMPLATES.INTERNAL_REVISION_REQUESTED && internalEmails.length > 0) {
         const ccEmails = internalEmails.slice(1).join(',');
         requests.push({ to: internalEmails[0], template_id: SENDGRID_TEMPLATES.INTERNAL_REVISION_REQUESTED, isInternal: true, cc: [DESIGN_TEAM_CC, ccEmails, 'hello@pandapatches.com'].filter(Boolean).join(',') });
@@ -301,26 +308,26 @@ export const triggerStatusEmail = async (order: Order, statusToCheck: string) =>
       break;
     case OrderStatus.IN_PRODUCTION:
     case OrderStatus.APPROVED:
-      if (SENDGRID_TEMPLATES.CUSTOMER_PRODUCTION_START) requests.push({ to: order.customerEmail, template_id: SENDGRID_TEMPLATES.CUSTOMER_PRODUCTION_START, isInternal: false, cc: [DESIGN_TEAM_CC, 'hello@pandapatches.com'].filter(Boolean).join(',') });
+      if (SENDGRID_TEMPLATES.CUSTOMER_PRODUCTION_START) requests.push({ to: order.customerEmail, template_id: SENDGRID_TEMPLATES.CUSTOMER_PRODUCTION_START, isInternal: false, cc: [customerCC, DESIGN_TEAM_CC, 'hello@pandapatches.com'].filter(Boolean).join(',') });
       if (SENDGRID_TEMPLATES.INTERNAL_PRODUCTION_START && internalEmails.length > 0) {
         const ccEmails = internalEmails.slice(1).join(',');
         requests.push({ to: internalEmails[0], template_id: SENDGRID_TEMPLATES.INTERNAL_PRODUCTION_START, isInternal: true, cc: [DESIGN_TEAM_CC, ccEmails, 'hello@pandapatches.com'].filter(Boolean).join(',') });
       }
       break;
     case OrderStatus.QUALITY_ASSURANCE:
-      if (SENDGRID_TEMPLATES.INTERNAL_QUALITY_ASSURANCE) requests.push({ to: order.customerEmail, template_id: SENDGRID_TEMPLATES.INTERNAL_QUALITY_ASSURANCE, isInternal: false, cc: [DESIGN_TEAM_CC, 'hello@pandapatches.com'].filter(Boolean).join(',') });
+      if (SENDGRID_TEMPLATES.INTERNAL_QUALITY_ASSURANCE) requests.push({ to: order.customerEmail, template_id: SENDGRID_TEMPLATES.INTERNAL_QUALITY_ASSURANCE, isInternal: false, cc: [customerCC, DESIGN_TEAM_CC, 'hello@pandapatches.com'].filter(Boolean).join(',') });
       break;
     case OrderStatus.SHIPPED:
-      if (SENDGRID_TEMPLATES.CUSTOMER_SHIPPED) requests.push({ to: order.customerEmail, template_id: SENDGRID_TEMPLATES.CUSTOMER_SHIPPED, isInternal: false, cc: [DESIGN_TEAM_CC, 'hello@pandapatches.com'].filter(Boolean).join(',') });
+      if (SENDGRID_TEMPLATES.CUSTOMER_SHIPPED) requests.push({ to: order.customerEmail, template_id: SENDGRID_TEMPLATES.CUSTOMER_SHIPPED, isInternal: false, cc: [customerCC, DESIGN_TEAM_CC, 'hello@pandapatches.com'].filter(Boolean).join(',') });
       break;
     case OrderStatus.DELIVERED:
-      if (SENDGRID_TEMPLATES.CUSTOMER_DELIVERED) requests.push({ to: order.customerEmail, template_id: SENDGRID_TEMPLATES.CUSTOMER_DELIVERED, isInternal: false, cc: [DESIGN_TEAM_CC, 'hello@pandapatches.com'].filter(Boolean).join(',') });
+      if (SENDGRID_TEMPLATES.CUSTOMER_DELIVERED) requests.push({ to: order.customerEmail, template_id: SENDGRID_TEMPLATES.CUSTOMER_DELIVERED, isInternal: false, cc: [customerCC, DESIGN_TEAM_CC, 'hello@pandapatches.com'].filter(Boolean).join(',') });
       break;
     case OrderStatus.FEEDBACK:
-      if (SENDGRID_TEMPLATES.CUSTOMER_FEEDBACK) requests.push({ to: order.customerEmail, template_id: SENDGRID_TEMPLATES.CUSTOMER_FEEDBACK, isInternal: false, cc: [DESIGN_TEAM_CC, 'hello@pandapatches.com'].filter(Boolean).join(',') });
+      if (SENDGRID_TEMPLATES.CUSTOMER_FEEDBACK) requests.push({ to: order.customerEmail, template_id: SENDGRID_TEMPLATES.CUSTOMER_FEEDBACK, isInternal: false, cc: [customerCC, DESIGN_TEAM_CC, 'hello@pandapatches.com'].filter(Boolean).join(',') });
       break;
     case OrderStatus.REFUNDED:
-      if (SENDGRID_TEMPLATES.CUSTOMER_REFUNDED) requests.push({ to: order.customerEmail, template_id: SENDGRID_TEMPLATES.CUSTOMER_REFUNDED, isInternal: false, cc: [DESIGN_TEAM_CC, 'hello@pandapatches.com'].filter(Boolean).join(',') });
+      if (SENDGRID_TEMPLATES.CUSTOMER_REFUNDED) requests.push({ to: order.customerEmail, template_id: SENDGRID_TEMPLATES.CUSTOMER_REFUNDED, isInternal: false, cc: [customerCC, DESIGN_TEAM_CC, 'hello@pandapatches.com'].filter(Boolean).join(',') });
       break;
     case OrderStatus.REMAKE:
       // Customer email: Apologetic, reassuring
@@ -329,7 +336,7 @@ export const triggerStatusEmail = async (order: Order, statusToCheck: string) =>
           to: order.customerEmail,
           template_id: SENDGRID_TEMPLATES.CUSTOMER_REMAKE,
           isInternal: false,
-          cc: [DESIGN_TEAM_CC, 'hello@pandapatches.com'].filter(Boolean).join(',')
+          cc: [customerCC, DESIGN_TEAM_CC, 'hello@pandapatches.com'].filter(Boolean).join(',')
         });
       }
       // Internal email: Urgent alert to production team with all team members in CC

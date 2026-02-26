@@ -310,12 +310,19 @@ const OrderPage: React.FC = () => {
                             <h1 className="text-3xl font-bold text-white flex items-center gap-3">
                                 Order {order.orderNumber}
                                 {order.isUrgent && (
-                                    <span className={`text-sm px-3 py-1 rounded-full border font-bold ${order.isUrgentApproved
-                                        ? 'bg-red-600/20 border-red-500 text-red-400'
-                                        : 'bg-yellow-500/20 border-yellow-500 text-yellow-400 animate-pulse'
-                                        }`}>
-                                        {order.isUrgentApproved ? 'URGENT' : 'URGENT (APPROVAL NEEDED)'}
-                                    </span>
+                                    <div className="flex items-center gap-2 flex-wrap">
+                                        <span className={`text-sm px-3 py-1 rounded-full border font-bold ${order.isUrgentApproved
+                                            ? 'bg-red-600/20 border-red-500 text-red-400'
+                                            : 'bg-yellow-500/20 border-yellow-500 text-yellow-400 animate-pulse'
+                                            }`}>
+                                            {order.isUrgentApproved ? 'URGENT' : 'URGENT (APPROVAL NEEDED)'}
+                                        </span>
+                                        {order.rushDate && (
+                                            <span className="text-sm px-3 py-1 rounded-full border font-bold bg-orange-500/20 border-orange-500 text-orange-400">
+                                                🚢 Ship by: {new Date(order.rushDate + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                                            </span>
+                                        )}
+                                    </div>
                                 )}
                             </h1>
                         </div>
@@ -387,6 +394,11 @@ const OrderPage: React.FC = () => {
                                     <p className="text-slate-400 text-sm">
                                         The customer or agent has requested urgent production. This usually incurs a rush fee.
                                     </p>
+                                    {order.rushDate && (
+                                        <p className="mt-2 text-sm font-bold text-orange-400">
+                                            🚢 Must ship by: {new Date(order.rushDate + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}
+                                        </p>
+                                    )}
                                 </div>
                             </div>
                             <div className="flex items-center gap-3 w-full sm:w-auto">

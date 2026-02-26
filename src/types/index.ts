@@ -59,6 +59,7 @@ export interface Order {
   // --- Customer Information ---
   customerName: string;
   customerEmail: string;
+  ccEmail?: string; // Secondary/CC email for companies with multiple contacts
   customerPhone?: string;
   customerProfileUrl?: string;
 
@@ -72,6 +73,7 @@ export interface Order {
   instructions?: string;
   isUrgent: boolean;
   isUrgentApproved?: boolean;
+  rushDate?: string; // Required ship-by date when order is marked urgent
 
   // --- Financials ---
   orderAmount: number | null;
@@ -184,6 +186,7 @@ export interface Quote {
    // --- Customer Information ---
    customerName: string;
    customerEmail: string;
+   ccEmail?: string; // Secondary/CC email for companies with multiple contacts
    customerPhone?: string;
    customerProfileUrl?: string;
 
