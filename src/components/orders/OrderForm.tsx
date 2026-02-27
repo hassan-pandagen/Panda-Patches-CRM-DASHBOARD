@@ -367,6 +367,15 @@ const OrderForm: React.FC<OrderFormProps> = ({
   const patchTypes = PATCHES_TYPE_OPTIONS;
   const shippingCarriers = ["FedEx", "DHL", "UPS", "USPS", "Other"];
   const backingOptions = ["Iron on", "Sew on", "Sticker", "Velcro"];
+  const watchedPatchType = watch('patchesType');
+  const isDSTService = watchedPatchType === 'DST Service';
+
+  // Auto-set quantity to 1 for DST Service (no physical quantity needed)
+  useEffect(() => {
+    if (isDSTService) {
+      setValue('patchesQuantity', 1, { shouldDirty: false });
+    }
+  }, [isDSTService, setValue]);
   
   const orderNum = initialData?.orderNumber || 'new-order';
   
@@ -492,10 +501,12 @@ const OrderForm: React.FC<OrderFormProps> = ({
               <option value="No Border">No Border</option>
             </select>
           </div>
-          <div>
-            <label className="block text-sm font-medium text-slate-300">Quantity</label>
-            <input type="number" {...register('patchesQuantity', { required: true, min: 1, valueAsNumber: true })} className="mt-1 block w-full bg-slate-800 border-slate-600 rounded-md text-white focus:ring-brand-orange focus:border-brand-orange" />
-          </div>
+          {!isDSTService ? (
+            <div>
+              <label className="block text-sm font-medium text-slate-300">Quantity</label>
+              <input type="number" {...register('patchesQuantity', { required: true, min: 1, valueAsNumber: true })} className="mt-1 block w-full bg-slate-800 border-slate-600 rounded-md text-white focus:ring-brand-orange focus:border-brand-orange" />
+            </div>
+          ) : <div />}
 
           {/* Row 2: Patch Type | Size | Backing */}
           <div>

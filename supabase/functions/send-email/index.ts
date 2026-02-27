@@ -395,6 +395,30 @@ const buildEmailHTML = (templateId: string, data: any): string => {
   </table>
   ` : ''}
 
+  ${templateId.includes('INTERNAL') && data.is_urgent && data.rush_date ? `
+  <!-- URGENT RUSH DATE BANNER (Internal Emails Only) -->
+  <table class="module" role="module" data-type="text" border="0" cellpadding="0" cellspacing="0" width="100%" style="table-layout: fixed;">
+    <tbody>
+      <tr>
+        <td style="padding:20px; line-height:26px; text-align:center; background-color:#fff0f0; border-left: 5px solid #e53e3e;" height="100%" valign="top" bgcolor="#fff0f0" role="module-content">
+          <div>
+            <div style="font-family: inherit; text-align: center; margin-bottom: 10px;">
+              <span style="font-size: 22px; font-family: 'lucida sans unicode', 'lucida grande', sans-serif; color: #c53030; font-weight: bold;">🚨 URGENT ORDER — RUSH REQUIRED 🚨</span>
+            </div>
+            <div style="font-family: inherit; text-align: center; background-color: #ffffff; padding: 14px 24px; border-radius: 6px; border: 2px solid #e53e3e;">
+              <span style="font-size: 16px; font-family: 'lucida sans unicode', 'lucida grande', sans-serif; color: #666;">Must Ship By: </span>
+              <span style="font-size: 22px; font-family: 'lucida sans unicode', 'lucida grande', sans-serif; color: #c53030; font-weight: bold;">${escapeHtml(data.rush_date)}</span>
+            </div>
+            <div style="font-family: inherit; text-align: center; margin-top: 10px;">
+              <span style="font-size: 14px; font-family: 'lucida sans unicode', 'lucida grande', sans-serif; color: #c53030; font-style: italic;">⚠️ Please prioritize this order and ensure it ships on time!</span>
+            </div>
+          </div>
+        </td>
+      </tr>
+    </tbody>
+  </table>
+  ` : ''}
+
   ${templateId === 'INTERNAL_REMAKE' && data.instructions ? `
   <!-- REMAKE INSTRUCTIONS (INTERNAL_REMAKE Only) -->
   <table class="module" role="module" data-type="text" border="0" cellpadding="0" cellspacing="0" width="100%" style="table-layout: fixed;">
