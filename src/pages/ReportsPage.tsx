@@ -101,7 +101,8 @@ const SimpleStatCard: React.FC<{
   prefix?: string;
   suffix?: string;
   icon: React.ReactNode;
-}> = ({ title, value, prefix = "", suffix = "", icon }) => (
+  subtitle?: string;
+}> = ({ title, value, prefix = "", suffix = "", icon, subtitle }) => (
   <div className="flex items-center justify-between">
     <div className="flex-1">
       <p className="text-sm font-medium text-slate-400 mb-1">{title}</p>
@@ -110,6 +111,7 @@ const SimpleStatCard: React.FC<{
         {typeof value === "number" ? value.toLocaleString() : value}
         {suffix}
       </p>
+      {subtitle && <p className="text-xs text-slate-500 mt-1">{subtitle}</p>}
     </div>
     <div className="p-3 bg-gradient-to-br from-white/10 to-white/5 rounded-xl">
       {icon}
@@ -176,13 +178,23 @@ const SalesReportComponent: React.FC<ReportComponentProps> = ({ orders, dateRang
   }, [orders]);
 
   // SAFEGUARDS: If DB sends NULL (masked), treat as 0
-  // Net Revenue = Excludes refunded and cancelled orders (matches Dashboard calculation)
+  // Gross Revenue = All orders regardless of status
+  const totalGrossRevenue = useMemo(
+    () => orders.reduce((sum, order) => sum + (order.orderAmount || 0), 0),
+    [orders]
+  );
+  // Total Refunds = Orders with REFUNDED status
+  const totalRefundedAmount = useMemo(
+    () => orders.reduce((sum, order) => {
+      if (order.status === 'REFUNDED') return sum + (order.orderAmount || 0);
+      return sum;
+    }, 0),
+    [orders]
+  );
+  // Net Revenue = Gross minus refunded and cancelled orders
   const totalNetRevenue = useMemo(
     () => orders.reduce((sum, order) => {
-      // Exclude refunded and cancelled orders from revenue
-      if (order.status === 'REFUNDED' || order.status === 'CANCELLED') {
-        return sum;
-      }
+      if (order.status === 'REFUNDED' || order.status === 'CANCELLED') return sum;
       return sum + (order.orderAmount || 0);
     }, 0),
     [orders]
@@ -242,8 +254,11 @@ const SalesReportComponent: React.FC<ReportComponentProps> = ({ orders, dateRang
       }
       const data = agentData.get(agent)!;
       data.orders += 1;
-      data.revenue += order.orderAmount || 0;
-      data.collected += order.amountPaid || 0;
+      // Exclude refunded and cancelled orders from revenue (match Net Revenue calculation)
+      if (order.status !== 'REFUNDED' && order.status !== 'CANCELLED') {
+        data.revenue += order.orderAmount || 0;
+        data.collected += order.amountPaid || 0;
+      }
     }
     return Array.from(agentData.entries(), ([agent, data]) => ({
       agent,
@@ -269,6 +284,7 @@ const SalesReportComponent: React.FC<ReportComponentProps> = ({ orders, dateRang
             value={totalNetRevenue}
             prefix="$"
             icon={<DollarSign className="w-6 h-6 text-brand-orange" />}
+            subtitle={`Gross $${totalGrossRevenue.toLocaleString("en-US", { maximumFractionDigits: 0 })}${totalRefundedAmount > 0 ? ` · Refunds -$${totalRefundedAmount.toLocaleString("en-US", { maximumFractionDigits: 0 })}` : ''}`}
           />
         </StatCardWrapper>
         <StatCardWrapper
@@ -431,7 +447,7 @@ const SalesReportComponent: React.FC<ReportComponentProps> = ({ orders, dateRang
         </div>
 
         {agentPerformance.length > 0 && (
-          <div className="relative z-10 mt-6 pt-6 border-t border-slate-700/50 grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="relative z-10 mt-6 pt-6 border-t border-slate-700/50 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
             <div className="group/stat relative bg-slate-800/30 hover:bg-slate-800/50 rounded-lg p-4 border border-slate-700/50 hover:border-brand-orange/30 transition-all duration-300 overflow-hidden">
               <div className="absolute inset-0 bg-brand-orange/5 opacity-0 group-hover/stat:opacity-100 transition-opacity duration-300" />
               <div className="relative z-10">
@@ -446,23 +462,30 @@ const SalesReportComponent: React.FC<ReportComponentProps> = ({ orders, dateRang
                 <p className="text-2xl font-bold text-blue-400">{agentPerformance.reduce((sum, a) => sum + a.orders, 0)}</p>
               </div>
             </div>
-            <div className="group/stat relative bg-slate-800/30 hover:bg-slate-800/50 rounded-lg p-4 border border-slate-700/50 hover:border-green-400/30 transition-all duration-300 overflow-hidden">
-              <div className="absolute inset-0 bg-green-500/5 opacity-0 group-hover/stat:opacity-100 transition-opacity duration-300" />
+            <div className="group/stat relative bg-slate-800/30 hover:bg-slate-800/50 rounded-lg p-4 border border-slate-700/50 hover:border-slate-500/30 transition-all duration-300 overflow-hidden">
+              <div className="absolute inset-0 bg-slate-500/5 opacity-0 group-hover/stat:opacity-100 transition-opacity duration-300" />
               <div className="relative z-10">
-                <p className="text-slate-400 text-xs font-semibold uppercase mb-1">Total Revenue</p>
-                <p className="text-2xl font-bold text-green-400">
-                  ${agentPerformance.reduce((sum, a) => sum + a.revenue, 0).toLocaleString("en-US", { maximumFractionDigits: 0 })}
+                <p className="text-slate-400 text-xs font-semibold uppercase mb-1">Gross Revenue</p>
+                <p className="text-2xl font-bold text-slate-300">
+                  ${totalGrossRevenue.toLocaleString("en-US", { maximumFractionDigits: 0 })}
                 </p>
               </div>
             </div>
-            <div className="group/stat relative bg-slate-800/30 hover:bg-slate-800/50 rounded-lg p-4 border border-slate-700/50 hover:border-brand-orange/30 transition-all duration-300 overflow-hidden">
-              <div className="absolute inset-0 bg-brand-orange/5 opacity-0 group-hover/stat:opacity-100 transition-opacity duration-300" />
+            <div className="group/stat relative bg-slate-800/30 hover:bg-slate-800/50 rounded-lg p-4 border border-slate-700/50 hover:border-red-400/30 transition-all duration-300 overflow-hidden">
+              <div className="absolute inset-0 bg-red-500/5 opacity-0 group-hover/stat:opacity-100 transition-opacity duration-300" />
               <div className="relative z-10">
-                <p className="text-slate-400 text-xs font-semibold uppercase mb-1">Avg Collection %</p>
-                <p className="text-2xl font-bold text-brand-orange">
-                  {agentPerformance.length > 0 
-                    ? (agentPerformance.reduce((sum, a) => sum + (a.revenue > 0 ? (a.collected / a.revenue) * 100 : 0), 0) / agentPerformance.length).toFixed(0)
-                    : 0}%
+                <p className="text-slate-400 text-xs font-semibold uppercase mb-1">Refunds</p>
+                <p className="text-2xl font-bold text-red-400">
+                  {totalRefundedAmount > 0 ? `-$${totalRefundedAmount.toLocaleString("en-US", { maximumFractionDigits: 0 })}` : '$0'}
+                </p>
+              </div>
+            </div>
+            <div className="group/stat relative bg-slate-800/30 hover:bg-slate-800/50 rounded-lg p-4 border border-slate-700/50 hover:border-green-400/30 transition-all duration-300 overflow-hidden">
+              <div className="absolute inset-0 bg-green-500/5 opacity-0 group-hover/stat:opacity-100 transition-opacity duration-300" />
+              <div className="relative z-10">
+                <p className="text-slate-400 text-xs font-semibold uppercase mb-1">Net Revenue</p>
+                <p className="text-2xl font-bold text-green-400">
+                  ${totalNetRevenue.toLocaleString("en-US", { maximumFractionDigits: 0 })}
                 </p>
               </div>
             </div>
