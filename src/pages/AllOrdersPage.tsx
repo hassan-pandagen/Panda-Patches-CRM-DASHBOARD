@@ -28,6 +28,8 @@ import {
     CheckCircle,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import ToggleButtons from '../components/ui/ToggleButtons';
+import DateRangeFilter, { DateRange } from '../components/ui/DateRangeFilter';
 
 const FilterTab = React.memo(({ active, label, count, onClick, isUrgent = false }: any) => (
     <button
@@ -89,8 +91,10 @@ async function fetchPaginatedOrders(params: {
     ids?: string;
     userRole?: UserRole | null;
     userEmail?: string | null;
+    dateRangeStart?: string;
+    dateRangeEnd?: string;
 }): Promise<{ orders: Order[]; totalCount: number }> {
-    const { page, filter, search, salesAgent, leadSource, date, ids, userRole, userEmail } = params;
+    const { page, filter, search, salesAgent, leadSource, date, ids, userRole, userEmail, dateRangeStart, dateRangeEnd } = params;
     const from = (page - 1) * ITEMS_PER_PAGE;
     const to = from + ITEMS_PER_PAGE - 1;
 
@@ -122,10 +126,16 @@ async function fetchPaginatedOrders(params: {
     if (salesAgent) query = query.eq('sales_agent', salesAgent);
     if (leadSource) query = query.eq('lead_source', leadSource);
     if (date) {
-        // Filter by date (full day range)
+        // Filter by date (full day range) — single-day drill-down from dashboard
         const dayStart = `${date}T00:00:00.000Z`;
         const dayEnd = `${date}T23:59:59.999Z`;
         query = query.gte('created_at', dayStart).lte('created_at', dayEnd);
+    } else if (dateRangeStart && dateRangeEnd) {
+        // Filter by month/week/custom date range from the orders page date picker
+        const nextDay = new Date(dateRangeEnd);
+        nextDay.setDate(nextDay.getDate() + 1);
+        const nextDayStr = nextDay.toISOString().split('T')[0];
+        query = query.gte('created_at', `${dateRangeStart}T00:00:00.000Z`).lt('created_at', `${nextDayStr}T00:00:00.000Z`);
     }
 
     // Apply status/special filters
@@ -277,6 +287,34 @@ const AllOrdersPage: React.FC = () => {
     const [searchQuery, setSearchQuery] = useState('');
     const [activeFilter, setActiveFilter] = useState<string>('ALL');
     const [currentPage, setCurrentPage] = useState(1);
+    const [dateView, setDateView] = useState<'today' | 'week' | 'month' | 'custom'>('month');
+    const [customDateRange, setCustomDateRange] = useState<DateRange | null>(null);
+
+    const activeDateRange = React.useMemo(() => {
+        if (dateView === 'custom' && customDateRange) return customDateRange;
+        const now = new Date();
+        const year = now.getFullYear();
+        const month = now.getMonth();
+        const pad = (n: number) => String(n).padStart(2, '0');
+        const fmt = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+        if (dateView === 'today') {
+            const today = fmt(now);
+            return { startDate: today, endDate: today };
+        } else if (dateView === 'week') {
+            const start = new Date(now); start.setDate(now.getDate() - 7);
+            return { startDate: fmt(start), endDate: fmt(now) };
+        } else {
+            const start = new Date(year, month, 1);
+            const end = new Date(year, month + 1, 0);
+            return { startDate: fmt(start), endDate: fmt(end) };
+        }
+    }, [dateView, customDateRange]);
+
+    const handleCustomDateChange = (range: DateRange) => {
+        setCustomDateRange(range);
+        setDateView('custom');
+        setCurrentPage(1);
+    };
 
     // Debounce search by 300ms to avoid hammering the DB on every keystroke
     const debouncedSearch = useDebouncedValue(searchQuery, 300);
@@ -306,10 +344,14 @@ const AllOrdersPage: React.FC = () => {
         }
     }, [searchParam]);
 
-    // Reset to page 1 only when search changes (filter reset is handled by handleFilterChange)
+    // Reset to page 1 only when search or date view changes
     useEffect(() => {
         setCurrentPage(1);
     }, [debouncedSearch]);
+
+    useEffect(() => {
+        setCurrentPage(1);
+    }, [dateView, activeDateRange.startDate, activeDateRange.endDate]);
 
     // ============================================
     // QUERY 1: Tab counts (lightweight, cached separately)
@@ -335,6 +377,8 @@ const AllOrdersPage: React.FC = () => {
         ids: idsParam,
         userRole: role,
         userEmail: user?.email || null,
+        dateRangeStart: dateParam ? undefined : activeDateRange.startDate,
+        dateRangeEnd: dateParam ? undefined : activeDateRange.endDate,
     };
 
     const { data: pageData, isLoading, isFetching, error } = useQuery({
@@ -405,12 +449,25 @@ const AllOrdersPage: React.FC = () => {
                     <h1 className="text-3xl font-bold text-white">Orders</h1>
                     <p className="text-slate-300 text-sm mt-1">Manage and track your production pipeline</p>
                 </div>
-                <Link to="/new-order">
-                    <Button variant="primary" size="lg" className="shadow-lg shadow-brand-orange/20 text-white font-semibold">
-                        <Plus className="w-5 h-5 mr-2" />
-                        New Order
-                    </Button>
-                </Link>
+                <div className="flex items-center gap-3 flex-wrap">
+                    <ToggleButtons view={dateView} onViewChange={(v) => { setDateView(v); setCurrentPage(1); }} />
+                    <DateRangeFilter
+                        value={dateView === 'custom' ? customDateRange || undefined : undefined}
+                        onChange={handleCustomDateChange}
+                    />
+                    <span className="text-xs text-slate-400 hidden sm:inline">
+                        {activeDateRange.startDate === activeDateRange.endDate
+                            ? new Date(activeDateRange.startDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+                            : `${new Date(activeDateRange.startDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} – ${new Date(activeDateRange.endDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`
+                        }
+                    </span>
+                    <Link to="/new-order">
+                        <Button variant="primary" size="lg" className="shadow-lg shadow-brand-orange/20 text-white font-semibold">
+                            <Plus className="w-5 h-5 mr-2" />
+                            New Order
+                        </Button>
+                    </Link>
+                </div>
             </div>
 
             {/* --- CONTROLS BAR --- */}
