@@ -107,7 +107,7 @@ A professional-grade, full-stack Customer Relationship Management (CRM) applicat
   - **Serverless Functions:** Supabase Edge Functions (for email sending)
 
 - **Email Service:**
-   - **Provider:** SendGrid
+   - **Provider:** ZeptoMail (Zoho)
    - **Automation:** Transaction emails, order confirmations, status updates
 
 - **Monitoring & Observability:**

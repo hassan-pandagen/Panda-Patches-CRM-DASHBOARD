@@ -9,7 +9,7 @@ import Button from '../components/ui/Button';
 import Skeleton from '../components/ui/Skeleton';
 import SpotlightCard from '../components/ui/SpotlightCard';
 import { useToast } from '../hooks/useToast';
-import { ArrowLeft, CheckCircle, Trash2, Calendar, Mail, Phone } from 'lucide-react';
+import { ArrowLeft, CheckCircle, Trash2, Calendar, Mail, Phone, Paperclip, Image } from 'lucide-react';
 
 const QuoteDetailPage: React.FC = () => {
   const { quoteNumber } = useParams<{ quoteNumber: string }>();
@@ -202,6 +202,54 @@ const QuoteDetailPage: React.FC = () => {
                     </a>
                   </div>
                 ))}
+              </div>
+            </SpotlightCard>
+          )}
+
+          {/* Customer Artwork / Attachments */}
+          {quote.customerAttachmentUrls && quote.customerAttachmentUrls.length > 0 && (
+            <SpotlightCard className="p-6">
+              <h2 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
+                <Paperclip className="w-5 h-5 text-brand-orange" />
+                Customer Artwork ({quote.customerAttachmentUrls.length})
+              </h2>
+              <div className="grid grid-cols-2 gap-4">
+                {quote.customerAttachmentUrls.map((url, index) => {
+                  const isImage = /\.(jpg|jpeg|png|gif|webp|svg)$/i.test(url.split('?')[0]);
+                  return (
+                    <div key={index} className="relative group">
+                      {isImage ? (
+                        <>
+                          <img
+                            src={url}
+                            alt={`Artwork ${index + 1}`}
+                            className="w-full h-48 object-cover rounded-lg border border-slate-600 hover:border-brand-orange transition-colors"
+                          />
+                          <a
+                            href={url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="absolute inset-0 flex items-center justify-center bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity rounded-lg"
+                          >
+                            <span className="text-white text-sm font-semibold">View Full</span>
+                          </a>
+                        </>
+                      ) : (
+                        <a
+                          href={url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center gap-3 p-4 rounded-lg border border-slate-600 hover:border-brand-orange bg-slate-800/50 transition-colors"
+                        >
+                          <Image className="w-8 h-8 text-brand-orange flex-shrink-0" />
+                          <span className="text-slate-300 text-sm truncate">
+                            {url.split('/').pop()?.split('?')[0] || `Attachment ${index + 1}`}
+                          </span>
+                        </a>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             </SpotlightCard>
           )}
