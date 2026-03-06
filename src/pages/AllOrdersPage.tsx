@@ -130,8 +130,8 @@ async function fetchPaginatedOrders(params: {
         const dayStart = `${date}T00:00:00.000Z`;
         const dayEnd = `${date}T23:59:59.999Z`;
         query = query.gte('created_at', dayStart).lte('created_at', dayEnd);
-    } else if (dateRangeStart && dateRangeEnd) {
-        // Filter by month/week/custom date range from the orders page date picker
+    } else if (dateRangeStart && dateRangeEnd && !search) {
+        // Date range filter — skipped when search is active so orders from any date are found
         const nextDay = new Date(dateRangeEnd);
         nextDay.setDate(nextDay.getDate() + 1);
         const nextDayStr = nextDay.toISOString().split('T')[0];
@@ -498,6 +498,11 @@ const AllOrdersPage: React.FC = () => {
                         onChange={(e) => setSearchQuery(e.target.value)}
                         className="w-full bg-slate-800/50 border border-slate-600 text-white text-sm rounded-xl pl-10 pr-4 py-3 focus:ring-2 focus:ring-brand-orange/50 focus:border-brand-orange transition-all placeholder-slate-400 focus-ring"
                     />
+                    {debouncedSearch && (
+                        <span className="absolute right-10 top-1/2 -translate-y-1/2 text-xs text-slate-500 hidden sm:inline">
+                            searching all time
+                        </span>
+                    )}
                     {/* Fetching indicator */}
                     {isFetching && (
                         <div className="absolute right-3 top-1/2 -translate-y-1/2">
