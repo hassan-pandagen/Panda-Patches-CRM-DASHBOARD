@@ -9,7 +9,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../hooks/useToast';
 import { queryKeys } from '../constants/queryKeys';
 import InvoiceModal from '../components/invoices/InvoiceModal';
-import { mapDbToOrder, triggerStatusEmail } from '../services/orderService';
+import { mapDbToOrder, triggerStatusEmail, sendPaymentConfirmationEmail } from '../services/orderService';
 import FileUploadSection from '../components/orders/FileUpload';
 
 // UI Components
@@ -26,6 +26,7 @@ import OrderTimeline from '../components/orders/OrderTimeline';
 import ShippingLabelModal from '../components/orders/ShippingLabelModal';
 import OptimizedImage from '../components/ui/OptimizedImage';
 import AssignOrderSection from '../components/orders/AssignOrderSection';
+import EmailLogsSection from '../components/orders/EmailLogsSection';
 
 // --- CONFIRMATION MODAL ---
 const ConfirmationModal: React.FC<{
@@ -63,13 +64,14 @@ const OrderPage: React.FC = () => {
     const navigate = useNavigate();
     const queryClient = useQueryClient();
     const [isDeleteModalOpen, setIsDeleteModalOpen] = React.useState(false);
-    const { toast } = useToast();
+    const { success: showSuccess, error: showError } = useToast();
     const [isInvoiceModalOpen, setIsInvoiceModalOpen] = React.useState(false);
     const [isShippingLabelModalOpen, setIsShippingLabelModalOpen] = React.useState(false);
     const [previewUrl, setPreviewUrl] = React.useState<string | null>(null);
     const [isProcessing, setIsProcessing] = React.useState(false);
     const [productionFiles, setProductionFiles] = React.useState<string[]>([]);
     const [isEditingProduction, setIsEditingProduction] = React.useState(false);
+    const [isSendingPaymentEmail, setIsSendingPaymentEmail] = React.useState(false);
 
     // --- PERMISSION CHECKS ---
     const isAdmin = role === UserRole.ADMIN;
@@ -697,6 +699,32 @@ const OrderPage: React.FC = () => {
                             </div>
                         )}
 
+                        {/* PAYMENT CONFIRMATION EMAIL */}
+                        {isAdmin && order && (
+                            <div className="pt-2">
+                                <Button
+                                    variant="secondary"
+                                    size="sm"
+                                    disabled={isSendingPaymentEmail}
+                                    onClick={async () => {
+                                        setIsSendingPaymentEmail(true);
+                                        try {
+                                            await sendPaymentConfirmationEmail(order);
+                                            showSuccess('Payment confirmation email sent!');
+                                        } catch (err: any) {
+                                            showError('Email failed', err?.message);
+                                        } finally {
+                                            setIsSendingPaymentEmail(false);
+                                        }
+                                    }}
+                                    className="w-full"
+                                >
+                                    <Mail size={14} />
+                                    <span>{isSendingPaymentEmail ? 'Sending…' : 'Send Payment Confirmation'}</span>
+                                </Button>
+                            </div>
+                        )}
+
                         {/* DELETE BUTTON */}
                         {canDelete && (
                             <div className="pt-2">
@@ -710,9 +738,16 @@ const OrderPage: React.FC = () => {
 
                 </div>
 
-                {/* ✅ NEW: ACTIVITY TIMELINE (Full Width at Bottom) */}
+                {/* ✅ EMAIL LOGS (Full Width) */}
+                {order && (
+                    <div className="w-full animate-fadeIn lg:col-span-3">
+                        <EmailLogsSection order={order} />
+                    </div>
+                )}
+
+                {/* ✅ ACTIVITY TIMELINE (Full Width at Bottom) */}
                 <div className="w-full animate-fadeIn lg:col-span-3">
-                    {/* Pass the numeric ID (e.g., 123) not the string "PP-10021" 
+                    {/* Pass the numeric ID (e.g., 123) not the string "PP-10021"
               Ensure 'order.id' is the DB Primary Key */}
                     {order && <OrderTimeline orderId={order.id} />}
                 </div>

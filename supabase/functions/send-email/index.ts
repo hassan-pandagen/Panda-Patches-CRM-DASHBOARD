@@ -93,6 +93,10 @@ const getEmailSubject = (templateId: string, data: any): string => {
     // Remake templates
     'CUSTOMER_REMAKE': `We're Making It Right - ${orderNumber}`,
     'INTERNAL_REMAKE': `[URGENT] Remake Required - ${orderNumber}`,
+
+    // Payment templates
+    'CUSTOMER_PAYMENT_CONFIRMATION': `Payment Received - ${orderNumber}`,
+    'INTERNAL_PAYMENT_NOTIFICATION': `[INTERNAL] Payment Received - ${orderNumber}`,
   };
 
   return subjects[templateId] || `Update from Panda Patches - ${orderNumber}`;
@@ -124,6 +128,10 @@ const getTemplateMessage = (templateId: string): string => {
     // Remake templates
     'CUSTOMER_REMAKE': 'We sincerely apologize for the inconvenience with your order. Our production team did not meet the quality standards you deserved. This is entirely our fault, and we take full responsibility. We are remaking your custom patches at absolutely no extra cost to you. Your satisfaction is our top priority, and we will make this right.',
     'INTERNAL_REMAKE': 'URGENT REMAKE REQUIRED: The customer was not satisfied with the patches we produced. This order needs to be remade immediately. Please contact the sales agent to get full details about what the customer wants changed. Review all specifications carefully and ask questions if anything is unclear. This is our second chance to get it right - quality check everything before shipping.',
+
+    // Payment templates
+    'CUSTOMER_PAYMENT_CONFIRMATION': 'We have received your payment — thank you! Your order is confirmed and our team is working on your mockup. You will receive your mockup in 24 hours.',
+    'INTERNAL_PAYMENT_NOTIFICATION': 'A payment has been recorded for this order. Please review the payment details below and update records accordingly.',
   };
 
   return messages[templateId] || 'Thank you for your order! Our team is working on your custom patches.';
@@ -218,6 +226,8 @@ const shouldShowFullDetails = (templateId: string): boolean => {
     'CUSTOMER_DELIVERED',
     'CUSTOMER_FEEDBACK_REQUEST',
     'CUSTOMER_REFUND_ISSUED',
+    'CUSTOMER_PAYMENT_CONFIRMATION',
+    'INTERNAL_PAYMENT_NOTIFICATION',
   ];
 
   return !minimalDetailsTemplates.includes(templateId);
@@ -520,6 +530,64 @@ const buildEmailHTML = (templateId: string, data: any): string => {
         <td style="padding:0px 0px 20px 0px;" role="module-content" bgcolor=""></td>
       </tr>
     </tbody>
+  </table>
+  ` : ''}
+
+  ${(templateId === 'CUSTOMER_PAYMENT_CONFIRMATION' || templateId === 'INTERNAL_PAYMENT_NOTIFICATION') && data.amount_paid ? `
+  <!-- PAYMENT SUMMARY BOX -->
+  <table class="module" role="module" data-type="text" border="0" cellpadding="0" cellspacing="0" width="100%" style="table-layout: fixed;">
+    <tbody>
+      <tr>
+        <td style="padding:25px 20px 25px 20px; line-height:26px; text-align:center; background-color:#e8f5e9; border-left: 5px solid #4caf50; border-radius: 8px; margin: 20px 0;" height="100%" valign="top" bgcolor="#e8f5e9" role="module-content">
+          <div>
+            <div style="font-family: inherit; text-align: center; margin-bottom: 20px;">
+              <span style="font-size: 22px; font-family: 'lucida sans unicode', 'lucida grande', sans-serif; color: #000; font-weight: bold;">💳 Payment Summary</span>
+            </div>
+            <table border="0" cellpadding="0" cellspacing="0" width="100%" style="max-width:400px; margin: 0 auto; background: #fff; border-radius: 8px; overflow: hidden; border: 1px solid #e0e0e0;">
+              <tr>
+                <td style="padding: 12px 20px; border-bottom: 1px solid #f0f0f0;">
+                  <span style="font-size: 15px; font-family: 'lucida sans unicode', 'lucida grande', sans-serif; color: #555;">Total Amount</span>
+                  <span style="font-size: 16px; font-family: 'lucida sans unicode', 'lucida grande', sans-serif; color: #000; font-weight: bold; float: right;">${escapeHtml(String(data.total_amount || 'N/A'))}</span>
+                </td>
+              </tr>
+              <tr>
+                <td style="padding: 12px 20px; border-bottom: 1px solid #f0f0f0; background-color: #f0fff4;">
+                  <span style="font-size: 15px; font-family: 'lucida sans unicode', 'lucida grande', sans-serif; color: #2e7d32;">✅ Amount Paid</span>
+                  <span style="font-size: 18px; font-family: 'lucida sans unicode', 'lucida grande', sans-serif; color: #2e7d32; font-weight: bold; float: right;">${escapeHtml(String(data.amount_paid))}</span>
+                </td>
+              </tr>
+              ${templateId !== 'CUSTOMER_PAYMENT_CONFIRMATION' && data.amount_remaining && data.amount_remaining !== '$0' ? `
+              <tr>
+                <td style="padding: 12px 20px; background-color: #fffde7;">
+                  <span style="font-size: 15px; font-family: 'lucida sans unicode', 'lucida grande', sans-serif; color: #f57f17;">⏳ Remaining Balance</span>
+                  <span style="font-size: 18px; font-family: 'lucida sans unicode', 'lucida grande', sans-serif; color: #f57f17; font-weight: bold; float: right;">${escapeHtml(String(data.amount_remaining))}</span>
+                </td>
+              </tr>
+              ` : `
+              <tr>
+                <td style="padding: 12px 20px; background-color: #e8f5e9; text-align: center;">
+                  <span style="font-size: 15px; font-family: 'lucida sans unicode', 'lucida grande', sans-serif; color: #2e7d32; font-weight: bold;">🎉 Paid in Full — Thank you!</span>
+                </td>
+              </tr>
+              `}
+              ${templateId === 'INTERNAL_PAYMENT_NOTIFICATION' && data.customer_email ? `
+              <tr>
+                <td style="padding: 12px 20px; border-top: 1px solid #f0f0f0;">
+                  <span style="font-size: 14px; font-family: 'lucida sans unicode', 'lucida grande', sans-serif; color: #555;">Customer Email</span>
+                  <span style="font-size: 14px; font-family: 'lucida sans unicode', 'lucida grande', sans-serif; color: #000; float: right;">${escapeHtml(String(data.customer_email))}</span>
+                </td>
+              </tr>
+              ` : ''}
+            </table>
+          </div>
+        </td>
+      </tr>
+    </tbody>
+  </table>
+
+  <!-- SPACER AFTER PAYMENT -->
+  <table class="module" role="module" data-type="spacer" border="0" cellpadding="0" cellspacing="0" width="100%" style="table-layout: fixed;">
+    <tbody><tr><td style="padding:0px 0px 20px 0px;" role="module-content" bgcolor=""></td></tr></tbody>
   </table>
   ` : ''}
 

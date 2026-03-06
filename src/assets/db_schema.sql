@@ -85,6 +85,10 @@ CREATE TABLE IF NOT EXISTS public.orders (
     is_urgent boolean NOT NULL DEFAULT false,
     is_urgent_approved boolean DEFAULT false,
     lead_source text,
+    assigned_by text,
+    assigned_at timestamptz,
+    cc_email text,
+    rush_date date,
     created_at timestamptz NOT NULL DEFAULT now(),
     updated_at timestamptz NOT NULL DEFAULT now(),
     created_by uuid DEFAULT auth.uid() REFERENCES public.user_profiles(id) ON DELETE SET NULL
@@ -213,11 +217,23 @@ CREATE TABLE IF NOT EXISTS public.performance_metrics (
 
 -- SECTION 2.1: SCHEMA MIGRATIONS / ALTERATIONS
 -- -----------------------------------------------------------------
-ALTER TABLE public.attendance_sessions 
+ALTER TABLE public.attendance_sessions
 ADD COLUMN IF NOT EXISTS updated_at timestamptz DEFAULT now();
 
-ALTER TABLE public.attendance_sessions 
+ALTER TABLE public.attendance_sessions
 ADD COLUMN IF NOT EXISTS auto_clocked_out boolean DEFAULT FALSE;
+
+-- Orders: assignment tracking (migration: add_order_assignment_tracking)
+ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS assigned_by text;
+ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS assigned_at timestamptz;
+COMMENT ON COLUMN public.orders.assigned_by IS 'Email of the admin who assigned this order';
+COMMENT ON COLUMN public.orders.assigned_at IS 'Timestamp when the order was assigned';
+
+-- Orders: CC email (migration: add_cc_email_to_orders)
+ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS cc_email text;
+
+-- Orders: rush date (migration: add_rush_date_to_orders)
+ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS rush_date date;
 
 -- SECTION 3: BUCKET SETUP
 -- -----------------------------------------------------------------
@@ -284,6 +300,13 @@ CREATE INDEX IF NOT EXISTS idx_orders_customer_email ON public.orders(customer_e
 CREATE INDEX IF NOT EXISTS idx_orders_sales_agent ON public.orders(sales_agent text_ops);
 CREATE INDEX IF NOT EXISTS idx_orders_customer_phone ON public.orders(customer_phone text_ops);
 CREATE INDEX IF NOT EXISTS idx_orders_created_at ON public.orders(created_at timestamptz_ops);
+-- Assignment tracking indexes (migration: add_order_assignment_tracking)
+CREATE INDEX IF NOT EXISTS idx_orders_sales_agent_null ON public.orders(sales_agent) WHERE sales_agent IS NULL;
+CREATE INDEX IF NOT EXISTS idx_orders_assigned_by ON public.orders(assigned_by);
+-- CC email index (migration: add_cc_email_to_orders)
+CREATE INDEX IF NOT EXISTS idx_orders_cc_email ON public.orders(cc_email) WHERE cc_email IS NOT NULL;
+-- Rush date index (migration: add_rush_date_to_orders)
+CREATE INDEX IF NOT EXISTS idx_orders_rush_date ON public.orders(rush_date) WHERE rush_date IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_quotes_quote_number ON public.quotes(quote_number);
 CREATE INDEX IF NOT EXISTS idx_quotes_customer_email ON public.quotes(customer_email text_ops);
 CREATE INDEX IF NOT EXISTS idx_quotes_sales_agent ON public.quotes(sales_agent text_ops);
@@ -294,6 +317,7 @@ CREATE INDEX IF NOT EXISTS idx_order_communications_order_id ON public.order_com
 CREATE INDEX IF NOT EXISTS idx_attendance_sessions_user_id ON public.attendance_sessions(user_id);
 CREATE INDEX IF NOT EXISTS idx_attendance_sessions_user_email ON public.attendance_sessions(user_email);
 CREATE INDEX IF NOT EXISTS idx_attendance_sessions_date ON public.attendance_sessions(work_date);
+CREATE INDEX IF NOT EXISTS idx_attendance_sessions_work_date_desc ON public.attendance_sessions(work_date DESC);
 CREATE INDEX IF NOT EXISTS idx_attendance_sessions_active ON public.attendance_sessions(user_id) WHERE clock_out_time IS NULL;
 
 -- Ensures each user can only have ONE active session
@@ -789,6 +813,10 @@ SELECT
   is_urgent AS "isUrgent",
   is_urgent_approved AS "isUrgentApproved",
   lead_source AS "leadSource",
+  assigned_by AS "assignedBy",
+  assigned_at AS "assignedAt",
+  cc_email AS "ccEmail",
+  rush_date AS "rushDate",
   created_at AS "createdAt",
   updated_at AS "updatedAt",
   created_by AS "createdBy",
@@ -1019,6 +1047,131 @@ SELECT
   COUNT(*) as non_admin_users_updated
 FROM user_profiles 
 WHERE role != 'ADMIN' AND permissions->>'orders_view_own_only' = 'true';
+
+-- SECTION 12: FUTURE UPGRADES
+-- -----------------------------------------------------------------
+-- Run these only when ready (Supabase Pro plan required for pg_cron).
+
+-- ── 12A: AUTO CLOCK-OUT CRON JOB (Supabase Pro only) ─────────────
+-- Step 1: Enable pg_cron extension via Supabase Dashboard → Database → Extensions
+-- CREATE EXTENSION IF NOT EXISTS pg_cron;
+
+-- Step 2: Schedule job to run every hour
+-- SELECT cron.schedule(
+--   'auto-close-stale-attendance-sessions',
+--   '0 * * * *',
+--   $$SELECT auto_close_stale_sessions();$$
+-- );
+
+-- Step 3: Verify
+-- SELECT jobid, schedule, command, active FROM cron.job
+-- WHERE jobname = 'auto-close-stale-attendance-sessions';
+
+-- Step 4: View run history
+-- SELECT jobid, runid, command, status, start_time, end_time
+-- FROM cron.job_run_details
+-- WHERE jobid = (SELECT jobid FROM cron.job WHERE jobname = 'auto-close-stale-attendance-sessions')
+-- ORDER BY start_time DESC LIMIT 10;
+
+-- Management commands:
+-- Disable:  SELECT cron.alter_job(jobid, enabled => false) FROM cron.job WHERE jobname = 'auto-close-stale-attendance-sessions';
+-- Enable:   SELECT cron.alter_job(jobid, enabled => true)  FROM cron.job WHERE jobname = 'auto-close-stale-attendance-sessions';
+-- Remove:   SELECT cron.unschedule('auto-close-stale-attendance-sessions');
+
+-- ── 12B: SERVER-SIDE PAGINATION (Run when you have 1000+ orders) ──
+-- Optimized indexes for paginated queries
+CREATE INDEX IF NOT EXISTS idx_orders_created_at_desc ON public.orders(created_at DESC, id DESC);
+CREATE INDEX IF NOT EXISTS idx_orders_status_created_at ON public.orders(status, created_at DESC, id DESC);
+CREATE INDEX IF NOT EXISTS idx_orders_customer_search
+ON public.orders USING gin(
+  to_tsvector('english',
+    coalesce(customer_name, '') || ' ' ||
+    coalesce(customer_email, '') || ' ' ||
+    coalesce(customer_phone, '')
+  )
+);
+CREATE INDEX IF NOT EXISTS idx_orders_number_search ON public.orders(order_number text_pattern_ops);
+
+-- Paginated orders function (replaces client-side fetch for large datasets)
+CREATE OR REPLACE FUNCTION public.get_orders_paginated(
+  p_page INTEGER DEFAULT 1,
+  p_page_size INTEGER DEFAULT 50,
+  p_status TEXT DEFAULT NULL,
+  p_search TEXT DEFAULT NULL,
+  p_sales_agent TEXT DEFAULT NULL,
+  p_user_role TEXT DEFAULT 'USER',
+  p_user_email TEXT DEFAULT NULL
+)
+RETURNS TABLE(
+  id BIGINT,
+  order_number TEXT,
+  customer_name TEXT,
+  customer_email TEXT,
+  design_name TEXT,
+  status TEXT,
+  created_at TIMESTAMPTZ,
+  sales_agent TEXT,
+  order_amount NUMERIC,
+  total_count BIGINT
+)
+LANGUAGE plpgsql SECURITY DEFINER
+AS $$
+DECLARE
+  v_offset INTEGER;
+  v_total_count BIGINT;
+BEGIN
+  v_offset := (p_page - 1) * p_page_size;
+
+  SELECT COUNT(*) INTO v_total_count
+  FROM public.orders
+  WHERE
+    (p_status IS NULL OR public.orders.status = p_status)
+    AND (p_search IS NULL OR
+      public.orders.order_number ILIKE '%' || p_search || '%' OR
+      public.orders.customer_name ILIKE '%' || p_search || '%' OR
+      public.orders.customer_email ILIKE '%' || p_search || '%')
+    AND (p_sales_agent IS NULL OR public.orders.sales_agent = p_sales_agent)
+    AND (p_user_role = 'ADMIN' OR public.orders.sales_agent = p_user_email);
+
+  RETURN QUERY
+  SELECT
+    o.id, o.order_number, o.customer_name, o.customer_email, o.design_name,
+    o.status, o.created_at, o.sales_agent, o.order_amount, v_total_count
+  FROM public.orders o
+  WHERE
+    (p_status IS NULL OR o.status = p_status)
+    AND (p_search IS NULL OR
+      o.order_number ILIKE '%' || p_search || '%' OR
+      o.customer_name ILIKE '%' || p_search || '%' OR
+      o.customer_email ILIKE '%' || p_search || '%')
+    AND (p_sales_agent IS NULL OR o.sales_agent = p_sales_agent)
+    AND (p_user_role = 'ADMIN' OR o.sales_agent = p_user_email)
+  ORDER BY o.created_at DESC, o.id DESC
+  LIMIT p_page_size OFFSET v_offset;
+END;
+$$;
+
+-- Slow query monitor view (optional, requires pg_stat_statements extension)
+-- CREATE OR REPLACE VIEW public.slow_query_stats AS
+-- SELECT query, calls, total_exec_time, mean_exec_time, max_exec_time
+-- FROM pg_stat_statements WHERE query LIKE '%orders%'
+-- ORDER BY mean_exec_time DESC LIMIT 20;
+-- GRANT SELECT ON public.slow_query_stats TO authenticated;
+
+-- Dashboard metrics cache (refresh via pg_cron when on Pro plan)
+-- CREATE MATERIALIZED VIEW IF NOT EXISTS public.dashboard_metrics_cache AS
+-- SELECT
+--   COUNT(*) FILTER (WHERE status = 'NEW_ORDER') as new_orders_count,
+--   COUNT(*) FILTER (WHERE status = 'IN_PRODUCTION') as in_production_count,
+--   COUNT(*) FILTER (WHERE status = 'SHIPPED') as shipped_count,
+--   COUNT(*) FILTER (WHERE created_at >= CURRENT_DATE - INTERVAL '7 days') as orders_last_7_days,
+--   SUM(order_amount) FILTER (WHERE created_at >= CURRENT_DATE - INTERVAL '30 days') as revenue_30_days
+-- FROM public.orders;
+-- Refresh cron (Pro plan):
+-- SELECT cron.schedule('refresh-dashboard-metrics', '0 * * * *',
+--   $$REFRESH MATERIALIZED VIEW public.dashboard_metrics_cache;$$);
+
+SELECT 'Future upgrade sections loaded (indexes active, functions created, cron lines are commented).' AS status;
 
 -- SECTION 11: ATTENDANCE SYSTEM CONFIGURATION REFERENCE
 -- -----------------------------------------------------------------

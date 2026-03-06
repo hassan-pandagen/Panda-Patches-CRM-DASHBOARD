@@ -404,7 +404,21 @@ export const triggerStatusEmail = async (order: Order, statusToCheck: string) =>
         visibility: 'internal'
       };
     } catch (err) {
+      const errorMsg = (err as any)?.message || String(err) || 'Unknown error';
       logger.error(`[Email Service] Failed to send email to ${req.to}`, err);
+      // Log the failed email so it appears in the Email Logs section on the Order page
+      try {
+        await supabase.from('order_communications').insert({
+          order_id: order.id,
+          recipient_email: req.to,
+          template_id: req.template_id,
+          subject: `FAILED: ${statusToCheck}`,
+          body: errorMsg,
+          visibility: 'internal',
+        });
+      } catch {
+        // ignore secondary log failure
+      }
       return null;
     }
   });
@@ -580,4 +594,104 @@ export const updateOrderDetails = async (
   endMeasure();
   
   return newOrder;
+};
+
+// ─── RESEND A FAILED EMAIL ────────────────────────────────────────────────────
+export const resendFailedEmail = async (
+  order: Order,
+  communicationId: number,
+  triggerStatus: string,
+  templateId: string,
+  recipientEmail: string
+): Promise<void> => {
+  const emailData = prepareEmailData(order, triggerStatus);
+
+  const response = await supabase.functions.invoke('send-email', {
+    body: { to: recipientEmail, template_id: templateId, dynamic_data: emailData },
+  });
+
+  if (response.error) {
+    const errorMsg = (response.error as any)?.message || String(response.error) || 'Unknown error';
+    // Log the new failure
+    await supabase.from('order_communications').insert({
+      order_id: order.id,
+      recipient_email: recipientEmail,
+      template_id: templateId,
+      subject: `FAILED: ${triggerStatus}`,
+      body: errorMsg,
+      visibility: 'internal',
+    });
+    throw new Error(errorMsg);
+  }
+
+  // Success: remove the failed record and log success
+  await supabase.from('order_communications').delete().eq('id', communicationId);
+  await supabase.from('order_communications').insert({
+    order_id: order.id,
+    recipient_email: recipientEmail,
+    template_id: templateId,
+    subject: `Auto-Trigger: ${triggerStatus}`,
+    body: `Template Sent: ${templateId}`,
+    visibility: 'internal',
+  });
+};
+
+// ─── MANUAL PAYMENT CONFIRMATION EMAIL ───────────────────────────────────────
+export const sendPaymentConfirmationEmail = async (order: Order): Promise<void> => {
+  const emailData = {
+    customer_name: order.customerName || 'Valued Customer',
+    customer_email: order.customerEmail,
+    order_number: order.orderNumber,
+    order_date: new Date(order.createdAt).toLocaleDateString(),
+    total_amount: `$${(order.orderAmount || 0).toLocaleString()}`,
+    amount_paid: `$${(order.amountPaid || 0).toLocaleString()}`,
+    amount_remaining: `$${(order.amountRemaining || 0).toLocaleString()}`,
+    is_paid_in_full: (order.amountRemaining || 0) <= 0,
+    design_name: order.designName || '',
+    order_link: `https://portal.pandapatches.com/order/${order.orderNumber}`,
+    sales_agent_name: order.salesAgent || 'Panda Team',
+  };
+
+  const requests: Array<{ to: string; template_id: string }> = [];
+
+  // Customer receipt
+  if (order.customerEmail && isValidEmail(order.customerEmail)) {
+    requests.push({ to: order.customerEmail, template_id: 'CUSTOMER_PAYMENT_CONFIRMATION' });
+  }
+  // Internal alert → lance@pandapatches.com only
+  requests.push({ to: 'lance@pandapatches.com', template_id: 'INTERNAL_PAYMENT_NOTIFICATION' });
+
+  const results = await Promise.allSettled(
+    requests.map(req =>
+      supabase.functions.invoke('send-email', {
+        body: { to: req.to, template_id: req.template_id, dynamic_data: emailData },
+      })
+    )
+  );
+
+  // Log all attempts to order_communications
+  const logs = results.map((result, i) => ({
+    order_id: order.id,
+    recipient_email: requests[i].to,
+    template_id: requests[i].template_id,
+    subject: result.status === 'fulfilled' && !result.value.error
+      ? 'Auto-Trigger: PAYMENT_CONFIRMATION'
+      : 'FAILED: PAYMENT_CONFIRMATION',
+    body: result.status === 'fulfilled' && !result.value.error
+      ? `Template Sent: ${requests[i].template_id}`
+      : ((result.status === 'rejected' ? result.reason?.message : result.value?.error?.message) || 'Unknown error'),
+    visibility: 'internal' as const,
+  }));
+
+  if (logs.length > 0) {
+    await supabase.from('order_communications').insert(logs).then();
+  }
+
+  // Throw if ALL failed
+  const anySuccess = results.some(
+    r => r.status === 'fulfilled' && !(r.value as any).error
+  );
+  if (!anySuccess) {
+    throw new Error('Payment confirmation emails failed to send');
+  }
 };
