@@ -3,14 +3,14 @@
 import React, { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { getQuoteByNumber, updateQuote, convertQuoteToOrder, deleteQuote } from '../services/quoteService';
+import { getQuoteByNumber, updateQuote, convertQuoteToOrder, deleteQuote, sendQuoteEmail } from '../services/quoteService';
 import { queryKeys } from '../constants/queryKeys';
 import { PATCHES_TYPE_OPTIONS } from '../constants/index';
 import Button from '../components/ui/Button';
 import Skeleton from '../components/ui/Skeleton';
 import SpotlightCard from '../components/ui/SpotlightCard';
 import { useToast } from '../hooks/useToast';
-import { ArrowLeft, CheckCircle, Trash2, Calendar, Mail, Phone, Paperclip, Image, Pencil, X, AlertTriangle, DollarSign, ExternalLink } from 'lucide-react';
+import { ArrowLeft, CheckCircle, Trash2, Calendar, Mail, Phone, Paperclip, Image, Pencil, X, AlertTriangle, DollarSign, ExternalLink, MailCheck, Send } from 'lucide-react';
 import OptimizedImage from '../components/ui/OptimizedImage';
 
 // ─── SELECT STYLE ────────────────────────────────────────────────────────────
@@ -38,6 +38,7 @@ const QuoteDetailPage: React.FC = () => {
   const [convertingId, setConvertingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [isSendingEmail, setIsSendingEmail] = useState(false);
 
   // Edit form state
   const [editForm, setEditForm] = useState<Record<string, string>>({});
@@ -648,6 +649,56 @@ const QuoteDetailPage: React.FC = () => {
                 </div>
               )}
             </div>
+          </SpotlightCard>
+
+          {/* Email Status + Send Button */}
+          <SpotlightCard className={`p-6 border ${quote.emailSentAt ? 'bg-emerald-900/20 border-emerald-600/40' : 'bg-slate-800/50 border-slate-700'}`}>
+            <h3 className="font-semibold text-white mb-3 flex items-center gap-2">
+              <MailCheck className={`w-4 h-4 ${quote.emailSentAt ? 'text-emerald-400' : 'text-slate-400'}`} />
+              Quote Email
+            </h3>
+
+            {quote.emailSentAt ? (
+              <div className="mb-4">
+                <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-emerald-500/20 border border-emerald-500/30">
+                  <MailCheck className="w-4 h-4 text-emerald-400 shrink-0" />
+                  <div>
+                    <p className="text-emerald-300 text-sm font-semibold">Quote Sent</p>
+                    <p className="text-emerald-400/70 text-xs">
+                      {new Date(quote.emailSentAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                      {' · '}
+                      {new Date(quote.emailSentAt).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <p className="text-sm text-slate-400 mb-3">Quote email has not been sent yet.</p>
+            )}
+
+            <button
+              disabled={isSendingEmail}
+              onClick={async () => {
+                setIsSendingEmail(true);
+                try {
+                  await sendQuoteEmail(quote);
+                  queryClient.invalidateQueries({ queryKey: queryKeys.quotes.single(quoteNumber || '') });
+                  showSuccess('Quote email sent!');
+                } catch (err: any) {
+                  showError('Email failed', err?.message);
+                } finally {
+                  setIsSendingEmail(false);
+                }
+              }}
+              className={`w-full flex items-center justify-center gap-2 rounded-lg py-2 text-sm font-semibold transition-colors disabled:opacity-50
+                ${quote.emailSentAt
+                  ? 'bg-emerald-600/20 border border-emerald-600/50 text-emerald-300 hover:bg-emerald-600/30'
+                  : 'bg-brand-orange/20 border border-brand-orange text-brand-orange hover:bg-brand-orange/30'
+                }`}
+            >
+              <Send className="w-3.5 h-3.5" />
+              {isSendingEmail ? 'Sending…' : quote.emailSentAt ? 'Resend Quote Email' : 'Send Quote Email'}
+            </button>
           </SpotlightCard>
 
           {/* Follow-up Section */}

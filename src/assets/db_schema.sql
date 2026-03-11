@@ -113,6 +113,7 @@ CREATE TABLE IF NOT EXISTS public.quotes (
      customer_attachment_urls text[],
      sales_agent text NOT NULL,
      lead_source text,
+     email_sent_at timestamptz,
      created_at timestamptz NOT NULL DEFAULT now(),
      updated_at timestamptz NOT NULL DEFAULT now(),
      created_by uuid DEFAULT auth.uid() REFERENCES public.user_profiles(id) ON DELETE SET NULL
@@ -234,6 +235,10 @@ ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS cc_email text;
 
 -- Orders: rush date (migration: add_rush_date_to_orders)
 ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS rush_date date;
+
+-- Quotes: email sent tracking
+ALTER TABLE public.quotes ADD COLUMN IF NOT EXISTS email_sent_at timestamptz;
+COMMENT ON COLUMN public.quotes.email_sent_at IS 'Timestamp of when the quote email was successfully sent to the customer. NULL = not yet sent.';
 
 -- SECTION 3: BUCKET SETUP
 -- -----------------------------------------------------------------

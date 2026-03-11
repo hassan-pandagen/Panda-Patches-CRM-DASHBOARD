@@ -10,7 +10,7 @@ import Button from '../components/ui/Button';
 import Skeleton from '../components/ui/Skeleton';
 import EmptyState from '../components/ui/EmptyState';
 import SpotlightCard from '../components/ui/SpotlightCard';
-import { Search, Plus, Calendar, ArrowRight, Trash2, CheckCircle } from 'lucide-react';
+import { Search, Plus, Calendar, ArrowRight, Trash2, CheckCircle, MailCheck, Clock } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useToast } from '../hooks/useToast';
 
@@ -188,6 +188,17 @@ const QuotesPage: React.FC = () => {
                           <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">
                             QT-SERIES
                           </span>
+                          {quote.emailSentAt ? (
+                            <span className="flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                              <MailCheck className="w-3 h-3" />
+                              Quote Sent · {new Date(quote.emailSentAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                            </span>
+                          ) : (
+                            <span className="flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-yellow-500/10 text-yellow-400 border border-yellow-500/20">
+                              <Clock className="w-3 h-3" />
+                              Not Sent
+                            </span>
+                          )}
                         </div>
                         <div className="flex flex-wrap items-center gap-3 text-sm text-slate-300 mt-1">
                           {quote.createdAt && (

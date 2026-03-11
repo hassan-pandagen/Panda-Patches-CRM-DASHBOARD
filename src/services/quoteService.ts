@@ -7,8 +7,8 @@ import { Quote, Order, OrderStatus } from '../types/index';
 import { logger } from './logger';
 
 const SENDGRID_TEMPLATES = {
-  CUSTOMER_QUOTE: 'd-c1e82e04c1b447daa9df3b62c89b742b',
-  INTERNAL_QUOTE: 'd-6e9383594bbd4ff384acef85a625f635',
+  CUSTOMER_QUOTE: 'd-fcd19c2e3d2d42a4b0e1bf3087179c7d',
+  INTERNAL_QUOTE: 'd-c74e2abd9bb54b79b994aa53b654c374',
 };
 
 const PRODUCTION_EMAIL = 'lilcustomerzdesign@gmail.com';
@@ -18,7 +18,7 @@ const toSnakeCase = (data: any): any => {
   if (!data || typeof data !== 'object') return {};
 
   const readOnlyFields = new Set([
-    'id', 'quoteNumber', 'createdAt', 'updatedAt'
+    'id', 'quoteNumber', 'createdAt', 'updatedAt', 'emailSentAt'
   ]);
 
   const snakeCaseObject: { [key: string]: any } = {};
@@ -78,6 +78,7 @@ export const mapDbToQuote = (data: any): Quote => {
     
     createdAt: data.createdAt ?? data.created_at,
     updatedAt: data.updatedAt ?? data.updated_at,
+    emailSentAt: data.emailSentAt ?? data.email_sent_at ?? null,
   };
 };
 
@@ -94,7 +95,7 @@ const generateQuoteNumber = async (): Promise<string> => {
 };
 
 // Send quote emails (customer + internal team)
-const sendQuoteEmail = async (quote: Quote): Promise<void> => {
+export const sendQuoteEmail = async (quote: Quote): Promise<void> => {
   try {
     const { data: { session } } = await supabase.auth.getSession();
     
@@ -130,7 +131,7 @@ const sendQuoteEmail = async (quote: Quote): Promise<void> => {
       design_backing: quote.designBacking,
       size: quote.designSize,
       instructions: quote.instructions || '',
-      estimated_amount: quote.estimatedAmount,
+      estimated_amount: quote.estimatedAmount ? `$${(quote.estimatedAmount).toLocaleString()}` : 'TBD',
       sales_agent: quote.salesAgent,
       // Add mockup files for SendGrid processing
       winner_file: winnerUrl ? { url: winnerUrl, file_name: getFileName(winnerUrl) } : null,
@@ -152,6 +153,7 @@ const sendQuoteEmail = async (quote: Quote): Promise<void> => {
           to: quote.customerEmail,
           template_id: SENDGRID_TEMPLATES.CUSTOMER_QUOTE,
           dynamic_data: emailData,
+          cc: 'lance@pandapatches.com',
         }),
       }
     );
@@ -159,8 +161,15 @@ const sendQuoteEmail = async (quote: Quote): Promise<void> => {
     if (!customerResponse.ok) {
       const errorText = await customerResponse.text();
       logger.error('Customer email failed', { error: errorText });
+      throw new Error(`Email send failed: ${errorText}`);
     } else {
       logger.info('Customer quote email sent', { quoteNumber: quote.quoteNumber, to: quote.customerEmail });
+      // Stamp email_sent_at so the UI can show "Quote Sent" badge
+      await supabase
+        .from('quotes')
+        .update({ email_sent_at: new Date().toISOString() })
+        .eq('quote_number', quote.quoteNumber);
+      queryClient.invalidateQueries({ queryKey: queryKeys.quotes?.all?.() });
     }
 
     // 2. Send to Production Team with Design CC

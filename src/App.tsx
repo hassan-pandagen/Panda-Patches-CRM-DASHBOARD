@@ -35,6 +35,9 @@ const BulkCostEntryPage = lazy(() => import('@/pages/BulkCostEntryPage'));
 import ProtectedRoute from './ProtectedRoute';
 import AdminRoute from './AdminRoute';
 
+// 404
+import NotFoundPage from '@/pages/NotFoundPage';
+
 const App: React.FC = () => {
   // ✅ Enable Supabase Realtime for live data updates
   useSupabaseRealtime();
@@ -79,9 +82,11 @@ const App: React.FC = () => {
                 <Route path="/performance-metrics" element={<PerformanceMetricsPage />} />
               </Route>
     
-              <Route path="*" element={<Navigate to="/" />} />
             </Route>
           </Route>
+
+          {/* 404 — outside protected routes so all unknown paths return not-found */}
+          <Route path="*" element={<NotFoundPage />} />
         </Routes>
       </Suspense>
     </>

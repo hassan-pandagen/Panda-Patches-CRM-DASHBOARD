@@ -55,7 +55,9 @@ const sendEmailSchema = z.object({
         return emails.every(email => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email));
       },
       { message: "CC contains invalid email format" }
-    )
+    ),
+
+  from_email: z.string().email().optional(),
 });
 
 // 1. Helper: Get Clean Filename
@@ -120,7 +122,7 @@ const getTemplateMessage = (templateId: string, data?: any): string => {
 
   const messages: Record<string, string> = {
     // Quote templates
-    'd-fcd19c2e3d2d42a4b0e1bf3087179c7d': 'Great news! We have received your custom patch request. Our design team has carefully reviewed your specifications and prepared a detailed quote proposal. Below you\'ll find all the information regarding your quote.',
+    'd-fcd19c2e3d2d42a4b0e1bf3087179c7d': 'Here\'s the quote you requested for your custom patches! Please review the details below. If you have any questions, would like to discuss the details, or are ready to move forward, simply reply to this email and our team will be happy to assist you.',
     'd-c74e2abd9bb54b79b994aa53b654c374': 'Internal: New quote request received. Please review the specifications and prepare the mockup.',
 
     // Order flow templates
@@ -733,6 +735,12 @@ const buildEmailHTML = (templateId: string, data: any): string => {
                               </div>
                               <div style="font-family: inherit; text-align: center"><br></div>
                             ` : ''}
+                            ${data.estimated_amount ? `
+                              <div style="font-family: inherit; text-align: center">
+                                <span style="font-family: 'lucida sans unicode', 'lucida grande', sans-serif; font-size: 20px; font-weight: bold; color: #fb6e1d;">Estimated Price: ${escapeHtml(String(data.estimated_amount))}</span>
+                              </div>
+                              <div style="font-family: inherit; text-align: center"><br></div>
+                            ` : ''}
                             ${templateId.includes('INTERNAL') && data.instructions ? `
                               <div style="font-family: inherit; text-align: center">
                                 <span style="font-family: 'lucida sans unicode', 'lucida grande', sans-serif; font-size: 18px;">Special Instruction: ${escapeHtml(data.instructions)}</span>
@@ -931,7 +939,7 @@ serve(async (req) => {
     // ✅ CHECK: Verify ZeptoMail API credentials are configured
     const ZEPTOMAIL_API_KEY = Deno.env.get('ZEPTOMAIL_API_KEY');
     const ZEPTOMAIL_BOUNCE_ADDRESS = Deno.env.get('ZEPTOMAIL_BOUNCE_ADDRESS'); // Optional
-    const SMTP_FROM_EMAIL = Deno.env.get('SMTP_FROM_EMAIL') || 'lance@pandapatches.com';
+    const SMTP_FROM_EMAIL = Deno.env.get('SMTP_FROM_EMAIL') || 'hello@pandapatches.com';
     const SMTP_FROM_NAME = Deno.env.get('SMTP_FROM_NAME') || 'Panda Patches';
     const SMTP_REPLY_TO = Deno.env.get('SMTP_REPLY_TO') || 'hello@pandapatches.com';
 
@@ -944,7 +952,7 @@ serve(async (req) => {
     const body = await req.json();
     const validatedData = sendEmailSchema.parse(body);
 
-    const { to, template_id, dynamic_data, cc } = validatedData;
+    const { to, template_id, dynamic_data, cc, from_email } = validatedData;
     const attachments = [];
     const inlineAttachments = [];
 
@@ -1040,10 +1048,8 @@ serve(async (req) => {
       ccAddresses.push(...additionalCC);
     }
 
-    // Remove duplicates and filter out recipient email and sender email from CC
-    const uniqueCC = [...new Set(ccAddresses)].filter(email =>
-      email !== to && email !== SMTP_FROM_EMAIL
-    );
+    // Remove duplicates and filter out only the recipient email from CC
+    const uniqueCC = [...new Set(ccAddresses)].filter(email => email !== to);
 
     const ccFormatted = uniqueCC.length > 0
       ? uniqueCC.map(email => ({ email_address: { address: email } }))
@@ -1083,7 +1089,7 @@ serve(async (req) => {
 
     const zeptomailPayload: any = {
       from: {
-        address: SMTP_FROM_EMAIL,
+        address: from_email || SMTP_FROM_EMAIL,
         name: SMTP_FROM_NAME,
       },
       to: toAddresses,

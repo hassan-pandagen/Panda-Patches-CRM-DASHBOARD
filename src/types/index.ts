@@ -209,6 +209,9 @@ export interface Quote {
    notes?: string;
    mockupUrls?: string[];
    customerAttachmentUrls?: string[];
+
+   // --- Email Tracking ---
+   emailSentAt?: string | null; // Timestamp of when quote email was sent to customer
 }
 
 // --- MONTHLY COSTS TYPE ---
