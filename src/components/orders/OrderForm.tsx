@@ -32,6 +32,13 @@ const REFUND_REASONS = [
   "Other"
 ];
 
+const REMAKE_REASONS = [
+  "Package Lost",
+  "Quality Issues",
+  "Handling Issues",
+  "Force Majeure"
+];
+
 const FormSectionWrapper: React.FC<{ title: string; children: React.ReactNode }> = ({ title, children }) => (
   <div className="group relative bg-slate-900/40 backdrop-blur-xl border border-white/10 rounded-2xl shadow-xl p-10">
     <h3 className="relative text-lg font-semibold text-white pb-2 mb-10">
@@ -710,11 +717,15 @@ const OrderForm: React.FC<OrderFormProps> = ({
           </div>
         </div>
         
-        {/* ✅ NEW: CONDITIONAL REASON BLOCK */}
-        {(watchedStatus === 'CANCELLED' || watchedStatus === 'REFUNDED') && (
-          <div className="mt-10 p-8 rounded-lg animate-fadeIn bg-red-500/10 border border-red-500/30">
-            <h4 className="text-red-200 font-semibold mb-4 flex items-center gap-2">
-              ⚠️ {watchedStatus === 'CANCELLED' ? 'Cancellation' : 'Refund'} Details
+        {/* ✅ CONDITIONAL REASON BLOCK — Cancelled / Refunded / Remake */}
+        {(watchedStatus === 'CANCELLED' || watchedStatus === 'REFUNDED' || watchedStatus === 'REMAKE') && (
+          <div className={`mt-10 p-8 rounded-lg animate-fadeIn ${
+            watchedStatus === 'REMAKE'
+              ? 'bg-amber-500/10 border border-amber-500/30'
+              : 'bg-red-500/10 border border-red-500/30'
+          }`}>
+            <h4 className={`${watchedStatus === 'REMAKE' ? 'text-amber-200' : 'text-red-200'} font-semibold mb-4 flex items-center gap-2`}>
+              {watchedStatus === 'REMAKE' ? '🔄 Remake' : watchedStatus === 'CANCELLED' ? '⚠️ Cancellation' : '⚠️ Refund'} Details
             </h4>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
@@ -727,9 +738,11 @@ const OrderForm: React.FC<OrderFormProps> = ({
                   {...register('reasonCategory', { required: 'Reason is required' })}
                   className="mt-1 block w-full bg-slate-800 border-slate-600 rounded-md text-white focus:ring-brand-orange focus:border-brand-orange"
                 >
-                  <option value="" disabled>Select a reason...</option>
-                  {watchedStatus === 'CANCELLED' 
+                  <option value="" disabled hidden>Select a reason...</option>
+                  {watchedStatus === 'CANCELLED'
                     ? CANCELLATION_REASONS.map(r => <option key={r} value={r}>{r}</option>)
+                    : watchedStatus === 'REMAKE'
+                    ? REMAKE_REASONS.map(r => <option key={r} value={r}>{r}</option>)
                     : REFUND_REASONS.map(r => <option key={r} value={r}>{r}</option>)
                   }
                 </select>
@@ -745,7 +758,9 @@ const OrderForm: React.FC<OrderFormProps> = ({
                   rows={3}
                   {...register('reasonDetails')}
                   className="mt-1 block w-full bg-slate-800 border-slate-600 rounded-md text-white focus:ring-brand-orange focus:border-brand-orange placeholder-slate-400"
-                  placeholder="Provide specific details (e.g., 'Customer denies receiving')..."
+                  placeholder={watchedStatus === 'REMAKE'
+                    ? "Describe the issue (e.g., 'Package lost in transit, customer never received')..."
+                    : "Provide specific details (e.g., 'Customer denies receiving')..."}
                 />
               </div>
             </div>

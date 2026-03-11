@@ -257,6 +257,9 @@ export const prepareEmailData = (order: Order, triggerStatus: string) => {
 
     is_urgent: order.isUrgent || false,
     rush_date: order.rushDate ? new Date(order.rushDate).toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }) : null,
+
+    remake_reason: order.reasonCategory || null,
+    remake_details: order.reasonDetails || null,
   };
 };
 

@@ -530,6 +530,7 @@ const AllOrdersPage: React.FC = () => {
                     <FilterTab active={activeFilter === 'SHIPPED'} label="Shipped" count={getCount('SHIPPED')} onClick={() => handleFilterChange('SHIPPED')} />
                     <FilterTab active={activeFilter === 'DELIVERED'} label="Delivered" count={getCount('DELIVERED')} onClick={() => handleFilterChange('DELIVERED')} />
                     <FilterTab active={activeFilter === 'QUALITY_ASSURANCE'} label="Quality Assurance" count={getCount('QUALITY_ASSURANCE')} onClick={() => handleFilterChange('QUALITY_ASSURANCE')} />
+                    <FilterTab active={activeFilter === 'REMAKE'} label="Remake" count={getCount('REMAKE')} onClick={() => handleFilterChange('REMAKE')} />
                     <FilterTab active={activeFilter === 'CANCELLED'} label="Cancelled" count={getCount('CANCELLED')} onClick={() => handleFilterChange('CANCELLED')} />
                     <FilterTab active={activeFilter === 'REFUNDED'} label="Refunds" count={getCount('REFUNDED')} onClick={() => handleFilterChange('REFUNDED')} />
                 </div>

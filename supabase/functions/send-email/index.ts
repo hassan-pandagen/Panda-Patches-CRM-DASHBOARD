@@ -91,8 +91,8 @@ const getEmailSubject = (templateId: string, data: any): string => {
     'QUALITY_ASSURANCE': `[INTERNAL] QA Check - ${orderNumber}`,
 
     // Remake templates
-    'CUSTOMER_REMAKE': `We're Making It Right - ${orderNumber}`,
-    'INTERNAL_REMAKE': `[URGENT] Remake Required - ${orderNumber}`,
+    'CUSTOMER_REMAKE': `We're Making It Right - ${orderNumber}${data.remake_reason ? ` (${data.remake_reason})` : ''}`,
+    'INTERNAL_REMAKE': `[URGENT] Remake Required - ${orderNumber}${data.remake_reason ? ` — ${data.remake_reason}` : ''}`,
 
     // Payment templates
     'CUSTOMER_PAYMENT_CONFIRMATION': `Payment Received - ${orderNumber}`,
@@ -103,7 +103,21 @@ const getEmailSubject = (templateId: string, data: any): string => {
 };
 
 // 3. Helper: Get Template Message based on Template ID
-const getTemplateMessage = (templateId: string): string => {
+const getTemplateMessage = (templateId: string, data?: any): string => {
+  const remakeReason = data?.remake_reason || '';
+  const customerRemakeMessages: Record<string, string> = {
+    'Package Lost': 'We are sorry to inform you that your package was lost during shipping. This is not the experience we want for our customers. We are remaking your custom patches at absolutely no extra cost to you and will ensure secure delivery this time.',
+    'Quality Issues': 'We sincerely apologize — our production team did not meet the quality standards you deserved. This is entirely our fault, and we take full responsibility. We are remaking your custom patches at absolutely no extra cost to you.',
+    'Handling Issues': 'We apologize for the handling issues with your order. Your patches were damaged and did not arrive in the condition we intended. We are remaking your custom patches at absolutely no extra cost to you.',
+    'Force Majeure': 'Due to unforeseen circumstances beyond our control, your order was affected. We sincerely apologize for the inconvenience. We are remaking your custom patches at absolutely no extra cost to you.',
+  };
+  const internalRemakeMessages: Record<string, string> = {
+    'Package Lost': 'URGENT REMAKE REQUIRED — PACKAGE LOST: The customer\'s package was lost in transit. This order needs to be remade and shipped immediately with tracking confirmation.',
+    'Quality Issues': 'URGENT REMAKE REQUIRED — QUALITY ISSUES: The patches did not meet quality standards. Remake immediately. Review all specs carefully and double-check quality before shipping.',
+    'Handling Issues': 'URGENT REMAKE REQUIRED — HANDLING ISSUES: The patches were damaged due to handling. Remake immediately and ensure proper packaging for shipment.',
+    'Force Majeure': 'URGENT REMAKE REQUIRED — FORCE MAJEURE: The order was affected by circumstances beyond control. Remake immediately and prioritize this order.',
+  };
+
   const messages: Record<string, string> = {
     // Quote templates
     'd-fcd19c2e3d2d42a4b0e1bf3087179c7d': 'Great news! We have received your custom patch request. Our design team has carefully reviewed your specifications and prepared a detailed quote proposal. Below you\'ll find all the information regarding your quote.',
@@ -125,9 +139,9 @@ const getTemplateMessage = (templateId: string): string => {
     'PRODUCTION_TEAM_REVISION': 'Production Team: Customer has requested revisions. Please review the feedback and update the mockup.',
     'QUALITY_ASSURANCE': 'Quality Assurance: Order ready for final QA check before shipping.',
 
-    // Remake templates
-    'CUSTOMER_REMAKE': 'We sincerely apologize for the inconvenience with your order. Our production team did not meet the quality standards you deserved. This is entirely our fault, and we take full responsibility. We are remaking your custom patches at absolutely no extra cost to you. Your satisfaction is our top priority, and we will make this right.',
-    'INTERNAL_REMAKE': 'URGENT REMAKE REQUIRED: The customer was not satisfied with the patches we produced. This order needs to be remade immediately. Please contact the sales agent to get full details about what the customer wants changed. Review all specifications carefully and ask questions if anything is unclear. This is our second chance to get it right - quality check everything before shipping.',
+    // Remake templates (dynamic based on reason, with fallback)
+    'CUSTOMER_REMAKE': customerRemakeMessages[remakeReason] || 'We sincerely apologize for the inconvenience with your order. Our production team did not meet the quality standards you deserved. This is entirely our fault, and we take full responsibility. We are remaking your custom patches at absolutely no extra cost to you. Your satisfaction is our top priority, and we will make this right.',
+    'INTERNAL_REMAKE': internalRemakeMessages[remakeReason] || 'URGENT REMAKE REQUIRED: The customer was not satisfied with the patches we produced. This order needs to be remade immediately. Please contact the sales agent to get full details about what the customer wants changed. Review all specifications carefully and ask questions if anything is unclear. This is our second chance to get it right - quality check everything before shipping.',
 
     // Payment templates
     'CUSTOMER_PAYMENT_CONFIRMATION': 'We have received your payment — thank you! Your order is confirmed and our team is working on your mockup. You will receive your mockup in 24 hours.',
@@ -242,7 +256,7 @@ const shouldShowInstagramPromo = (templateId: string): boolean => {
 // 4. Helper: Build Email HTML from Template ID and Data
 const buildEmailHTML = (templateId: string, data: any): string => {
   // Get template-specific message if not provided in data
-  const emailMessage = escapeHtml(data.message || getTemplateMessage(templateId));
+  const emailMessage = escapeHtml(data.message || getTemplateMessage(templateId, data));
 
   // Use professional SendGrid-style template adapted for AWS SES
   return `<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
@@ -421,6 +435,27 @@ const buildEmailHTML = (templateId: string, data: any): string => {
             </div>
             <div style="font-family: inherit; text-align: center; margin-top: 10px;">
               <span style="font-size: 14px; font-family: 'lucida sans unicode', 'lucida grande', sans-serif; color: #c53030; font-style: italic;">⚠️ Please prioritize this order and ensure it ships on time!</span>
+            </div>
+          </div>
+        </td>
+      </tr>
+    </tbody>
+  </table>
+  ` : ''}
+
+  ${(templateId === 'CUSTOMER_REMAKE' || templateId === 'INTERNAL_REMAKE') && data.remake_reason ? `
+  <!-- REMAKE REASON BOX -->
+  <table class="module" role="module" data-type="text" border="0" cellpadding="0" cellspacing="0" width="100%" style="table-layout: fixed;">
+    <tbody>
+      <tr>
+        <td style="padding:20px; line-height:26px; text-align:center; background-color:#fff3e0; border-left: 5px solid #ff9800; border-radius: 8px; margin: 10px 0;" height="100%" valign="top" bgcolor="#fff3e0" role="module-content">
+          <div>
+            <div style="font-family: inherit; text-align: center; margin-bottom: 12px;">
+              <span style="font-size: 20px; font-family: 'lucida sans unicode', 'lucida grande', sans-serif; color: #e65100; font-weight: bold;">🔄 Remake Reason</span>
+            </div>
+            <div style="font-family: inherit; text-align: center; background-color: #ffffff; padding: 15px; border-radius: 8px; border: 1px solid #ffe0b2;">
+              <span style="font-size: 18px; font-family: 'lucida sans unicode', 'lucida grande', sans-serif; color: #e65100; font-weight: bold;">${escapeHtml(data.remake_reason)}</span>
+              ${data.remake_details ? `<br/><span style="font-size: 14px; font-family: 'lucida sans unicode', 'lucida grande', sans-serif; color: #555; margin-top: 8px; display: inline-block;">${escapeHtml(data.remake_details)}</span>` : ''}
             </div>
           </div>
         </td>
