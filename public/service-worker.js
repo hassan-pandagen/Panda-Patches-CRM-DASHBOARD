@@ -1,4 +1,4 @@
-const CACHE_NAME = 'panda-patches-v1';
+const CACHE_NAME = 'panda-patches-v2';
 const URLS_TO_CACHE = ['/'];
 
 // Install event

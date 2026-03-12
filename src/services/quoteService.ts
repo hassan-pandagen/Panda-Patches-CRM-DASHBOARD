@@ -363,6 +363,19 @@ export const convertQuoteToOrder = async (quote: Quote): Promise<Order> => {
   }
 };
 
+// Mark quote as sent manually (no email sent — for Instagram/WhatsApp/Tawk.to quotes)
+export const markQuoteAsSent = async (quoteNumber: string): Promise<void> => {
+  const { error } = await supabase
+    .from('quotes')
+    .update({ email_sent_at: new Date().toISOString() })
+    .eq('quote_number', quoteNumber);
+
+  if (error) throw error;
+
+  queryClient.invalidateQueries({ queryKey: queryKeys.quotes?.all?.() });
+  logger.info('Quote marked as sent manually', { quoteNumber });
+};
+
 // Delete a quote
 export const deleteQuote = async (quoteNumber: string): Promise<void> => {
   try {

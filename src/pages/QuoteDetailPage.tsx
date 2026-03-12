@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { getQuoteByNumber, updateQuote, convertQuoteToOrder, deleteQuote, sendQuoteEmail } from '../services/quoteService';
+import { getQuoteByNumber, updateQuote, convertQuoteToOrder, deleteQuote, sendQuoteEmail, markQuoteAsSent } from '../services/quoteService';
 import { queryKeys } from '../constants/queryKeys';
 import { PATCHES_TYPE_OPTIONS } from '../constants/index';
 import Button from '../components/ui/Button';
@@ -39,6 +39,7 @@ const QuoteDetailPage: React.FC = () => {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [isSendingEmail, setIsSendingEmail] = useState(false);
+  const [isMarkingSent, setIsMarkingSent] = useState(false);
 
   // Edit form state
   const [editForm, setEditForm] = useState<Record<string, string>>({});
@@ -699,6 +700,29 @@ const QuoteDetailPage: React.FC = () => {
               <Send className="w-3.5 h-3.5" />
               {isSendingEmail ? 'Sending…' : quote.emailSentAt ? 'Resend Quote Email' : 'Send Quote Email'}
             </button>
+
+            {/* Mark as Sent — for quotes shared via Instagram / WhatsApp / Tawk.to */}
+            {!quote.emailSentAt && (
+              <button
+                disabled={isMarkingSent}
+                onClick={async () => {
+                  setIsMarkingSent(true);
+                  try {
+                    await markQuoteAsSent(quote.quoteNumber);
+                    queryClient.invalidateQueries({ queryKey: queryKeys.quotes.single(quoteNumber || '') });
+                    showSuccess('Quote marked as sent');
+                  } catch (err: any) {
+                    showError('Failed to mark as sent', err?.message);
+                  } finally {
+                    setIsMarkingSent(false);
+                  }
+                }}
+                className="w-full flex items-center justify-center gap-2 rounded-lg py-2 text-sm font-semibold transition-colors disabled:opacity-50 bg-slate-700/50 border border-slate-600 text-slate-300 hover:bg-slate-700 hover:text-white mt-2"
+              >
+                <MailCheck className="w-3.5 h-3.5" />
+                {isMarkingSent ? 'Marking…' : 'Mark as Sent (No Email)'}
+              </button>
+            )}
           </SpotlightCard>
 
           {/* Follow-up Section */}
