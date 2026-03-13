@@ -23,6 +23,7 @@ export const LEAD_SOURCE_OPTIONS: string[] = [
   'RingCentral',
   'ChatGPT',
   'Tawk.to',
+  'Checkout',
   'Referral',
   'Repeat Order',
   'Direct',

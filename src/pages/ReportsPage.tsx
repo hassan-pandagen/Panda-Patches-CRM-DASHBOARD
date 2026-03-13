@@ -601,11 +601,12 @@ const LeadSourceReportComponent: React.FC<ReportComponentProps> = ({
 
     orders.forEach((order) => {
       const sourceName = order.leadSource || "Unknown";
-      if (sourceStats.has(sourceName)) {
-        const current = sourceStats.get(sourceName)!;
-        current.revenue += order.orderAmount || 0;
-        current.orders += 1;
+      if (!sourceStats.has(sourceName)) {
+        sourceStats.set(sourceName, { revenue: 0, orders: 0 });
       }
+      const current = sourceStats.get(sourceName)!;
+      current.revenue += order.orderAmount || 0;
+      current.orders += 1;
     });
 
     return Array.from(sourceStats.entries())
