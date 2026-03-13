@@ -11,18 +11,9 @@ class OfflineManager {
   private listeners: Set<OfflineListener> = new Set();
   private isOnline: boolean = navigator.onLine;
   private swRegistration: ServiceWorkerRegistration | null = null;
-  private connectionCheckInterval: ReturnType<typeof setInterval> | null = null;
-
   constructor() {
-    // Listen to online/offline events
     window.addEventListener('online', this.handleOnline);
     window.addEventListener('offline', this.handleOffline);
-
-    // Also periodically check connection
-    // Only run the interval check in Production to save resources in Dev
-    if (import.meta.env.PROD) {
-      this.connectionCheckInterval = setInterval(() => this.checkConnection(), 30000);
-    }
   }
 
   /**
@@ -31,10 +22,6 @@ class OfflineManager {
   destroy = () => {
     window.removeEventListener('online', this.handleOnline);
     window.removeEventListener('offline', this.handleOffline);
-    if (this.connectionCheckInterval) {
-      clearInterval(this.connectionCheckInterval);
-      this.connectionCheckInterval = null;
-    }
     this.listeners.clear();
   };
 
@@ -131,41 +118,6 @@ class OfflineManager {
     logger.warn('[Offline Manager] Went offline');
     this.isOnline = false;
     this.notifyListeners();
-  };
-
-  private checkConnection = async () => {
-    try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 10000);
-
-      try {
-        const response = await fetch('/index.html', {
-          method: 'HEAD',
-          cache: 'no-store',
-          signal: controller.signal,
-        });
-
-        clearTimeout(timeoutId);
-
-        const wasOnline = this.isOnline;
-        this.isOnline = response.ok;
-
-        if (wasOnline !== this.isOnline) {
-          this.notifyListeners();
-        }
-      } catch (fetchErr: any) {
-        clearTimeout(timeoutId);
-        // Silent fail in logs is better for polling
-        const wasOnline = this.isOnline;
-        this.isOnline = false;
-
-        if (wasOnline !== this.isOnline) {
-          this.notifyListeners();
-        }
-      }
-    } catch (err) {
-      this.isOnline = false;
-    }
   };
 
   private notifyListeners = () => {
