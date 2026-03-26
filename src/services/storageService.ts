@@ -24,9 +24,10 @@ export const uploadFile = async (file: File): Promise<string> => {
     const fileExtension = file.name.split('.').pop() || 'bin';
     if (!fileExtension) throw new Error('File must have an extension');
 
-    // Use crypto.randomUUID() - a Web Crypto API standard, built into modern browsers & Node.js
-    const fileName = `${crypto.randomUUID()}.${fileExtension}`;
-    const filePath = `${fileName}`; // Keep it simple at the root of the bucket.
+    // Preserve original filename with timestamp prefix for uniqueness
+    const sanitizedName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+    const fileName = `${Date.now()}_${sanitizedName}`;
+    const filePath = `${fileName}`;
 
     logger.info(`[Storage Service] Uploading file: ${file.name} (${file.size} bytes)`);
 

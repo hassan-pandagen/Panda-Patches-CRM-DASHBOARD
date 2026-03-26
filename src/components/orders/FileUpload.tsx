@@ -68,9 +68,8 @@ const FileUploadSection: React.FC<FileUploadSectionProps> = ({
               continue;
             }
 
-            const fileName = `${Math.random()
-              .toString(36)
-              .substring(2)}_${Date.now()}.${fileExt}`;
+            const sanitizedName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+            const fileName = `${Date.now()}_${sanitizedName}`;
             const filePath = `${folderPath}/${fileName}`;
 
             const { error, data: uploadData } = await supabase.storage

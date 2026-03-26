@@ -108,6 +108,7 @@ interface ExistingCustomerInfo {
   customerPhone?: string;
   customerProfileUrl?: string;
   shippingAddress?: string;
+  ccEmail?: string;
 }
 
 
@@ -260,7 +261,7 @@ const OrderForm: React.FC<OrderFormProps> = ({
         // Fetch customer details + count
         const { data, error, count } = await supabase
           .from('orders')
-          .select('created_at, customer_name, customer_email, customer_phone, customer_profile_url, shipping_address', { count: 'exact', head: false })
+          .select('created_at, customer_name, customer_email, customer_phone, customer_profile_url, shipping_address, cc_email', { count: 'exact', head: false })
           .or(`customer_email.eq.${identifier},customer_phone.eq.${identifier}`)
           .order('created_at', { ascending: false })
           .limit(1);
@@ -276,6 +277,7 @@ const OrderForm: React.FC<OrderFormProps> = ({
             customerPhone: data[0].customer_phone || '',
             customerProfileUrl: data[0].customer_profile_url || '',
             shippingAddress: data[0].shipping_address || '',
+            ccEmail: data[0].cc_email || '',
           };
 
           setExistingCustomer(customerData);
@@ -349,6 +351,9 @@ const OrderForm: React.FC<OrderFormProps> = ({
     }
     if (existingCustomer.shippingAddress) {
       setValue('shippingAddress', existingCustomer.shippingAddress, { shouldDirty: true });
+    }
+    if (existingCustomer.ccEmail) {
+      setValue('ccEmail', existingCustomer.ccEmail, { shouldDirty: true });
     }
 
     // Show success feedback

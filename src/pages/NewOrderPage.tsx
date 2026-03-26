@@ -115,7 +115,8 @@ const NewOrderPage: React.FC = () => {
         customerEmail: String(formData.customerEmail || ''),
         customerPhone: String(formData.customerPhone || ''),
         customerProfileUrl: String(formData.customerProfileUrl || ''),
-        
+        ccEmail: String(formData.ccEmail || ''),
+
         // Shipping
         shippingAddress: String(formData.shippingAddress || ''),
         shippingCarrier: String(formData.shippingCarrier || ''),
