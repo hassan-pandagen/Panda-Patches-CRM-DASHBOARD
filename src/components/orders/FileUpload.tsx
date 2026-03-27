@@ -138,9 +138,12 @@ const FileUploadSection: React.FC<FileUploadSectionProps> = ({
     onUrlsChange(urls.filter((_, index) => index !== indexToRemove));
   };
 
-  // helper to get filename
-  const getFileName = (url: string) =>
-    url.split("/").pop()?.split("?")[0] || "File";
+  // helper to get filename — strip timestamp/UUID prefix, preserve original name
+  const getFileName = (url: string) => {
+    const raw = decodeURIComponent(url.split("/").pop()?.split("?")[0] || "File");
+    // Strip patterns like "1711234567890_" or "mockup_1711234567890_" or UUID prefixes
+    return raw.replace(/^(mockup_)?\d{10,}_/, '').replace(/^[a-f0-9-]{36}\./, '') || raw;
+  };
 
   return (
     <div className="space-y-3">

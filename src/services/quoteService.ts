@@ -109,13 +109,14 @@ export const sendQuoteEmail = async (quote: Quote): Promise<void> => {
     // Prepare mockup files for email (similar to order service)
     const getFileName = (url: string): string => {
       try {
-        return url ? url.split('/').pop()?.split('?')[0] || 'file' : 'file';
+        const raw = decodeURIComponent(url ? url.split('/').pop()?.split('?')[0] || 'file' : 'file');
+        return raw.replace(/^(mockup_)?\d{10,}_/, '').replace(/^[a-f0-9-]{36}\./, '') || raw;
       } catch {
         return 'file';
       }
     };
 
-    const isImage = (url: string) => /\.(jpg|jpeg|png|gif|webp)$/i.test(url.toLowerCase());
+    const isImage = (url: string) => /\.(jpg|jpeg|png|gif|webp)(\?|$)/i.test(url);
     const mockupUrls = quote.mockupUrls || [];
     const sortedMockups = [...mockupUrls].reverse();
     const winnerUrl = sortedMockups.find(url => isImage(url)) || sortedMockups[0] || "";

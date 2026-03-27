@@ -93,7 +93,8 @@ const DESIGN_TEAM_CC = 'design@pandapatches.com';
 
 const getFileName = (url: string): string => {
   try {
-    return url ? url.split('/').pop()?.split('?')[0] || 'file' : 'file';
+    const raw = decodeURIComponent(url ? url.split('/').pop()?.split('?')[0] || 'file' : 'file');
+    return raw.replace(/^(mockup_)?\d{10,}_/, '').replace(/^[a-f0-9-]{36}\./, '') || raw;
   } catch {
     return 'file';
   }

@@ -592,7 +592,7 @@ const QuoteDetailPage: React.FC = () => {
                     >
                       <Image className="w-8 h-8 text-brand-orange flex-shrink-0" />
                       <span className="text-slate-300 text-sm truncate">
-                        {url.split('/').pop()?.split('?')[0] || `Attachment ${index + 1}`}
+                        {decodeURIComponent(url.split('/').pop()?.split('?')[0] || `Attachment ${index + 1}`).replace(/^(mockup_)?\d{10,}_/, '').replace(/^[a-f0-9-]{36}\./, '')}
                       </span>
                     </a>
                   );

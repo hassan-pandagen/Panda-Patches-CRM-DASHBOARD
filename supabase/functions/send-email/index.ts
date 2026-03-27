@@ -60,10 +60,11 @@ const sendEmailSchema = z.object({
   from_email: z.string().email().optional(),
 });
 
-// 1. Helper: Get Clean Filename
+// 1. Helper: Get Clean Filename — strip timestamp/UUID prefix, preserve original name
 const getFileName = (url: string) => {
   try {
-      return decodeURIComponent(url.split('/').pop() || 'file').split('?')[0];
+      const raw = decodeURIComponent(url.split('/').pop() || 'file').split('?')[0];
+      return raw.replace(/^(mockup_)?\d{10,}_/, '').replace(/^[a-f0-9-]{36}\./, '') || raw;
   } catch { return 'file'; }
 };
 

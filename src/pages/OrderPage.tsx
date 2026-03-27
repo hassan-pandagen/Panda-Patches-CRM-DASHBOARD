@@ -615,7 +615,7 @@ const OrderPage: React.FC = () => {
                                                     className="text-blue-400 hover:text-blue-300 text-sm truncate flex items-center gap-2"
                                                 >
                                                     <FileText size={14} />
-                                                    {url.split('/').pop() || 'File'}
+                                                    {decodeURIComponent(url.split('/').pop()?.split('?')[0] || 'File').replace(/^(mockup_)?\d{10,}_/, '').replace(/^[a-f0-9-]{36}\./, '')}
                                                 </a>
                                             ))}
                                         </div>
