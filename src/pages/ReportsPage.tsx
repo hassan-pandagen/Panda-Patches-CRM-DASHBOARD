@@ -153,6 +153,65 @@ const SalesReportComponent: React.FC<ReportComponentProps> = ({ orders, dateRang
   const navigate = useNavigate();
   const [userNames, setUserNames] = useState<Record<string, string>>({});
 
+  // Payment Recovery: collections made in this period, broken down by order month
+  const { data: paymentRecoveryData = [] } = useQuery({
+    queryKey: ['payment-recovery', dateRange.startDate, dateRange.endDate],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('order_history')
+        .select('order_id, old_value, new_value, changed_at, user_email, orders!inner(order_number, created_at, sales_agent)')
+        .eq('field_changed', 'amount_paid')
+        .gte('changed_at', localMidnightISO(dateRange.startDate))
+        .lt('changed_at', localNextDayISO(dateRange.endDate))
+        .order('changed_at', { ascending: false });
+      if (error) throw error;
+      return (data || []).map((row: any) => ({
+        orderNumber: row.orders?.order_number,
+        orderCreatedAt: row.orders?.created_at,
+        salesAgent: row.orders?.sales_agent || 'Unassigned',
+        collectedAmount: (parseFloat(row.new_value) || 0) - (parseFloat(row.old_value) || 0),
+      }));
+    },
+    staleTime: 1000 * 60,
+  });
+
+  const agentRecoveryBreakdown = useMemo(() => {
+    if (!paymentRecoveryData.length) return new Map<string, { currentMonth: number; previousMonths: { month: string; amount: number; orders: string[] }[]; total: number }>();
+    const rangeStart = new Date(`${dateRange.startDate}T00:00:00`);
+    const rangeEndNext = new Date(`${dateRange.endDate}T00:00:00`);
+    rangeEndNext.setDate(rangeEndNext.getDate() + 1);
+    const breakdown = new Map<string, { currentMonth: number; previousMonths: Map<string, { amount: number; orders: Set<string> }>; total: number }>();
+
+    for (const payment of paymentRecoveryData) {
+      if (payment.collectedAmount <= 0) continue;
+      const agent = payment.salesAgent;
+      if (!breakdown.has(agent)) breakdown.set(agent, { currentMonth: 0, previousMonths: new Map(), total: 0 });
+      const d = breakdown.get(agent)!;
+      d.total += payment.collectedAmount;
+      const orderDate = new Date(payment.orderCreatedAt);
+      if (orderDate >= rangeStart && orderDate < rangeEndNext) {
+        d.currentMonth += payment.collectedAmount;
+      } else {
+        const mk = orderDate.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+        if (!d.previousMonths.has(mk)) d.previousMonths.set(mk, { amount: 0, orders: new Set() });
+        const md = d.previousMonths.get(mk)!;
+        md.amount += payment.collectedAmount;
+        md.orders.add(payment.orderNumber);
+      }
+    }
+
+    const result = new Map<string, { currentMonth: number; previousMonths: { month: string; amount: number; orders: string[] }[]; total: number }>();
+    for (const [agent, data] of breakdown) {
+      result.set(agent, {
+        currentMonth: data.currentMonth, total: data.total,
+        previousMonths: Array.from(data.previousMonths.entries(), ([month, v]) => ({
+          month, amount: v.amount, orders: Array.from(v.orders),
+        })).sort((a, b) => new Date(b.month).getTime() - new Date(a.month).getTime()),
+      });
+    }
+    return result;
+  }, [paymentRecoveryData, dateRange]);
+
   // Fetch user names from user_profiles
   useEffect(() => {
     const fetchUserNames = async () => {
@@ -256,18 +315,29 @@ const SalesReportComponent: React.FC<ReportComponentProps> = ({ orders, dateRang
       }
       const data = agentData.get(agent)!;
       data.orders += 1;
-      // Exclude refunded and cancelled orders from revenue (match Net Revenue calculation)
       if (order.status !== 'REFUNDED' && order.status !== 'CANCELLED') {
         data.revenue += order.orderAmount || 0;
         data.collected += order.amountPaid || 0;
       }
     }
-    return Array.from(agentData.entries(), ([agent, data]) => ({
-      agent,
-      ...data,
-      avg: data.orders > 0 ? data.revenue / data.orders : 0,
-    })).sort((a, b) => b.revenue - a.revenue);
-  }, [orders]);
+    // Merge recovery data for commission calculation
+    // "This Month" = amountPaid on current-month orders (from orders table, not payment history)
+    // "Recovered" = payments collected this month on OLDER orders (from payment history)
+    // "Commissionable" = This Month + Recovered
+    return Array.from(agentData.entries(), ([agent, data]) => {
+      const recovery = agentRecoveryBreakdown.get(agent);
+      const recovered = recovery?.previousMonths.reduce((s, p) => s + p.amount, 0) ?? 0;
+      const commissionable = data.collected + recovered;
+      return {
+        agent,
+        ...data,
+        avg: data.orders > 0 ? data.revenue / data.orders : 0,
+        recovered,
+        commissionable,
+        recoveryDetails: recovery?.previousMonths ?? [],
+      };
+    }).sort((a, b) => b.revenue - a.revenue);
+  }, [orders, agentRecoveryBreakdown]);
 
   return (
     <div className="space-y-6">
@@ -334,9 +404,9 @@ const SalesReportComponent: React.FC<ReportComponentProps> = ({ orders, dateRang
           <div>
             <h4 className="text-xl font-bold text-white flex items-center gap-2">
               <Award className="w-5 h-5 text-brand-orange" />
-              Sales Agent Performance
+              Sales Agent Performance & Commission
             </h4>
-            <p className="text-slate-400 text-sm mt-1">Performance metrics across all sales agents</p>
+            <p className="text-slate-400 text-sm mt-1">Sales, collections, recoveries & commissionable totals at a glance</p>
           </div>
         </div>
         
@@ -345,49 +415,56 @@ const SalesReportComponent: React.FC<ReportComponentProps> = ({ orders, dateRang
           <table className="w-full">
             <thead>
               <tr className="border-b border-white/10 bg-slate-800/50">
-                <th className="text-center py-4 px-6 font-bold text-slate-300 uppercase text-xs tracking-wider">Agent</th>
-                <th className="text-center py-4 px-6 font-bold text-slate-300 uppercase text-xs tracking-wider">
+                <th className="text-center py-4 px-4 font-bold text-slate-300 uppercase text-xs tracking-wider">Agent</th>
+                <th className="text-center py-4 px-4 font-bold text-slate-300 uppercase text-xs tracking-wider">
                   <div className="flex items-center justify-center gap-1"><CheckCircle className="w-4 h-4" />Orders</div>
                 </th>
-                <th className="text-center py-4 px-6 font-bold text-slate-300 uppercase text-xs tracking-wider">
+                <th className="text-center py-4 px-4 font-bold text-slate-300 uppercase text-xs tracking-wider">
                   <div className="flex items-center justify-center gap-1"><DollarSign className="w-4 h-4" />Revenue</div>
                 </th>
-                <th className="text-center py-4 px-6 font-bold text-slate-300 uppercase text-xs tracking-wider">
-                  <div className="flex items-center justify-center gap-1"><TrendingUp className="w-4 h-4" />Avg Order</div>
-                </th>
-                <th className="text-center py-4 px-6 font-bold text-slate-300 uppercase text-xs tracking-wider">
-                  <div className="flex items-center justify-center gap-1"><CheckCircle className="w-4 h-4" />Collected</div>
-                </th>
-                <th className="text-center py-4 px-6 font-bold text-slate-300 uppercase text-xs tracking-wider">
+                <th className="text-center py-4 px-4 font-bold text-slate-300 uppercase text-xs tracking-wider">
                   <div className="flex items-center justify-center gap-1"><AlertCircle className="w-4 h-4" />Pending</div>
                 </th>
-                <th className="text-center py-4 px-6 font-bold text-slate-300 uppercase text-xs tracking-wider">Collection %</th>
+                <th className="text-center py-4 px-4 font-bold text-slate-300 uppercase text-xs tracking-wider border-l border-white/10">
+                  <div className="flex items-center justify-center gap-1 text-emerald-400"><CheckCircle className="w-4 h-4" />This Month</div>
+                </th>
+                <th className="text-center py-4 px-4 font-bold text-slate-300 uppercase text-xs tracking-wider">
+                  <div className="flex items-center justify-center gap-1 text-amber-400"><TrendingUp className="w-4 h-4" />Recovered</div>
+                </th>
+                <th className="text-center py-4 px-4 font-bold text-slate-300 uppercase text-xs tracking-wider border-l border-white/10">
+                  <div className="flex items-center justify-center gap-1 text-brand-orange"><Award className="w-4 h-4" />Commissionable</div>
+                </th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-700/50">
               {agentPerformance.length > 0 ? (
                 agentPerformance.map((agent, idx) => {
                   const pending = agent.revenue - agent.collected;
-                  const collectionRate = agent.revenue > 0 ? (agent.collected / agent.revenue) * 100 : 0;
                   return (
                     <tr key={idx} className="hover:bg-white/5 transition-colors duration-200 group">
-                      <td className="py-4 px-6 font-medium text-slate-200 group-hover:text-white transition-colors text-center">
+                      <td className="py-4 px-4 font-medium text-slate-200 group-hover:text-white transition-colors text-center">
                         <button onClick={() => navigate(`/orders?salesAgent=${encodeURIComponent(agent.agent)}`)} className="bg-slate-700/50 hover:bg-brand-orange/20 px-3 py-2 rounded-lg text-base font-semibold transition-colors duration-200 text-brand-orange hover:text-brand-orange border border-slate-600 hover:border-brand-orange/50" title={`View orders from ${agent.agent}`}>
                           {userNames[agent.agent] || agent.agent.split("@")[0] || agent.agent}
                         </button>
                       </td>
-                      <td className="py-4 px-6 text-center"><span className="inline-block bg-blue-500/20 text-blue-300 px-3 py-1.5 rounded-lg font-semibold text-sm border border-blue-500/30">{agent.orders}</span></td>
-                      <td className="py-4 px-6 text-center"><span className="text-green-400 font-bold text-base">${agent.revenue.toLocaleString("en-US", { maximumFractionDigits: 0 })}</span></td>
-                      <td className="py-4 px-6 text-center text-slate-300 font-medium">${agent.avg.toLocaleString("en-US", { maximumFractionDigits: 0 })}</td>
-                      <td className="py-4 px-6 text-center"><span className="text-emerald-400 font-bold text-base">${agent.collected.toLocaleString("en-US", { maximumFractionDigits: 0 })}</span></td>
-                      <td className="py-4 px-6 text-center"><span className={`font-bold text-base ${pending > 0 ? 'text-amber-400' : 'text-slate-400'}`}>${pending.toLocaleString("en-US", { maximumFractionDigits: 0 })}</span></td>
-                      <td className="py-4 px-6 text-center">
-                        <div className="flex items-center justify-center gap-2">
-                          <div className="w-24 bg-slate-700 rounded-full h-2 overflow-hidden">
-                            <div className="h-full bg-gradient-to-r from-brand-orange to-orange-500 transition-all duration-300" style={{ width: `${Math.min(collectionRate, 100)}%` }} />
+                      <td className="py-4 px-4 text-center"><span className="inline-block bg-blue-500/20 text-blue-300 px-3 py-1.5 rounded-lg font-semibold text-sm border border-blue-500/30">{agent.orders}</span></td>
+                      <td className="py-4 px-4 text-center"><span className="text-green-400 font-bold text-base">${agent.revenue.toLocaleString("en-US", { maximumFractionDigits: 0 })}</span></td>
+                      <td className="py-4 px-4 text-center"><span className={`font-bold text-base ${pending > 0 ? 'text-amber-400' : 'text-slate-400'}`}>${pending.toLocaleString("en-US", { maximumFractionDigits: 0 })}</span></td>
+                      <td className="py-4 px-4 text-center border-l border-white/10">
+                        <span className="text-emerald-400 font-bold text-base">${agent.collected.toLocaleString("en-US", { maximumFractionDigits: 0 })}</span>
+                      </td>
+                      <td className="py-4 px-4 text-center">
+                        {agent.recovered > 0 ? (
+                          <div className="flex flex-col items-center">
+                            <span className="text-amber-400 font-bold text-base">+${agent.recovered.toLocaleString("en-US", { maximumFractionDigits: 0 })}</span>
+                            <span className="text-[10px] text-amber-400/60 mt-0.5">{agent.recoveryDetails.map(d => d.month).join(', ')}</span>
                           </div>
-                          <span className="text-brand-orange font-bold text-sm min-w-[50px] text-center">{collectionRate.toFixed(0)}%</span>
-                        </div>
+                        ) : (
+                          <span className="text-slate-500 text-sm">—</span>
+                        )}
+                      </td>
+                      <td className="py-4 px-4 text-center border-l border-white/10">
+                        <span className="text-brand-orange font-extrabold text-lg">${agent.commissionable.toLocaleString("en-US", { maximumFractionDigits: 0 })}</span>
                       </td>
                     </tr>
                   );
@@ -404,7 +481,6 @@ const SalesReportComponent: React.FC<ReportComponentProps> = ({ orders, dateRang
           {agentPerformance.length > 0 ? (
             agentPerformance.map((agent, idx) => {
               const pending = agent.revenue - agent.collected;
-              const collectionRate = agent.revenue > 0 ? (agent.collected / agent.revenue) * 100 : 0;
               return (
                 <div key={idx} className="bg-slate-800/40 rounded-xl p-4 border border-slate-700/50 space-y-3">
                   <div className="flex items-center justify-between">
@@ -413,25 +489,29 @@ const SalesReportComponent: React.FC<ReportComponentProps> = ({ orders, dateRang
                     </button>
                     <span className="bg-blue-500/20 text-blue-300 px-2.5 py-1 rounded-lg text-xs font-bold border border-blue-500/30">{agent.orders} orders</span>
                   </div>
-                  <div className="grid grid-cols-3 gap-3 text-center">
+                  <div className="grid grid-cols-2 gap-3 text-center">
                     <div>
                       <p className="text-[10px] text-slate-400 uppercase font-semibold">Revenue</p>
                       <p className="text-green-400 font-bold text-sm">${agent.revenue.toLocaleString("en-US", { maximumFractionDigits: 0 })}</p>
-                    </div>
-                    <div>
-                      <p className="text-[10px] text-slate-400 uppercase font-semibold">Collected</p>
-                      <p className="text-emerald-400 font-bold text-sm">${agent.collected.toLocaleString("en-US", { maximumFractionDigits: 0 })}</p>
                     </div>
                     <div>
                       <p className="text-[10px] text-slate-400 uppercase font-semibold">Pending</p>
                       <p className={`font-bold text-sm ${pending > 0 ? 'text-amber-400' : 'text-slate-400'}`}>${pending.toLocaleString("en-US", { maximumFractionDigits: 0 })}</p>
                     </div>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <div className="flex-1 bg-slate-700 rounded-full h-2 overflow-hidden">
-                      <div className="h-full bg-gradient-to-r from-brand-orange to-orange-500" style={{ width: `${Math.min(collectionRate, 100)}%` }} />
+                  <div className="border-t border-slate-700/50 pt-3 grid grid-cols-3 gap-2 text-center">
+                    <div>
+                      <p className="text-[10px] text-emerald-400 uppercase font-semibold">This Month</p>
+                      <p className="text-emerald-400 font-bold text-sm">${agent.collected.toLocaleString("en-US", { maximumFractionDigits: 0 })}</p>
                     </div>
-                    <span className="text-brand-orange font-bold text-xs">{collectionRate.toFixed(0)}%</span>
+                    <div>
+                      <p className="text-[10px] text-amber-400 uppercase font-semibold">Recovered</p>
+                      <p className="text-amber-400 font-bold text-sm">{agent.recovered > 0 ? `+$${agent.recovered.toLocaleString("en-US", { maximumFractionDigits: 0 })}` : '—'}</p>
+                    </div>
+                    <div className="bg-brand-orange/10 rounded-lg py-1">
+                      <p className="text-[10px] text-brand-orange uppercase font-bold">Pay On</p>
+                      <p className="text-brand-orange font-extrabold text-sm">${agent.commissionable.toLocaleString("en-US", { maximumFractionDigits: 0 })}</p>
+                    </div>
                   </div>
                 </div>
               );
@@ -490,6 +570,93 @@ const SalesReportComponent: React.FC<ReportComponentProps> = ({ orders, dateRang
           </div>
         )}
       </div>
+
+      {/* Payment Recovery Breakdown */}
+      {agentRecoveryBreakdown.size > 0 && (
+        <div className="bg-slate-900/40 backdrop-blur-xl border border-white/10 rounded-2xl p-6 shadow-xl">
+          <div className="flex items-center justify-between mb-6">
+            <div>
+              <h4 className="text-lg font-semibold text-white flex items-center gap-2">
+                <DollarSign className="w-5 h-5 text-emerald-400" />
+                Payment Collections Breakdown
+              </h4>
+              <p className="text-slate-400 text-sm mt-1">Collections made in this period — split by when the order was placed</p>
+            </div>
+          </div>
+
+          <div className="space-y-4">
+            {Array.from(agentRecoveryBreakdown.entries()).map(([agent, data]) => {
+              // Use actual amountPaid from orders for current month (not payment history deltas)
+              const agentPerf = agentPerformance.find(a => a.agent === agent);
+              const currentMonthCollected = agentPerf?.collected ?? data.currentMonth;
+              const recovered = data.previousMonths.reduce((s, p) => s + p.amount, 0);
+              const totalCommissionable = currentMonthCollected + recovered;
+              return (
+              <div key={agent} className="bg-slate-800/40 rounded-xl p-5 border border-slate-700/50">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-lg bg-brand-orange/20 flex items-center justify-center text-brand-orange font-bold text-sm">
+                      {(userNames[agent] || agent.split('@')[0] || '?').charAt(0).toUpperCase()}
+                    </div>
+                    <div>
+                      <p className="text-white font-semibold">{userNames[agent] || agent.split('@')[0]}</p>
+                      <p className="text-xs text-slate-500">{agent}</p>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-xs text-slate-400 uppercase font-semibold">Total Commissionable</p>
+                    <p className="text-xl font-bold text-brand-orange">${totalCommissionable.toLocaleString('en-US', { maximumFractionDigits: 0 })}</p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                  {/* Current Period */}
+                  {currentMonthCollected > 0 && (
+                    <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-lg p-4">
+                      <div className="flex items-center justify-between mb-2">
+                        <p className="text-[10px] text-emerald-400 uppercase font-bold tracking-wider">
+                          {new Date(`${dateRange.startDate}T00:00:00`).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })} Orders
+                        </p>
+                        <span className="text-[10px] text-emerald-400/60 font-medium">Commission Eligible</span>
+                      </div>
+                      <p className="text-2xl font-bold text-emerald-400">${currentMonthCollected.toLocaleString('en-US', { maximumFractionDigits: 0 })}</p>
+                    </div>
+                  )}
+
+                  {/* Previous Months */}
+                  {data.previousMonths.map((pm) => (
+                    <div key={pm.month} className="bg-amber-500/10 border border-amber-500/20 rounded-lg p-4">
+                      <div className="flex items-center justify-between mb-2">
+                        <p className="text-[10px] text-amber-400 uppercase font-bold tracking-wider">Recovered from {pm.month}</p>
+                        <span className="text-[10px] text-amber-400/60 font-medium">{pm.orders.length} order{pm.orders.length > 1 ? 's' : ''}</span>
+                      </div>
+                      <p className="text-2xl font-bold text-amber-400 mb-2">${pm.amount.toLocaleString('en-US', { maximumFractionDigits: 0 })}</p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {pm.orders.map(orderNum => (
+                          <button
+                            key={orderNum}
+                            onClick={() => navigate(`/order/${orderNum}`)}
+                            className="px-2 py-1 bg-amber-500/15 hover:bg-amber-500/30 border border-amber-500/20 rounded text-xs font-mono text-amber-300 hover:text-amber-200 transition-colors"
+                          >
+                            {orderNum}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+
+                  {currentMonthCollected === 0 && data.previousMonths.length === 0 && (
+                    <div className="bg-slate-800/50 rounded-lg p-4">
+                      <p className="text-xs text-slate-500">No collections recorded</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       <div className="bg-slate-900/40 backdrop-blur-xl border border-white/10 rounded-2xl p-6 shadow-xl">
         <h4 className="text-lg font-semibold text-white mb-4">
@@ -1152,13 +1319,6 @@ const ReportsPage: React.FC = () => {
      const month = String(date.getMonth() + 1).padStart(2, '0');
      const day = String(date.getDate()).padStart(2, '0');
      return `${year}-${month}-${day}`;
-   };
-
-   // Helper to get the next day (for exclusive end date queries)
-   const getNextDay = (dateStr: string): string => {
-     const date = new Date(dateStr);
-     date.setDate(date.getDate() + 1);
-     return formatDateOnly(date);
    };
 
    // Calculate default range (full calendar month)

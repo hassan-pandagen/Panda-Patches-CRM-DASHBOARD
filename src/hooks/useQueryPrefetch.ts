@@ -19,6 +19,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../services/supabaseClient';
 import { mapDbToOrder } from '../services/orderService';
 import { queryKeys } from '../constants/queryKeys';
+import { localMidnightISO, localNextDayISO } from '../utils/dateFilters';
 
 export const useQueryPrefetch = () => {
   const queryClient = useQueryClient();
@@ -67,43 +68,22 @@ export const useQueryPrefetch = () => {
    */
   const prefetchDashboard = async () => {
     try {
-      const endDate = new Date();
-      const startDate = new Date();
-      startDate.setDate(endDate.getDate() - 7);
-
-      const startDateStr = startDate.toISOString().split('T')[0];
-      const endDateStr = endDate.toISOString().split('T')[0];
+      // Prefetch current month (matches Dashboard default)
+      const now = new Date();
+      const year = now.getFullYear();
+      const month = now.getMonth();
+      const pad = (n: number) => String(n).padStart(2, '0');
+      const startDateStr = `${year}-${pad(month + 1)}-01`;
+      const endDateStr = `${year}-${pad(month + 1)}-${pad(new Date(year, month + 1, 0).getDate())}`;
 
       await queryClient.prefetchQuery({
-        queryKey: queryKeys.dashboard.metrics(startDateStr, endDateStr),
+        queryKey: queryKeys.dashboard.unified(startDateStr, endDateStr),
         queryFn: async () => {
-          const start = `${startDateStr}T00:00:00.000Z`;
-          const end = `${endDateStr}T23:59:59.999Z`;
-
           const { data, error } = await supabase
             .from('orders')
-            .select('*')
-            .gte('created_at', start)
-            .lte('created_at', end);
-
-          if (error) throw error;
-          return (data || []).map(mapDbToOrder);
-        },
-        staleTime: 60000,
-      });
-
-      // Also prefetch table data with default range
-      await queryClient.prefetchQuery({
-        queryKey: queryKeys.dashboard.table(startDateStr, endDateStr),
-        queryFn: async () => {
-          const start = `${startDateStr}T00:00:00.000Z`;
-          const end = `${endDateStr}T23:59:59.999Z`;
-
-          const { data, error } = await supabase
-            .from('orders')
-            .select('*')
-            .gte('created_at', start)
-            .lte('created_at', end);
+            .select('id, order_number, customer_name, customer_email, design_name, status, created_at, updated_at, sales_agent, order_amount, amount_paid, is_urgent, lead_source, patches_type')
+            .gte('created_at', localMidnightISO(startDateStr))
+            .lt('created_at', localNextDayISO(endDateStr));
 
           if (error) throw error;
           return (data || []).map(mapDbToOrder);
@@ -121,25 +101,22 @@ export const useQueryPrefetch = () => {
    */
   const prefetchReports = async () => {
     try {
-      const endDate = new Date();
-      const startDate = new Date();
-      startDate.setMonth(endDate.getMonth() - 1);
+      // Prefetch current month (matches Reports default)
+      const now = new Date();
+      const year = now.getFullYear();
+      const month = now.getMonth();
+      const pad = (n: number) => String(n).padStart(2, '0');
+      const startDateStr = `${year}-${pad(month + 1)}-01`;
+      const endDateStr = `${year}-${pad(month + 1)}-${pad(new Date(year, month + 1, 0).getDate())}`;
 
-      const startDateStr = startDate.toISOString().split('T')[0];
-      const endDateStr = endDate.toISOString().split('T')[0];
-
-      // Prefetch same data as orders but with different key
       await queryClient.prefetchQuery({
         queryKey: queryKeys.orders.report(startDateStr, endDateStr),
         queryFn: async () => {
-          const start = `${startDateStr}T00:00:00.000Z`;
-          const end = `${endDateStr}T23:59:59.999Z`;
-
           const { data, error } = await supabase
             .from('orders')
             .select('*')
-            .gte('created_at', start)
-            .lte('created_at', end)
+            .gte('created_at', localMidnightISO(startDateStr))
+            .lt('created_at', localNextDayISO(endDateStr))
             .order('created_at', { ascending: false });
 
           if (error) throw error;

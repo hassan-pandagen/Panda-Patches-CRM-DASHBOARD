@@ -108,13 +108,6 @@ export default function Dashboard() {
     return `${year}-${month}-${day}`;
   };
 
-  // Helper to get the next day (for exclusive end date queries)
-  const getNextDay = (dateStr: string): string => {
-    const date = new Date(dateStr);
-    date.setDate(date.getDate() + 1);
-    return formatDateOnly(date);
-  };
-
   // Calculate the active date range
   const activeDateRange = useMemo(() => {
     if ((dateView === "custom" || dateView === "last-month" || dateView === "quarter" || dateView === "year") && customDateRange) {
