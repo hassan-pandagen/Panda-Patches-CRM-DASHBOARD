@@ -23,14 +23,18 @@ export default defineConfig({
     chunkSizeWarningLimit: 1600, 
     rollupOptions: {
       output: {
-        // 🛑 SAFETY FIX: Group ALL dependencies into one file.
-        // This ensures React is always loaded in the correct order.
-        manualChunks(id) {
-          if (id.includes('node_modules')) {
-            return 'vendor';
-          }
+        manualChunks: {
+          // Core React — loaded on every page (small, cached forever)
+          'vendor-react': ['react', 'react-dom', 'react-router-dom'],
+          // Data layer — loaded once auth completes
+          'vendor-data': ['@tanstack/react-query', '@supabase/supabase-js'],
+          // Charts — only loaded on Reports/Dashboard
+          'vendor-charts': ['recharts'],
+          // UI animation — loaded after first paint
+          'vendor-ui': ['framer-motion'],
+          // Utilities — small, shared
+          'vendor-utils': ['date-fns', 'zod', 'lucide-react'],
         },
-        // Standard naming to prevent caching issues
         entryFileNames: 'assets/[name]-[hash].js',
         chunkFileNames: 'assets/[name]-[hash].js',
         assetFileNames: 'assets/[name]-[hash].[ext]',

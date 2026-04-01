@@ -3,6 +3,10 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useQuery, keepPreviousData } from '@tanstack/react-query';
 import { useSearchParams, Link, useNavigate } from 'react-router-dom';
+import { localMidnightISO, localNextDayISO } from '../utils/dateFilters';
+import BulkActionBar from '../components/orders/BulkActionBar';
+import QuickViewDrawer from '../components/orders/QuickViewDrawer';
+import SavedFilters from '../components/ui/SavedFilters';
 import { supabase } from '../services/supabaseClient';
 import { Order, OrderStatus, UserRole } from '../types';
 import { useAuth } from '../contexts/AuthContext';
@@ -34,7 +38,7 @@ import DateRangeFilter, { DateRange } from '../components/ui/DateRangeFilter';
 const FilterTab = React.memo(({ active, label, count, onClick, isUrgent = false }: any) => (
     <button
         onClick={onClick}
-        className={`relative px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 flex items-center gap-2 whitespace-nowrap ${active
+        className={`relative px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 flex items-center gap-2 whitespace-nowrap min-h-[40px] ${active
                 ? isUrgent
                     ? 'bg-red-600 text-white border border-red-400 shadow-lg shadow-red-900/40'
                     : 'bg-brand-orange text-white shadow-lg shadow-brand-orange/20'
@@ -127,15 +131,10 @@ async function fetchPaginatedOrders(params: {
     if (leadSource) query = query.eq('lead_source', leadSource);
     if (date) {
         // Filter by date (full day range) — single-day drill-down from dashboard
-        const dayStart = `${date}T00:00:00.000Z`;
-        const dayEnd = `${date}T23:59:59.999Z`;
-        query = query.gte('created_at', dayStart).lte('created_at', dayEnd);
+        query = query.gte('created_at', localMidnightISO(date)).lt('created_at', localNextDayISO(date));
     } else if (dateRangeStart && dateRangeEnd && !search) {
         // Date range filter — skipped when search is active so orders from any date are found
-        const nextDay = new Date(dateRangeEnd);
-        nextDay.setDate(nextDay.getDate() + 1);
-        const nextDayStr = nextDay.toISOString().split('T')[0];
-        query = query.gte('created_at', `${dateRangeStart}T00:00:00.000Z`).lt('created_at', `${nextDayStr}T00:00:00.000Z`);
+        query = query.gte('created_at', localMidnightISO(dateRangeStart)).lt('created_at', localNextDayISO(dateRangeEnd));
     }
 
     // Apply status/special filters
@@ -284,19 +283,71 @@ const AllOrdersPage: React.FC = () => {
     const { user, role, permissions } = useAuth();
     const [searchParams, setSearchParams] = useSearchParams();
     const navigate = useNavigate();
-    const [searchQuery, setSearchQuery] = useState('');
-    const [activeFilter, setActiveFilter] = useState<string>('ALL');
-    const [currentPage, setCurrentPage] = useState(1);
-    const [dateView, setDateView] = useState<'today' | 'week' | 'month' | 'custom'>('month');
-    const [customDateRange, setCustomDateRange] = useState<DateRange | null>(null);
+    const [searchQuery, setSearchQuery] = useState(searchParams.get('search') || '');
+    const [selectedOrderIds, setSelectedOrderIds] = useState<Set<string>>(new Set());
+    const [quickViewOrder, setQuickViewOrder] = useState<any>(null);
 
-    const activeDateRange = React.useMemo(() => {
-        if (dateView === 'custom' && customDateRange) return customDateRange;
+    const toggleSelect = useCallback((id: string) => {
+        setSelectedOrderIds(prev => {
+            const next = new Set(prev);
+            if (next.has(id)) next.delete(id); else next.add(id);
+            return next;
+        });
+    }, []);
+
+    const clearSelection = useCallback(() => setSelectedOrderIds(new Set()), []);
+
+    // --- Persist filters in URL so they survive navigation ---
+    const activeFilter = searchParams.get('filter') || 'ALL';
+    const currentPage = Number(searchParams.get('page')) || 1;
+    const dateView = searchParams.get('dateView') || 'month';
+    const customStartParam = searchParams.get('startDate');
+    const customEndParam = searchParams.get('endDate');
+    const customDateRange: DateRange | null = (customStartParam && customEndParam) ? { startDate: customStartParam, endDate: customEndParam } : null;
+
+    // Helper to update URL params without losing existing ones
+    const updateParams = useCallback((updates: Record<string, string | null>) => {
+        setSearchParams(prev => {
+            const next = new URLSearchParams(prev);
+            for (const [key, val] of Object.entries(updates)) {
+                if (val === null || val === undefined) next.delete(key);
+                else next.set(key, val);
+            }
+            return next;
+        }, { replace: true });
+    }, [setSearchParams]);
+
+    const setActiveFilter = useCallback((f: string) => updateParams({ filter: f === 'ALL' ? null : f, page: null }), [updateParams]);
+    const setCurrentPage = useCallback((p: number) => updateParams({ page: p <= 1 ? null : String(p) }), [updateParams]);
+
+    const pad = (n: number) => String(n).padStart(2, '0');
+    const fmt = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+
+    const setDateView = useCallback((v: string) => {
         const now = new Date();
         const year = now.getFullYear();
         const month = now.getMonth();
-        const pad = (n: number) => String(n).padStart(2, '0');
-        const fmt = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+
+        if (v === 'last-month') {
+            const start = new Date(year, month - 1, 1);
+            const end = new Date(year, month, 0);
+            updateParams({ dateView: 'last-month', startDate: fmt(start), endDate: fmt(end), page: null });
+        } else if (v === 'quarter') {
+            const qStart = new Date(year, Math.floor(month / 3) * 3, 1);
+            const qEnd = new Date(year, Math.floor(month / 3) * 3 + 3, 0);
+            updateParams({ dateView: 'quarter', startDate: fmt(qStart), endDate: fmt(qEnd), page: null });
+        } else if (v === 'year') {
+            updateParams({ dateView: 'year', startDate: `${year}-01-01`, endDate: `${year}-12-31`, page: null });
+        } else {
+            updateParams({ dateView: v === 'month' ? null : v, page: null, ...(v !== 'custom' ? { startDate: null, endDate: null } : {}) });
+        }
+    }, [updateParams]);
+
+    const activeDateRange = React.useMemo(() => {
+        if ((dateView === 'custom' || dateView === 'last-month' || dateView === 'quarter' || dateView === 'year') && customDateRange) return customDateRange;
+        const now = new Date();
+        const year = now.getFullYear();
+        const month = now.getMonth();
         if (dateView === 'today') {
             const today = fmt(now);
             return { startDate: today, endDate: today };
@@ -304,6 +355,7 @@ const AllOrdersPage: React.FC = () => {
             const start = new Date(now); start.setDate(now.getDate() - 7);
             return { startDate: fmt(start), endDate: fmt(now) };
         } else {
+            // Default: this month
             const start = new Date(year, month, 1);
             const end = new Date(year, month + 1, 0);
             return { startDate: fmt(start), endDate: fmt(end) };
@@ -311,10 +363,24 @@ const AllOrdersPage: React.FC = () => {
     }, [dateView, customDateRange]);
 
     const handleCustomDateChange = (range: DateRange) => {
-        setCustomDateRange(range);
-        setDateView('custom');
-        setCurrentPage(1);
+        updateParams({ dateView: 'custom', startDate: range.startDate, endDate: range.endDate, page: null });
     };
+
+    // Month navigation — shift date range by 1 month
+    const activeMonth = activeDateRange.startDate.substring(0, 7); // "2026-02"
+    const handlePrevMonth = useCallback(() => {
+        const [y, m] = activeDateRange.startDate.split('-').map(Number);
+        const start = new Date(y, m - 2, 1);
+        const end = new Date(y, m - 1, 0);
+        updateParams({ dateView: 'custom', startDate: fmt(start), endDate: fmt(end), page: null });
+    }, [activeDateRange.startDate, updateParams]);
+
+    const handleNextMonth = useCallback(() => {
+        const [y, m] = activeDateRange.startDate.split('-').map(Number);
+        const start = new Date(y, m, 1);
+        const end = new Date(y, m + 1, 0);
+        updateParams({ dateView: 'custom', startDate: fmt(start), endDate: fmt(end), page: null });
+    }, [activeDateRange.startDate, updateParams]);
 
     // Debounce search by 300ms to avoid hammering the DB on every keystroke
     const debouncedSearch = useDebouncedValue(searchQuery, 300);
@@ -328,30 +394,14 @@ const AllOrdersPage: React.FC = () => {
 
     const canViewFinancials = role === UserRole.ADMIN || permissions?.orders_edit_financials || permissions?.view_financials;
 
-    // --- URL AUTO-FILTER ---
+    // Reset to page 1 when search changes
+    const prevSearchRef = useRef(debouncedSearch);
     useEffect(() => {
-        const filterParam = searchParams.get('filter');
-        if (filterParam) {
-            setActiveFilter(filterParam);
+        if (prevSearchRef.current !== debouncedSearch) {
+            prevSearchRef.current = debouncedSearch;
             setCurrentPage(1);
         }
-    }, [searchParams]);
-
-    // --- URL SEARCH PARAMETER ---
-    useEffect(() => {
-        if (searchParam) {
-            setSearchQuery(searchParam);
-        }
-    }, [searchParam]);
-
-    // Reset to page 1 only when search or date view changes
-    useEffect(() => {
-        setCurrentPage(1);
-    }, [debouncedSearch]);
-
-    useEffect(() => {
-        setCurrentPage(1);
-    }, [dateView, activeDateRange.startDate, activeDateRange.endDate]);
+    }, [debouncedSearch, setCurrentPage]);
 
     // ============================================
     // QUERY 1: Tab counts (lightweight, cached separately)
@@ -404,18 +454,14 @@ const AllOrdersPage: React.FC = () => {
     const getCount = (status: string) => counts?.byStatus?.[status] || 0;
 
     const clearDrillDown = () => {
-        setSearchParams({});
+        // Only clear drill-down params, preserve date range & filter tab
+        updateParams({ salesAgent: null, leadSource: null, date: null, ids: null, search: null, page: null });
         setSearchQuery('');
-        setActiveFilter('ALL');
     };
 
     const handleFilterChange = useCallback((filter: string) => {
-        const newParams = new URLSearchParams(searchParams);
-        newParams.delete('ids');
-        setSearchParams(newParams);
-        setActiveFilter(filter);
-        setCurrentPage(1);
-    }, [searchParams, setSearchParams]);
+        updateParams({ filter: filter === 'ALL' ? null : filter, ids: null, page: null });
+    }, [updateParams]);
 
     // --- SKELETON LOADING (only on initial load, not page transitions) ---
     if (isLoading && !pageData) return (
@@ -450,7 +496,13 @@ const AllOrdersPage: React.FC = () => {
                     <p className="text-slate-300 text-sm mt-1">Manage and track your production pipeline</p>
                 </div>
                 <div className="flex items-center gap-3 flex-wrap">
-                    <ToggleButtons view={dateView} onViewChange={(v) => { setDateView(v); setCurrentPage(1); }} />
+                    <ToggleButtons
+                        view={dateView}
+                        onViewChange={setDateView}
+                        activeMonth={activeMonth}
+                        onPrevMonth={handlePrevMonth}
+                        onNextMonth={handleNextMonth}
+                    />
                     <DateRangeFilter
                         value={dateView === 'custom' ? customDateRange || undefined : undefined}
                         onChange={handleCustomDateChange}
@@ -461,6 +513,7 @@ const AllOrdersPage: React.FC = () => {
                             : `${new Date(activeDateRange.startDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} – ${new Date(activeDateRange.endDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`
                         }
                     </span>
+                    <SavedFilters />
                     <Link to="/new-order">
                         <Button variant="primary" size="lg" className="shadow-lg shadow-brand-orange/20 text-white font-semibold">
                             <Plus className="w-5 h-5 mr-2" />
@@ -577,7 +630,18 @@ const AllOrdersPage: React.FC = () => {
 
                                         <div className="flex flex-col md:flex-row md:items-center gap-4 justify-between pl-2">
                                             {/* LEFT: Info */}
-                                            <div className="flex items-center gap-4">
+                                            <div className="flex items-center gap-3 md:gap-4">
+                                                {/* Bulk select checkbox */}
+                                                <button
+                                                    onClick={(e) => { e.preventDefault(); e.stopPropagation(); toggleSelect(order.id); }}
+                                                    className={`w-6 h-6 rounded border-2 flex items-center justify-center flex-shrink-0 transition-all ${
+                                                        selectedOrderIds.has(order.id)
+                                                            ? 'bg-brand-orange border-brand-orange text-white'
+                                                            : 'border-slate-600 hover:border-slate-400 opacity-0 group-hover:opacity-100'
+                                                    }`}
+                                                >
+                                                    {selectedOrderIds.has(order.id) && <CheckCircle className="w-4 h-4" />}
+                                                </button>
                                                 <div className={`w-12 h-12 rounded-lg flex items-center justify-center text-xl font-bold shadow-md ${isOverdue || order.isUrgent ? 'bg-red-600 text-white' : 'bg-blue-600 text-white'
                                                     }`}>
                                                     {order.customerName.charAt(0).toUpperCase()}
@@ -626,17 +690,17 @@ const AllOrdersPage: React.FC = () => {
                                             </div>
 
                                             {/* RIGHT: Stats & Status */}
-                                            <div className="flex items-center justify-between md:justify-end gap-6 md:gap-10 mt-2 md:mt-0 border-t md:border-t-0 border-white/5 pt-3 md:pt-0">
+                                            <div className="flex items-center justify-between md:justify-end gap-4 md:gap-10 mt-2 md:mt-0 border-t md:border-t-0 border-white/5 pt-3 md:pt-0">
 
-                                                <div className="flex flex-col items-end min-w-[140px]">
+                                                <div className="flex flex-col items-start md:items-end md:min-w-[140px]">
                                                     <span className="text-[10px] text-slate-400 uppercase tracking-wider font-bold mb-1">Status</span>
                                                     <StatusBadge status={order.status as OrderStatus} />
                                                 </div>
 
-                                                <div className="flex flex-col items-end min-w-[90px]">
+                                                <div className="flex flex-col items-center md:items-end md:min-w-[90px]">
                                                     <span className="text-[10px] text-slate-400 uppercase tracking-wider font-bold mb-1">Amount</span>
                                                     {canViewFinancials ? (
-                                                        <span className="text-white font-bold text-base tracking-tight">${order.orderAmount.toLocaleString()}</span>
+                                                        <span className="text-white font-bold text-sm md:text-base tracking-tight">${order.orderAmount.toLocaleString()}</span>
                                                     ) : (
                                                         <div className="flex items-center gap-1 text-slate-500">
                                                             <Lock className="w-3 h-3" />
@@ -645,8 +709,7 @@ const AllOrdersPage: React.FC = () => {
                                                     )}
                                                 </div>
 
-                                                {/* PENDING COLUMN */}
-                                                <div className="flex flex-col items-end min-w-[90px]">
+                                                <div className="flex flex-col items-end md:min-w-[90px]">
                                                     <span className="text-[10px] text-slate-400 uppercase tracking-wider font-bold mb-1">Pending</span>
                                                     {canViewFinancials ? (
                                                         (order.amountRemaining ?? 0) <= 0.01 ? (
@@ -655,7 +718,7 @@ const AllOrdersPage: React.FC = () => {
                                                                 <span className="text-xs font-bold">Paid</span>
                                                             </span>
                                                         ) : (
-                                                            <span className="text-amber-400 font-bold text-base tracking-tight">
+                                                            <span className="text-amber-400 font-bold text-sm md:text-base tracking-tight">
                                                                 ${(order.amountRemaining ?? 0).toLocaleString()}
                                                             </span>
                                                         )
@@ -667,7 +730,14 @@ const AllOrdersPage: React.FC = () => {
                                                     )}
                                                 </div>
 
-                                                <ArrowRight className="w-5 h-5 text-slate-500 group-hover:text-brand-orange group-hover:translate-x-1 transition-all" />
+                                                {/* Quick view button */}
+                                                <button
+                                                    onClick={(e) => { e.preventDefault(); e.stopPropagation(); setQuickViewOrder(order); }}
+                                                    className="p-2 rounded-lg text-slate-500 hover:text-brand-orange hover:bg-white/10 transition-all opacity-0 group-hover:opacity-100 hidden md:flex items-center justify-center"
+                                                    title="Quick view"
+                                                >
+                                                    <ArrowRight className="w-5 h-5" />
+                                                </button>
                                             </div>
                                         </div>
                                     </div>
@@ -685,7 +755,7 @@ const AllOrdersPage: React.FC = () => {
                     <Button
                         variant="secondary"
                         disabled={currentPage === 1}
-                        onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                        onClick={() => setCurrentPage(Math.max(currentPage - 1, 1))}
                         className="bg-slate-800 border border-slate-600 text-white hover:bg-slate-700 disabled:opacity-50"
                     >
                         <ChevronLeft className="w-4 h-4 mr-1" /> Previous
@@ -699,13 +769,35 @@ const AllOrdersPage: React.FC = () => {
                     <Button
                         variant="secondary"
                         disabled={currentPage === totalPages}
-                        onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                        onClick={() => setCurrentPage(Math.min(currentPage + 1, totalPages))}
                         className="bg-slate-800 border border-slate-600 text-white hover:bg-slate-700 disabled:opacity-50"
                     >
                         Next <ChevronRight className="w-4 h-4 ml-1" />
                     </Button>
                 </div>
             )}
+            {/* Quick View Drawer */}
+            <QuickViewDrawer
+                order={quickViewOrder}
+                isOpen={!!quickViewOrder}
+                onClose={() => setQuickViewOrder(null)}
+            />
+
+            {/* Bulk Action Bar */}
+            <BulkActionBar
+                selectedIds={Array.from(selectedOrderIds)}
+                selectedOrders={orders.filter(o => selectedOrderIds.has(o.id)).map(o => ({ id: o.id, orderNumber: o.orderNumber }))}
+                onClear={clearSelection}
+                salesAgents={[
+                    { email: 'lance@pandapatches.com', name: 'Lance' },
+                    { email: 'hello@pandapatches.com', name: 'Panda Admin' },
+                    ...(orders
+                        .map(o => o.salesAgent)
+                        .filter((v, i, a) => v && a.indexOf(v) === i && v !== 'lance@pandapatches.com' && v !== 'hello@pandapatches.com')
+                        .map(email => ({ email: email!, name: email!.split('@')[0] }))
+                    )
+                ]}
+            />
         </div>
     );
 };

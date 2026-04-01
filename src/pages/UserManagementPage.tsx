@@ -405,89 +405,104 @@ const UserManagementPage: React.FC = () => {
           </Button>
         </div>
       ) : users && users.length > 0 && (
-        <div className="group relative bg-slate-900/40 backdrop-blur-xl border border-white/10 rounded-2xl shadow-xl overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="border-b border-white/10 bg-slate-900/50">
-                  <th className="px-6 py-4 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">Email</th>
-                  <th className="px-6 py-4 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">Name</th>
-                  <th className="px-6 py-4 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">Role</th>
-                  <th className="px-6 py-4 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">Permissions</th>
-                  <th className="px-6 py-4 text-right text-xs font-semibold text-slate-400 uppercase tracking-wider">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-white/5">
-                {users.map((user) => (
-                  <tr 
-                    key={user.id} 
-                    className="hover:bg-white/5 transition-colors"
-                  >
-                    <td className="px-6 py-4 text-sm text-slate-200 font-medium">{user.email}</td>
-                    <td className="px-6 py-4 text-sm text-slate-300">{user.full_name || '-'}</td>
-                    <td className="px-6 py-4 text-sm">
-                      <span className={`px-3 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                        user.role === 'ADMIN' 
-                          ? 'bg-brand-orange/20 text-brand-orange' 
-                          : 'bg-brand-green/20 text-brand-green'
-                      }`}>
-                        {user.role}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 text-sm">
-                      <div className="flex flex-wrap gap-2">
-                        {Object.entries(user.permissions || {})
-                          .filter(([_, hasAccess]) => hasAccess)
-                          .slice(0, 2)
-                          .map(([permission]) => (
-                            <span 
-                              key={permission} 
-                              className="px-2 py-1 bg-brand-green/10 text-brand-green text-xs rounded-md border border-brand-green/20"
-                            >
+        <>
+          {/* Desktop: Table view */}
+          <div className="hidden md:block group relative bg-slate-900/40 backdrop-blur-xl border border-white/10 rounded-2xl shadow-xl overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b border-white/10 bg-slate-900/50">
+                    <th className="px-6 py-4 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">Email</th>
+                    <th className="px-6 py-4 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">Name</th>
+                    <th className="px-6 py-4 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">Role</th>
+                    <th className="px-6 py-4 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">Permissions</th>
+                    <th className="px-6 py-4 text-right text-xs font-semibold text-slate-400 uppercase tracking-wider">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-white/5">
+                  {users.map((user) => (
+                    <tr key={user.id} className="hover:bg-white/5 transition-colors">
+                      <td className="px-6 py-4 text-sm text-slate-200 font-medium">{user.email}</td>
+                      <td className="px-6 py-4 text-sm text-slate-300">{user.full_name || '-'}</td>
+                      <td className="px-6 py-4 text-sm">
+                        <span className={`px-3 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${
+                          user.role === 'ADMIN' ? 'bg-brand-orange/20 text-brand-orange' : 'bg-brand-green/20 text-brand-green'
+                        }`}>{user.role}</span>
+                      </td>
+                      <td className="px-6 py-4 text-sm">
+                        <div className="flex flex-wrap gap-2">
+                          {Object.entries(user.permissions || {}).filter(([_, hasAccess]) => hasAccess).slice(0, 2).map(([permission]) => (
+                            <span key={permission} className="px-2 py-1 bg-brand-green/10 text-brand-green text-xs rounded-md border border-brand-green/20">
                               ✓ {PERMISSION_LABELS[permission as keyof UserPermissions]}
                             </span>
                           ))}
-                        {Object.values(user.permissions || {}).filter(Boolean).length > 2 && (
-                          <button
-                            onClick={() => openPermissionsModal(user)}
-                            className="text-xs text-slate-300 px-2 py-1 hover:bg-slate-700 rounded-md transition-colors cursor-pointer"
-                          >
-                            +{Object.values(user.permissions || {}).filter(Boolean).length - 2}
+                          {Object.values(user.permissions || {}).filter(Boolean).length > 2 && (
+                            <button onClick={() => openPermissionsModal(user)} className="text-xs text-slate-300 px-2 py-1 hover:bg-slate-700 rounded-md transition-colors cursor-pointer">
+                              +{Object.values(user.permissions || {}).filter(Boolean).length - 2}
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-right">
+                        <div className="flex items-center justify-end gap-2">
+                          <button onClick={() => openEditModal(user)} className="p-2.5 hover:bg-slate-700 rounded-lg transition-colors text-slate-400 hover:text-brand-orange" title="Edit User">
+                            <Edit className="w-4 h-4" />
                           </button>
-                        )}
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-right">
-                      <div className="flex items-center justify-end gap-2">
-                        <button 
-                          onClick={() => openEditModal(user)} 
-                          className="p-2 hover:bg-slate-700 rounded-lg transition-colors text-slate-400 hover:text-brand-orange"
-                          title="Edit User"
-                        >
-                          <Edit className="w-4 h-4" />
-                        </button>
-                        <button
-                          onClick={() => openPasswordModal(user)}
-                          className="p-2 hover:bg-slate-700 rounded-lg transition-colors text-slate-400 hover:text-slate-200"
-                          title="Change Password"
-                        >
-                          <Key className="w-4 h-4" />
-                        </button>
-                        <button 
-                          onClick={() => openDeleteModal(user)} 
-                          className="p-2 hover:bg-red-900/20 rounded-lg transition-colors text-slate-400 hover:text-red-400"
-                          title="Delete User"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                          <button onClick={() => openPasswordModal(user)} className="p-2.5 hover:bg-slate-700 rounded-lg transition-colors text-slate-400 hover:text-slate-200" title="Change Password">
+                            <Key className="w-4 h-4" />
+                          </button>
+                          <button onClick={() => openDeleteModal(user)} className="p-2.5 hover:bg-red-900/20 rounded-lg transition-colors text-slate-400 hover:text-red-400" title="Delete User">
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
-        </div>
+
+          {/* Mobile: Card view */}
+          <div className="md:hidden space-y-3">
+            {users.map((user) => (
+              <div key={user.id} className="bg-slate-900/40 backdrop-blur-xl border border-white/10 rounded-xl p-4 space-y-3">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-bold text-white truncate">{user.full_name || user.email}</p>
+                    <p className="text-xs text-slate-400 truncate mt-0.5">{user.email}</p>
+                  </div>
+                  <span className={`px-3 py-1 text-xs font-semibold rounded-full flex-shrink-0 ${
+                    user.role === 'ADMIN' ? 'bg-brand-orange/20 text-brand-orange' : 'bg-brand-green/20 text-brand-green'
+                  }`}>{user.role}</span>
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {Object.entries(user.permissions || {}).filter(([_, v]) => v).slice(0, 3).map(([p]) => (
+                    <span key={p} className="px-2 py-1 bg-brand-green/10 text-brand-green text-[10px] rounded-md border border-brand-green/20">
+                      {PERMISSION_LABELS[p as keyof UserPermissions]}
+                    </span>
+                  ))}
+                  {Object.values(user.permissions || {}).filter(Boolean).length > 3 && (
+                    <button onClick={() => openPermissionsModal(user)} className="text-[10px] text-slate-400 px-2 py-1 hover:bg-slate-700 rounded-md">
+                      +{Object.values(user.permissions || {}).filter(Boolean).length - 3} more
+                    </button>
+                  )}
+                </div>
+                <div className="flex items-center gap-2 pt-2 border-t border-white/5">
+                  <button onClick={() => openEditModal(user)} className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium transition-colors">
+                    <Edit className="w-3.5 h-3.5" /> Edit
+                  </button>
+                  <button onClick={() => openPasswordModal(user)} className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium transition-colors">
+                    <Key className="w-3.5 h-3.5" /> Password
+                  </button>
+                  <button onClick={() => openDeleteModal(user)} className="py-2.5 px-4 rounded-lg bg-slate-800 hover:bg-red-900/30 text-red-400 text-xs font-medium transition-colors">
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </>
       )}
 
       {/* Delete Confirmation Modal */}

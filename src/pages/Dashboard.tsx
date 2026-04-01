@@ -1,7 +1,10 @@
-import React, { useState, useMemo, type KeyboardEvent } from "react";
+import React, { useState, useMemo, useCallback, type KeyboardEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
+import { localMidnightISO, localNextDayISO } from "../utils/dateFilters";
+import ActivityFeed from "../components/dashboard/ActivityFeed";
 import {
+  Clock,
   DollarSign,
   AlertCircle,
   CheckCircle,
@@ -92,9 +95,7 @@ export default function Dashboard() {
   const [searchTerm, setSearchTerm] = useState("");
 
   // UNIFIED DATE CONTROL
-  const [dateView, setDateView] = useState<
-    "today" | "week" | "month" | "custom"
-  >("month");
+  const [dateView, setDateViewRaw] = useState<string>("month");
   const [customDateRange, setCustomDateRange] = useState<DateRange | null>(
     null
   );
@@ -116,7 +117,7 @@ export default function Dashboard() {
 
   // Calculate the active date range
   const activeDateRange = useMemo(() => {
-    if (dateView === "custom" && customDateRange) {
+    if ((dateView === "custom" || dateView === "last-month" || dateView === "quarter" || dateView === "year") && customDateRange) {
       return customDateRange;
     }
 
@@ -152,8 +153,67 @@ export default function Dashboard() {
 
   const handleCustomDateChange = (range: DateRange) => {
     setCustomDateRange(range);
-    setDateView("custom");
+    setDateViewRaw("custom");
   };
+
+  const setDateView = useCallback((v: string) => {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = now.getMonth();
+    if (v === 'last-month') {
+      const start = new Date(year, month - 1, 1);
+      const end = new Date(year, month, 0);
+      setCustomDateRange({ startDate: formatDateOnly(start), endDate: formatDateOnly(end) });
+      setDateViewRaw('last-month');
+    } else if (v === 'quarter') {
+      const qStart = new Date(year, Math.floor(month / 3) * 3, 1);
+      const qEnd = new Date(year, Math.floor(month / 3) * 3 + 3, 0);
+      setCustomDateRange({ startDate: formatDateOnly(qStart), endDate: formatDateOnly(qEnd) });
+      setDateViewRaw('quarter');
+    } else if (v === 'year') {
+      setCustomDateRange({ startDate: `${year}-01-01`, endDate: `${year}-12-31` });
+      setDateViewRaw('year');
+    } else {
+      setDateViewRaw(v);
+      if (v !== 'custom') setCustomDateRange(null);
+    }
+  }, []);
+
+  // Month navigation
+  const activeMonth = activeDateRange.startDate.substring(0, 7);
+  const handlePrevMonth = useCallback(() => {
+    const [y, m] = activeDateRange.startDate.split('-').map(Number);
+    const start = new Date(y, m - 2, 1);
+    const end = new Date(y, m - 1, 0);
+    setCustomDateRange({ startDate: formatDateOnly(start), endDate: formatDateOnly(end) });
+    setDateViewRaw('custom');
+  }, [activeDateRange.startDate]);
+
+  const handleNextMonth = useCallback(() => {
+    const [y, m] = activeDateRange.startDate.split('-').map(Number);
+    const start = new Date(y, m, 1);
+    const end = new Date(y, m + 1, 0);
+    setCustomDateRange({ startDate: formatDateOnly(start), endDate: formatDateOnly(end) });
+    setDateViewRaw('custom');
+  }, [activeDateRange.startDate]);
+
+  // Build Orders page URL with current date range carried over
+  const ordersUrl = useCallback((extra?: string) => {
+    const params = new URLSearchParams();
+    if (dateView !== 'month') {
+      params.set('dateView', dateView);
+    }
+    if (customDateRange) {
+      params.set('startDate', customDateRange.startDate);
+      params.set('endDate', customDateRange.endDate);
+    }
+    if (extra) {
+      const extraParams = new URLSearchParams(extra);
+      extraParams.forEach((v, k) => params.set(k, v));
+    }
+    const qs = params.toString();
+    return `/orders${qs ? `?${qs}` : ''}`;
+  }, [dateView, customDateRange]);
 
   const {
     data: orders = [],
@@ -175,14 +235,11 @@ export default function Dashboard() {
         throw new Error("Not authenticated");
       }
 
-      // Use .lt() with next day to include ALL orders on the end date
-      // Example: endDate "2026-01-31" → lt("2026-02-01") includes all Jan 31 orders
-      // Select only columns needed for dashboard - avoids fetching large file URL arrays (50x data reduction)
       let query = supabase
          .from("orders")
          .select("id, order_number, customer_name, customer_email, design_name, status, created_at, updated_at, sales_agent, order_amount, amount_paid, is_urgent, lead_source, patches_type")
-         .gte("created_at", activeDateRange.startDate)
-         .lt("created_at", getNextDay(activeDateRange.endDate));
+         .gte("created_at", localMidnightISO(activeDateRange.startDate))
+         .lt("created_at", localNextDayISO(activeDateRange.endDate));
 
       // ✅ FIX ADDED HERE: Force filter by email if not Admin
       // This ensures sales agents ONLY see their own rows, regardless of RLS speed.
@@ -259,17 +316,16 @@ export default function Dashboard() {
 
   const isAdmin = role === UserRole.ADMIN;
   const getViewText = () => {
-    if (dateView === "custom")
-      return `${new Date(
-        activeDateRange.startDate
-      ).toLocaleDateString()} - ${new Date(
-        activeDateRange.endDate
-      ).toLocaleDateString()}`;
-    return dateView === "today"
-      ? "today"
-      : dateView === "week"
-      ? "this week"
-      : "this month";
+    if (dateView === "custom") {
+      const s = new Date(activeDateRange.startDate);
+      const e = new Date(activeDateRange.endDate);
+      // If it's a full single month, show "February 2026" etc.
+      if (s.getDate() === 1 && e.getDate() === new Date(e.getFullYear(), e.getMonth() + 1, 0).getDate() && s.getMonth() === e.getMonth()) {
+        return s.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+      }
+      return `${s.toLocaleDateString()} - ${e.toLocaleDateString()}`;
+    }
+    return dateView === "today" ? "today" : dateView === "week" ? "this week" : "this month";
   };
 
   return (
@@ -295,7 +351,13 @@ export default function Dashboard() {
           </div>
 
           <div className="flex flex-col lg:flex-row items-start lg:items-center gap-4">
-            <ToggleButtons view={dateView} onViewChange={setDateView} />
+            <ToggleButtons
+              view={dateView}
+              onViewChange={setDateView}
+              activeMonth={activeMonth}
+              onPrevMonth={handlePrevMonth}
+              onNextMonth={handleNextMonth}
+            />
             <DateRangeFilter
               value={activeDateRange}
               onChange={handleCustomDateChange}
@@ -317,7 +379,7 @@ export default function Dashboard() {
             prefix="$"
             icon={<DollarSign className="w-6 h-6 text-brand-orange" />}
             gradient="bg-gradient-to-r from-brand-orange to-orange-600"
-            onClick={() => navigate("/orders")}
+            onClick={() => navigate(ordersUrl())}
             isLoading={isLoading}
           />
 
@@ -328,8 +390,7 @@ export default function Dashboard() {
             prefix="$"
             icon={<AlertCircle className="w-6 h-6 text-amber-300" />}
             gradient="bg-gradient-to-r from-amber-500 to-yellow-500"
-            // ✅ Navigate to filter for unpaid orders
-            onClick={() => navigate("/orders?filter=PAYMENT_PENDING")}
+            onClick={() => navigate(ordersUrl("filter=PAYMENT_PENDING"))}
             isLoading={isLoading}
           />
 
@@ -339,7 +400,7 @@ export default function Dashboard() {
             value={totalOrders}
             icon={<TrendingUp className="w-6 h-6 text-purple-400" />}
             gradient="bg-gradient-to-r from-purple-500 to-pink-500"
-            onClick={() => navigate("/orders")}
+            onClick={() => navigate(ordersUrl())}
             isLoading={isLoading}
           />
 
@@ -350,8 +411,7 @@ export default function Dashboard() {
             prefix="$"
             icon={<CheckCircle className="w-6 h-6 text-green-400" />}
             gradient="bg-gradient-to-r from-green-500 to-emerald-500"
-            // ✅ Navigate to filter for completed/paid orders
-            onClick={() => navigate("/orders?filter=PAID")}
+            onClick={() => navigate(ordersUrl("filter=PAID"))}
             isLoading={isLoading}
           />
         </motion.div>
@@ -361,7 +421,7 @@ export default function Dashboard() {
           {/* LEFT COLUMN: Production & Quick Actions */}
           <div className="lg:col-span-1 space-y-6">
             <SpotlightCard className="p-6">
-              <ProductionProgress orders={orders} />
+              <ProductionProgress orders={orders} buildOrdersUrl={ordersUrl} />
             </SpotlightCard>
 
             {isAdmin && (
@@ -399,6 +459,18 @@ export default function Dashboard() {
             </SpotlightCard>
           </div>
         </div>
+
+        {/* ACTIVITY FEED — Full Width */}
+        <SpotlightCard className="p-6">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-semibold text-white flex items-center gap-2">
+              <Clock className="w-5 h-5 text-brand-orange" />
+              Recent Activity
+            </h3>
+            <span className="text-xs text-slate-500">Live updates</span>
+          </div>
+          <ActivityFeed />
+        </SpotlightCard>
       </div>
     </div>
   );

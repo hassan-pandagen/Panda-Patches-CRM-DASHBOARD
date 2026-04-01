@@ -9,6 +9,16 @@
 @tailwind utilities;
 /* stylelint-enable at-rule-no-unknown */
 
+/* Hide scrollbar but keep scroll functionality */
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
 /* 3. Apply your custom base styles to the 'base' layer */
 @layer base {
   html {

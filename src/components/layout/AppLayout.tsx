@@ -1,28 +1,29 @@
-import React from "react";
+import React, { useState, useCallback } from "react";
 import { Outlet, useLocation } from "react-router-dom";
 import { motion } from "framer-motion";
 import Sidebar from "./Sidebar";
 import Header from "./Header";
+import Navbar from "./Navbar";
+import { useKeyboardShortcuts } from "../../hooks/useKeyboardShortcuts";
 
 const AppLayout: React.FC = () => {
   const location = useLocation();
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  useKeyboardShortcuts();
+
+  const toggleSidebar = useCallback(() => setSidebarOpen((prev) => !prev), []);
+  const closeSidebar = useCallback(() => setSidebarOpen(false), []);
 
   return (
     <div className="flex h-screen bg-[#0B1120] text-slate-200 overflow-hidden relative selection:bg-brand-orange/30">
-      {/* --- LAYER 1: AMBIENT BACKGROUND (CSS animations - no JS repaints) --- */}
+      {/* --- LAYER 1: AMBIENT BACKGROUND --- */}
       <div className="fixed inset-0 z-0 overflow-hidden pointer-events-none">
-        {/* Top Left - Warm Glow */}
         <div className="absolute -top-[20%] -left-[10%] w-[800px] h-[800px] bg-brand-orange/20 rounded-full blur-[120px] opacity-40" />
-
-        {/* Bottom Right - Cool Glow */}
         <div className="absolute -bottom-[20%] -right-[10%] w-[600px] h-[600px] bg-blue-600/20 rounded-full blur-[120px] opacity-35" />
-
-        {/* Center - Subtle Fill */}
         <div className="absolute top-[20%] left-[30%] w-[600px] h-[600px] bg-purple-500/5 rounded-full blur-[150px]" />
       </div>
 
-      {/* --- LAYER 2: FILM GRAIN (THE MAGIC SAUCE) --- */}
-      {/* This invisible noise texture makes the glass look expensive */}
+      {/* --- LAYER 2: FILM GRAIN --- */}
       <div
         className="fixed inset-0 z-[1] opacity-[0.03] pointer-events-none mix-blend-overlay"
         style={{
@@ -31,16 +32,30 @@ const AppLayout: React.FC = () => {
       />
 
       {/* --- LAYER 3: CONTENT --- */}
-      {/* Sidebar (Elevated) */}
-      <div className="relative z-20 flex-shrink-0 shadow-2xl shadow-black/50">
-        <Sidebar />
+
+      {/* Mobile Overlay */}
+      {sidebarOpen && (
+        <div
+          className="fixed inset-0 z-30 bg-black/60 backdrop-blur-sm md:hidden"
+          onClick={closeSidebar}
+        />
+      )}
+
+      {/* Sidebar - hidden on mobile, slide-in drawer when open */}
+      <div
+        className={`
+          fixed inset-y-0 left-0 z-40 w-64 transform transition-transform duration-300 ease-in-out
+          md:relative md:translate-x-0 md:z-20 md:flex-shrink-0 md:shadow-2xl md:shadow-black/50
+          ${sidebarOpen ? "translate-x-0" : "-translate-x-full"}
+        `}
+      >
+        <Sidebar onNavigate={closeSidebar} />
       </div>
 
       {/* Main Area */}
-      <div className="relative z-10 flex flex-1 flex-col overflow-hidden">
-        <Header />
-        <main className="relative z-20 flex-1 overflow-y-auto p-6 lg:p-8 custom-scrollbar scroll-smooth">
-          {/* Smooth page transitions - fade in/out between routes */}
+      <div className="relative z-10 flex flex-1 flex-col overflow-hidden w-full">
+        <Header onMenuToggle={toggleSidebar} />
+        <main className="relative z-20 flex-1 overflow-y-auto p-4 md:p-6 lg:p-8 pb-24 md:pb-6 custom-scrollbar scroll-smooth">
           <motion.div
             key={location.pathname}
             initial={{ opacity: 0 }}
@@ -51,12 +66,14 @@ const AppLayout: React.FC = () => {
             <Outlet />
           </motion.div>
 
-          {/* Floating Footer Credit (Optional but nice) */}
           <div className="py-6 text-center text-xs text-slate-600 font-medium tracking-widest uppercase opacity-50 hover:opacity-100 transition-opacity">
             Panda Patches OS v2.5
           </div>
         </main>
       </div>
+
+      {/* Mobile Bottom Navbar */}
+      <Navbar />
     </div>
   );
 };

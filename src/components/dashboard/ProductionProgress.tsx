@@ -14,6 +14,7 @@ interface ProductionStatus {
 
 interface ProductionProgressProps {
   orders: Order[];
+  buildOrdersUrl?: (extra?: string) => string;
 }
 
 const containerVariants: Variants = {
@@ -26,7 +27,7 @@ const itemVariants: Variants = {
   visible: { opacity: 1, x: 0, transition: { type: "spring", stiffness: 100 } },
 };
 
-export const ProductionProgress: React.FC<ProductionProgressProps> = ({ orders }) => {
+export const ProductionProgress: React.FC<ProductionProgressProps> = ({ orders, buildOrdersUrl }) => {
   const navigate = useNavigate();
 
   const { statusCounts, urgentCount } = useMemo(() => {
@@ -81,7 +82,7 @@ export const ProductionProgress: React.FC<ProductionProgressProps> = ({ orders }
   ];
 
   const handleStatusClick = (filterQuery: string) => {
-    navigate(`/orders?${filterQuery}`);
+    navigate(buildOrdersUrl ? buildOrdersUrl(filterQuery) : `/orders?${filterQuery}`);
   };
 
   return (

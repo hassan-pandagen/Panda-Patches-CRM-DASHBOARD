@@ -414,50 +414,48 @@ const OrderForm: React.FC<OrderFormProps> = ({
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-8">
       <FormSectionWrapper title="Customer Information">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-5 md:gap-8">
           
           {/* --- LIVE CUSTOMER INSIGHTS --- */}
           {existingCustomer && (
-            <div className="md:col-span-2 mb-6 p-4 bg-blue-500/10 border border-blue-500/30 rounded-xl flex items-center justify-between animate-in fade-in slide-in-from-top-2">
-              <div className="flex items-center gap-3">
-                <div className="p-2 bg-blue-500/20 rounded-lg text-blue-400">
-                  <UserCheck className="w-5 h-5" />
+            <div className="md:col-span-2 mb-6 p-4 bg-blue-500/10 border border-blue-500/30 rounded-xl animate-in fade-in slide-in-from-top-2">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-blue-500/20 rounded-lg text-blue-400 flex-shrink-0">
+                    <UserCheck className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-bold text-white flex items-center gap-2 flex-wrap">
+                      Repeat Customer
+                      <span className="text-xs font-normal bg-blue-600 text-white px-2 py-0.5 rounded-full">
+                        {existingCustomer.count} Past Orders
+                      </span>
+                    </h4>
+                    <p className="text-xs text-slate-400">
+                      Last order: <span className="text-slate-200">{existingCustomer.lastOrder}</span>
+                    </p>
+                  </div>
                 </div>
-                <div>
-                  <h4 className="text-sm font-bold text-white flex items-center gap-2">
-                    Repeat Customer Detected
-                    <span className="text-xs font-normal bg-blue-600 text-white px-2 py-0.5 rounded-full">
-                      {existingCustomer.count} Past Orders
-                    </span>
-                  </h4>
-                  <p className="text-xs text-slate-400">
-                    Last order placed on: <span className="text-slate-200">{existingCustomer.lastOrder}</span>
-                  </p>
-                </div>
-              </div>
-              
-              <div className="flex items-center gap-2">
-                {/* Copy Customer Info Button */}
-                <button
-                  type="button"
-                  onClick={handleCopyCustomerInfo}
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-brand-orange hover:bg-orange-600 border border-orange-500/30 rounded-lg text-xs font-bold text-white transition-all group"
-                >
-                  <Copy className="w-3 h-3" />
-                  Copy Customer Info
-                </button>
 
-                {/* View History Link */}
-                <a
-                  href={`/customers/${encodeURIComponent(watchEmail || watchPhone)}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-900/50 hover:bg-blue-600 border border-blue-500/30 rounded-lg text-xs font-bold text-blue-400 hover:text-white transition-all group"
-                >
-                  <History className="w-3 h-3 group-hover:animate-spin-slow" />
-                  View History
-                  <ExternalLink className="w-3 h-3 opacity-50" />
-                </a>
+                <div className="flex items-center gap-2 ml-11 sm:ml-0">
+                  <button
+                    type="button"
+                    onClick={handleCopyCustomerInfo}
+                    className="flex items-center gap-1.5 px-4 py-2.5 bg-brand-orange hover:bg-orange-600 border border-orange-500/30 rounded-lg text-xs font-bold text-white transition-all"
+                  >
+                    <Copy className="w-3.5 h-3.5" />
+                    Copy Info
+                  </button>
+                  <a
+                    href={`/customers/${encodeURIComponent(watchEmail || watchPhone)}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-1.5 px-4 py-2.5 bg-slate-900/50 hover:bg-blue-600 border border-blue-500/30 rounded-lg text-xs font-bold text-blue-400 hover:text-white transition-all"
+                  >
+                    <History className="w-3.5 h-3.5" />
+                    History
+                  </a>
+                </div>
               </div>
             </div>
           )}
@@ -497,7 +495,7 @@ const OrderForm: React.FC<OrderFormProps> = ({
       </FormSectionWrapper>
 
       <FormSectionWrapper title="Design & Product">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-10">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 md:gap-5 md:gap-8">
           {/* Row 1: Design Name | Border Type | Quantity */}
           <div>
             <label className="block text-sm font-medium text-slate-300">Design Name</label>
@@ -552,7 +550,7 @@ const OrderForm: React.FC<OrderFormProps> = ({
       </FormSectionWrapper>
 
       <FormSectionWrapper title="Shipping Details">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-5 md:gap-8">
           <div className="md:col-span-2">
             <label className="block text-sm font-medium text-slate-300">Shipping Address</label>
             <Textarea
@@ -577,7 +575,7 @@ const OrderForm: React.FC<OrderFormProps> = ({
 
       {/* ATTACHMENTS SECTION */}
       <FormSectionWrapper title="Attachments & Files">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-5 md:gap-8">
           
           {/* Mockups */}
           <div className="md:col-span-2">
@@ -632,7 +630,7 @@ const OrderForm: React.FC<OrderFormProps> = ({
 
       {(showFinancialsProp || canEditFinancials) && (
         <FormSectionWrapper title="Financials">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-10">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-5 md:gap-8">
             <div>
               <label className="block text-xs text-slate-400">Order Amount</label>
               <input type="number" step="0.01" {...register('orderAmount', { required: 'Required', valueAsNumber: true, min: { value: 0, message: "Cannot be negative" } })} className="w-full bg-slate-800 border-slate-600 rounded-md text-white" disabled={!canEditFinancials} />
@@ -659,7 +657,7 @@ const OrderForm: React.FC<OrderFormProps> = ({
               {errors.marketingCost && <p className="text-red-400 text-xs mt-1">{errors.marketingCost.message}</p>}
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-10 pt-6 mt-6 border-t border-slate-700">
+          <div className="grid grid-cols-2 gap-5 md:gap-8 pt-6 mt-6 border-t border-slate-700">
             <div><p className="text-xs text-slate-500">Remaining</p><p className="text-xl font-bold text-amber-400">${amountRemaining.toFixed(2)}</p></div>
             <div><p className="text-xs text-slate-500">Profit</p><p className={`text-xl font-bold ${profit >= 0 ? 'text-green-400' : 'text-red-400'}`}>${profit.toFixed(2)}</p></div>
           </div>
@@ -667,7 +665,7 @@ const OrderForm: React.FC<OrderFormProps> = ({
       )}
 
       <FormSectionWrapper title="Order Status">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-10">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-5 md:gap-8">
           <div>
             <label className="block text-sm font-medium text-slate-300">
               Status <span className="text-red-400">*</span>
@@ -733,7 +731,7 @@ const OrderForm: React.FC<OrderFormProps> = ({
               {watchedStatus === 'REMAKE' ? '🔄 Remake' : watchedStatus === 'CANCELLED' ? '⚠️ Cancellation' : '⚠️ Refund'} Details
             </h4>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-5 md:gap-8">
               {/* Reason Category Dropdown */}
               <div>
                 <label className="block text-sm font-medium text-slate-300">
@@ -774,11 +772,11 @@ const OrderForm: React.FC<OrderFormProps> = ({
 
       </FormSectionWrapper>
 
-      <div className="flex justify-end gap-4 pt-6 border-t border-slate-700">
-        <Button type="button" variant="secondary" onClick={() => reset(formDefaultValues)} disabled={isSaving || isUploading}>
+      <div className="flex flex-col-reverse sm:flex-row justify-end gap-3 sm:gap-4 pt-6 border-t border-slate-700">
+        <Button type="button" variant="secondary" onClick={() => reset(formDefaultValues)} disabled={isSaving || isUploading} className="w-full sm:w-auto">
           Cancel
         </Button>
-        <Button type="submit" disabled={isSaving || isUploading} title={isUploading ? "Please wait for all files to finish uploading" : ""}>
+        <Button type="submit" disabled={isSaving || isUploading} title={isUploading ? "Please wait for all files to finish uploading" : ""} className="w-full sm:w-auto">
           {isSaving ? <Spinner small /> : isUploading ? 'Uploading Files...' : 'Save Changes'}
         </Button>
       </div>

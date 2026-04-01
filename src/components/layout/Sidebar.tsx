@@ -22,6 +22,7 @@ interface SidebarItemProps {
   label: string;
   icon: React.ReactNode;
   prefetchType?: "orders" | "dashboard" | "reports" | "clock-in-out" | "none";
+  onClick?: () => void;
 }
 
 const SidebarItem: React.FC<SidebarItemProps> = ({
@@ -29,6 +30,7 @@ const SidebarItem: React.FC<SidebarItemProps> = ({
   label,
   icon,
   prefetchType = "none",
+  onClick,
 }) => {
   const location = useLocation();
   const isActive =
@@ -53,6 +55,7 @@ const SidebarItem: React.FC<SidebarItemProps> = ({
       to={to}
       onMouseEnter={handleMouseEnter}
       onTouchStart={handleMouseEnter}
+      onClick={onClick}
       className={`flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-all duration-200 relative ${
         isActive
           ? "bg-brand-orange text-white shadow-lg shadow-brand-orange/20"
@@ -68,15 +71,15 @@ const SidebarItem: React.FC<SidebarItemProps> = ({
   );
 };
 
-const Sidebar: React.FC = () => {
+interface SidebarProps {
+  onNavigate?: () => void;
+}
+
+const Sidebar: React.FC<SidebarProps> = ({ onNavigate }) => {
   const { role, signOut, permissions } = useAuth();
 
   const isAdmin = role === "ADMIN";
-
-  // Helper: Is this a "Financial" viewer? (Sales Manager)
   const canViewFinancials = isAdmin || permissions?.reports_view_financials;
-
-  // Helper: Is this a "Production" viewer? (Hassan)
   const canViewProduction = isAdmin || permissions?.orders_edit_production;
 
   const navItems = [
@@ -108,29 +111,20 @@ const Sidebar: React.FC = () => {
 
   return (
     <aside className="w-64 flex flex-col h-full bg-[#0B1120]/80 backdrop-blur-xl border-r border-white/5 relative">
-      {/* Add a subtle top-to-bottom shine on the right border */}
       <div className="absolute right-0 top-0 bottom-0 w-[1px] bg-gradient-to-b from-transparent via-white/20 to-transparent" />
 
       {/* Logo Header */}
       <div className="flex items-center justify-center h-20 flex-shrink-0 px-4">
         <BrandLogo className="h-9 w-auto" variant="dark" />
       </div>
-      <nav className="grow space-y-2 p-4">
+      <nav className="grow space-y-2 p-4 overflow-y-auto custom-scrollbar">
         {navItems
           .filter((item) => {
-            // 1. Dashboard: Only Admin or Financial Viewers (Hides for Production)
             if (item.to === "/") return canViewFinancials;
-
-            // 2. Orders: Everyone
             if (item.to === "/orders") return true;
-
-            // 3. Reports: Show if they can view Financials OR Production stats
             if (item.to === "/reports")
               return canViewFinancials || canViewProduction;
-
-            // 4. Clock In/Out: Everyone
             if (item.to === "/clock-in-out") return true;
-
             return true;
           })
           .map((item) => (
@@ -138,28 +132,28 @@ const Sidebar: React.FC = () => {
               key={item.to}
               {...item}
               prefetchType={item.prefetchType}
+              onClick={onNavigate}
             />
           ))}
 
-        {/* New Order: Permission Based */}
         {permissions?.orders_create && (
           <SidebarItem
             to="/new-order"
             label="New Order"
             icon={<PlusCircle className="w-5 h-5" />}
+            onClick={onNavigate}
           />
         )}
 
-        {/* Quotes: Permission Based */}
         {permissions?.orders_create && (
           <SidebarItem
             to="/quotes"
             label="Quotes"
             icon={<FileText className="w-5 h-5" />}
+            onClick={onNavigate}
           />
         )}
 
-        {/* ADMIN ONLY LINKS */}
         {isAdmin && (
           <>
             <div className="my-2 border-t border-white/10 mx-2" />
@@ -167,27 +161,31 @@ const Sidebar: React.FC = () => {
               to="/bulk-cost-entry"
               label="Bulk Cost Entry"
               icon={<DollarSign className="w-5 h-5" />}
+              onClick={onNavigate}
             />
             <SidebarItem
               to="/user-management"
               label="User Management"
               icon={<Users className="w-5 h-5" />}
+              onClick={onNavigate}
             />
             <SidebarItem
               to="/performance-metrics"
               label="Performance Metrics"
               icon={<Activity className="w-5 h-5" />}
+              onClick={onNavigate}
             />
             <SidebarItem
               to="/settings"
               label="Settings"
               icon={<Settings className="w-5 h-5" />}
+              onClick={onNavigate}
             />
           </>
         )}
       </nav>
 
-      <div className="mt-auto">
+      <div className="mt-auto flex-shrink-0 p-4 pt-0">
         <button
           onClick={signOut}
           className="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium text-slate-400 hover:bg-red-500/20 hover:text-red-300 transition-all duration-200"

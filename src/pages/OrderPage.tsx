@@ -306,9 +306,9 @@ const OrderPage: React.FC = () => {
                 <div className="space-y-4">
                     <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                         <div>
-                            <Link to="/orders" className="flex items-center gap-2 text-sm text-slate-400 hover:text-white transition-colors mb-2">
+                            <button onClick={() => navigate(-1)} className="flex items-center gap-2 text-sm text-slate-400 hover:text-white transition-colors mb-2">
                                 <ArrowLeft size={16} /> Back to All Orders
-                            </Link>
+                            </button>
                             <h1 className="text-3xl font-bold text-white flex items-center gap-3">
                                 Order {order.orderNumber}
                                 {order.isUrgent && (

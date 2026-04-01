@@ -1,7 +1,9 @@
 import React, { useState, useMemo, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "../contexts/AuthContext";
+import { localMidnightISO, localNextDayISO } from "../utils/dateFilters";
 import SpotlightCard from "../components/ui/SpotlightCard";
+import ToggleButtons from "../components/ui/ToggleButtons";
 import { Order, UserRole, OrderStatus } from "../types/index";
 import Spinner from "../components/ui/Spinner";
 import { LEAD_SOURCE_OPTIONS } from "../constants/index";
@@ -338,40 +340,26 @@ const SalesReportComponent: React.FC<ReportComponentProps> = ({ orders, dateRang
           </div>
         </div>
         
-        <div className="relative z-10 overflow-x-auto">
+        {/* Desktop: Table */}
+        <div className="relative z-10 overflow-x-auto hidden md:block">
           <table className="w-full">
             <thead>
               <tr className="border-b border-white/10 bg-slate-800/50">
                 <th className="text-center py-4 px-6 font-bold text-slate-300 uppercase text-xs tracking-wider">Agent</th>
                 <th className="text-center py-4 px-6 font-bold text-slate-300 uppercase text-xs tracking-wider">
-                  <div className="flex items-center justify-center gap-1">
-                    <CheckCircle className="w-4 h-4" />
-                    Orders
-                  </div>
+                  <div className="flex items-center justify-center gap-1"><CheckCircle className="w-4 h-4" />Orders</div>
                 </th>
                 <th className="text-center py-4 px-6 font-bold text-slate-300 uppercase text-xs tracking-wider">
-                  <div className="flex items-center justify-center gap-1">
-                    <DollarSign className="w-4 h-4" />
-                    Revenue
-                  </div>
+                  <div className="flex items-center justify-center gap-1"><DollarSign className="w-4 h-4" />Revenue</div>
                 </th>
                 <th className="text-center py-4 px-6 font-bold text-slate-300 uppercase text-xs tracking-wider">
-                  <div className="flex items-center justify-center gap-1">
-                    <TrendingUp className="w-4 h-4" />
-                    Avg Order
-                  </div>
+                  <div className="flex items-center justify-center gap-1"><TrendingUp className="w-4 h-4" />Avg Order</div>
                 </th>
                 <th className="text-center py-4 px-6 font-bold text-slate-300 uppercase text-xs tracking-wider">
-                  <div className="flex items-center justify-center gap-1">
-                    <CheckCircle className="w-4 h-4" />
-                    Collected
-                  </div>
+                  <div className="flex items-center justify-center gap-1"><CheckCircle className="w-4 h-4" />Collected</div>
                 </th>
                 <th className="text-center py-4 px-6 font-bold text-slate-300 uppercase text-xs tracking-wider">
-                  <div className="flex items-center justify-center gap-1">
-                    <AlertCircle className="w-4 h-4" />
-                    Pending
-                  </div>
+                  <div className="flex items-center justify-center gap-1"><AlertCircle className="w-4 h-4" />Pending</div>
                 </th>
                 <th className="text-center py-4 px-6 font-bold text-slate-300 uppercase text-xs tracking-wider">Collection %</th>
               </tr>
@@ -382,68 +370,78 @@ const SalesReportComponent: React.FC<ReportComponentProps> = ({ orders, dateRang
                   const pending = agent.revenue - agent.collected;
                   const collectionRate = agent.revenue > 0 ? (agent.collected / agent.revenue) * 100 : 0;
                   return (
-                    <tr
-                      key={idx}
-                      className="hover:bg-white/5 transition-colors duration-200 group"
-                    >
+                    <tr key={idx} className="hover:bg-white/5 transition-colors duration-200 group">
                       <td className="py-4 px-6 font-medium text-slate-200 group-hover:text-white transition-colors text-center">
-                        <button
-                          onClick={() => navigate(`/orders?salesAgent=${encodeURIComponent(agent.agent)}`)}
-                          className="bg-slate-700/50 hover:bg-brand-orange/20 px-3 py-2 rounded-lg text-base font-semibold transition-colors duration-200 text-brand-orange hover:text-brand-orange border border-slate-600 hover:border-brand-orange/50"
-                          title={`View orders from ${agent.agent}`}
-                        >
+                        <button onClick={() => navigate(`/orders?salesAgent=${encodeURIComponent(agent.agent)}`)} className="bg-slate-700/50 hover:bg-brand-orange/20 px-3 py-2 rounded-lg text-base font-semibold transition-colors duration-200 text-brand-orange hover:text-brand-orange border border-slate-600 hover:border-brand-orange/50" title={`View orders from ${agent.agent}`}>
                           {userNames[agent.agent] || agent.agent.split("@")[0] || agent.agent}
                         </button>
                       </td>
-                      <td className="py-4 px-6 text-center">
-                        <span className="inline-block bg-blue-500/20 text-blue-300 px-3 py-1.5 rounded-lg font-semibold text-sm border border-blue-500/30">
-                          {agent.orders}
-                        </span>
-                      </td>
-                      <td className="py-4 px-6 text-center">
-                        <span className="text-green-400 font-bold text-base">
-                          ${agent.revenue.toLocaleString("en-US", { maximumFractionDigits: 0 })}
-                        </span>
-                      </td>
-                      <td className="py-4 px-6 text-center text-slate-300 font-medium">
-                        ${agent.avg.toLocaleString("en-US", { maximumFractionDigits: 0 })}
-                      </td>
-                      <td className="py-4 px-6 text-center">
-                        <span className="text-emerald-400 font-bold text-base">
-                          ${agent.collected.toLocaleString("en-US", { maximumFractionDigits: 0 })}
-                        </span>
-                      </td>
-                      <td className="py-4 px-6 text-center">
-                        <span className={`font-bold text-base ${pending > 0 ? 'text-amber-400' : 'text-slate-400'}`}>
-                          ${pending.toLocaleString("en-US", { maximumFractionDigits: 0 })}
-                        </span>
-                      </td>
+                      <td className="py-4 px-6 text-center"><span className="inline-block bg-blue-500/20 text-blue-300 px-3 py-1.5 rounded-lg font-semibold text-sm border border-blue-500/30">{agent.orders}</span></td>
+                      <td className="py-4 px-6 text-center"><span className="text-green-400 font-bold text-base">${agent.revenue.toLocaleString("en-US", { maximumFractionDigits: 0 })}</span></td>
+                      <td className="py-4 px-6 text-center text-slate-300 font-medium">${agent.avg.toLocaleString("en-US", { maximumFractionDigits: 0 })}</td>
+                      <td className="py-4 px-6 text-center"><span className="text-emerald-400 font-bold text-base">${agent.collected.toLocaleString("en-US", { maximumFractionDigits: 0 })}</span></td>
+                      <td className="py-4 px-6 text-center"><span className={`font-bold text-base ${pending > 0 ? 'text-amber-400' : 'text-slate-400'}`}>${pending.toLocaleString("en-US", { maximumFractionDigits: 0 })}</span></td>
                       <td className="py-4 px-6 text-center">
                         <div className="flex items-center justify-center gap-2">
                           <div className="w-24 bg-slate-700 rounded-full h-2 overflow-hidden">
-                            <div 
-                              className="h-full bg-gradient-to-r from-brand-orange to-orange-500 transition-all duration-300"
-                              style={{ width: `${Math.min(collectionRate, 100)}%` }}
-                            />
+                            <div className="h-full bg-gradient-to-r from-brand-orange to-orange-500 transition-all duration-300" style={{ width: `${Math.min(collectionRate, 100)}%` }} />
                           </div>
-                          <span className="text-brand-orange font-bold text-sm min-w-[50px] text-center">
-                            {collectionRate.toFixed(0)}%
-                          </span>
+                          <span className="text-brand-orange font-bold text-sm min-w-[50px] text-center">{collectionRate.toFixed(0)}%</span>
                         </div>
                       </td>
                     </tr>
                   );
                 })
               ) : (
-                <tr>
-                  <td colSpan={7} className="py-12 text-center text-slate-400">
-                    <AlertCircle className="w-8 h-8 mx-auto mb-2 opacity-50" />
-                    No sales data available for this period
-                  </td>
-                </tr>
+                <tr><td colSpan={7} className="py-12 text-center text-slate-400"><AlertCircle className="w-8 h-8 mx-auto mb-2 opacity-50" />No sales data available for this period</td></tr>
               )}
             </tbody>
           </table>
+        </div>
+
+        {/* Mobile: Card view */}
+        <div className="relative z-10 md:hidden space-y-3 mt-4">
+          {agentPerformance.length > 0 ? (
+            agentPerformance.map((agent, idx) => {
+              const pending = agent.revenue - agent.collected;
+              const collectionRate = agent.revenue > 0 ? (agent.collected / agent.revenue) * 100 : 0;
+              return (
+                <div key={idx} className="bg-slate-800/40 rounded-xl p-4 border border-slate-700/50 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <button onClick={() => navigate(`/orders?salesAgent=${encodeURIComponent(agent.agent)}`)} className="text-brand-orange font-bold text-sm hover:underline">
+                      {userNames[agent.agent] || agent.agent.split("@")[0] || agent.agent}
+                    </button>
+                    <span className="bg-blue-500/20 text-blue-300 px-2.5 py-1 rounded-lg text-xs font-bold border border-blue-500/30">{agent.orders} orders</span>
+                  </div>
+                  <div className="grid grid-cols-3 gap-3 text-center">
+                    <div>
+                      <p className="text-[10px] text-slate-400 uppercase font-semibold">Revenue</p>
+                      <p className="text-green-400 font-bold text-sm">${agent.revenue.toLocaleString("en-US", { maximumFractionDigits: 0 })}</p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] text-slate-400 uppercase font-semibold">Collected</p>
+                      <p className="text-emerald-400 font-bold text-sm">${agent.collected.toLocaleString("en-US", { maximumFractionDigits: 0 })}</p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] text-slate-400 uppercase font-semibold">Pending</p>
+                      <p className={`font-bold text-sm ${pending > 0 ? 'text-amber-400' : 'text-slate-400'}`}>${pending.toLocaleString("en-US", { maximumFractionDigits: 0 })}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="flex-1 bg-slate-700 rounded-full h-2 overflow-hidden">
+                      <div className="h-full bg-gradient-to-r from-brand-orange to-orange-500" style={{ width: `${Math.min(collectionRate, 100)}%` }} />
+                    </div>
+                    <span className="text-brand-orange font-bold text-xs">{collectionRate.toFixed(0)}%</span>
+                  </div>
+                </div>
+              );
+            })
+          ) : (
+            <div className="py-12 text-center text-slate-400">
+              <AlertCircle className="w-8 h-8 mx-auto mb-2 opacity-50" />
+              No sales data available for this period
+            </div>
+          )}
         </div>
 
         {agentPerformance.length > 0 && (
@@ -764,7 +762,8 @@ const LeadSourceReportComponent: React.FC<ReportComponentProps> = ({
             <Award className="w-5 h-5 text-brand-orange" />
             Top Repeat Customers
           </h4>
-          <div className="overflow-x-auto max-h-[500px] custom-scrollbar">
+          {/* Desktop: Table */}
+          <div className="overflow-x-auto max-h-[500px] custom-scrollbar hidden md:block">
             <table className="w-full text-left text-slate-200">
               <thead className="text-xs font-bold text-slate-400 uppercase bg-slate-800/50 sticky top-0 tracking-wider">
                 <tr>
@@ -778,46 +777,44 @@ const LeadSourceReportComponent: React.FC<ReportComponentProps> = ({
               </thead>
               <tbody className="divide-y divide-white/5">
                 {repeatCustomerMetrics.detailedCustomers.map((customer, index) => (
-                  <tr
-                    key={index}
-                    className="hover:bg-white/5 transition-colors group"
-                  >
+                  <tr key={index} className="hover:bg-white/5 transition-colors group">
                     <td className="px-4 py-3.5">
                       <div className="flex flex-col">
                         <span className="text-sm font-semibold text-white">{customer.customerName}</span>
                         <span className="text-xs text-slate-400">{customer.customerEmail || customer.customerPhone}</span>
                       </div>
                     </td>
+                    <td className="px-4 py-3.5 text-center"><span className="inline-flex items-center justify-center px-2.5 py-1 bg-brand-orange/20 text-brand-orange rounded-full text-sm font-bold">{customer.orderCount}</span></td>
+                    <td className="px-4 py-3.5 text-sm text-slate-300">{customer.favoritePatchType}</td>
+                    <td className="px-4 py-3.5 text-right text-emerald-400 font-bold tracking-wide">${customer.totalRevenue.toLocaleString()}</td>
+                    <td className="px-4 py-3.5 text-sm text-slate-400">{new Date(customer.lastOrderDate).toLocaleDateString()}</td>
                     <td className="px-4 py-3.5 text-center">
-                      <span className="inline-flex items-center justify-center px-2.5 py-1 bg-brand-orange/20 text-brand-orange rounded-full text-sm font-bold">
-                        {customer.orderCount}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3.5 text-sm text-slate-300">
-                      {customer.favoritePatchType}
-                    </td>
-                    <td className="px-4 py-3.5 text-right text-emerald-400 font-bold tracking-wide">
-                      ${customer.totalRevenue.toLocaleString()}
-                    </td>
-                    <td className="px-4 py-3.5 text-sm text-slate-400">
-                      {new Date(customer.lastOrderDate).toLocaleDateString()}
-                    </td>
-                    <td className="px-4 py-3.5 text-center">
-                      <button
-                        onClick={() => {
-                          // Use order IDs directly for 100% accuracy
-                          // This guarantees we show exactly the orders that were grouped together
-                          navigate(`/orders?ids=${encodeURIComponent(customer.orderNumbers)}`);
-                        }}
-                        className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-white text-xs font-medium rounded-lg transition-colors"
-                      >
-                        View Orders
-                      </button>
+                      <button onClick={() => navigate(`/orders?ids=${encodeURIComponent(customer.orderNumbers)}`)} className="px-3 py-2 bg-slate-700 hover:bg-slate-600 text-white text-xs font-medium rounded-lg transition-colors">View Orders</button>
                     </td>
                   </tr>
                 ))}
               </tbody>
             </table>
+          </div>
+
+          {/* Mobile: Card view */}
+          <div className="md:hidden space-y-3 max-h-[500px] overflow-y-auto custom-scrollbar">
+            {repeatCustomerMetrics.detailedCustomers.map((customer, index) => (
+              <div key={index} className="bg-slate-800/40 rounded-xl p-4 border border-slate-700/50 space-y-2">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-bold text-white truncate">{customer.customerName}</p>
+                    <p className="text-xs text-slate-400 truncate">{customer.customerEmail || customer.customerPhone}</p>
+                  </div>
+                  <span className="bg-brand-orange/20 text-brand-orange px-2.5 py-1 rounded-full text-xs font-bold flex-shrink-0">{customer.orderCount} orders</span>
+                </div>
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-slate-400">{customer.favoritePatchType} · {new Date(customer.lastOrderDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
+                  <span className="text-emerald-400 font-bold">${customer.totalRevenue.toLocaleString()}</span>
+                </div>
+                <button onClick={() => navigate(`/orders?ids=${encodeURIComponent(customer.orderNumbers)}`)} className="w-full py-2.5 bg-slate-700 hover:bg-slate-600 text-white text-xs font-medium rounded-lg transition-colors mt-1">View Orders</button>
+              </div>
+            ))}
           </div>
           <div className="mt-4 pt-4 border-t border-white/10 text-sm text-slate-400">
             Showing {repeatCustomerMetrics.detailedCustomers.length} repeat customers sorted by order count
@@ -842,38 +839,15 @@ const LeadSourceReportComponent: React.FC<ReportComponentProps> = ({
             </thead>
             <tbody className="divide-y divide-white/5">
               {leadSourceStats.map((source, index) => (
-                <tr
-                  key={index}
-                  className="hover:bg-white/5 cursor-pointer transition-colors group"
-                  onClick={() =>
-                    navigate(
-                      `/orders?leadSource=${encodeURIComponent(source.name)}`
-                    )
-                  }
-                >
-                  <td className="px-4 py-3.5 text-sm font-semibold text-white flex items-center gap-3">
-                    <span
-                      className={`w-2.5 h-2.5 rounded-full shadow-sm ${
-                        source.revenue > 0 ? "" : "bg-slate-600"
-                      }`}
-                      style={{
-                        backgroundColor:
-                          source.revenue > 0
-                            ? SOURCE_COLORS[source.name] ||
-                              SOURCE_COLORS["Other"]
-                            : undefined,
-                      }}
-                    />
-                    <span className="group-hover:text-brand-orange transition-colors">
-                      {source.name}
-                    </span>
+                <tr key={index} className="hover:bg-white/5 cursor-pointer transition-colors group" onClick={() => navigate(`/orders?leadSource=${encodeURIComponent(source.name)}`)}>
+                  <td className="px-4 py-3.5 text-sm font-semibold text-white">
+                    <div className="flex items-center gap-3">
+                      <span className={`w-2.5 h-2.5 rounded-full shadow-sm flex-shrink-0 ${source.revenue > 0 ? "" : "bg-slate-600"}`} style={{ backgroundColor: source.revenue > 0 ? SOURCE_COLORS[source.name] || SOURCE_COLORS["Other"] : undefined }} />
+                      <span className="group-hover:text-brand-orange transition-colors">{source.name}</span>
+                    </div>
                   </td>
-                  <td className="px-4 py-3.5 text-sm text-center text-slate-300 font-medium bg-white/0 group-hover:bg-white/5 rounded-lg transition-colors">
-                    {source.orders}
-                  </td>
-                  <td className="px-4 py-3.5 text-sm text-right text-emerald-400 font-bold tracking-wide">
-                    ${source.revenue.toLocaleString()}
-                  </td>
+                  <td className="px-4 py-3.5 text-sm text-center text-slate-300 font-medium">{source.orders}</td>
+                  <td className="px-4 py-3.5 text-sm text-right text-emerald-400 font-bold tracking-wide">${source.revenue.toLocaleString()}</td>
                 </tr>
               ))}
             </tbody>
@@ -1205,39 +1179,67 @@ const ReportsPage: React.FC = () => {
    };
 
    const [dateRange, setDateRange] = React.useState<DateRange>(getDefaultReportsRange);
-   const [dateView, setDateView] = React.useState<"today" | "week" | "month">("month");
+   const [dateView, setDateViewRaw] = React.useState<string>("month");
 
-   // Handle date view change
-   const handleDateViewChange = (view: "today" | "week" | "month") => {
-     setDateView(view);
-
+   // Handle date view change (supports new presets)
+   const handleDateViewChange = React.useCallback((v: string) => {
      const now = new Date();
-     let startDate: Date;
-     let endDate: Date;
+     const year = now.getFullYear();
+     const month = now.getMonth();
 
-     if (view === "today") {
-       startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-       endDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-     } else if (view === "week") {
-       endDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-       startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 7);
+     if (v === 'last-month') {
+       const start = new Date(year, month - 1, 1);
+       const end = new Date(year, month, 0);
+       setDateRange({ startDate: formatDateOnly(start), endDate: formatDateOnly(end) });
+       setDateViewRaw('last-month');
+     } else if (v === 'quarter') {
+       const qStart = new Date(year, Math.floor(month / 3) * 3, 1);
+       const qEnd = new Date(year, Math.floor(month / 3) * 3 + 3, 0);
+       setDateRange({ startDate: formatDateOnly(qStart), endDate: formatDateOnly(qEnd) });
+       setDateViewRaw('quarter');
+     } else if (v === 'year') {
+       setDateRange({ startDate: `${year}-01-01`, endDate: `${year}-12-31` });
+       setDateViewRaw('year');
+     } else if (v === 'today') {
+       const today = formatDateOnly(now);
+       setDateRange({ startDate: today, endDate: today });
+       setDateViewRaw('today');
+     } else if (v === 'week') {
+       const start = new Date(year, month, now.getDate() - 7);
+       setDateRange({ startDate: formatDateOnly(start), endDate: formatDateOnly(now) });
+       setDateViewRaw('week');
+     } else if (v === 'month') {
+       const start = new Date(year, month, 1);
+       const end = new Date(year, month + 1, 0);
+       setDateRange({ startDate: formatDateOnly(start), endDate: formatDateOnly(end) });
+       setDateViewRaw('month');
      } else {
-       // Full calendar month: 1st to last day of CURRENT month
-       const year = now.getFullYear();
-       const month = now.getMonth();
-       startDate = new Date(year, month, 1);
-       endDate = new Date(year, month + 1, 0); // Day 0 of next month = last day of current month
+       setDateViewRaw(v);
      }
+   }, []);
 
-     setDateRange({
-       startDate: formatDateOnly(startDate),
-       endDate: formatDateOnly(endDate),
-     });
-   };
+   // Month navigation
+   const activeMonth = dateRange.startDate.substring(0, 7);
+   const handlePrevMonth = React.useCallback(() => {
+     const [y, m] = dateRange.startDate.split('-').map(Number);
+     const start = new Date(y, m - 2, 1);
+     const end = new Date(y, m - 1, 0);
+     setDateRange({ startDate: formatDateOnly(start), endDate: formatDateOnly(end) });
+     setDateViewRaw('custom');
+   }, [dateRange.startDate]);
+
+   const handleNextMonth = React.useCallback(() => {
+     const [y, m] = dateRange.startDate.split('-').map(Number);
+     const start = new Date(y, m, 1);
+     const end = new Date(y, m + 1, 0);
+     setDateRange({ startDate: formatDateOnly(start), endDate: formatDateOnly(end) });
+     setDateViewRaw('custom');
+   }, [dateRange.startDate]);
 
    // Update dateView when custom range is changed
    const handleCustomDateRange = (range: DateRange) => {
      setDateRange(range);
+     setDateViewRaw('custom');
    };
 
   // --- 1. DYNAMIC TAB GENERATION (The Clean UI Fix) ---
@@ -1312,8 +1314,8 @@ const ReportsPage: React.FC = () => {
       let query = supabase
         .from("orders")
         .select("*")
-        .gte("created_at", dateRange.startDate)
-        .lt("created_at", getNextDay(dateRange.endDate));
+        .gte("created_at", localMidnightISO(dateRange.startDate))
+        .lt("created_at", localNextDayISO(dateRange.endDate));
 
       // Filter by sales agent for sales agents only (PRODUCTION can see all orders)
       if (role !== UserRole.ADMIN && role !== UserRole.PRODUCTION && user?.email) {
@@ -1396,22 +1398,13 @@ const ReportsPage: React.FC = () => {
           </div>
 
           <div className="flex flex-col sm:flex-row items-center gap-4">
-            {/* Date View Buttons */}
-            <div className="flex items-center gap-2 bg-slate-800/50 border border-slate-700 rounded-lg p-1">
-              {["today", "week", "month"].map((view) => (
-                <button
-                  key={view}
-                  onClick={() => handleDateViewChange(view as "today" | "week" | "month")}
-                  className={`px-3 py-1.5 rounded text-sm font-medium transition-all ${
-                    dateView === view
-                      ? "bg-brand-orange text-white shadow-lg shadow-brand-orange/20"
-                      : "text-slate-300 hover:text-white hover:bg-slate-700"
-                  }`}
-                >
-                  {view.charAt(0).toUpperCase() + view.slice(1)}
-                </button>
-              ))}
-            </div>
+            <ToggleButtons
+              view={dateView}
+              onViewChange={handleDateViewChange}
+              activeMonth={activeMonth}
+              onPrevMonth={handlePrevMonth}
+              onNextMonth={handleNextMonth}
+            />
 
             <DateRangeFilter value={dateRange} onChange={handleCustomDateRange} />
             {csvConfig && (
@@ -1426,12 +1419,12 @@ const ReportsPage: React.FC = () => {
         </div>
 
         {/* Navigation Tabs (Only shows allowed tabs) */}
-        <div className="bg-slate-900/40 backdrop-blur-xl border border-white/10 rounded-2xl p-2 shadow-xl inline-flex gap-2">
+        <div className="bg-slate-900/40 backdrop-blur-xl border border-white/10 rounded-2xl p-2 shadow-xl flex gap-2 overflow-x-auto no-scrollbar -mx-4 px-4 md:mx-0 md:px-2">
           {availableReports.map((report) => (
             <button
               key={report.key}
               onClick={() => setSearchParams({ type: report.key })}
-              className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium rounded-lg transition-all duration-200 ${
+              className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium rounded-lg transition-all duration-200 whitespace-nowrap flex-shrink-0 ${
                 activeReport === report.key
                   ? "bg-brand-orange text-white shadow-lg"
                   : "text-slate-300 hover:bg-white/10 hover:text-white"

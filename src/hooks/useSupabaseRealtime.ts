@@ -72,13 +72,14 @@ export const useSupabaseRealtime = () => {
         },
         (payload) => {
           console.log('[Realtime] Activity logged');
-          // Invalidate all order history queries (without specific ID to catch all)
+          // Invalidate order history + activity feed
           queryClient.invalidateQueries({
             predicate: (query) =>
               Array.isArray(query.queryKey) &&
               query.queryKey[0] === 'orders' &&
               query.queryKey.includes('history'),
           });
+          queryClient.invalidateQueries({ queryKey: ['activity-feed'] });
         }
       )
       .subscribe((status, err) => {

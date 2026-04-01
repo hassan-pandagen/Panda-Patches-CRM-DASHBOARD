@@ -81,7 +81,7 @@ const DayButton = React.memo<{
         onMouseEnter={onMouseEnter}
         disabled={disabled}
         className={`
-          h-9 w-9 flex items-center justify-center text-sm font-medium transition-all relative
+          h-10 w-10 md:h-9 md:w-9 flex items-center justify-center text-sm font-medium transition-all relative
           ${!isCurrentMonth ? 'text-slate-600 opacity-40' : 'text-slate-200'}
           ${disabled ? 'text-slate-600 cursor-not-allowed opacity-30' : 'cursor-pointer'}
           ${isSelected ? 'bg-orange-600 text-white font-bold shadow-lg shadow-orange-600/30 z-10' : ''}
@@ -259,9 +259,9 @@ const DateRangeFilter: React.FC<DateRangeFilterProps> = ({ value, onChange }) =>
             {isFirstMonth ? (
               <button
                 onClick={goToPrevMonth}
-                className="p-1.5 hover:bg-slate-700/50 rounded-lg transition-colors"
+                className="p-2.5 hover:bg-slate-700/50 rounded-lg transition-colors min-w-[40px] min-h-[40px] flex items-center justify-center"
               >
-                <ChevronLeft className="w-4 h-4 text-slate-300" />
+                <ChevronLeft className="w-5 h-5 text-slate-300" />
               </button>
             ) : (
               <div className="w-7" />
@@ -274,9 +274,9 @@ const DateRangeFilter: React.FC<DateRangeFilterProps> = ({ value, onChange }) =>
             {!isFirstMonth ? (
               <button
                 onClick={goToNextMonth}
-                className="p-1.5 hover:bg-slate-700/50 rounded-lg transition-colors"
+                className="p-2.5 hover:bg-slate-700/50 rounded-lg transition-colors min-w-[40px] min-h-[40px] flex items-center justify-center"
               >
-                <ChevronRight className="w-4 h-4 text-slate-300" />
+                <ChevronRight className="w-5 h-5 text-slate-300" />
               </button>
             ) : (
               <div className="w-7" />
@@ -350,9 +350,13 @@ const DateRangeFilter: React.FC<DateRangeFilterProps> = ({ value, onChange }) =>
       {/* Trigger Button */}
       <button
         onClick={handleOpen}
-        className="flex items-center gap-2 px-4 py-2.5 bg-slate-900/40 backdrop-blur-xl border border-white/10 rounded-xl text-white text-sm hover:border-white/20 focus:outline-none focus:ring-2 focus:ring-slate-500 transition-all"
+        className={`flex items-center gap-2 px-4 py-2.5 backdrop-blur-xl rounded-xl text-sm transition-all focus:outline-none focus:ring-2 focus:ring-slate-500 ${
+          value?.startDate
+            ? 'bg-brand-orange/10 border border-brand-orange/40 text-brand-orange hover:border-brand-orange/60'
+            : 'bg-slate-900/40 border border-white/10 text-white hover:border-white/20'
+        }`}
       >
-        <Calendar className="w-4 h-4 text-slate-400" />
+        <Calendar className={`w-4 h-4 ${value?.startDate ? 'text-brand-orange' : 'text-slate-400'}`} />
         <span className="hidden sm:inline text-xs font-medium">{displayText}</span>
       </button>
 
@@ -364,27 +368,35 @@ const DateRangeFilter: React.FC<DateRangeFilterProps> = ({ value, onChange }) =>
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -10 }}
             transition={{ duration: 0.15 }} // OPTIMIZED: Faster animation (0.2s → 0.15s)
-            className="absolute top-full right-0 mt-2 z-50 bg-slate-950 border border-white/10 rounded-2xl shadow-2xl p-6"
+            className="absolute top-full right-0 mt-2 z-50 bg-slate-950 border border-white/10 rounded-2xl shadow-2xl p-4 md:p-6 max-w-[calc(100vw-2rem)] md:max-w-none"
           >
             <div className="space-y-4">
-              {/* Calendar */}
-              <div className="flex gap-8 bg-slate-900/60 rounded-xl p-6 backdrop-blur-sm">
+              {/* Calendar — single month on mobile, two on desktop */}
+              <div className="flex flex-col md:flex-row gap-4 md:gap-8 bg-slate-900/60 rounded-xl p-4 md:p-6 backdrop-blur-sm">
                 {renderMonth(currentMonth, currentMonthDays, true)}
-                {renderMonth(nextMonth, nextMonthDays, false)}
+                <div className="hidden md:block">
+                  {renderMonth(nextMonth, nextMonthDays, false)}
+                </div>
+                {/* Mobile: show next month nav on first month */}
+                <div className="flex justify-end md:hidden -mt-2">
+                  <button onClick={goToNextMonth} className="text-xs text-slate-400 hover:text-white px-3 py-2 rounded-lg hover:bg-slate-700/50 transition-colors">
+                    Next month →
+                  </button>
+                </div>
               </div>
 
               {/* Action Buttons */}
               <div className="flex gap-3">
                 <button
                   onClick={handleCancel}
-                  className="flex-1 px-5 py-2.5 text-sm font-medium text-slate-300 bg-slate-800/50 hover:bg-slate-800 rounded-xl transition-all"
+                  className="flex-1 px-5 py-3 text-sm font-medium text-slate-300 bg-slate-800/50 hover:bg-slate-800 rounded-xl transition-all"
                 >
                   Cancel
                 </button>
                 <button
                   onClick={handleApply}
                   disabled={!startDate || !endDate}
-                  className={`flex-1 px-5 py-2.5 text-sm font-bold rounded-xl transition-all ${
+                  className={`flex-1 px-5 py-3 text-sm font-bold rounded-xl transition-all ${
                     startDate && endDate
                       ? 'bg-gradient-to-r from-orange-600 to-orange-500 text-white hover:shadow-lg hover:shadow-orange-600/30'
                       : 'bg-slate-700/50 text-slate-500 cursor-not-allowed'
