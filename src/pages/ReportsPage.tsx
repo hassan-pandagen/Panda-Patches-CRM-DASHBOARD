@@ -1526,6 +1526,63 @@ const ReportsPage: React.FC = () => {
     };
   }, [filteredOrders, permissions, activeReport]);
 
+  // Google Ads Customer Match Export
+  const googleAdsCustomerList = useMemo(() => {
+    if (!filteredOrders.length) return null;
+    const seen = new Set<string>();
+    const customers: { Email: string; Phone: string; 'First Name': string; 'Last Name': string; Country: string; Zip: string }[] = [];
+
+    for (const order of filteredOrders) {
+      if (!order.customerEmail || order.status === 'CANCELLED' || order.status === 'REFUNDED') continue;
+      const emailKey = order.customerEmail.trim().toLowerCase();
+      if (seen.has(emailKey)) continue;
+      seen.add(emailKey);
+
+      const nameParts = (order.customerName || '').trim().split(/\s+/);
+      const firstName = nameParts[0] || '';
+      const lastName = nameParts.slice(1).join(' ') || '';
+
+      // Extract country/zip from shipping address if available
+      let country = 'US';
+      let zip = '';
+      if (order.shippingAddress) {
+        // Try to extract zip code (5 digits or 5+4 format)
+        const zipMatch = order.shippingAddress.match(/\b(\d{5}(?:-\d{4})?)\b/);
+        if (zipMatch) zip = zipMatch[1].split('-')[0]; // Remove extension
+      }
+
+      let phone = '';
+      if (order.customerPhone) {
+        const digits = order.customerPhone.replace(/\D/g, '');
+        phone = digits.length === 10 ? `+1${digits}` : digits.length === 11 && digits.startsWith('1') ? `+${digits}` : digits.length > 0 ? `+${digits}` : '';
+      }
+
+      customers.push({ Email: emailKey, Phone: phone, 'First Name': firstName, 'Last Name': lastName, Country: country, Zip: zip });
+    }
+    return customers;
+  }, [filteredOrders]);
+
+  const handleGoogleAdsExport = () => {
+    if (!googleAdsCustomerList?.length) return;
+    const headers = ['Email', 'Phone', 'First Name', 'Last Name', 'Country', 'Zip'];
+    const csvRows = [
+      headers.join(','),
+      ...googleAdsCustomerList.map(row =>
+        headers.map(h => {
+          const val = row[h as keyof typeof row] || '';
+          return val.includes(',') ? `"${val}"` : val;
+        }).join(',')
+      ),
+    ];
+    const blob = new Blob([csvRows.join('\n')], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `google-ads-customer-match-${dateRange.startDate}-to-${dateRange.endDate}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   if (isAuthLoading || isQueryLoading)
     return <Spinner fullScreen message="Preparing your reports..." />;
   if (availableReports.length === 0)
@@ -1574,6 +1631,15 @@ const ReportsPage: React.FC = () => {
               >
                 <Download className="w-4 h-4" /> <span>Export</span>
               </CSVLink>
+            )}
+            {googleAdsCustomerList && googleAdsCustomerList.length >= 1 && activeReport === 'sales' && (
+              <button
+                onClick={handleGoogleAdsExport}
+                className="h-[42px] flex items-center gap-2 px-4 bg-blue-600/80 hover:bg-blue-600 rounded-lg text-white text-sm font-semibold transition-colors"
+                title={`Export ${googleAdsCustomerList.length} customers for Google Ads`}
+              >
+                <Share2 className="w-4 h-4" /> <span>Google Ads ({googleAdsCustomerList.length})</span>
+              </button>
             )}
           </div>
         </div>

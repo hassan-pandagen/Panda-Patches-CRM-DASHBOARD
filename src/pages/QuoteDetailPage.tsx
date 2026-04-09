@@ -11,7 +11,6 @@ import Skeleton from '../components/ui/Skeleton';
 import SpotlightCard from '../components/ui/SpotlightCard';
 import { useToast } from '../hooks/useToast';
 import { ArrowLeft, CheckCircle, Trash2, Calendar, Mail, Phone, Paperclip, Image, Pencil, X, AlertTriangle, DollarSign, ExternalLink, MailCheck, Send } from 'lucide-react';
-import OptimizedImage from '../components/ui/OptimizedImage';
 
 // ─── SELECT STYLE ────────────────────────────────────────────────────────────
 const selectStyle = {
@@ -420,7 +419,7 @@ const QuoteDetailPage: React.FC = () => {
               </div>
             </div>
             <div className="p-4 flex items-center justify-center">
-              <OptimizedImage
+              <img
                 src={previewUrl}
                 alt="Preview"
                 className="max-w-full max-h-[75vh] rounded-lg object-contain"

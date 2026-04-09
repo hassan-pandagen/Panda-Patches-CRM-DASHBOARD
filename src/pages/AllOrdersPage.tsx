@@ -1,6 +1,7 @@
 // src/pages/AllOrdersPage.tsx - SERVER-SIDE PAGINATION & FILTERING
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { useQuery, keepPreviousData } from '@tanstack/react-query';
 import { useSearchParams, Link, useNavigate } from 'react-router-dom';
 import { localMidnightISO, localNextDayISO } from '../utils/dateFilters';
@@ -30,10 +31,91 @@ import {
     ChevronRight,
     X,
     CheckCircle,
+    ChevronDown,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import ToggleButtons from '../components/ui/ToggleButtons';
 import DateRangeFilter, { DateRange } from '../components/ui/DateRangeFilter';
+
+const AgentDropdown: React.FC<{ agents: string[]; value: string; onChange: (v: string) => void }> = ({ agents, value, onChange }) => {
+    const [open, setOpen] = React.useState(false);
+    const [pos, setPos] = React.useState({ top: 0, right: 0 });
+    const btnRef = React.useRef<HTMLButtonElement>(null);
+    const dropdownRef = React.useRef<HTMLDivElement>(null);
+
+    React.useEffect(() => {
+        const handler = (e: MouseEvent) => {
+            const target = e.target as Node;
+            const outsideBtn = btnRef.current && !btnRef.current.contains(target);
+            const outsideDropdown = dropdownRef.current && !dropdownRef.current.contains(target);
+            if (outsideBtn && outsideDropdown) setOpen(false);
+        };
+        document.addEventListener('mousedown', handler);
+        return () => document.removeEventListener('mousedown', handler);
+    }, []);
+
+    const handleOpen = () => {
+        if (btnRef.current) {
+            const r = btnRef.current.getBoundingClientRect();
+            setPos({ top: r.bottom + window.scrollY + 8, right: window.innerWidth - r.right });
+        }
+        setOpen(o => !o);
+    };
+
+    const label = value ? value.split('@')[0] : 'All Sales Agents';
+    const isFiltered = !!value;
+
+    return (
+        <>
+            <button
+                ref={btnRef}
+                type="button"
+                onClick={handleOpen}
+                className={`flex items-center gap-2 px-4 py-3 rounded-xl text-sm font-medium transition-all min-h-[46px] whitespace-nowrap border ${
+                    isFiltered
+                        ? 'bg-brand-orange/20 border-brand-orange text-brand-orange'
+                        : 'bg-slate-800/50 border-brand-orange/40 text-white hover:border-brand-orange hover:bg-slate-800'
+                }`}
+            >
+                <span>{label}</span>
+                {isFiltered ? (
+                    <span
+                        role="button"
+                        onClick={(e) => { e.stopPropagation(); onChange(''); setOpen(false); }}
+                        className="hover:text-white transition-colors"
+                    >
+                        <X className="w-3.5 h-3.5" />
+                    </span>
+                ) : (
+                    <ChevronDown className={`w-3.5 h-3.5 transition-transform ${open ? 'rotate-180' : ''}`} />
+                )}
+            </button>
+
+            {open && createPortal(
+                <div
+                    ref={dropdownRef}
+                    style={{ position: 'absolute', top: pos.top, right: pos.right }}
+                    className="w-64 bg-slate-900 border border-brand-orange/30 rounded-xl shadow-2xl z-[9999] overflow-hidden"
+                >
+                    <div className="max-h-72 overflow-y-auto py-1">
+                        {agents.map(agent => (
+                            <button
+                                key={agent}
+                                type="button"
+                                onClick={() => { onChange(agent); setOpen(false); }}
+                                className={`w-full text-left px-4 py-2.5 text-sm transition-colors ${value === agent ? 'text-brand-orange bg-brand-orange/10' : 'text-slate-300 hover:bg-white/5 hover:text-white'}`}
+                            >
+                                {agent.split('@')[0]}
+                                <span className="block text-xs text-slate-500">{agent}</span>
+                            </button>
+                        ))}
+                    </div>
+                </div>,
+                document.body
+            )}
+        </>
+    );
+};
 
 const FilterTab = React.memo(({ active, label, count, onClick, isUrgent = false }: any) => (
     <button
@@ -415,6 +497,24 @@ const AllOrdersPage: React.FC = () => {
     });
 
     // ============================================
+    // QUERY 1b: Distinct sales agents for admin dropdown
+    // ============================================
+    const { data: salesAgents } = useQuery({
+        queryKey: ['salesAgents'],
+        queryFn: async () => {
+            const { data, error } = await supabase
+                .from('orders')
+                .select('sales_agent')
+                .not('sales_agent', 'is', null);
+            if (error) throw error;
+            const unique = [...new Set((data || []).map((r: any) => r.sales_agent as string))].sort();
+            return unique;
+        },
+        staleTime: 1000 * 60 * 5,
+        enabled: role === UserRole.ADMIN,
+    });
+
+    // ============================================
     // QUERY 2: Paginated orders (the actual page data)
     // ============================================
     const queryParams = {
@@ -531,7 +631,7 @@ const AllOrdersPage: React.FC = () => {
                     <div className="flex items-center justify-between bg-brand-orange/10 border border-brand-orange/20 px-4 py-2 rounded-xl">
                         <div className="flex items-center gap-2 text-sm text-brand-orange">
                             <span className="font-bold">Active Filter:</span>
-                            {salesAgentParam && <span>Agent: {salesAgentParam}</span>}
+                            {salesAgentParam && <span>Agent: {salesAgentParam.split('@')[0]}</span>}
                             {leadSourceParam && <span>Source: {leadSourceParam}</span>}
                             {dateParam && <span>Date: {new Date(dateParam).toLocaleDateString()}</span>}
                         </div>
@@ -541,26 +641,37 @@ const AllOrdersPage: React.FC = () => {
                     </div>
                 )}
 
-                {/* Search */}
-                <div className="relative">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-5 h-5" />
-                    <input
-                        type="text"
-                        placeholder="Search by Order ID, Name, Design, Phone (e.g. 300123), or Email..."
-                        value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
-                        className="w-full bg-slate-800/50 border border-slate-600 text-white text-sm rounded-xl pl-10 pr-4 py-3 focus:ring-2 focus:ring-brand-orange/50 focus:border-brand-orange transition-all placeholder-slate-400 focus-ring"
-                    />
-                    {debouncedSearch && (
-                        <span className="absolute right-10 top-1/2 -translate-y-1/2 text-xs text-slate-500 hidden sm:inline">
-                            searching all time
-                        </span>
-                    )}
-                    {/* Fetching indicator */}
-                    {isFetching && (
-                        <div className="absolute right-3 top-1/2 -translate-y-1/2">
-                            <div className="w-4 h-4 border-2 border-brand-orange/30 border-t-brand-orange rounded-full animate-spin" />
-                        </div>
+                {/* Search + Agent Filter row */}
+                <div className="flex gap-3 items-center">
+                    {/* Search */}
+                    <div className="relative flex-1">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-5 h-5" />
+                        <input
+                            type="text"
+                            placeholder="Search by Order ID, Name, Design, Phone (e.g. 300123), or Email..."
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                            className="w-full bg-slate-800/50 border border-brand-orange/40 text-white text-sm rounded-xl pl-10 pr-4 py-3 focus:ring-2 focus:ring-brand-orange/60 focus:border-brand-orange transition-all placeholder-slate-400"
+                        />
+                        {debouncedSearch && (
+                            <span className="absolute right-10 top-1/2 -translate-y-1/2 text-xs text-slate-500 hidden sm:inline">
+                                searching all time
+                            </span>
+                        )}
+                        {isFetching && (
+                            <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                                <div className="w-4 h-4 border-2 border-brand-orange/30 border-t-brand-orange rounded-full animate-spin" />
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Sales Agent Filter — admin only */}
+                    {role === UserRole.ADMIN && salesAgents && salesAgents.length > 0 && (
+                        <AgentDropdown
+                            agents={salesAgents}
+                            value={salesAgentParam || ''}
+                            onChange={(val) => updateParams({ salesAgent: val || null, page: null })}
+                        />
                     )}
                 </div>
 

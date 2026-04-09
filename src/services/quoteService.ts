@@ -380,6 +380,27 @@ export const markQuoteAsSent = async (quoteNumber: string): Promise<void> => {
 // Delete a quote
 export const deleteQuote = async (quoteNumber: string): Promise<void> => {
   try {
+    // Fetch quote first to get file URLs for cleanup
+    const { data: quote } = await supabase
+      .from('quotes')
+      .select('mockup_urls, customer_attachment_urls')
+      .eq('quote_number', quoteNumber)
+      .single();
+
+    // Clean up storage files before deleting the record
+    if (quote) {
+      const { deleteFilesByUrls } = await import('./storageCleanup');
+      const allUrls = [
+        ...((quote as any).mockup_urls || []),
+        ...((quote as any).customer_attachment_urls || []),
+      ].filter(Boolean);
+      if (allUrls.length > 0) {
+        await deleteFilesByUrls(allUrls).catch(err =>
+          logger.error('Failed to cleanup quote files (continuing with delete)', err)
+        );
+      }
+    }
+
     const { error } = await supabase
       .from('quotes')
       .delete()

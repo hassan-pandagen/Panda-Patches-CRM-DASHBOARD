@@ -6,7 +6,6 @@ import { supabase } from '../../services/supabaseClient';
 import { deleteFile } from '../../services/storageService';
 import { updateOrder } from '../../services/orderService';
 import { Upload, Download, Trash2, FileText, Loader2, Eye } from 'lucide-react';
-import { OptimizedImage } from '../ui/OptimizedImage';
 
 interface ProductionFilesProps {
     order: Order;
@@ -176,8 +175,7 @@ const ProductionFiles: React.FC<ProductionFilesProps> = ({ order, onUpdate }) =>
                             </button>
                         </div>
                         <div className="p-4 flex justify-center">
-                            {/* ✅ UPGRADE: OptimizedImage component - serves WebP when possible, 70% smaller */}
-                            <OptimizedImage 
+                            <img
                                 src={previewUrl}
                                 alt="File preview"
                                 className="max-w-full max-h-[80vh] object-contain rounded-lg"

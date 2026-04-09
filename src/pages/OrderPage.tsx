@@ -24,7 +24,6 @@ import { Edit, Trash2, ShieldAlert, ArrowLeft, Lock, MapPin, Smartphone, Maximiz
 // 1. Import the new component
 import OrderTimeline from '../components/orders/OrderTimeline';
 import ShippingLabelModal from '../components/orders/ShippingLabelModal';
-import OptimizedImage from '../components/ui/OptimizedImage';
 import AssignOrderSection from '../components/orders/AssignOrderSection';
 import EmailLogsSection from '../components/orders/EmailLogsSection';
 
@@ -291,7 +290,7 @@ const OrderPage: React.FC = () => {
                             </button>
                         </div>
                         <div className="p-4 flex items-center justify-center">
-                            <OptimizedImage
+                            <img
                                 src={previewUrl}
                                 alt="Image Preview"
                                 className="max-w-full max-h-[70vh] rounded"

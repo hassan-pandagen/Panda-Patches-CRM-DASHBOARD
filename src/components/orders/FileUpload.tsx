@@ -1,15 +1,14 @@
 import React, { useState, useCallback } from "react";
+import { createPortal } from "react-dom";
 import {
   Upload,
   X,
   FileText,
-  Image as ImageIcon,
   ArrowDownCircle,
   Eye,
 } from "lucide-react";
 import { supabase } from "../../services/supabaseClient";
 import { logger } from "../../services/logger";
-import { OptimizedImage } from "../ui/OptimizedImage";
 
 interface FileUploadSectionProps {
   title: string;
@@ -18,14 +17,16 @@ interface FileUploadSectionProps {
   urls: string[];
   onUrlsChange: (urls: string[]) => void;
   allowMultiple?: boolean;
-
-  // ✅ NEW PROP: Function to handle moving file to another list
   onMoveFile?: (url: string) => void;
   moveLabel?: string;
-  
-  // ✅ NEW: Callback to notify parent when uploads start/stop
   onUploadStateChange?: (isUploading: boolean) => void;
 }
+
+const isImage = (url: string) =>
+  /\.(jpg|jpeg|png|gif|webp)(\?|$)/i.test(url);
+
+const isExcel = (url: string) =>
+  /\.(xlsx|xls|csv)(\?|$)/i.test(url);
 
 const FileUploadSection: React.FC<FileUploadSectionProps> = ({
   title,
@@ -38,16 +39,13 @@ const FileUploadSection: React.FC<FileUploadSectionProps> = ({
   onUploadStateChange,
 }) => {
   const [isDragActive, setIsDragActive] = useState(false);
-  // ✅ DAY 4 FIX: Track upload errors
   const [uploadErrors, setUploadErrors] = useState<string[]>([]);
-  // ✅ UPGRADE: Image preview modal
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
 
   const handleUploadFiles = useCallback(
     async (files: FileList | null) => {
       if (!files) return;
 
-      // ✅ NOTIFY PARENT: Upload starting
       onUploadStateChange?.(true);
 
       const newUrls: string[] = [];
@@ -56,7 +54,6 @@ const FileUploadSection: React.FC<FileUploadSectionProps> = ({
       try {
         for (const file of Array.from(files)) {
           try {
-            // ✅ DAY 4 FIX: Validate file before upload
             if (!file.name) {
               errors.push("File name is missing");
               continue;
@@ -68,11 +65,11 @@ const FileUploadSection: React.FC<FileUploadSectionProps> = ({
               continue;
             }
 
-            const sanitizedName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+            const sanitizedName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
             const fileName = `${Date.now()}_${sanitizedName}`;
             const filePath = `${folderPath}/${fileName}`;
 
-            const { error, data: uploadData } = await supabase.storage
+            const { error } = await supabase.storage
               .from(bucketName)
               .upload(filePath, file);
 
@@ -85,6 +82,7 @@ const FileUploadSection: React.FC<FileUploadSectionProps> = ({
             const { data } = supabase.storage
               .from(bucketName)
               .getPublicUrl(filePath);
+
             if (!data?.publicUrl) {
               errors.push(`Failed to get public URL for ${file.name}`);
               continue;
@@ -92,15 +90,11 @@ const FileUploadSection: React.FC<FileUploadSectionProps> = ({
 
             newUrls.push(data.publicUrl);
           } catch (err: any) {
-            logger.error(
-              `[FileUpload] Unexpected error uploading ${file.name}`,
-              err
-            );
+            logger.error(`[FileUpload] Unexpected error uploading ${file.name}`, err);
             errors.push(`Unexpected error: ${err.message}`);
           }
         }
 
-        // ✅ DAY 4 FIX: Report errors
         if (errors.length > 0) {
           setUploadErrors(errors);
           logger.warn(`[FileUpload] ${errors.length} file(s) failed to upload`);
@@ -108,7 +102,6 @@ const FileUploadSection: React.FC<FileUploadSectionProps> = ({
 
         onUrlsChange([...urls, ...newUrls]);
       } finally {
-        // ✅ NOTIFY PARENT: Upload finished (whether success or error)
         onUploadStateChange?.(false);
       }
     },
@@ -120,9 +113,7 @@ const FileUploadSection: React.FC<FileUploadSectionProps> = ({
     setIsDragActive(true);
   };
 
-  const handleDragLeave = () => {
-    setIsDragActive(false);
-  };
+  const handleDragLeave = () => setIsDragActive(false);
 
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
@@ -138,27 +129,20 @@ const FileUploadSection: React.FC<FileUploadSectionProps> = ({
     onUrlsChange(urls.filter((_, index) => index !== indexToRemove));
   };
 
-  // helper to get filename — strip timestamp/UUID prefix, preserve original name
   const getFileName = (url: string) => {
     const raw = decodeURIComponent(url.split("/").pop()?.split("?")[0] || "File");
-    // Strip patterns like "1711234567890_" or "mockup_1711234567890_" or UUID prefixes
-    return raw.replace(/^(mockup_)?\d{10,}_/, '').replace(/^[a-f0-9-]{36}\./, '') || raw;
+    return raw.replace(/^(mockup_)?\d{10,}_/, "").replace(/^[a-f0-9-]{36}\./, "") || raw;
   };
 
   return (
     <div className="space-y-3">
       <h4 className="text-sm font-medium text-slate-300">{title}</h4>
 
-      {/* ✅ DAY 4 FIX: Display upload errors */}
       {uploadErrors.length > 0 && (
         <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-lg">
-          <p className="text-xs font-semibold text-red-400 mb-1">
-            Upload Errors:
-          </p>
+          <p className="text-xs font-semibold text-red-400 mb-1">Upload Errors:</p>
           {uploadErrors.map((error, idx) => (
-            <p key={idx} className="text-xs text-red-300">
-              {error}
-            </p>
+            <p key={idx} className="text-xs text-red-300">{error}</p>
           ))}
         </div>
       )}
@@ -169,15 +153,15 @@ const FileUploadSection: React.FC<FileUploadSectionProps> = ({
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
         className={`border-2 border-dashed rounded-lg p-6 text-center cursor-pointer transition-all duration-300
-          ${
-            isDragActive
-              ? "border-brand-orange bg-brand-orange/10 scale-105"
-              : "border-white/10 hover:border-brand-orange/50 hover:bg-brand-orange/5"
+          ${isDragActive
+            ? "border-brand-orange bg-brand-orange/10 scale-105"
+            : "border-white/10 hover:border-brand-orange/50 hover:bg-brand-orange/5"
           }`}
       >
         <input
           type="file"
           multiple
+          accept="image/*,.pdf,.xlsx,.xls,.csv"
           onChange={handleFileInput}
           className="hidden"
           id={`file-input-${title}`}
@@ -185,10 +169,9 @@ const FileUploadSection: React.FC<FileUploadSectionProps> = ({
         <label htmlFor={`file-input-${title}`} className="cursor-pointer block">
           <Upload className="w-8 h-8 text-slate-400 mx-auto mb-2" />
           <p className="text-sm text-slate-400">
-            {isDragActive
-              ? "Drop files here..."
-              : "Drag & drop or click to upload"}
+            {isDragActive ? "Drop files here..." : "Drag & drop or click to upload"}
           </p>
+          <p className="text-xs text-slate-500 mt-1">Images, PDF, Excel (.xlsx, .xls, .csv)</p>
         </label>
       </div>
 
@@ -200,12 +183,8 @@ const FileUploadSection: React.FC<FileUploadSectionProps> = ({
             className="flex items-center justify-between p-3 bg-white/5 rounded-lg border border-white/5 group hover:border-white/10"
           >
             <div className="flex items-center gap-3 overflow-hidden">
-              {url.toLowerCase().match(/\.(jpg|jpeg|png|gif|webp)$/) ? (
-                <img
-                  src={url}
-                  alt="Thumbnail"
-                  className="w-10 h-10 object-cover rounded"
-                />
+              {isImage(url) ? (
+                <img src={url} alt="Thumbnail" className="w-10 h-10 object-cover rounded" />
               ) : (
                 <div className="w-10 h-10 bg-slate-700 rounded flex items-center justify-center">
                   <FileText className="w-5 h-5 text-slate-400" />
@@ -222,8 +201,7 @@ const FileUploadSection: React.FC<FileUploadSectionProps> = ({
             </div>
 
             <div className="flex items-center gap-2">
-              {/* ✅ Preview Button */}
-              {url.toLowerCase().match(/\.(jpg|jpeg|png|gif|webp)$/) && (
+              {isImage(url) && (
                 <button
                   type="button"
                   onClick={() => setPreviewUrl(url)}
@@ -234,7 +212,6 @@ const FileUploadSection: React.FC<FileUploadSectionProps> = ({
                 </button>
               )}
 
-              {/* ✅ THE MOVE BUTTON */}
               {onMoveFile && (
                 <button
                   type="button"
@@ -246,7 +223,6 @@ const FileUploadSection: React.FC<FileUploadSectionProps> = ({
                 </button>
               )}
 
-              {/* Delete Button */}
               <button
                 type="button"
                 onClick={() => removeFile(index)}
@@ -259,37 +235,37 @@ const FileUploadSection: React.FC<FileUploadSectionProps> = ({
         ))}
       </div>
 
-      {/* ✅ Preview Modal */}
-      {previewUrl && (
-        <div
-          className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4"
-          onClick={() => setPreviewUrl(null)}
-        >
+      {/* Preview Modal — rendered via portal to escape any parent transform/filter/overflow */}
+      {previewUrl &&
+        createPortal(
           <div
-            className="bg-slate-900 rounded-lg border border-white/10 max-w-4xl max-h-[85vh] overflow-auto"
-            onClick={(e) => e.stopPropagation()}
+            className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-[9999] p-4"
+            onClick={() => setPreviewUrl(null)}
           >
-            <div className="p-4 border-b border-white/10 flex items-center justify-between">
-              <h3 className="text-sm font-semibold text-white">
-                {getFileName(previewUrl)}
-              </h3>
-              <button
-                onClick={() => setPreviewUrl(null)}
-                className="p-1 text-slate-400 hover:text-white hover:bg-white/10 rounded transition-colors"
-              >
-                <X className="w-5 h-5" />
-              </button>
+            <div
+              className="bg-slate-900 rounded-lg border border-white/10 max-w-4xl max-h-[90vh] overflow-auto"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="p-4 border-b border-white/10 flex items-center justify-between">
+                <h3 className="text-sm font-semibold text-white">{getFileName(previewUrl)}</h3>
+                <button
+                  onClick={() => setPreviewUrl(null)}
+                  className="p-1 text-slate-400 hover:text-white hover:bg-white/10 rounded transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+              <div className="p-4 flex items-center justify-center">
+                <img
+                  src={previewUrl}
+                  alt={getFileName(previewUrl)}
+                  className="max-w-full max-h-[80vh] rounded"
+                />
+              </div>
             </div>
-            <div className="p-4 flex items-center justify-center">
-              <OptimizedImage
-                src={previewUrl}
-                alt={getFileName(previewUrl)}
-                className="max-w-full max-h-[70vh] rounded"
-              />
-            </div>
-          </div>
-        </div>
-      )}
+          </div>,
+          document.body
+        )}
     </div>
   );
 };
