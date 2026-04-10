@@ -16,8 +16,8 @@ const PVC_VENDOR_EMAIL = 'Arsalan.ali.khan.85@gmail.com';
 const DESIGN_TEAM_CC = 'design@pandapatches.com';
 const HELLO_EMAIL = 'hello@pandapatches.com';
 
-// ✅ Only trigger for orders created by the checkout system (super admin)
-const CHECKOUT_AGENT = 'hello@pandapatches.com';
+// ✅ Only trigger for orders created by the checkout system
+const CHECKOUT_AGENTS = ['web_checkout', 'hello@pandapatches.com'];
 
 function getInternalEmails(patchType?: string): string[] {
   if (patchType?.toLowerCase() === 'pvc') {
@@ -48,8 +48,8 @@ serve(async (req) => {
 
     console.log(`📧 [Checkout Webhook] New order: ${orderNumber}, agent: ${salesAgent}`);
 
-    // ✅ Only fire for checkout orders (hello@pandapatches.com)
-    if (salesAgent.toLowerCase() !== CHECKOUT_AGENT) {
+    // ✅ Only fire for checkout orders (WEB_CHECKOUT or hello@pandapatches.com)
+    if (!CHECKOUT_AGENTS.includes(salesAgent.toLowerCase())) {
       console.log(`⏭️ Skipping - order created by CRM agent: ${salesAgent} (not checkout)`);
       return new Response(JSON.stringify({ skipped: true, reason: 'not a checkout order' }), { status: 200 });
     }
