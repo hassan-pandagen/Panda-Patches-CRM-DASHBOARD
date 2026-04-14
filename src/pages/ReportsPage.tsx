@@ -44,6 +44,8 @@ import {
   ShieldAlert,
   Package,
   Calendar,
+  MessageSquare,
+  ClipboardList,
 } from "lucide-react";
 import { motion, Variants } from "framer-motion";
 import { TooltipProps } from "recharts";
@@ -55,6 +57,8 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { CSVLink } from "react-csv";
 import ProfitLossReportComponent from "../components/Reports/ProfitLossReportComponent";
 import CancellationChart from "../components/Reports/CancellationChart";
+import CustomerFeedbackReport from "../components/Reports/CustomerFeedbackReport";
+import FormFeedbackReport from "../components/Reports/FormFeedbackReport";
 import IncomeStatementReport from "../components/Reports/IncomeStatementReport";
 import ProductMixAnalysis from "../components/Reports/ProductMixAnalysis";
 import { SOURCE_COLORS, PATCH_TYPE_COLORS } from "../constants/colors";
@@ -1306,7 +1310,9 @@ type ReportType =
   | "profitLoss"
   | "quality"
   | "incomeStatement"
-  | "productMix";
+  | "productMix"
+  | "customerFeedback"
+  | "formFeedback";
 
 const ReportsPage: React.FC = () => {
    const { user, role, permissions, isLoading: isAuthLoading } = useAuth();
@@ -1416,6 +1422,8 @@ const ReportsPage: React.FC = () => {
         { key: "incomeStatement", label: "Income Statement", icon: DollarSign },
         { key: "profitLoss", label: "Profit & Loss", icon: FileText },
         { key: "leadSource", label: "Lead Source", icon: Share2 },
+        { key: "customerFeedback", label: "Customer Feedback", icon: MessageSquare },
+        { key: "formFeedback", label: "Form Feedback", icon: ClipboardList },
       ];
     }
 
@@ -1424,6 +1432,8 @@ const ReportsPage: React.FC = () => {
       tabs.push({ key: "sales", label: "My Performance", icon: TrendingUp });
       tabs.push({ key: "production", label: "Production Queue", icon: Zap });
       tabs.push({ key: "quality", label: "Quality Issues", icon: ShieldAlert });
+      tabs.push({ key: "customerFeedback", label: "Customer Feedback", icon: MessageSquare });
+      tabs.push({ key: "formFeedback", label: "Form Feedback", icon: ClipboardList });
       return tabs;
     }
 
@@ -1689,6 +1699,12 @@ const ReportsPage: React.FC = () => {
           )}
           {activeReport === "quality" && (
             <CancellationChart orders={filteredOrders} />
+          )}
+          {activeReport === "customerFeedback" && (
+            <CustomerFeedbackReport orders={filteredOrders} dateRange={dateRange} />
+          )}
+          {activeReport === "formFeedback" && (
+            <FormFeedbackReport dateRange={dateRange} />
           )}
         </motion.div>
       </div>

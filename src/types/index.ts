@@ -215,6 +215,34 @@ export interface Quote {
 }
 
 // --- MONTHLY COSTS TYPE ---
+// --- ORDER NOTES / CUSTOMER FEEDBACK ---
+export type NoteType = 'quality_feedback' | 'customer_call' | 'complaint' | 'general';
+
+export interface OrderNote {
+  id: number;
+  orderId: number;
+  userId: string;
+  userEmail: string;
+  userName: string;
+  noteType: NoteType;
+  content: string;
+  rating: number | null; // 1-5 star rating for quality feedback
+  createdAt: string;
+}
+
+// --- FORM FEEDBACK (from portal quote forms) ---
+export type FormFeedbackRating = 'easy' | 'okay' | 'difficult';
+export type FormFeedbackType = 'hero_quote' | 'bulk_quote' | 'calculator_quote';
+
+export interface FormFeedback {
+  id: string;
+  formType: FormFeedbackType;
+  rating: FormFeedbackRating;
+  comment: string | null;
+  pageUrl: string;
+  createdAt: string;
+}
+
 export interface MonthlyCost {
   id: number;
   monthYear: string; // Format: "YYYY-MM" (e.g., "2026-01")

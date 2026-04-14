@@ -13,6 +13,7 @@ import { updateOrderDetails } from '../services/orderService';
 import OrderForm, { SaveData } from "../components/orders/OrderForm";
 import Spinner from "../components/ui/Spinner";
 import { ArrowLeft } from "lucide-react";
+import OrderNotesSection from "../components/orders/OrderNotesSection";
 
 const EditOrderPage: React.FC = () => {
   const { orderNumber } = useParams<{ orderNumber: string }>();
@@ -223,6 +224,11 @@ const EditOrderPage: React.FC = () => {
         showFinancials={canEditAll}
         onFormChange={handleFormChange}
       />
+
+      {/* Customer Notes & Feedback */}
+      <div className="mt-6">
+        <OrderNotesSection orderId={initialOrder.id} />
+      </div>
 
       {/* Activity Log Section */}
       <div className="bg-slate-900/40 backdrop-blur-xl border border-white/10 rounded-2xl shadow-xl p-10">

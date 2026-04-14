@@ -90,6 +90,19 @@ export const queryKeys = {
     single: (quoteNumber: string) => [...queryKeys.quotes.details(), quoteNumber] as const,
   },
 
+  // All keys related to order notes
+  orderNotes: {
+    all: () => ['order-notes'] as const,
+    byOrderId: (orderId: number) => [...queryKeys.orderNotes.all(), orderId] as const,
+    report: (startDate: string, endDate: string) => [...queryKeys.orderNotes.all(), 'report', { startDate, endDate }] as const,
+  },
+
+  // All keys related to form feedback (portal quote forms)
+  formFeedback: {
+    all: () => ['form-feedback'] as const,
+    range: (startDate: string, endDate: string) => [...queryKeys.formFeedback.all(), 'range', { startDate, endDate }] as const,
+  },
+
   // All keys related to monthly costs
   monthlyCosts: {
     all: () => ['monthly-costs'] as const,

@@ -6,6 +6,7 @@ export const PATCHES_TYPE_OPTIONS: string[] = [
   'Silicone Transfer', 'High Density Transfer',
   'TPU+Chenille', 'TPU+Embroidery', 'TPU+Sublimation',
   'Glitter+Embroidery', 'Glitter+Chenille', 'Glitter+Embroidery 3D',
+  'DTF+Chenille', 'DTF+Embroidery', 'Embroidery Transfer',
   'DST Service', 'Challenge Coin',
   'PVC Keychains', 'Embroidered Keychains', 'Leather Keychains'
 ];

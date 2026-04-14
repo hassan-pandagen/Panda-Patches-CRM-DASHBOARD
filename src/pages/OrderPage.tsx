@@ -26,6 +26,7 @@ import OrderTimeline from '../components/orders/OrderTimeline';
 import ShippingLabelModal from '../components/orders/ShippingLabelModal';
 import AssignOrderSection from '../components/orders/AssignOrderSection';
 import EmailLogsSection from '../components/orders/EmailLogsSection';
+import OrderNotesSection from '../components/orders/OrderNotesSection';
 
 // --- CONFIRMATION MODAL ---
 const ConfirmationModal: React.FC<{
@@ -736,6 +737,13 @@ const OrderPage: React.FC = () => {
                     </div>
 
                 </div>
+
+                {/* ✅ CUSTOMER NOTES & FEEDBACK (Full Width) */}
+                {order && (
+                    <div className="w-full animate-fadeIn lg:col-span-3">
+                        <OrderNotesSection orderId={order.id} />
+                    </div>
+                )}
 
                 {/* ✅ EMAIL LOGS (Full Width) */}
                 {order && (
