@@ -100,6 +100,10 @@ const getEmailSubject = (templateId: string, data: any): string => {
     // Payment templates
     'CUSTOMER_PAYMENT_CONFIRMATION': `Payment Received - ${orderNumber}`,
     'INTERNAL_PAYMENT_NOTIFICATION': `[INTERNAL] Payment Received - ${orderNumber}`,
+
+    // Customer portal invite templates
+    'CUSTOMER_WELCOME_INVITE': `Welcome to Panda Patches — Set Up Your Account`,
+    'CUSTOMER_RETURNING_LOGIN': `Track Your New Order - ${orderNumber}`,
   };
 
   return subjects[templateId] || `Update from Panda Patches - ${orderNumber}`;
@@ -149,6 +153,10 @@ const getTemplateMessage = (templateId: string, data?: any): string => {
     // Payment templates
     'CUSTOMER_PAYMENT_CONFIRMATION': 'We have received your payment — thank you! Your order is confirmed and our team is working on your mockup. You will receive your mockup in 24 hours.',
     'INTERNAL_PAYMENT_NOTIFICATION': 'A payment has been recorded for this order. Please review the payment details below and update records accordingly.',
+
+    // Customer portal invite templates
+    'CUSTOMER_WELCOME_INVITE': 'Thank you for your order! We\'ve created a Customer Portal account for you so you can track your order in real time, view your mockups, and see every step of your patch journey. Tap the button below to set your password — takes less than 30 seconds.',
+    'CUSTOMER_RETURNING_LOGIN': 'Thank you for your new order! Your Customer Portal is ready — tap the button below to log in and track this order along with your previous ones. The link expires in 1 hour; after that, just sign in with your email and password.',
   };
 
   return messages[templateId] || 'Thank you for your order! Our team is working on your custom patches.';
@@ -245,6 +253,8 @@ const shouldShowFullDetails = (templateId: string): boolean => {
     'CUSTOMER_REFUND_ISSUED',
     'CUSTOMER_PAYMENT_CONFIRMATION',
     'INTERNAL_PAYMENT_NOTIFICATION',
+    'CUSTOMER_WELCOME_INVITE',
+    'CUSTOMER_RETURNING_LOGIN',
   ];
 
   return !minimalDetailsTemplates.includes(templateId);
@@ -776,6 +786,44 @@ const buildEmailHTML = (templateId: string, data: any): string => {
       </tr>
     </tbody>
   </table>
+  ` : ''}
+
+  ${(templateId === 'CUSTOMER_WELCOME_INVITE' || templateId === 'CUSTOMER_RETURNING_LOGIN') && data.portal_action_url ? `
+  <!-- CUSTOMER PORTAL CTA BUTTON (mobile-optimized) -->
+  <table border="0" cellpadding="0" cellspacing="0" class="module" data-type="button" role="module" style="table-layout: fixed;" width="100%">
+    <tbody>
+      <tr>
+        <td align="center" bgcolor="" class="outer-td" style="padding:10px 20px 30px 20px;">
+          <table border="0" cellpadding="0" cellspacing="0" class="wrapper-mobile" style="text-align:center; width: 100%; max-width: 420px;">
+            <tbody>
+              <tr>
+                <td align="center" bgcolor="#FB6E1D" class="inner-td" style="border-radius:8px; font-size:18px; text-align:center; background-color:#FB6E1D;">
+                  <a href="${escapeHtml(data.portal_action_url)}" style="background-color:#FB6E1D; border:1px solid #FB6E1D; border-radius:8px; color:#ffffff; display:block; font-size:18px; font-weight:bold; line-height:1.3; padding:18px 24px; text-align:center; text-decoration:none; font-family: 'lucida sans unicode', 'lucida grande', sans-serif;" target="_blank">
+                    ${templateId === 'CUSTOMER_WELCOME_INVITE' ? 'Set Your Password &rarr;' : 'Log In &amp; Track Order &rarr;'}
+                  </a>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </td>
+      </tr>
+    </tbody>
+  </table>
+  ${data.portal_login_url ? `
+  <!-- PORTAL LOGIN FALLBACK LINK -->
+  <table class="module" role="module" data-type="text" border="0" cellpadding="0" cellspacing="0" width="100%" style="table-layout: fixed;">
+    <tbody>
+      <tr>
+        <td style="padding:0px 20px 20px 20px; line-height:20px; text-align:center;" height="100%" valign="top" bgcolor="" role="module-content">
+          <div style="font-family: 'lucida sans unicode', 'lucida grande', sans-serif; font-size: 13px; color: #666;">
+            Button not working? Copy and paste this link: <br/>
+            <a href="${escapeHtml(data.portal_action_url)}" style="color: #fb6e1d; word-break: break-all;">${escapeHtml(data.portal_action_url)}</a>
+          </div>
+        </td>
+      </tr>
+    </tbody>
+  </table>
+  ` : ''}
   ` : ''}
 
   ${templateId.includes('INTERNAL') && data.order_link ? `

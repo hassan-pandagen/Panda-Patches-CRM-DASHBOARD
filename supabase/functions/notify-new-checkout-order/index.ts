@@ -126,6 +126,26 @@ serve(async (req) => {
 
     console.log(`✅ [Checkout Webhook] Internal production email sent for order ${orderNumber}`);
 
+    // ✅ Fire the customer portal invite (fire-and-forget; don't fail the webhook if this fails)
+    const customerEmail = record.customer_email;
+    if (customerEmail) {
+      fetch(`${SUPABASE_URL}/functions/v1/invite-customer`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+        },
+        body: JSON.stringify({
+          email: customerEmail,
+          customer_name: record.customer_name || 'Customer',
+          order_number: orderNumber,
+        }),
+      })
+        .then((r) => r.text())
+        .then((t) => console.log(`[Checkout Webhook] invite-customer response:`, t))
+        .catch((err) => console.error(`[Checkout Webhook] invite-customer failed:`, err));
+    }
+
     return new Response(
       JSON.stringify({ success: true, order: orderNumber, sent_to: primaryRecipient, cc: ccEmails }),
       { status: 200, headers: { 'Content-Type': 'application/json' } }

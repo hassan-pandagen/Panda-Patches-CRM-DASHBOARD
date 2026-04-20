@@ -34,6 +34,17 @@ const BulkCostEntryPage = lazy(() => import('@/pages/BulkCostEntryPage'));
 // Protection
 import ProtectedRoute from './ProtectedRoute';
 import AdminRoute from './AdminRoute';
+import CustomerProtectedRoute from './CustomerProtectedRoute';
+
+// Customer Portal Pages (Lazy)
+const CustomerLoginPage = lazy(() => import('@/pages/customer/CustomerLoginPage'));
+const CustomerAuthCallback = lazy(() => import('@/pages/customer/CustomerAuthCallback'));
+const CustomerSetPasswordPage = lazy(() => import('@/pages/customer/CustomerSetPasswordPage'));
+const CustomerDashboard = lazy(() => import('@/pages/customer/CustomerDashboard'));
+const CustomerOrderDetail = lazy(() => import('@/pages/customer/CustomerOrderDetail'));
+const CustomerProfilePage = lazy(() => import('@/pages/customer/CustomerProfilePage'));
+const CustomerHelpPage = lazy(() => import('@/pages/customer/CustomerHelpPage'));
+const CustomerLayout = lazy(() => import('@/components/customer/CustomerLayout'));
 
 // 404
 import NotFoundPage from '@/pages/NotFoundPage';
@@ -84,6 +95,25 @@ const App: React.FC = () => {
     
             </Route>
           </Route>
+
+          {/* ====== CUSTOMER PORTAL ROUTES ====== */}
+          {/* Public customer routes */}
+          <Route path="/customer/login" element={<ErrorBoundary><CustomerLoginPage /></ErrorBoundary>} />
+          <Route path="/customer/auth/callback" element={<ErrorBoundary><CustomerAuthCallback /></ErrorBoundary>} />
+          <Route path="/customer/set-password" element={<ErrorBoundary><CustomerSetPasswordPage /></ErrorBoundary>} />
+
+          {/* Protected customer routes */}
+          <Route element={<CustomerProtectedRoute />}>
+            <Route element={<ErrorBoundary><CustomerLayout /></ErrorBoundary>}>
+              <Route path="/customer/dashboard" element={<CustomerDashboard />} />
+              <Route path="/customer/order/:orderNumber" element={<CustomerOrderDetail />} />
+              <Route path="/customer/profile" element={<CustomerProfilePage />} />
+              <Route path="/customer/help" element={<CustomerHelpPage />} />
+            </Route>
+          </Route>
+
+          {/* Redirect /customer to login */}
+          <Route path="/customer" element={<Navigate to="/customer/login" replace />} />
 
           {/* 404 — outside protected routes so all unknown paths return not-found */}
           <Route path="*" element={<NotFoundPage />} />

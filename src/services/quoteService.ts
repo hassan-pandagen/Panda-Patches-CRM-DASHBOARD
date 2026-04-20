@@ -27,7 +27,8 @@ const toSnakeCase = (data: any): any => {
     if (Object.prototype.hasOwnProperty.call(data, key) && !readOnlyFields.has(key)) {
       const value = data[key];
       const snakeKey = key.replace(/[A-Z]/g, letter => `_${letter.toLowerCase()}`);
-      snakeCaseObject[snakeKey] = value === undefined ? null : value;
+      // Normalize empty/undefined to null — Postgres rejects "" for date/numeric columns
+      snakeCaseObject[snakeKey] = (value === undefined || value === '') ? null : value;
     }
   }
 

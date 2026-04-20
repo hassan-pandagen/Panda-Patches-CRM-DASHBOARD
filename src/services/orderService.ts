@@ -33,8 +33,8 @@ const toSnakeCase = (data: any): any => {
     if (Object.prototype.hasOwnProperty.call(data, key) && !readOnlyFields.has(key)) {
       const value = data[key];
       const snakeKey = key.replace(/[A-Z]/g, letter => `_${letter.toLowerCase()}`);
-      // ✅ FIX: Ensure undefined values are converted to null for the DB
-      snakeCaseObject[snakeKey] = value === undefined ? null : value;
+      // Normalize empty/undefined to null — Postgres rejects "" for date/numeric columns
+      snakeCaseObject[snakeKey] = (value === undefined || value === '') ? null : value;
     }
   }
 
@@ -504,6 +504,22 @@ export const createOrder = async (orderData: any, userEmail: string) => {
     triggerStatusEmail(mappedOrder, OrderStatus.NEW_ORDER).catch(err => {
       logger.error("[Email Service] Email trigger failed (background)", err);
     });
+
+    // Step 8b: Fire customer portal invite (fire-and-forget; new customer → set-password, returning → magic login)
+    if (mappedOrder.customerEmail) {
+      supabase.functions
+        .invoke('invite-customer', {
+          body: {
+            email: mappedOrder.customerEmail,
+            customer_name: mappedOrder.customerName || 'Customer',
+            order_number: mappedOrder.orderNumber,
+            portal_url: window.location.origin,
+          },
+        })
+        .catch((err) => {
+          logger.error('[Customer Portal] Invite trigger failed (background)', err);
+        });
+    }
 
     end();
     return mappedOrder;
