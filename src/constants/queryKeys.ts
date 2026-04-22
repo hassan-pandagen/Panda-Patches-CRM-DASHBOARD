@@ -13,8 +13,9 @@ export const queryKeys = {
     // Server-side paginated list (AllOrdersPage)
     paginated: (params: { page: number; filter: string; search: string; salesAgent?: string; leadSource?: string; date?: string; ids?: string }) =>
       [...queryKeys.orders.all(), 'paginated', params] as const,
-    // Lightweight counts for tab badges
-    counts: () => [...queryKeys.orders.all(), 'counts'] as const,
+    // Lightweight counts for tab badges (filtered by the same params as the paginated list)
+    counts: (params?: { salesAgent?: string; leadSource?: string; dateRangeStart?: string; dateRangeEnd?: string }) =>
+      [...queryKeys.orders.all(), 'counts', params || {}] as const,
     details: () => [...queryKeys.orders.all(), 'single'] as const, // Renamed from 'detail'
     single: (id: number) => [...queryKeys.orders.details(), id] as const, // Renamed from 'detail'
     history: (id: number) => [...queryKeys.orders.all(), 'history', id] as const,

@@ -1,10 +1,15 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../services/supabaseClient';
 import { queryKeys } from '../constants/queryKeys';
 
+// Coalesce bursts of DB changes (order status sweeps, bulk edits) into a single
+// invalidation pass so the UI doesn't thrash with a refetch per row change.
+const ORDERS_INVALIDATE_DEBOUNCE_MS = 500;
+
 export const useSupabaseRealtime = () => {
   const queryClient = useQueryClient();
+  const ordersInvalidateTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     // Subscribe to orders table changes
@@ -19,9 +24,11 @@ export const useSupabaseRealtime = () => {
         },
         (payload) => {
           console.log('[Realtime] Orders updated:', payload.eventType);
-          // Invalidate all order queries (paginated pages, counts, lists, singles)
-          queryClient.invalidateQueries({ queryKey: queryKeys.orders.all() });
-          queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.all() });
+          if (ordersInvalidateTimer.current) clearTimeout(ordersInvalidateTimer.current);
+          ordersInvalidateTimer.current = setTimeout(() => {
+            queryClient.invalidateQueries({ queryKey: queryKeys.orders.all() });
+            queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.all() });
+          }, ORDERS_INVALIDATE_DEBOUNCE_MS);
         }
       )
       .subscribe((status, err) => {
@@ -92,6 +99,7 @@ export const useSupabaseRealtime = () => {
 
     // Cleanup subscriptions on unmount
     return () => {
+      if (ordersInvalidateTimer.current) clearTimeout(ordersInvalidateTimer.current);
       supabase.removeChannel(ordersSubscription);
       if (usersSubscription) supabase.removeChannel(usersSubscription);
       supabase.removeChannel(historySubscription);

@@ -210,7 +210,14 @@ async function fetchPaginatedOrders(params: {
 
     // Apply drill-down params
     if (salesAgent) query = query.eq('sales_agent', salesAgent);
-    if (leadSource) query = query.eq('lead_source', leadSource);
+    if (leadSource) {
+        // "Unknown" = orders with no lead_source recorded (NULL or empty string)
+        if (leadSource === 'Unknown') {
+            query = query.or('lead_source.is.null,lead_source.eq.');
+        } else {
+            query = query.eq('lead_source', leadSource);
+        }
+    }
     if (date) {
         // Filter by date (full day range) — single-day drill-down from dashboard
         query = query.gte('created_at', localMidnightISO(date)).lt('created_at', localNextDayISO(date));
@@ -306,12 +313,40 @@ interface TabCounts {
     paymentPending: number;
 }
 
-async function fetchTabCounts(): Promise<TabCounts> {
+async function fetchTabCounts(params: {
+    salesAgent?: string;
+    leadSource?: string;
+    dateRangeStart?: string;
+    dateRangeEnd?: string;
+    userRole?: UserRole | null;
+    userEmail?: string | null;
+} = {}): Promise<TabCounts> {
+    const { salesAgent, leadSource, dateRangeStart, dateRangeEnd, userRole, userEmail } = params;
+
     // Single query: fetch only status, is_urgent, created_at, order_amount, amount_paid, sales_agent
     // This is lightweight — no large text fields
-    const { data, error } = await supabase
+    let query = supabase
         .from('orders')
         .select('status, is_urgent, created_at, order_amount, amount_paid, sales_agent');
+
+    // AGENT/USER see only their assigned orders; ADMIN/PRODUCTION see all
+    if (userRole !== UserRole.ADMIN && userRole !== UserRole.PRODUCTION && userEmail) {
+        query = query.eq('sales_agent', userEmail);
+    }
+
+    if (salesAgent) query = query.eq('sales_agent', salesAgent);
+    if (leadSource) {
+        if (leadSource === 'Unknown') {
+            query = query.or('lead_source.is.null,lead_source.eq.');
+        } else {
+            query = query.eq('lead_source', leadSource);
+        }
+    }
+    if (dateRangeStart && dateRangeEnd) {
+        query = query.gte('created_at', localMidnightISO(dateRangeStart)).lt('created_at', localNextDayISO(dateRangeEnd));
+    }
+
+    const { data, error } = await query;
 
     if (error) throw new Error(error.message);
 
@@ -488,12 +523,18 @@ const AllOrdersPage: React.FC = () => {
     // ============================================
     // QUERY 1: Tab counts (lightweight, cached separately)
     // ============================================
+    const countsFilterParams = {
+        salesAgent: salesAgentParam,
+        leadSource: leadSourceParam,
+        dateRangeStart: activeDateRange.startDate,
+        dateRangeEnd: activeDateRange.endDate,
+    };
     const { data: counts } = useQuery({
-        queryKey: queryKeys.orders.counts(),
-        queryFn: fetchTabCounts,
+        queryKey: queryKeys.orders.counts(countsFilterParams),
+        queryFn: () => fetchTabCounts({ ...countsFilterParams, userRole: role, userEmail: user?.email }),
         staleTime: 1000 * 60, // 60 seconds — counts don't need to be super fresh
         gcTime: 1000 * 60 * 5,
-        refetchOnWindowFocus: true,
+        refetchOnWindowFocus: false, // realtime subscription already handles fresh data
     });
 
     // ============================================
@@ -502,15 +543,22 @@ const AllOrdersPage: React.FC = () => {
     const { data: salesAgents } = useQuery({
         queryKey: ['salesAgents'],
         queryFn: async () => {
+            // Agents are staff users — query user_profiles (small table) instead of scanning all orders.
             const { data, error } = await supabase
-                .from('orders')
-                .select('sales_agent')
-                .not('sales_agent', 'is', null);
+                .from('user_profiles')
+                .select('email')
+                .not('email', 'is', null);
             if (error) throw error;
-            const unique = [...new Set((data || []).map((r: any) => r.sales_agent as string))].sort();
-            return unique;
+            return (data || [])
+                .map((r: any) => r.email as string)
+                .filter(Boolean)
+                .sort();
         },
-        staleTime: 1000 * 60 * 5,
+        // Staff list changes rarely — keep it cached aggressively
+        staleTime: 1000 * 60 * 30,
+        gcTime: 1000 * 60 * 60,
+        refetchOnMount: false,
+        refetchOnWindowFocus: false,
         enabled: role === UserRole.ADMIN,
     });
 
@@ -702,7 +750,7 @@ const AllOrdersPage: React.FC = () => {
 
             {/* --- ORDERS LIST --- */}
             <div className="space-y-3">
-                <AnimatePresence mode="wait">
+                <AnimatePresence>
                     {orders.length === 0 && !isFetching ? (
                         <EmptyState
                             title="No Orders Found"

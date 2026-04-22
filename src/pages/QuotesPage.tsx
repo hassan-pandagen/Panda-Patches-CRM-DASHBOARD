@@ -140,7 +140,7 @@ const QuotesPage: React.FC = () => {
 
       {/* Quotes List */}
       <div className="space-y-3">
-        <AnimatePresence mode="wait">
+        <AnimatePresence>
           {paginatedQuotes.length === 0 ? (
             <EmptyState
               title="No Quotes Found"

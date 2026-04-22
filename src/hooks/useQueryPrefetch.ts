@@ -30,19 +30,6 @@ export const useQueryPrefetch = () => {
    */
   const prefetchOrders = async () => {
     try {
-      // Prefetch tab counts (lightweight)
-      await queryClient.prefetchQuery({
-        queryKey: queryKeys.orders.counts(),
-        queryFn: async () => {
-          const { data, error } = await supabase
-            .from('orders')
-            .select('status, is_urgent, created_at, order_amount, amount_paid');
-          if (error) throw error;
-          return data || [];
-        },
-        staleTime: 15000,
-      });
-
       // Prefetch page 1 of "ALL" filter
       const params = { page: 1, filter: 'ALL', search: '' };
       await queryClient.prefetchQuery({
