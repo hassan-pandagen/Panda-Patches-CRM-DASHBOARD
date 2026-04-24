@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '../../services/supabaseClient';
 import { useAuth } from '../../contexts/AuthContext';
 import { UserRole } from '../../types';
@@ -36,6 +36,9 @@ const AssignOrderSection: React.FC<AssignOrderSectionProps> = ({
   const [selectedAgent, setSelectedAgent] = useState<string>(currentAgent || '');
   const [isLoading, setIsLoading] = useState(false);
   const [isLoadingAgents, setIsLoadingAgents] = useState(true);
+  // Synchronous re-entry guard — state updates are async so `isLoading` can't
+  // block a rapid second click before React commits. A ref flips instantly.
+  const inFlightRef = useRef(false);
 
   // Only admins can assign orders
   const canAssign = role === UserRole.ADMIN;
@@ -97,6 +100,9 @@ const AssignOrderSection: React.FC<AssignOrderSectionProps> = ({
   }, [canAssign]); // Removed toast from dependencies to prevent infinite loop
 
   const handleAssign = async () => {
+    // Guard against double-invocation (click race before isLoading commits)
+    if (inFlightRef.current) return;
+
     if (!selectedAgent || !user?.email) {
       toast.error('Please select a sales agent');
       return;
@@ -107,6 +113,7 @@ const AssignOrderSection: React.FC<AssignOrderSectionProps> = ({
       return;
     }
 
+    inFlightRef.current = true;
     setIsLoading(true);
 
     try {
@@ -127,10 +134,11 @@ const AssignOrderSection: React.FC<AssignOrderSectionProps> = ({
       if (onAssignmentChange) {
         onAssignmentChange();
       }
-    } catch (error) {
-      console.error('Error assigning order:', error);
+    } catch (err) {
+      console.error('Error assigning order:', err);
       toast.error('Failed to assign order');
     } finally {
+      inFlightRef.current = false;
       setIsLoading(false);
     }
   };
