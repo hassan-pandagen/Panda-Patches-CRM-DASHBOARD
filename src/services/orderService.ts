@@ -175,6 +175,9 @@ export const mapDbToOrder = (data: any): Order => {
     salesAgent: data.salesAgent ?? data.sales_agent,
     assignedBy: data.assignedBy ?? data.assigned_by,
     assignedAt: data.assignedAt ?? data.assigned_at,
+
+    attribution: data.attribution ?? null,
+
     createdAt: data.createdAt ?? data.created_at,
     updatedAt: data.updatedAt ?? data.updated_at,
 
@@ -472,6 +475,9 @@ export const createOrder = async (orderData: any, userEmail: string) => {
       ...orderData,
       // ✅ ONLY fallback status - preserve all user data
       status: orderData.status || OrderStatus.NEW_ORDER,
+      // Marketing attribution (Meta CAPI etc.). Explicit null for manually-created
+      // orders so the DB column is NULL rather than absent from the payload.
+      attribution: orderData.attribution ?? null,
     };
 
     // Step 4: Convert to database format

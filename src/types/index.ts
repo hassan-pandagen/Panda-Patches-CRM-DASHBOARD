@@ -91,6 +91,9 @@ export interface Order {
   assignedBy?: string; // Email of admin who assigned this order
   assignedAt?: string; // Timestamp when order was assigned
 
+  // --- Marketing Attribution (for Meta CAPI etc.) ---
+  attribution: Record<string, unknown> | null;
+
   // --- Notes & Attachments (Arrays of URLs) ---
   revisionNotes?: string;
   redoNotes?: string;
@@ -204,6 +207,9 @@ export interface Quote {
    // --- Personnel & Sourcing ---
    salesAgent: string;
    leadSource?: string;
+
+   // --- Marketing Attribution (for Meta CAPI etc.) ---
+   attribution: Record<string, unknown> | null;
 
    // --- Notes & Attachments ---
    notes?: string;

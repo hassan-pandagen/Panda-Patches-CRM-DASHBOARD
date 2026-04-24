@@ -72,7 +72,9 @@ export const mapDbToQuote = (data: any): Quote => {
     
     salesAgent: data.salesAgent ?? data.sales_agent,
     leadSource: data.leadSource ?? data.lead_source,
-    
+
+    attribution: data.attribution ?? null,
+
     notes: data.notes,
     mockupUrls: Array.isArray(data.mockupUrls ?? data.mockup_urls) ? (data.mockupUrls ?? data.mockup_urls) : [],
     customerAttachmentUrls: Array.isArray(data.customerAttachmentUrls ?? data.customer_attachment_urls) ? (data.customerAttachmentUrls ?? data.customer_attachment_urls) : [],
@@ -336,7 +338,11 @@ export const convertQuoteToOrder = async (quote: Quote): Promise<Order> => {
       
       salesAgent: quote.salesAgent,
       leadSource: quote.leadSource || '',
-      
+
+      // Carry marketing attribution forward so Meta CAPI fires with the original touchpoint
+      // data when this order is paid. Keep NULL as NULL (do not coerce to {}).
+      attribution: quote.attribution ?? null,
+
       shippingAddress: '',
       shippingCarrier: '',
       shippingTrackingNumber: '',
