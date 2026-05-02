@@ -29,6 +29,9 @@ const inviteSchema = z.object({
   customer_name: z.string().max(200).optional().default('Customer'),
   order_number: z.string().max(100).optional().default('N/A'),
   portal_url: z.string().url().optional(),
+  // 'auto' (default): new = invite, returning = magic link
+  // 'reset_password': force a password recovery email even for returning customers
+  mode: z.enum(['auto', 'reset_password']).optional().default('auto'),
 });
 
 const DEFAULT_PORTAL_URL = 'https://login.pandapatches.com';
@@ -46,7 +49,7 @@ Deno.serve(async (req: Request) => {
     const admin = createClient(SUPABASE_URL, SERVICE_KEY);
 
     const body = await req.json();
-    const { email, customer_name, order_number, portal_url } = inviteSchema.parse(body);
+    const { email, customer_name, order_number, portal_url, mode } = inviteSchema.parse(body);
 
     const portal = (portal_url || DEFAULT_PORTAL_URL).replace(/\/$/, '');
     const setPasswordRedirect = `${portal}/customer/set-password`;
@@ -117,15 +120,28 @@ Deno.serve(async (req: Request) => {
       actionLink = data.properties?.action_link ?? '';
       templateId = 'CUSTOMER_WELCOME_INVITE';
     } else {
-      // Returning customer - send magic login link for this new order
-      const { data, error } = await admin.auth.admin.generateLink({
-        type: 'magiclink',
-        email,
-        options: { redirectTo: loginRedirect },
-      });
-      if (error) throw error;
-      actionLink = data.properties?.action_link ?? '';
-      templateId = 'CUSTOMER_RETURNING_LOGIN';
+      // Returning customer
+      if (mode === 'reset_password') {
+        // Send password recovery email — lands on /customer/set-password
+        const { data, error } = await admin.auth.admin.generateLink({
+          type: 'recovery',
+          email,
+          options: { redirectTo: setPasswordRedirect },
+        });
+        if (error) throw error;
+        actionLink = data.properties?.action_link ?? '';
+        templateId = 'CUSTOMER_PASSWORD_RESET';
+      } else {
+        // Default: magic login link for this new order
+        const { data, error } = await admin.auth.admin.generateLink({
+          type: 'magiclink',
+          email,
+          options: { redirectTo: loginRedirect },
+        });
+        if (error) throw error;
+        actionLink = data.properties?.action_link ?? '';
+        templateId = 'CUSTOMER_RETURNING_LOGIN';
+      }
     }
 
     if (!actionLink) throw new Error('Failed to generate portal link');

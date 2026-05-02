@@ -15,6 +15,8 @@ import {
   X,
   Send,
   ShoppingBag,
+  KeyRound,
+  AlertCircle,
 } from 'lucide-react';
 
 interface CustomerProfile {
@@ -42,6 +44,11 @@ const CustomersPage: React.FC = () => {
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteName, setInviteName] = useState('');
   const [isSending, setIsSending] = useState(false);
+  // Detected existing customer info (null = brand new, object = returning)
+  const [existingCustomer, setExistingCustomer] = useState<{
+    full_name: string | null;
+    last_login_at: string | null;
+  } | null>(null);
 
   // Fetch all customer profiles with their order stats
   const { data: customers = [], isLoading, refetch } = useQuery({
@@ -117,7 +124,26 @@ const CustomersPage: React.FC = () => {
     totalRevenue: customers.reduce((sum, c) => sum + c.total_spent, 0),
   };
 
-  const handleInvite = async () => {
+  // Detect if email belongs to existing customer (debounced on email change)
+  React.useEffect(() => {
+    const email = inviteEmail.trim().toLowerCase();
+    if (!email || !email.includes('@')) {
+      setExistingCustomer(null);
+      return;
+    }
+    const timer = setTimeout(async () => {
+      const { data } = await supabase
+        .from('customer_profiles')
+        .select('full_name, last_login_at')
+        .eq('email', email)
+        .maybeSingle();
+      setExistingCustomer(data);
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [inviteEmail]);
+
+  // mode: 'auto' = invite (new) or magic link (returning) | 'reset_password' = force password reset
+  const handleSendInvite = async (mode: 'auto' | 'reset_password' = 'auto') => {
     if (!inviteEmail.trim()) {
       toast.error('Email required', 'Please enter a customer email.');
       return;
@@ -127,22 +153,29 @@ const CustomersPage: React.FC = () => {
       const { data, error } = await supabase.functions.invoke('invite-customer', {
         body: {
           email: inviteEmail.trim().toLowerCase(),
-          customer_name: inviteName.trim() || 'Customer',
+          customer_name: inviteName.trim() || existingCustomer?.full_name || 'Customer',
           order_number: 'N/A',
-          portal_url: window.location.origin,
+          portal_url: 'https://login.pandapatches.com',
+          mode,
         },
       });
-      // Edge function returns 400 with { error: "message" } in body
       if (error || data?.error) {
         throw new Error(data?.error || error?.message || 'Please try again.');
       }
-      toast.success('Invite sent!', `Portal invite sent to ${inviteEmail}.`);
+      const successMsg =
+        mode === 'reset_password'
+          ? `Password reset link sent to ${inviteEmail}.`
+          : existingCustomer
+          ? `Magic login link sent to ${inviteEmail}.`
+          : `Welcome invite sent to ${inviteEmail}.`;
+      toast.success('Email sent!', successMsg);
       setShowInviteModal(false);
       setInviteEmail('');
       setInviteName('');
+      setExistingCustomer(null);
       refetch();
     } catch (err: any) {
-      toast.error('Failed to send invite', err.message || 'Please try again.');
+      toast.error('Failed to send', err.message || 'Please try again.');
     } finally {
       setIsSending(false);
     }
@@ -428,42 +461,94 @@ const CustomersPage: React.FC = () => {
                   placeholder="customer@example.com"
                   value={inviteEmail}
                   onChange={(e) => setInviteEmail(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && handleInvite()}
+                  onKeyDown={(e) => e.key === 'Enter' && handleSendInvite('auto')}
                   className="w-full px-4 py-2.5 bg-slate-800 border border-white/10 rounded-lg text-sm text-white placeholder-slate-500 focus:outline-none focus:border-brand-orange/50 transition-colors"
                 />
               </div>
 
-              <div className="bg-slate-800/50 rounded-lg p-3 flex items-start gap-2.5">
-                <Mail className="w-4 h-4 text-slate-400 mt-0.5 flex-shrink-0" />
-                <p className="text-xs text-slate-400">
-                  Customer will receive a welcome email with a link to set their
-                  password and access the portal.
-                </p>
-              </div>
+              {/* Context-aware info banner */}
+              {existingCustomer ? (
+                <div className="bg-blue-500/10 border border-blue-500/20 rounded-lg p-3 flex items-start gap-2.5">
+                  <AlertCircle className="w-4 h-4 text-blue-400 mt-0.5 flex-shrink-0" />
+                  <div className="text-xs text-blue-200">
+                    <p className="font-medium text-blue-300 mb-0.5">
+                      This customer already has an account
+                      {existingCustomer.full_name ? ` (${existingCustomer.full_name})` : ''}
+                    </p>
+                    <p className="text-blue-200/80">
+                      Choose <span className="font-medium">Send Magic Link</span> for instant
+                      login, or <span className="font-medium">Reset Password</span> if they
+                      forgot their password.
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                <div className="bg-slate-800/50 rounded-lg p-3 flex items-start gap-2.5">
+                  <Mail className="w-4 h-4 text-slate-400 mt-0.5 flex-shrink-0" />
+                  <p className="text-xs text-slate-400">
+                    Customer will receive a welcome email with a link to set their
+                    password and access the portal.
+                  </p>
+                </div>
+              )}
             </div>
 
             {/* Actions */}
             <div className="flex gap-3 mt-6">
               <button
                 onClick={() => setShowInviteModal(false)}
-                className="flex-1 px-4 py-2.5 border border-white/10 text-slate-300 hover:text-white hover:border-white/20 rounded-lg text-sm font-medium transition-all"
+                className="px-4 py-2.5 border border-white/10 text-slate-300 hover:text-white hover:border-white/20 rounded-lg text-sm font-medium transition-all"
               >
                 Cancel
               </button>
-              <button
-                onClick={handleInvite}
-                disabled={isSending || !inviteEmail.trim()}
-                className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-brand-orange hover:bg-brand-orange/90 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg text-sm font-medium transition-all"
-              >
-                {isSending ? (
-                  <Spinner size="sm" />
-                ) : (
-                  <>
-                    <Send className="w-4 h-4" />
-                    Send Invite
-                  </>
-                )}
-              </button>
+
+              {existingCustomer ? (
+                <>
+                  <button
+                    onClick={() => handleSendInvite('reset_password')}
+                    disabled={isSending || !inviteEmail.trim()}
+                    className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 border border-amber-500/40 bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg text-sm font-medium transition-all"
+                  >
+                    {isSending ? (
+                      <Spinner size="sm" />
+                    ) : (
+                      <>
+                        <KeyRound className="w-4 h-4" />
+                        Reset Password
+                      </>
+                    )}
+                  </button>
+                  <button
+                    onClick={() => handleSendInvite('auto')}
+                    disabled={isSending || !inviteEmail.trim()}
+                    className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-brand-orange hover:bg-brand-orange/90 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg text-sm font-medium transition-all"
+                  >
+                    {isSending ? (
+                      <Spinner size="sm" />
+                    ) : (
+                      <>
+                        <Send className="w-4 h-4" />
+                        Send Magic Link
+                      </>
+                    )}
+                  </button>
+                </>
+              ) : (
+                <button
+                  onClick={() => handleSendInvite('auto')}
+                  disabled={isSending || !inviteEmail.trim()}
+                  className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-brand-orange hover:bg-brand-orange/90 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg text-sm font-medium transition-all"
+                >
+                  {isSending ? (
+                    <Spinner size="sm" />
+                  ) : (
+                    <>
+                      <Send className="w-4 h-4" />
+                      Send Invite
+                    </>
+                  )}
+                </button>
+              )}
             </div>
           </div>
         </div>

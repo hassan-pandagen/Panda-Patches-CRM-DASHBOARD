@@ -104,6 +104,7 @@ const getEmailSubject = (templateId: string, data: any): string => {
     // Customer portal invite templates
     'CUSTOMER_WELCOME_INVITE': `Welcome to Panda Patches — Set Up Your Account`,
     'CUSTOMER_RETURNING_LOGIN': `Track Your New Order - ${orderNumber}`,
+    'CUSTOMER_PASSWORD_RESET': `Reset Your Panda Patches Portal Password`,
   };
 
   return subjects[templateId] || `Update from Panda Patches - ${orderNumber}`;
@@ -157,6 +158,7 @@ const getTemplateMessage = (templateId: string, data?: any): string => {
     // Customer portal invite templates
     'CUSTOMER_WELCOME_INVITE': 'Thank you for your order! We\'ve created a Customer Portal account for you so you can track your order in real time, view your mockups, and see every step of your patch journey. Tap the button below to set your password — takes less than 30 seconds.',
     'CUSTOMER_RETURNING_LOGIN': 'Thank you for your new order! Your Customer Portal is ready — tap the button below to log in and track this order along with your previous ones. The link expires in 1 hour; after that, just sign in with your email and password.',
+    'CUSTOMER_PASSWORD_RESET': 'A password reset was requested for your Panda Patches Customer Portal. Tap the button below to choose a new password. The link expires in 1 hour. If you didn\'t request this, you can safely ignore this email.',
   };
 
   return messages[templateId] || 'Thank you for your order! Our team is working on your custom patches.';
@@ -255,6 +257,7 @@ const shouldShowFullDetails = (templateId: string): boolean => {
     'INTERNAL_PAYMENT_NOTIFICATION',
     'CUSTOMER_WELCOME_INVITE',
     'CUSTOMER_RETURNING_LOGIN',
+    'CUSTOMER_PASSWORD_RESET',
   ];
 
   return !minimalDetailsTemplates.includes(templateId);
@@ -788,7 +791,7 @@ const buildEmailHTML = (templateId: string, data: any): string => {
   </table>
   ` : ''}
 
-  ${(templateId === 'CUSTOMER_WELCOME_INVITE' || templateId === 'CUSTOMER_RETURNING_LOGIN') && data.portal_action_url ? `
+  ${(templateId === 'CUSTOMER_WELCOME_INVITE' || templateId === 'CUSTOMER_RETURNING_LOGIN' || templateId === 'CUSTOMER_PASSWORD_RESET') && data.portal_action_url ? `
   <!-- CUSTOMER PORTAL CTA BUTTON (mobile-optimized) -->
   <table border="0" cellpadding="0" cellspacing="0" class="module" data-type="button" role="module" style="table-layout: fixed;" width="100%">
     <tbody>
@@ -799,7 +802,7 @@ const buildEmailHTML = (templateId: string, data: any): string => {
               <tr>
                 <td align="center" bgcolor="#FB6E1D" class="inner-td" style="border-radius:8px; font-size:18px; text-align:center; background-color:#FB6E1D;">
                   <a href="${escapeHtml(data.portal_action_url)}" style="background-color:#FB6E1D; border:1px solid #FB6E1D; border-radius:8px; color:#ffffff; display:block; font-size:18px; font-weight:bold; line-height:1.3; padding:18px 24px; text-align:center; text-decoration:none; font-family: 'lucida sans unicode', 'lucida grande', sans-serif;" target="_blank">
-                    ${templateId === 'CUSTOMER_WELCOME_INVITE' ? 'Set Your Password &rarr;' : 'Log In &amp; Track Order &rarr;'}
+                    ${templateId === 'CUSTOMER_WELCOME_INVITE' ? 'Set Your Password &rarr;' : templateId === 'CUSTOMER_PASSWORD_RESET' ? 'Reset Password &rarr;' : 'Log In &amp; Track Order &rarr;'}
                   </a>
                 </td>
               </tr>
