@@ -133,6 +133,12 @@ const CustomerLayout: React.FC = () => {
 };
 
 // Tawk.to widget — pre-fills visitor context so agents see who is chatting
+// Uses Vite env vars if set, otherwise falls back to the hardcoded property/widget IDs
+const TAWK_PROPERTY_ID =
+  (import.meta as any).env?.VITE_TAWK_PROPERTY_ID || '64b56d7d94cf5d49dc6422c0';
+const TAWK_WIDGET_ID =
+  (import.meta as any).env?.VITE_TAWK_WIDGET_ID || '1h5ib7cm1';
+
 const TawkToWidget: React.FC<{ name?: string; email?: string }> = ({ name, email }) => {
   React.useEffect(() => {
     // Set visitor attributes before loading so they appear in agent dashboard
@@ -153,8 +159,7 @@ const TawkToWidget: React.FC<{ name?: string; email?: string }> = ({ name, email
 
     const script = document.createElement('script');
     script.async = true;
-    // Replace YOUR_TAWK_PROPERTY_ID with your actual Tawk.to property ID
-    script.src = 'https://embed.tawk.to/YOUR_TAWK_PROPERTY_ID/default';
+    script.src = `https://embed.tawk.to/${TAWK_PROPERTY_ID}/${TAWK_WIDGET_ID}`;
     script.charset = 'UTF-8';
     script.setAttribute('crossorigin', '*');
     document.body.appendChild(script);
