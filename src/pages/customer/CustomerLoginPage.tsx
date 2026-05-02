@@ -19,9 +19,31 @@ const CustomerLoginPage: React.FC = () => {
   const [resetSent, setResetSent] = useState(false);
 
   useEffect(() => {
+    // If URL hash contains a recovery/invite token, route to set-password BEFORE
+    // the session check redirects to dashboard. Supabase auto-exchanges the token.
+    const hash = window.location.hash || '';
+    const search = window.location.search || '';
+    const isRecovery =
+      hash.includes('type=recovery') ||
+      hash.includes('type=invite') ||
+      search.includes('type=recovery') ||
+      search.includes('type=invite');
+
+    if (isRecovery) {
+      // Preserve the hash so /customer/set-password can pick up the session
+      navigate('/customer/set-password' + hash, { replace: true });
+      return;
+    }
+
     const check = async () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (session?.user) {
+        // If they're logged in but their password isn't set yet, force set-password
+        const passwordSet = session.user.app_metadata?.password_set === true;
+        if (!passwordSet) {
+          navigate('/customer/set-password', { replace: true });
+          return;
+        }
         const { data } = await supabase
           .from('customer_profiles')
           .select('id')
@@ -58,13 +80,26 @@ const CustomerLoginPage: React.FC = () => {
     setError('');
     setLoading(true);
     try {
-      const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: `${window.location.origin}/customer/set-password`,
+      // Use our branded edge function instead of Supabase's default email
+      const { data, error } = await supabase.functions.invoke('invite-customer', {
+        body: {
+          email: email.trim().toLowerCase(),
+          customer_name: 'Customer',
+          order_number: 'N/A',
+          portal_url: 'https://login.pandapatches.com',
+          mode: 'reset_password',
+        },
       });
-      if (error) throw error;
+      if (error || data?.error) {
+        // Don't reveal whether the email exists — show generic success
+        // (this is a security best practice for forgot-password flows)
+        console.warn('[forgot] invite-customer error:', data?.error || error?.message);
+      }
       setResetSent(true);
     } catch (err: any) {
-      setError(err.message || 'Could not send reset email.');
+      // Same — show success even on error to avoid email enumeration
+      console.warn('[forgot] error:', err.message);
+      setResetSent(true);
     } finally {
       setLoading(false);
     }
