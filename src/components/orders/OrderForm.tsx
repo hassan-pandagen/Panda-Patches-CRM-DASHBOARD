@@ -9,9 +9,10 @@ import { useToast } from '../../hooks/useToast';
 import Spinner from '../ui/Spinner';
 import FileUploadSection from './FileUpload'; 
 import Textarea from '../ui/Textarea'; 
-import { LEAD_SOURCE_OPTIONS, PATCHES_TYPE_OPTIONS } from '../../constants/index';
+import { LEAD_SOURCE_OPTIONS, PATCHES_TYPE_OPTIONS, COUNTRY_OPTIONS } from '../../constants/index';
 import { supabase } from '../../services/supabaseClient';
 import { logger } from '../../services/logger';
+import { sanitizeOrFilterValue } from '../../utils/supabaseFilters';
 import { History, UserCheck, ExternalLink, Copy } from 'lucide-react';
 
 const CANCELLATION_REASONS = [
@@ -69,6 +70,7 @@ export interface SaveData {
   shippingCost: number;
   marketingCost: number;
   leadSource?: string;
+  country?: string;
   status: string;
   isUrgent: boolean;
   rushDate?: string;
@@ -149,6 +151,7 @@ const transformOrderToFormData = (order: Order | null | undefined): SaveData => 
       
       // Lead info
       leadSource: '',
+      country: '',
       isUrgent: false,
       
       // Files
@@ -185,6 +188,7 @@ const transformOrderToFormData = (order: Order | null | undefined): SaveData => 
     
     reasonCategory: order.reasonCategory || '',
     reasonDetails: order.reasonDetails || '',
+    country: order.country || '',
   };
 };
 
@@ -259,10 +263,11 @@ const OrderForm: React.FC<OrderFormProps> = ({
       setIsCheckingCustomer(true);
       try {
         // Fetch customer details + count
+        const safeId = sanitizeOrFilterValue(identifier);
         const { data, error, count } = await supabase
           .from('orders')
           .select('created_at, customer_name, customer_email, customer_phone, customer_profile_url, shipping_address, cc_email', { count: 'exact', head: false })
-          .or(`customer_email.eq.${identifier},customer_phone.eq.${identifier}`)
+          .or(`customer_email.eq.${safeId},customer_phone.eq.${safeId}`)
           .order('created_at', { ascending: false })
           .limit(1);
 
@@ -697,6 +702,24 @@ const OrderForm: React.FC<OrderFormProps> = ({
               <option value="" disabled hidden>Select...</option>
               {LEAD_SOURCE_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
             </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-300">
+              Country <span className="text-red-400">*</span>
+            </label>
+            <select
+              {...register('country', { required: 'Country is required' })}
+              className="mt-1 block w-full bg-slate-800 border-slate-600 rounded-md text-white focus:ring-brand-orange focus:border-brand-orange"
+            >
+              <option value="" disabled hidden>Select country...</option>
+              {COUNTRY_OPTIONS.map(c => <option key={c} value={c}>{c}</option>)}
+            </select>
+            {errors.country && (
+              <p className="text-red-400 text-xs mt-1 flex items-center gap-1">
+                <span>⚠️</span>
+                {errors.country.message as string}
+              </p>
+            )}
           </div>
           <div className="flex flex-col gap-2 pb-3">
             <label className="flex items-center gap-2 cursor-pointer">

@@ -11,6 +11,7 @@ import { getStatusInfo } from '../constants/statusInfo';
 import { Package, Lock, Search, ArrowRight } from 'lucide-react';
 import EmptyState from '../components/ui/EmptyState';
 import Spinner from '../components/ui/Spinner';
+import { sanitizeIlikePattern } from '../utils/supabaseFilters';
 
 // Helper for Badge
 const StatusBadge = ({ status }: { status: OrderStatus }) => {
@@ -36,7 +37,7 @@ const SearchResultsPage: React.FC = () => {
       if (!query) return [];
       
       // Search multiple columns using Supabase 'or' syntax
-      const searchTerm = `%${query}%`;
+      const searchTerm = `%${sanitizeIlikePattern(query)}%`;
       const { data, error } = await supabase
         .from('orders_with_details')
         .select('*')

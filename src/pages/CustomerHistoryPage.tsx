@@ -9,8 +9,8 @@ import { Order, OrderStatus } from '../types';
 import { queryKeys } from '../constants/queryKeys';
 import Spinner from '../components/ui/Spinner';
 import { mapDbToOrder } from '../services/orderService';
-import { logger } from '../services/logger'; // ✅ UPGRADE 6: Logger service
 import StatusBadge from '../components/ui/StatusBadge';
+import { sanitizeOrFilterValue } from '../utils/supabaseFilters';
 import { ArrowLeft, Mail, Phone, DollarSign, ShoppingBag, Clock, TrendingUp } from 'lucide-react';
 
 const CustomerHistoryPage: React.FC = () => {
@@ -31,10 +31,11 @@ const CustomerHistoryPage: React.FC = () => {
 
       logger.debug('[Customer History] Querying database for customer', customerId);
 
+      const safeId = sanitizeOrFilterValue(customerId);
       const { data, error, count } = await supabase
         .from('orders')
         .select('*', { count: 'exact' })
-        .or(`customer_email.eq.${customerId},customer_phone.eq.${customerId}`)
+        .or(`customer_email.eq.${safeId},customer_phone.eq.${safeId}`)
         .order('created_at', { ascending: false });
 
       logger.debug('[Customer History] Query result', { data, error, count });

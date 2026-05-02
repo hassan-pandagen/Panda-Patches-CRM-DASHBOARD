@@ -158,6 +158,12 @@ const Sidebar: React.FC<SidebarProps> = ({ onNavigate }) => {
           <>
             <div className="my-2 border-t border-white/10 mx-2" />
             <SidebarItem
+              to="/portal-customers"
+              label="Customers"
+              icon={<Users className="w-5 h-5" />}
+              onClick={onNavigate}
+            />
+            <SidebarItem
               to="/bulk-cost-entry"
               label="Bulk Cost Entry"
               icon={<DollarSign className="w-5 h-5" />}

@@ -91,6 +91,9 @@ export interface Order {
   assignedBy?: string; // Email of admin who assigned this order
   assignedAt?: string; // Timestamp when order was assigned
 
+  // --- Geography ---
+  country?: string | null; // Shipping country, fixed dropdown — see COUNTRY_OPTIONS
+
   // --- Marketing Attribution (for Meta CAPI etc.) ---
   attribution: Record<string, unknown> | null;
 

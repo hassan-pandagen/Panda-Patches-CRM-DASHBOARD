@@ -27,6 +27,15 @@ const CustomerAuthGuard: React.FC = () => {
     return <Navigate to="/" replace />;
   }
 
+  // Force password setup if app_metadata.password_set is not true
+  // This blocks customers from reaching the dashboard until they explicitly set a password
+  const passwordSet = user.app_metadata?.password_set === true;
+  const isOnSetPasswordPage = location.pathname === '/customer/set-password';
+
+  if (!passwordSet && !isOnSetPasswordPage) {
+    return <Navigate to="/customer/set-password" replace />;
+  }
+
   return <Outlet />;
 };
 

@@ -1,7 +1,17 @@
 -- =================================================================
--- COMPLETE SCHEMA: Panda Patches CRM - WITH INDUSTRY-STANDARD ATTENDANCE
+-- COMPLETE SCHEMA: Panda Patches CRM - SINGLE SOURCE OF TRUTH
 -- Status: PRODUCTION READY
--- Updated: Attendance system with PKT timezone, auto-clockout, reporting
+-- Last synced: 2026-04-30
+-- Includes all migrations:
+--   001_add_indexes_and_constraints
+--   002_auto_clockout_cron
+--   add_order_assignment_tracking
+--   add_cc_email_to_orders
+--   add_rush_date_to_orders
+--   003_create_order_notes
+--   004_customer_portal
+--   add_country_to_orders
+--   attribution_jsonb (orders + quotes)
 -- =================================================================
 
 -- SECTION 0: DROP ALL EXISTING POLICIES FIRST
@@ -216,6 +226,44 @@ CREATE TABLE IF NOT EXISTS public.performance_metrics (
     metadata jsonb
 );
 
+-- Order notes for sales team: quality feedback, complaints, call logs (migration: 003_create_order_notes)
+CREATE TABLE IF NOT EXISTS public.order_notes (
+    id bigint PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
+    order_id bigint NOT NULL REFERENCES public.orders(id) ON DELETE CASCADE,
+    user_id uuid REFERENCES public.user_profiles(id),
+    user_email text NOT NULL,
+    user_name text NOT NULL DEFAULT '',
+    note_type text NOT NULL DEFAULT 'general', -- 'quality_feedback', 'customer_call', 'complaint', 'general'
+    content text NOT NULL,
+    rating smallint CHECK (rating IS NULL OR (rating >= 1 AND rating <= 5)),
+    created_at timestamptz NOT NULL DEFAULT now()
+);
+
+-- Customer portal: separate auth identity from internal staff (migration: 004_customer_portal)
+CREATE TABLE IF NOT EXISTS public.customer_profiles (
+    id uuid PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+    email text UNIQUE NOT NULL,
+    full_name text,
+    company_name text,
+    phone text,
+    avatar_url text,
+    is_active boolean NOT NULL DEFAULT true,
+    created_at timestamptz NOT NULL DEFAULT now(),
+    updated_at timestamptz NOT NULL DEFAULT now(),
+    last_login_at timestamptz
+);
+
+CREATE TABLE IF NOT EXISTS public.customer_notifications (
+    id bigint PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
+    customer_email text NOT NULL,
+    order_id bigint REFERENCES public.orders(id) ON DELETE CASCADE,
+    type text NOT NULL, -- 'status_change', 'shipped', 'delivered', 'proof_ready'
+    title text NOT NULL,
+    body text NOT NULL,
+    is_read boolean NOT NULL DEFAULT false,
+    created_at timestamptz NOT NULL DEFAULT now()
+);
+
 -- SECTION 2.1: SCHEMA MIGRATIONS / ALTERATIONS
 -- -----------------------------------------------------------------
 ALTER TABLE public.attendance_sessions
@@ -239,6 +287,19 @@ ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS rush_date date;
 -- Quotes: email sent tracking
 ALTER TABLE public.quotes ADD COLUMN IF NOT EXISTS email_sent_at timestamptz;
 COMMENT ON COLUMN public.quotes.email_sent_at IS 'Timestamp of when the quote email was successfully sent to the customer. NULL = not yet sent.';
+
+-- Orders: shipping country for regional reporting and Meta CAPI (migration: add_country_to_orders)
+ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS country text;
+ALTER TABLE public.orders DROP CONSTRAINT IF EXISTS orders_country_check;
+ALTER TABLE public.orders ADD CONSTRAINT orders_country_check
+  CHECK (country IS NULL OR country IN ('USA', 'AUSTRALIA', 'CANADA', 'NEW ZEALAND', 'UK'));
+COMMENT ON COLUMN public.orders.country IS 'Shipping country (agent picks from fixed dropdown). To add a country: extend the CHECK constraint here AND update COUNTRY_OPTIONS in src/constants/options.ts.';
+
+-- Orders + Quotes: marketing attribution payload from website checkout (UTMs, fbp/fbc, gclid, etc.)
+ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS attribution jsonb DEFAULT NULL;
+ALTER TABLE public.quotes ADD COLUMN IF NOT EXISTS attribution jsonb DEFAULT NULL;
+COMMENT ON COLUMN public.orders.attribution IS 'Marketing attribution from website checkout: fbp, fbc, fbclid, gclid, utm_source/medium/campaign/content/term, country. Used for Meta CAPI server-side events.';
+COMMENT ON COLUMN public.quotes.attribution IS 'Same attribution payload from quote form — carries over to order on conversion.';
 
 -- SECTION 3: BUCKET SETUP
 -- -----------------------------------------------------------------
@@ -337,6 +398,23 @@ WHERE auto_clocked_out = TRUE;
 CREATE INDEX IF NOT EXISTS idx_attendance_summary_user_id ON public.attendance_summary(user_id);
 CREATE INDEX IF NOT EXISTS idx_attendance_summary_month ON public.attendance_summary(month);
 CREATE INDEX IF NOT EXISTS idx_performance_metrics_user_id ON public.performance_metrics(user_id);
+
+-- Order notes indexes (migration: 003_create_order_notes)
+CREATE INDEX IF NOT EXISTS idx_order_notes_order_id ON public.order_notes(order_id);
+CREATE INDEX IF NOT EXISTS idx_order_notes_created_at ON public.order_notes(created_at);
+CREATE INDEX IF NOT EXISTS idx_order_notes_note_type ON public.order_notes(note_type);
+CREATE INDEX IF NOT EXISTS idx_order_notes_rating ON public.order_notes(rating) WHERE rating IS NOT NULL;
+
+-- Customer portal indexes (migration: 004_customer_portal)
+CREATE INDEX IF NOT EXISTS idx_customer_profiles_email ON public.customer_profiles(email);
+CREATE INDEX IF NOT EXISTS idx_customer_notif_email ON public.customer_notifications(customer_email);
+CREATE INDEX IF NOT EXISTS idx_customer_notif_read ON public.customer_notifications(customer_email, is_read) WHERE is_read = false;
+
+-- Country index for regional reports (migration: add_country_to_orders)
+CREATE INDEX IF NOT EXISTS idx_orders_country ON public.orders(country) WHERE country IS NOT NULL;
+
+-- Attribution index for CAPI queries
+CREATE INDEX IF NOT EXISTS idx_orders_attribution ON public.orders USING gin(attribution) WHERE attribution IS NOT NULL;
 
 -- SECTION 5: FUNCTIONS & TRIGGERS
 -- -----------------------------------------------------------------
@@ -775,6 +853,23 @@ RETURNS TRIGGER LANGUAGE plpgsql AS $$
 BEGIN NEW.updated_at = now(); RETURN NEW; END;
 $$;
 
+-- Auto-create customer_profiles row on signup — only for non-staff users (migration: 004_customer_portal)
+CREATE OR REPLACE FUNCTION public.handle_new_customer()
+RETURNS TRIGGER AS $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM public.user_profiles WHERE id = NEW.id) THEN
+        INSERT INTO public.customer_profiles (id, email, full_name)
+        VALUES (
+            NEW.id,
+            NEW.email,
+            COALESCE(NEW.raw_user_meta_data->>'full_name', split_part(NEW.email, '@', 1))
+        )
+        ON CONFLICT (id) DO NOTHING;
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
 GRANT SELECT ON auth.users TO postgres;
 GRANT INSERT ON public.user_profiles TO postgres;
 
@@ -985,6 +1080,70 @@ WITH CHECK (true);
 CREATE POLICY "perf_metrics_delete" ON public.performance_metrics FOR DELETE
 USING (public.is_super_admin());
 
+-- Order Notes (migration: 003_create_order_notes)
+ALTER TABLE public.order_notes ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "order_notes_select" ON public.order_notes FOR SELECT TO authenticated USING (true);
+CREATE POLICY "order_notes_insert" ON public.order_notes FOR INSERT TO authenticated WITH CHECK (auth.uid() = user_id);
+CREATE POLICY "order_notes_delete" ON public.order_notes FOR DELETE TO authenticated USING (auth.uid() = user_id);
+
+GRANT INSERT ON public.order_notes TO authenticated;
+
+-- Customer Profiles (migration: 004_customer_portal)
+ALTER TABLE public.customer_profiles ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "customers_read_own_profile" ON public.customer_profiles
+    FOR SELECT TO authenticated USING (auth.uid() = id);
+
+CREATE POLICY "customers_update_own_profile" ON public.customer_profiles
+    FOR UPDATE TO authenticated USING (auth.uid() = id) WITH CHECK (auth.uid() = id);
+
+CREATE POLICY "staff_read_all_customer_profiles" ON public.customer_profiles
+    FOR SELECT TO authenticated
+    USING (EXISTS (SELECT 1 FROM public.user_profiles WHERE id = auth.uid()));
+
+CREATE POLICY "service_role_customer_profiles_full_access" ON public.customer_profiles
+    FOR ALL TO service_role USING (true) WITH CHECK (true);
+
+-- Customer Notifications (migration: 004_customer_portal)
+ALTER TABLE public.customer_notifications ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "customers_read_own_notifications" ON public.customer_notifications
+    FOR SELECT TO authenticated
+    USING (customer_email = (SELECT email FROM public.customer_profiles WHERE id = auth.uid()));
+
+CREATE POLICY "customers_mark_notifications_read" ON public.customer_notifications
+    FOR UPDATE TO authenticated
+    USING (customer_email = (SELECT email FROM public.customer_profiles WHERE id = auth.uid()))
+    WITH CHECK (customer_email = (SELECT email FROM public.customer_profiles WHERE id = auth.uid()));
+
+CREATE POLICY "staff_manage_all_notifications" ON public.customer_notifications
+    FOR ALL TO authenticated
+    USING (EXISTS (SELECT 1 FROM public.user_profiles WHERE id = auth.uid()));
+
+-- Customers: read-only access to their own orders via customer_profiles
+CREATE POLICY "customers_read_own_orders" ON public.orders
+    FOR SELECT TO authenticated
+    USING (
+        customer_email = (SELECT email FROM public.customer_profiles WHERE id = auth.uid())
+        OR cc_email = (SELECT email FROM public.customer_profiles WHERE id = auth.uid())
+    );
+
+-- Customers: read status-change history on their own orders
+CREATE POLICY "customers_read_own_order_history" ON public.order_history
+    FOR SELECT TO authenticated
+    USING (
+        EXISTS (
+            SELECT 1 FROM public.orders
+            WHERE public.orders.id = order_history.order_id
+            AND (
+                public.orders.customer_email = (SELECT email FROM public.customer_profiles WHERE id = auth.uid())
+                OR public.orders.cc_email = (SELECT email FROM public.customer_profiles WHERE id = auth.uid())
+            )
+        )
+        AND field_changed IN ('status', 'ORDER_CREATED')
+    );
+
 -- Grant access to views
 GRANT SELECT ON public.active_attendance_sessions TO authenticated;
 GRANT SELECT ON public.sales_agent_reports TO authenticated;
@@ -1020,6 +1179,11 @@ ALTER TABLE public.orders ENABLE ALWAYS TRIGGER trigger_log_order_changes;
 -- DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
 -- CREATE TRIGGER on_auth_user_created AFTER INSERT ON auth.users FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
 -- ALTER TABLE auth.users ENABLE ALWAYS TRIGGER on_auth_user_created;
+
+-- Customer portal: auto-create customer_profiles on signup (migration: 004_customer_portal)
+-- ❌ SKIPPED: Same auth.users permission restriction — run via Supabase Dashboard
+-- DROP TRIGGER IF EXISTS on_customer_signup ON auth.users;
+-- CREATE TRIGGER on_customer_signup AFTER INSERT ON auth.users FOR EACH ROW EXECUTE FUNCTION public.handle_new_customer();
 
 DROP TRIGGER IF EXISTS trigger_update_attendance_summary ON public.attendance_sessions;
 CREATE TRIGGER trigger_update_attendance_summary AFTER INSERT OR UPDATE OR DELETE ON public.attendance_sessions FOR EACH ROW EXECUTE FUNCTION public.recalculate_attendance_summary();

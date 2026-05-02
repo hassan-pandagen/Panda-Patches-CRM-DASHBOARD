@@ -65,8 +65,23 @@ const CustomerSetPasswordPage: React.FC = () => {
 
     setLoading(true);
     try {
-      const { error } = await supabase.auth.updateUser({ password });
-      if (error) throw error;
+      // Set password
+      const { error: pwError } = await supabase.auth.updateUser({ password });
+      if (pwError) throw pwError;
+
+      // Flip the password_set flag in app_metadata via edge function
+      // (app_metadata can only be modified server-side with service role)
+      const { error: flagError } = await supabase.functions.invoke('mark-password-set', {});
+      if (flagError) {
+        // Non-fatal — password is set, flag just wasn't flipped
+        // Next login will work, and the flag will get set then.
+        // But log it for debugging.
+        console.warn('[set-password] Could not flip password_set flag:', flagError.message);
+      }
+
+      // Refresh session so the JWT picks up new app_metadata
+      await supabase.auth.refreshSession();
+
       navigate('/customer/dashboard', { replace: true });
     } catch (err: any) {
       setError(err.message || 'Could not set your password. Please try again.');

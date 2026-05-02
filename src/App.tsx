@@ -30,11 +30,13 @@ const CustomerHistoryPage = lazy(() => import('@/pages/CustomerHistoryPage'));
 const ClockInOutPage = lazy(() => import('@/pages/ClockInOutPage'));
 const PerformanceMetricsPage = lazy(() => import('@/pages/PerformanceMetricsPage'));
 const BulkCostEntryPage = lazy(() => import('@/pages/BulkCostEntryPage'));
+const CustomersPage = lazy(() => import('@/pages/CustomersPage'));
 
 // Protection
 import ProtectedRoute from './ProtectedRoute';
 import AdminRoute from './AdminRoute';
 import CustomerProtectedRoute from './CustomerProtectedRoute';
+import HostnameRouter from './HostnameRouter';
 
 // Customer Portal Pages (Lazy)
 const CustomerLoginPage = lazy(() => import('@/pages/customer/CustomerLoginPage'));
@@ -59,6 +61,7 @@ const App: React.FC = () => {
       <OfflineIndicator />
       
       <Suspense fallback={<LazyLoadingFallback />}>
+        <HostnameRouter>
         <Routes>
           {/* Public Route */}
           <Route path="/login" element={<ErrorBoundary><LoginPage /></ErrorBoundary>} />
@@ -91,6 +94,7 @@ const App: React.FC = () => {
                 <Route path="/bulk-cost-entry" element={<BulkCostEntryPage />} />
                 <Route path="/user-management" element={<UserManagementPage />} />
                 <Route path="/performance-metrics" element={<PerformanceMetricsPage />} />
+                <Route path="/portal-customers" element={<CustomersPage />} />
               </Route>
     
             </Route>
@@ -118,6 +122,7 @@ const App: React.FC = () => {
           {/* 404 — outside protected routes so all unknown paths return not-found */}
           <Route path="*" element={<NotFoundPage />} />
         </Routes>
+        </HostnameRouter>
       </Suspense>
     </>
   );

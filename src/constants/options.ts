@@ -11,6 +11,16 @@ export const PATCHES_TYPE_OPTIONS: string[] = [
   'PVC Keychains', 'Embroidered Keychains', 'Leather Keychains'
 ];
 export const DESIGN_BACKING_OPTIONS: string[] = ['Iron-on', 'Velcro', 'Adhesive', 'None'];
+// Shipping countries we sell into. Extend this list AND the CHECK constraint in
+// supabase/migrations/add_country_to_orders.sql when a new country is added.
+export const COUNTRY_OPTIONS: string[] = [
+  'USA',
+  'AUSTRALIA',
+  'CANADA',
+  'NEW ZEALAND',
+  'UK',
+];
+
 export const LEAD_SOURCE_OPTIONS: string[] = [
   'Google',
   'Bing',

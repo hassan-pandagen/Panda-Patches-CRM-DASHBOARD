@@ -176,6 +176,8 @@ export const mapDbToOrder = (data: any): Order => {
     assignedBy: data.assignedBy ?? data.assigned_by,
     assignedAt: data.assignedAt ?? data.assigned_at,
 
+    country: data.country ?? null,
+
     attribution: data.attribution ?? null,
 
     createdAt: data.createdAt ?? data.created_at,
@@ -256,7 +258,7 @@ export const prepareEmailData = (order: Order, triggerStatus: string) => {
     tracking_number: order.shippingTrackingNumber,
     tracking_link: trackingUrl,
 
-    order_link: `https://portal.pandapatches.com/order/${order.orderNumber}`,
+    order_link: `https://login.pandapatches.com/customer/order/${order.orderNumber}`,
     sales_agent_name: order.salesAgent || "Panda Team",
 
     is_urgent: order.isUrgent || false,
@@ -674,7 +676,7 @@ export const sendPaymentConfirmationEmail = async (order: Order): Promise<void> 
     amount_remaining: `$${(order.amountRemaining || 0).toLocaleString()}`,
     is_paid_in_full: (order.amountRemaining || 0) <= 0,
     design_name: order.designName || '',
-    order_link: `https://portal.pandapatches.com/order/${order.orderNumber}`,
+    order_link: `https://login.pandapatches.com/customer/order/${order.orderNumber}`,
     sales_agent_name: order.salesAgent || 'Panda Team',
   };
 

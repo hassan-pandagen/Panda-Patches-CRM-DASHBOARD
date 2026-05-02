@@ -123,28 +123,46 @@ const CustomerLayout: React.FC = () => {
         <Outlet />
       </main>
 
-      {/* Tawk.to Widget - paste your existing script ID here */}
-      <TawkToWidget />
+      {/* Tawk.to Widget — pre-filled with customer identity */}
+      <TawkToWidget
+        name={profile?.full_name || profile?.email?.split('@')[0]}
+        email={profile?.email}
+      />
     </div>
   );
 };
 
-// Tawk.to widget component
-const TawkToWidget: React.FC = () => {
+// Tawk.to widget — pre-fills visitor context so agents see who is chatting
+const TawkToWidget: React.FC<{ name?: string; email?: string }> = ({ name, email }) => {
   React.useEffect(() => {
-    // Load Tawk.to script (same as your website)
+    // Set visitor attributes before loading so they appear in agent dashboard
+    (window as any).Tawk_API = (window as any).Tawk_API || {};
+    (window as any).Tawk_LoadStart = new Date();
+
+    if (name || email) {
+      (window as any).Tawk_API.onLoad = function () {
+        (window as any).Tawk_API.setAttributes(
+          {
+            name:  name  || 'Customer',
+            email: email || '',
+          },
+          function (err: any) { if (err) console.warn('[Tawk] setAttributes error', err); }
+        );
+      };
+    }
+
     const script = document.createElement('script');
     script.async = true;
+    // Replace YOUR_TAWK_PROPERTY_ID with your actual Tawk.to property ID
     script.src = 'https://embed.tawk.to/YOUR_TAWK_PROPERTY_ID/default';
     script.charset = 'UTF-8';
     script.setAttribute('crossorigin', '*');
     document.body.appendChild(script);
 
     return () => {
-      // Cleanup on unmount
-      document.body.removeChild(script);
+      if (document.body.contains(script)) document.body.removeChild(script);
     };
-  }, []);
+  }, [name, email]);
 
   return null;
 };

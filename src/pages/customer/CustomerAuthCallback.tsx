@@ -7,7 +7,7 @@ const CustomerAuthCallback: React.FC = () => {
 
   useEffect(() => {
     const handleCallback = async () => {
-      // Supabase handles the token exchange from the URL automatically
+      // Wait for Supabase to exchange the token from the URL hash
       const { data: { session }, error } = await supabase.auth.getSession();
 
       if (error || !session) {
@@ -15,7 +15,32 @@ const CustomerAuthCallback: React.FC = () => {
         return;
       }
 
-      // Redirect to customer dashboard
+      const userId = session.user.id;
+
+      // Check if this is a staff member — if so, bounce to CRM login
+      const { data: staffProfile } = await supabase
+        .from('user_profiles')
+        .select('id')
+        .eq('id', userId)
+        .maybeSingle();
+
+      if (staffProfile) {
+        navigate('/login', { replace: true });
+        return;
+      }
+
+      // Check if they came from an invite link (no password set yet)
+      // Supabase sets amr to 'link' for invite/magiclink flows
+      const amr = session.user.amr as any;
+      const isInviteFlow = Array.isArray(amr)
+        ? amr.some((a: any) => a.method === 'invite')
+        : false;
+
+      if (isInviteFlow) {
+        navigate('/customer/set-password', { replace: true });
+        return;
+      }
+
       navigate('/customer/dashboard', { replace: true });
     };
 
