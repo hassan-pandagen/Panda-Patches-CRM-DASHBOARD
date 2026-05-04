@@ -8,7 +8,8 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { z } from "https://deno.land/x/zod@v3.22.4/mod.ts";
 
 const ALLOWED_ORIGINS = [
-  'https://login.pandapatches.com',
+  'https://login.pandapatches.com',          // customer portal
+  'https://portal.pandapatches.com',          // staff CRM (production)
   'https://panda-patches-crm-dashboard.vercel.app',
 ];
 

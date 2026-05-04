@@ -8,7 +8,9 @@ import { Order } from '../../types';
 import {
   ArrowLeft, Package, Maximize, Truck, MapPin,
   CheckCircle, MessageSquare, User, ThumbsUp, ThumbsDown,
+  CreditCard,
 } from 'lucide-react';
+import OrderMessageThread from '../../components/messaging/OrderMessageThread';
 
 // ── Timeline ─────────────────────────────────────────────────────────────────
 
@@ -364,7 +366,7 @@ const CustomerOrderDetail: React.FC = () => {
     );
   }
 
-  const amountRemaining = order.orderAmount - order.amountPaid;
+  const amountRemaining = (order.orderAmount || 0) - (order.amountPaid || 0);
 
   return (
     <div className="space-y-6 animate-fadeIn">
@@ -478,6 +480,11 @@ const CustomerOrderDetail: React.FC = () => {
                 </div>
               )}
             </div>
+
+            {/* Pay Balance via Stripe — only show if there's a balance due AND order is active */}
+            {amountRemaining > 0 && !['CANCELLED', 'REFUNDED'].includes(order.status) && (
+              <PayBalanceButton orderId={order.id} amount={amountRemaining} />
+            )}
           </div>
 
           {/* Account Manager — generic, never expose agent email */}
@@ -485,10 +492,7 @@ const CustomerOrderDetail: React.FC = () => {
             <h3 className="text-sm font-semibold text-white mb-3 flex items-center gap-2">
               <User className="w-4 h-4 text-brand-orange" /> Your Account Manager
             </h3>
-            <p className="text-xs text-slate-400 mb-3">
-              Have a question about this order? Your dedicated account manager is here to help.
-            </p>
-            <div className="flex items-center gap-3 mb-4">
+            <div className="flex items-center gap-3 mb-3">
               <div className="w-9 h-9 rounded-full bg-brand-orange/20 flex items-center justify-center">
                 <User className="w-4 h-4 text-brand-orange" />
               </div>
@@ -497,19 +501,29 @@ const CustomerOrderDetail: React.FC = () => {
                 <p className="text-xs text-slate-400">Account Manager</p>
               </div>
             </div>
-            <a
-              href="mailto:hello@mycustompatches.net"
-              className="flex items-center justify-center gap-2 w-full py-2.5 bg-brand-orange/10 hover:bg-brand-orange/20 border border-brand-orange/30 text-brand-orange rounded-xl text-sm font-medium transition-all"
-            >
-              <MessageSquare className="w-4 h-4" />
-              Contact Us
-            </a>
-            <p className="text-xs text-slate-500 text-center mt-2">
-              Or use the live chat in the bottom right
+            <p className="text-xs text-slate-500">
+              Use the message thread below for questions about this order, or the live chat in the
+              bottom-right for urgent help.
             </p>
           </div>
         </div>
       </div>
+
+      {/* Per-Order Message Thread (customer ↔ assigned agent) */}
+      <OrderMessageThread
+        orderId={order.id}
+        orderNumber={order.orderNumber}
+        viewer="customer"
+        currentUser={
+          profile?.id
+            ? {
+                id: profile.id,
+                email: profile.email,
+                name: profile.full_name || profile.email?.split('@')[0],
+              }
+            : undefined
+        }
+      />
 
       {/* Image Preview Modal */}
       {previewUrl && (
@@ -528,5 +542,49 @@ const SpecItem: React.FC<{ label: string; value: string; highlight?: boolean }> 
     <p className={`text-sm font-medium ${highlight ? 'text-brand-orange' : 'text-white'}`}>{value}</p>
   </div>
 );
+
+// ── Pay Balance via Stripe (hits create-stripe-checkout edge function) ──
+const PayBalanceButton: React.FC<{ orderId: number; amount: number }> = ({ orderId, amount }) => {
+  const [isCreating, setIsCreating] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
+
+  const handleClick = async () => {
+    setIsCreating(true);
+    setError(null);
+    try {
+      const { data, error: fnErr } = await supabase.functions.invoke('create-stripe-checkout', {
+        body: { order_id: orderId },
+      });
+      if (fnErr || data?.error) {
+        throw new Error(data?.error || fnErr?.message || 'Could not create checkout session');
+      }
+      if (!data?.url) throw new Error('No checkout URL returned');
+      // Redirect to Stripe-hosted Checkout
+      window.location.href = data.url;
+    } catch (err: any) {
+      setError(err.message || 'Something went wrong. Try again.');
+      setIsCreating(false);
+    }
+  };
+
+  return (
+    <div className="mt-5 pt-5 border-t border-slate-700">
+      <button
+        onClick={handleClick}
+        disabled={isCreating}
+        className="w-full flex items-center justify-center gap-2 py-3 bg-brand-orange hover:bg-brand-orange/90 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-xl font-semibold transition-all shadow-lg shadow-brand-orange/20"
+      >
+        <CreditCard className="w-4 h-4" />
+        {isCreating ? 'Redirecting…' : `Pay Balance · $${amount.toFixed(2)}`}
+      </button>
+      {error && (
+        <p className="text-xs text-red-400 mt-2 text-center">{error}</p>
+      )}
+      <p className="text-[10px] text-slate-500 text-center mt-2">
+        Secure payment via Stripe · Card payment
+      </p>
+    </div>
+  );
+};
 
 export default CustomerOrderDetail;

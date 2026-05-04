@@ -5,7 +5,7 @@ import { useCustomerAuth } from '../../contexts/CustomerAuthContext';
 import { mapDbToOrder } from '../../services/orderService';
 import { Order, OrderStatus } from '../../types';
 import { NavLink } from 'react-router-dom';
-import { Package, Clock, Truck, CheckCircle, ChevronRight, AlertTriangle } from 'lucide-react';
+import { Package, Clock, Truck, CheckCircle, ChevronRight, AlertTriangle, DollarSign, Wallet } from 'lucide-react';
 
 const STATUS_DISPLAY: Record<string, { label: string; color: string; bg: string }> = {
   NEW_ORDER: { label: 'Order Received', color: 'text-blue-400', bg: 'bg-blue-400/10' },
@@ -44,6 +44,15 @@ const CustomerDashboard: React.FC = () => {
   const activeOrders = orders.filter(o => !['CANCELLED', 'REFUNDED', 'DELIVERED', 'FEEDBACK'].includes(o.status));
   const completedOrders = orders.filter(o => ['DELIVERED', 'FEEDBACK'].includes(o.status));
 
+  // Payment totals across non-cancelled orders
+  const billableOrders = orders.filter(o => !['CANCELLED', 'REFUNDED'].includes(o.status));
+  const totalPaid = billableOrders.reduce((sum, o) => sum + (o.amountPaid || 0), 0);
+  const totalRemaining = billableOrders.reduce((sum, o) => {
+    const remaining = (o.orderAmount || 0) - (o.amountPaid || 0);
+    return sum + Math.max(remaining, 0);
+  }, 0);
+  const fmtMoney = (n: number) => `$${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
   return (
     <div className="space-y-6 animate-fadeIn">
       {/* Welcome */}
@@ -56,11 +65,29 @@ const CustomerDashboard: React.FC = () => {
 
       {/* Summary Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <SummaryCard icon={<Package className="w-5 h-5 text-blue-400" />} label="Total Orders" value={orders.length} />
-        <SummaryCard icon={<Clock className="w-5 h-5 text-orange-400" />} label="Active" value={activeOrders.length} />
-        <SummaryCard icon={<Truck className="w-5 h-5 text-purple-400" />} label="Shipped" value={orders.filter(o => o.status === 'SHIPPED').length} />
-        <SummaryCard icon={<CheckCircle className="w-5 h-5 text-emerald-400" />} label="Delivered" value={completedOrders.length} />
+        <SummaryCard icon={<Package className="w-5 h-5 text-blue-400" />} label="Total Orders" value={String(orders.length)} />
+        <SummaryCard icon={<Clock className="w-5 h-5 text-orange-400" />} label="Active" value={String(activeOrders.length)} />
+        <SummaryCard icon={<Truck className="w-5 h-5 text-purple-400" />} label="Shipped" value={String(orders.filter(o => o.status === 'SHIPPED').length)} />
+        <SummaryCard icon={<CheckCircle className="w-5 h-5 text-emerald-400" />} label="Delivered" value={String(completedOrders.length)} />
       </div>
+
+      {/* Payment Summary — only show if there are billable orders */}
+      {billableOrders.length > 0 && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <SummaryCard
+            icon={<DollarSign className="w-5 h-5 text-emerald-400" />}
+            label="Total Paid"
+            value={fmtMoney(totalPaid)}
+            valueColor="text-emerald-400"
+          />
+          <SummaryCard
+            icon={<Wallet className="w-5 h-5 text-brand-orange" />}
+            label="Balance Due"
+            value={fmtMoney(totalRemaining)}
+            valueColor={totalRemaining > 0 ? 'text-brand-orange' : 'text-slate-300'}
+          />
+        </div>
+      )}
 
       {/* Active Orders */}
       {activeOrders.length > 0 && (
@@ -108,14 +135,19 @@ const CustomerDashboard: React.FC = () => {
 };
 
 // Summary card component
-const SummaryCard: React.FC<{ icon: React.ReactNode; label: string; value: number }> = ({ icon, label, value }) => (
+const SummaryCard: React.FC<{
+  icon: React.ReactNode;
+  label: string;
+  value: string;
+  valueColor?: string;
+}> = ({ icon, label, value, valueColor = 'text-white' }) => (
   <div className="bg-slate-900/60 backdrop-blur-xl border border-white/10 rounded-2xl p-4 sm:p-5">
     <div className="flex items-center justify-between">
-      <div>
+      <div className="min-w-0">
         <p className="text-xs sm:text-sm text-slate-400">{label}</p>
-        <p className="text-2xl sm:text-3xl font-bold text-white mt-1">{value}</p>
+        <p className={`text-2xl sm:text-3xl font-bold mt-1 truncate ${valueColor}`}>{value}</p>
       </div>
-      <div className="p-2.5 bg-white/5 rounded-xl">{icon}</div>
+      <div className="p-2.5 bg-white/5 rounded-xl shrink-0 ml-3">{icon}</div>
     </div>
   </div>
 );

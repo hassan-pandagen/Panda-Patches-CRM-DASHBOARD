@@ -11,12 +11,11 @@
       "dest": "/assets/$1"
     },
     {
-      "src": "/(login|orders|new-order|quotes|new-quote|reports|settings|search|clock-in-out|bulk-cost-entry|user-management|performance-metrics|order/.*|quote/.*|customers/.*|$)",
+      "src": "/(login|orders|new-order|quotes|new-quote|reports|settings|search|clock-in-out|bulk-cost-entry|user-management|performance-metrics|portal-customers|activity|order/.*|quote/.*|customers/.*|customer|customer/.*|$)",
       "dest": "/index.html"
     },
     {
       "src": "/(.*)",
-      "status": 404,
       "dest": "/index.html"
     }
   ],

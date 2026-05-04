@@ -105,6 +105,10 @@ const getEmailSubject = (templateId: string, data: any): string => {
     'CUSTOMER_WELCOME_INVITE': `Welcome to Panda Patches — Set Up Your Account`,
     'CUSTOMER_RETURNING_LOGIN': `Track Your New Order - ${orderNumber}`,
     'CUSTOMER_PASSWORD_RESET': `Reset Your Panda Patches Portal Password`,
+
+    // Order message thread templates
+    'AGENT_NEW_CUSTOMER_MESSAGE': `[Customer Message] ${data.customer_name || 'A customer'} replied on order ${orderNumber}`,
+    'CUSTOMER_NEW_AGENT_MESSAGE': `New message on your order ${orderNumber}`,
   };
 
   return subjects[templateId] || `Update from Panda Patches - ${orderNumber}`;
@@ -159,6 +163,10 @@ const getTemplateMessage = (templateId: string, data?: any): string => {
     'CUSTOMER_WELCOME_INVITE': 'Thank you for your order! We\'ve created a Customer Portal account for you so you can track your order in real time, view your mockups, and see every step of your patch journey. Tap the button below to set your password — takes less than 30 seconds.',
     'CUSTOMER_RETURNING_LOGIN': 'Thank you for your new order! Your Customer Portal is ready — tap the button below to log in and track this order along with your previous ones. The link expires in 1 hour; after that, just sign in with your email and password.',
     'CUSTOMER_PASSWORD_RESET': 'A password reset was requested for your Panda Patches Customer Portal. Tap the button below to choose a new password. The link expires in 1 hour. If you didn\'t request this, you can safely ignore this email.',
+
+    // Order message thread templates
+    'AGENT_NEW_CUSTOMER_MESSAGE': `${data?.customer_name || 'A customer'} just sent a message on order ${data?.order_number || ''}.\n\nMessage: "${(data?.message_content || '').substring(0, 1000)}"\n\nReply through the order in the CRM to keep the conversation in one place.`,
+    'CUSTOMER_NEW_AGENT_MESSAGE': `Your account manager just replied on order ${data?.order_number || ''}.\n\n"${(data?.message_content || '').substring(0, 1000)}"\n\nView the full conversation and reply in your portal.`,
   };
 
   return messages[templateId] || 'Thank you for your order! Our team is working on your custom patches.';
@@ -258,6 +266,8 @@ const shouldShowFullDetails = (templateId: string): boolean => {
     'CUSTOMER_WELCOME_INVITE',
     'CUSTOMER_RETURNING_LOGIN',
     'CUSTOMER_PASSWORD_RESET',
+    'AGENT_NEW_CUSTOMER_MESSAGE',
+    'CUSTOMER_NEW_AGENT_MESSAGE',
   ];
 
   return !minimalDetailsTemplates.includes(templateId);
@@ -829,8 +839,8 @@ const buildEmailHTML = (templateId: string, data: any): string => {
   ` : ''}
   ` : ''}
 
-  ${templateId.includes('INTERNAL') && data.order_link ? `
-  <!-- VIEW CRM BUTTON (Internal Emails Only) -->
+  ${(templateId.includes('INTERNAL') || templateId === 'AGENT_NEW_CUSTOMER_MESSAGE' || templateId === 'CUSTOMER_NEW_AGENT_MESSAGE') && data.order_link ? `
+  <!-- VIEW CRM / VIEW PORTAL BUTTON -->
   <table border="0" cellpadding="0" cellspacing="0" class="module" data-type="button" role="module" style="table-layout: fixed;" width="100%">
     <tbody>
       <tr>
@@ -840,7 +850,7 @@ const buildEmailHTML = (templateId: string, data: any): string => {
               <tr>
                 <td align="center" bgcolor="#FB6E1D" class="inner-td" style="border-radius:6px; font-size:16px; text-align:center; background-color:inherit;">
                   <a href="${escapeHtml(data.order_link)}" style="background-color:#FB6E1D; border:1px solid #FB6E1D; border-color:#FB6E1D; border-radius:6px; border-width:1px; color:#ffffff; display:inline-block; font-size:16px; font-weight:bold; letter-spacing:0px; line-height:normal; padding:16px 40px 16px 40px; text-align:center; text-decoration:none; border-style:solid; font-family: 'lucida sans unicode', 'lucida grande', sans-serif;" target="_blank">
-                    VIEW IN CRM PORTAL →
+                    ${templateId === 'AGENT_NEW_CUSTOMER_MESSAGE' ? 'REPLY IN CRM →' : templateId === 'CUSTOMER_NEW_AGENT_MESSAGE' ? 'VIEW MESSAGE →' : 'VIEW IN CRM PORTAL →'}
                   </a>
                 </td>
               </tr>

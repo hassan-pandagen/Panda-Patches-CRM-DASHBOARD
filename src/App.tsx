@@ -31,6 +31,7 @@ const ClockInOutPage = lazy(() => import('@/pages/ClockInOutPage'));
 const PerformanceMetricsPage = lazy(() => import('@/pages/PerformanceMetricsPage'));
 const BulkCostEntryPage = lazy(() => import('@/pages/BulkCostEntryPage'));
 const CustomersPage = lazy(() => import('@/pages/CustomersPage'));
+const ActivityPage = lazy(() => import('@/pages/ActivityPage'));
 
 // Protection
 import ProtectedRoute from './ProtectedRoute';
@@ -85,6 +86,7 @@ const App: React.FC = () => {
               <Route path="/customers/:identifier" element={<CustomerHistoryPage />} />
               <Route path="/settings" element={<SettingsPage />} />
               <Route path="/search" element={<SearchResultsPage />} />
+              <Route path="/activity" element={<ActivityPage />} />
     
               {/* Attendance */}
               <Route path="/clock-in-out" element={<ClockInOutPage />} />

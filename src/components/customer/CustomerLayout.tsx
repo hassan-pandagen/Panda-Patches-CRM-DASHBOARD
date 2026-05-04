@@ -3,6 +3,7 @@ import { Outlet, NavLink, useNavigate } from 'react-router-dom';
 import { useCustomerAuth } from '../../contexts/CustomerAuthContext';
 import { LayoutDashboard, Package, User, LogOut, Menu, X, MessageCircle, HelpCircle } from 'lucide-react';
 import CustomerNotificationBell from './CustomerNotificationBell';
+import TawkToWidget from './TawkToWidget';
 
 const navItems = [
   { to: '/customer/dashboard', icon: LayoutDashboard, label: 'My Orders' },
@@ -130,46 +131,6 @@ const CustomerLayout: React.FC = () => {
       />
     </div>
   );
-};
-
-// Tawk.to widget — pre-fills visitor context so agents see who is chatting
-// Uses Vite env vars if set, otherwise falls back to the hardcoded property/widget IDs
-const TAWK_PROPERTY_ID =
-  (import.meta as any).env?.VITE_TAWK_PROPERTY_ID || '64b56d7d94cf5d49dc6422c0';
-const TAWK_WIDGET_ID =
-  (import.meta as any).env?.VITE_TAWK_WIDGET_ID || '1h5ib7cm1';
-
-const TawkToWidget: React.FC<{ name?: string; email?: string }> = ({ name, email }) => {
-  React.useEffect(() => {
-    // Set visitor attributes before loading so they appear in agent dashboard
-    (window as any).Tawk_API = (window as any).Tawk_API || {};
-    (window as any).Tawk_LoadStart = new Date();
-
-    if (name || email) {
-      (window as any).Tawk_API.onLoad = function () {
-        (window as any).Tawk_API.setAttributes(
-          {
-            name:  name  || 'Customer',
-            email: email || '',
-          },
-          function (err: any) { if (err) console.warn('[Tawk] setAttributes error', err); }
-        );
-      };
-    }
-
-    const script = document.createElement('script');
-    script.async = true;
-    script.src = `https://embed.tawk.to/${TAWK_PROPERTY_ID}/${TAWK_WIDGET_ID}`;
-    script.charset = 'UTF-8';
-    script.setAttribute('crossorigin', '*');
-    document.body.appendChild(script);
-
-    return () => {
-      if (document.body.contains(script)) document.body.removeChild(script);
-    };
-  }, [name, email]);
-
-  return null;
 };
 
 export default CustomerLayout;

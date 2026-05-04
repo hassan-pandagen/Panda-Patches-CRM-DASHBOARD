@@ -12,6 +12,7 @@ import {
   Clock,
   Activity,
   DollarSign,
+  Bell,
 } from "lucide-react";
 import { useAuth } from "../../contexts/AuthContext";
 import { useQueryPrefetch } from "../../hooks/useQueryPrefetch";
@@ -106,6 +107,12 @@ const Sidebar: React.FC<SidebarProps> = ({ onNavigate }) => {
       label: "Clock In/Out",
       icon: <Clock className="w-5 h-5" />,
       prefetchType: "clock-in-out" as const,
+    },
+    {
+      to: "/activity",
+      label: "Activity",
+      icon: <Bell className="w-5 h-5" />,
+      prefetchType: "none" as const,
     },
   ];
 

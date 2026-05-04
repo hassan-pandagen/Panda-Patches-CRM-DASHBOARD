@@ -19,7 +19,7 @@ import SpotlightCard from '../components/ui/SpotlightCard';
 import StatusBadge from '../components/ui/StatusBadge';
 
 // Icons (Check already imported below)
-import { Edit, Trash2, ShieldAlert, ArrowLeft, Lock, MapPin, Smartphone, Maximize, Check, XCircle, AlertTriangle, Copy, FileText, Upload, Package, X, Mail } from 'lucide-react';
+import { Edit, Trash2, ShieldAlert, ArrowLeft, Lock, MapPin, Smartphone, Maximize, Check, XCircle, AlertTriangle, Copy, FileText, Upload, Package, X, Mail, DollarSign } from 'lucide-react';
 
 // 1. Import the new component
 import OrderTimeline from '../components/orders/OrderTimeline';
@@ -27,6 +27,9 @@ import ShippingLabelModal from '../components/orders/ShippingLabelModal';
 import AssignOrderSection from '../components/orders/AssignOrderSection';
 import EmailLogsSection from '../components/orders/EmailLogsSection';
 import OrderNotesSection from '../components/orders/OrderNotesSection';
+import OrderMessageThread from '../components/messaging/OrderMessageThread';
+import MarkAsPaidModal from '../components/orders/MarkAsPaidModal';
+import MetaCapiPanel from '../components/orders/MetaCapiPanel';
 
 // --- CONFIRMATION MODAL ---
 const ConfirmationModal: React.FC<{
@@ -72,6 +75,7 @@ const OrderPage: React.FC = () => {
     const [productionFiles, setProductionFiles] = React.useState<string[]>([]);
     const [isEditingProduction, setIsEditingProduction] = React.useState(false);
     const [isSendingPaymentEmail, setIsSendingPaymentEmail] = React.useState(false);
+    const [isMarkPaidModalOpen, setIsMarkPaidModalOpen] = React.useState(false);
 
     // --- PERMISSION CHECKS ---
     const isAdmin = role === UserRole.ADMIN;
@@ -267,6 +271,15 @@ const OrderPage: React.FC = () => {
                 isOpen={isShippingLabelModalOpen}
                 onClose={() => setIsShippingLabelModalOpen(false)}
                 order={order}
+            />
+
+            <MarkAsPaidModal
+                isOpen={isMarkPaidModalOpen}
+                onClose={() => setIsMarkPaidModalOpen(false)}
+                orderId={order.id}
+                orderNumber={order.orderNumber}
+                orderAmount={order.orderAmount || 0}
+                amountAlreadyPaid={order.amountPaid || 0}
             />
 
             {/* Image Preview Modal */}
@@ -699,6 +712,28 @@ const OrderPage: React.FC = () => {
                             </div>
                         )}
 
+                        {/* META CAPI STATUS PANEL (Admin Only) */}
+                        {isAdmin && order && (
+                            <div className="pt-2">
+                                <MetaCapiPanel orderId={order.id} orderNumber={order.orderNumber} />
+                            </div>
+                        )}
+
+                        {/* MARK AS PAID (MANUAL) — Square / Bank / Cash / Other */}
+                        {canViewFinancials && order && (order.amountRemaining || 0) > 0 && (
+                            <div className="pt-2">
+                                <Button
+                                    variant="primary"
+                                    size="sm"
+                                    onClick={() => setIsMarkPaidModalOpen(true)}
+                                    className="w-full bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 hover:text-emerald-300 border border-emerald-500/30"
+                                >
+                                    <DollarSign size={14} />
+                                    <span>Record Manual Payment</span>
+                                </Button>
+                            </div>
+                        )}
+
                         {/* PAYMENT CONFIRMATION EMAIL */}
                         {isAdmin && order && (
                             <div className="pt-2">
@@ -742,6 +777,22 @@ const OrderPage: React.FC = () => {
                 {order && (
                     <div className="w-full animate-fadeIn lg:col-span-3">
                         <OrderNotesSection orderId={order.id} />
+                    </div>
+                )}
+
+                {/* Customer ↔ Agent message thread (visible to customer in their portal) */}
+                {order && user && (
+                    <div className="w-full animate-fadeIn lg:col-span-3">
+                        <OrderMessageThread
+                            orderId={order.id}
+                            orderNumber={order.orderNumber}
+                            viewer="agent"
+                            currentUser={{
+                                id: user.id,
+                                email: user.email,
+                                name: (user.user_metadata as any)?.full_name || user.email?.split('@')[0],
+                            }}
+                        />
                     </div>
                 )}
 

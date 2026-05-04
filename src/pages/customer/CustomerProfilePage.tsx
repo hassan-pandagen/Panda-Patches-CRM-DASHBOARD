@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useCustomerAuth } from '../../contexts/CustomerAuthContext';
 import { supabase } from '../../services/supabaseClient';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { User, Mail, Building, Phone, Save } from 'lucide-react';
+import { User, Mail, Building, Phone, Save, MapPin } from 'lucide-react';
 
 const CustomerProfilePage: React.FC = () => {
   const { profile, user } = useCustomerAuth();
@@ -11,6 +11,7 @@ const CustomerProfilePage: React.FC = () => {
   const [fullName, setFullName] = useState('');
   const [companyName, setCompanyName] = useState('');
   const [phone, setPhone] = useState('');
+  const [defaultShippingAddress, setDefaultShippingAddress] = useState('');
   const [saved, setSaved] = useState(false);
 
   useEffect(() => {
@@ -18,6 +19,7 @@ const CustomerProfilePage: React.FC = () => {
       setFullName(profile.full_name || '');
       setCompanyName(profile.company_name || '');
       setPhone(profile.phone || '');
+      setDefaultShippingAddress((profile as any).default_shipping_address || '');
     }
   }, [profile]);
 
@@ -30,6 +32,7 @@ const CustomerProfilePage: React.FC = () => {
           full_name: fullName.trim() || null,
           company_name: companyName.trim() || null,
           phone: phone.trim() || null,
+          default_shipping_address: defaultShippingAddress.trim() || null,
           updated_at: new Date().toISOString(),
         })
         .eq('id', user.id);
@@ -107,6 +110,23 @@ const CustomerProfilePage: React.FC = () => {
               placeholder="Your phone number (optional)"
               className="w-full bg-slate-800/50 border border-slate-700 rounded-xl px-4 py-3 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-brand-orange/50 focus:border-brand-orange/50"
             />
+          </div>
+
+          {/* Default Shipping Address */}
+          <div>
+            <label className="flex items-center gap-2 text-sm font-medium text-slate-300 mb-1.5">
+              <MapPin className="w-4 h-4" /> Default Shipping Address
+            </label>
+            <textarea
+              value={defaultShippingAddress}
+              onChange={(e) => setDefaultShippingAddress(e.target.value)}
+              placeholder="123 Main St, Apt 4B&#10;Austin, TX 78701&#10;United States"
+              rows={4}
+              className="w-full bg-slate-800/50 border border-slate-700 rounded-xl px-4 py-3 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-brand-orange/50 focus:border-brand-orange/50 resize-none"
+            />
+            <p className="text-xs text-slate-600 mt-1">
+              Saved here for your records. Each order's shipping address is set when the order is placed.
+            </p>
           </div>
 
           {/* Save Button */}

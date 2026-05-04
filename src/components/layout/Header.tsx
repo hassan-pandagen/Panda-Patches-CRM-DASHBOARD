@@ -3,6 +3,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { Link } from 'react-router-dom';
 import { User, LogOut, Settings, ChevronDown, Menu } from 'lucide-react';
 import NotificationBell from '../ui/NotificationBell';
+import ActivityBell from '../ui/ActivityBell';
 
 interface HeaderProps {
   onMenuToggle?: () => void;
@@ -39,6 +40,10 @@ const Header: React.FC<HeaderProps> = ({ onMenuToggle }) => {
 
       {/* Right side - notifications & user menu */}
       <div className="flex items-center gap-2 md:gap-4">
+        {/* New Activity bell — shows customer messages + order events to all staff */}
+        <ActivityBell />
+
+        {/* Legacy notification bell — admin-only, will be deprecated */}
         {role === 'ADMIN' && (
             <NotificationBell />
         )}

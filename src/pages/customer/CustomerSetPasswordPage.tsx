@@ -5,6 +5,7 @@ import { supabase } from '../../services/supabaseClient';
 import Spinner from '../../components/ui/Spinner';
 import SpotlightCard from '../../components/ui/SpotlightCard';
 import { BrandLogo } from '../../components/ui/BrandLogo';
+import TawkToWidget from '../../components/customer/TawkToWidget';
 
 // Prevent iOS input auto-zoom (font must be >= 16px)
 const inputFont = { fontSize: '16px' } as const;
@@ -203,6 +204,9 @@ const CustomerSetPasswordPage: React.FC = () => {
           Need help? Email <span className="text-slate-400">hello@pandapatches.com</span>
         </p>
       </div>
+
+      {/* Live chat available during password setup too */}
+      <TawkToWidget name={undefined} email={email || undefined} />
     </div>
   );
 };

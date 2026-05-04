@@ -5,6 +5,7 @@ import { supabase } from '../../services/supabaseClient';
 import Spinner from '../../components/ui/Spinner';
 import SpotlightCard from '../../components/ui/SpotlightCard';
 import { BrandLogo } from '../../components/ui/BrandLogo';
+import TawkToWidget from '../../components/customer/TawkToWidget';
 
 const inputFont = { fontSize: '16px' } as const; // prevent iOS auto-zoom
 
@@ -302,6 +303,9 @@ const CustomerLoginPage: React.FC = () => {
           Need help? Email <span className="text-slate-400">hello@pandapatches.com</span>
         </p>
       </div>
+
+      {/* Live chat — anyone can chat, even before logging in */}
+      <TawkToWidget name={email || undefined} email={email || undefined} />
     </div>
   );
 };
