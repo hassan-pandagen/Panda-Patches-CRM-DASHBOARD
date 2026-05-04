@@ -317,7 +317,7 @@ const CustomerOrderDetail: React.FC = () => {
           status, reason_category, reason_details,
           sales_agent, is_urgent, lead_source,
           created_at, updated_at, created_by,
-          revision_notes, redo_notes, rush_date, cc_email,
+          revision_notes, redo_notes, rush_date,
           customer_attachment_urls, production_file_urls,
           shipping_attachment_urls, redo_attachments, packing,
           is_urgent_approved, assigned_by, assigned_at, country, attribution

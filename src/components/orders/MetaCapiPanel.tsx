@@ -25,10 +25,9 @@ const MetaCapiPanel: React.FC<Props> = ({ orderId, orderNumber }) => {
   const { success: showSuccess, error: showError } = useToast();
   const [showRaw, setShowRaw] = useState(false);
 
-  // Admin-only
-  if (role !== 'ADMIN') return null;
+  // ALL hooks must be called unconditionally — checks happen AFTER hook calls
+  const isAdmin = role === 'ADMIN';
 
-  // Fetch raw CAPI fields (separate from mapped Order type so we get DB column names)
   const { data: order } = useQuery({
     queryKey: ['order-capi', orderId],
     queryFn: async () => {
@@ -42,24 +41,14 @@ const MetaCapiPanel: React.FC<Props> = ({ orderId, orderNumber }) => {
       if (error) throw error;
       return data as any;
     },
-    enabled: !!orderId,
+    enabled: !!orderId && isAdmin,
     refetchInterval: 15000,
   });
-
-  if (!order) return null;
-  // Hide if order is too new to have any payment
-  if (!order.amount_paid || order.amount_paid <= 0) return null;
-
-  const sent = order.capi_purchase_sent === true;
-  const reversed = order.capi_purchase_reversed === true;
-  const isCancelled = ['CANCELLED', 'REFUNDED'].includes(order.status);
-  const needsReversal = sent && isCancelled && !reversed;
-  const fbtraceId = order.capi_purchase_response?.fbtrace_id;
 
   const retry = useMutation({
     mutationFn: async () => {
       const { data, error } = await supabase.functions.invoke('send-meta-purchase', {
-        body: { order_id: order.id, force: true },
+        body: { order_id: orderId, force: true },
       });
       if (error || data?.error) throw new Error(data?.error || error?.message || 'Failed');
       return data;
@@ -75,7 +64,7 @@ const MetaCapiPanel: React.FC<Props> = ({ orderId, orderNumber }) => {
   const reverse = useMutation({
     mutationFn: async () => {
       const { data, error } = await supabase.functions.invoke('reverse-meta-purchase', {
-        body: { order_id: order.id, reason: `Order ${order.status.toLowerCase()}` },
+        body: { order_id: orderId, reason: order?.status ? `Order ${order.status.toLowerCase()}` : 'manual' },
       });
       if (error || data?.error) throw new Error(data?.error || error?.message || 'Failed');
       return data;
@@ -87,6 +76,17 @@ const MetaCapiPanel: React.FC<Props> = ({ orderId, orderNumber }) => {
     },
     onError: (err: any) => showError('Reversal failed', err?.message || 'Try again'),
   });
+
+  // EARLY RETURNS — only after all hooks are called
+  if (!isAdmin) return null;
+  if (!order) return null;
+  if (!order.amount_paid || order.amount_paid <= 0) return null;
+
+  const sent = order.capi_purchase_sent === true;
+  const reversed = order.capi_purchase_reversed === true;
+  const isCancelled = ['CANCELLED', 'REFUNDED'].includes(order.status);
+  const needsReversal = sent && isCancelled && !reversed;
+  const fbtraceId = order.capi_purchase_response?.fbtrace_id;
 
   const StatusBadge = () => {
     if (reversed) {
