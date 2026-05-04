@@ -10,7 +10,7 @@
 // IMPORTANT: This webhook must use raw body for Stripe signature verification.
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import Stripe from "https://esm.sh/stripe@17.5.0?target=deno";
+import Stripe from "https://esm.sh/stripe@18.5.0?target=denonext";
 
 Deno.serve(async (req: Request) => {
   if (req.method !== "POST") {
@@ -30,7 +30,11 @@ Deno.serve(async (req: Request) => {
       throw new Error("Supabase env vars not configured");
     }
 
-    const stripe = new Stripe(STRIPE_KEY, { apiVersion: "2024-12-18.acacia" });
+    const stripe = new Stripe(STRIPE_KEY, {
+      // @ts-ignore: Stripe types lag behind actual API versions
+      apiVersion: "2025-06-30.basil",
+      httpClient: Stripe.createFetchHttpClient(),
+    });
 
     // Stripe requires the raw body string to verify the signature
     const rawBody = await req.text();

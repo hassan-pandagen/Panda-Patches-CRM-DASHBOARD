@@ -7,7 +7,7 @@
 // which fires the CAPI Purchase event via the Postgres trigger.
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import Stripe from "https://esm.sh/stripe@17.5.0?target=deno";
+import Stripe from "https://esm.sh/stripe@18.5.0?target=denonext";
 import { z } from "https://deno.land/x/zod@v3.22.4/mod.ts";
 
 const ALLOWED_ORIGINS = [
@@ -51,7 +51,12 @@ Deno.serve(async (req: Request) => {
     if (!SUPABASE_URL || !SERVICE_KEY || !ANON_KEY) throw new Error("Supabase env vars missing");
     if (!STRIPE_KEY) throw new Error("STRIPE_SECRET_KEY not configured");
 
-    const stripe = new Stripe(STRIPE_KEY, { apiVersion: "2024-12-18.acacia" });
+    // Stripe SDK in Deno — let it use its default API version (matches account dashboard setting)
+    const stripe = new Stripe(STRIPE_KEY, {
+      // @ts-ignore: Stripe types lag behind actual API versions
+      apiVersion: "2025-06-30.basil",
+      httpClient: Stripe.createFetchHttpClient(),
+    });
 
     // ── Authenticate the caller ──────────────────────────
     const authHeader = req.headers.get("Authorization");
@@ -154,45 +159,56 @@ Deno.serve(async (req: Request) => {
       return labelMap[label] ?? '';
     })();
 
-    const session = await stripe.checkout.sessions.create({
-      mode: "payment",
-      payment_method_types: ["card"],
-      line_items: [
-        {
-          price_data: {
-            currency: "usd",
-            product_data: {
-              name: `${productLabel}${labelText}`,
-              description: order.design_name
-                ? `Order ${order.order_number} · ${order.design_name}`
-                : `Order ${order.order_number}`,
+    let session;
+    try {
+      session = await stripe.checkout.sessions.create({
+        mode: "payment",
+        line_items: [
+          {
+            price_data: {
+              currency: "usd",
+              product_data: {
+                name: `${productLabel}${labelText}`,
+                description: order.design_name
+                  ? `Order ${order.order_number} · ${order.design_name}`
+                  : `Order ${order.order_number}`,
+              },
+              unit_amount: Math.round(chargeAmount * 100),
             },
-            unit_amount: Math.round(chargeAmount * 100),
+            quantity: 1,
           },
-          quantity: 1,
+        ],
+        customer_email: orderEmail || undefined,
+        metadata: {
+          order_id: String(order.id),
+          order_number: String(order.order_number || ""),
+          payment_kind: label,
+          capi_event_id: `order_${order.id}_purchase`,
+          origin: isStaff ? "crm_agent" : "customer_portal",
+          agent_user_id: isStaff ? String(user.id) : "",
+          fbp: String(order.attribution?.fbp || ""),
+          fbc: String(order.attribution?.fbc || ""),
         },
-      ],
-      customer_email: orderEmail || undefined,
-      metadata: {
-        order_id: String(order.id),
-        order_number: String(order.order_number || ""),
-        payment_kind: label,
-        capi_event_id: `order_${order.id}_purchase`,
-        // Indicate origin so webhook knows where it came from
-        origin: isStaff ? "crm_agent" : "customer_portal",
-        agent_user_id: isStaff ? String(user.id) : "",
-        // Carry attribution forward so webhook can attach fbp/fbc to CAPI event if not already on order
-        fbp: String(order.attribution?.fbp || ""),
-        fbc: String(order.attribution?.fbc || ""),
-      },
-      success_url: isStaff
-        ? `https://portal.pandapatches.com/order/${order.order_number}?paid=1`
-        : `https://login.pandapatches.com/customer/order/${order.order_number}?paid=1`,
-      cancel_url: isStaff
-        ? `https://portal.pandapatches.com/order/${order.order_number}?cancelled=1`
-        : `https://login.pandapatches.com/customer/order/${order.order_number}?cancelled=1`,
-      expires_at: Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 7, // 7 days
-    });
+        success_url: isStaff
+          ? `https://portal.pandapatches.com/order/${order.order_number}?paid=1`
+          : `https://login.pandapatches.com/customer/order/${order.order_number}?paid=1`,
+        cancel_url: isStaff
+          ? `https://portal.pandapatches.com/order/${order.order_number}?cancelled=1`
+          : `https://login.pandapatches.com/customer/order/${order.order_number}?cancelled=1`,
+        expires_at: Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 7, // 7 days
+      });
+    } catch (stripeErr: any) {
+      // Surface the actual Stripe error to caller for easier debugging
+      console.error("[create-stripe-checkout] Stripe API error:", stripeErr?.message, stripeErr?.code, stripeErr?.type);
+      return new Response(
+        JSON.stringify({
+          error: `Stripe error: ${stripeErr?.message || 'unknown'}`,
+          code: stripeErr?.code,
+          type: stripeErr?.type,
+        }),
+        { headers: { ...getCorsHeaders(req), "Content-Type": "application/json" }, status: 502 }
+      );
+    }
 
     // Log the link generation in order_history for audit
     await admin.from("order_history").insert({
