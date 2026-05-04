@@ -11,6 +11,7 @@ import Skeleton from '../components/ui/Skeleton';
 import SpotlightCard from '../components/ui/SpotlightCard';
 import { useToast } from '../hooks/useToast';
 import { ArrowLeft, CheckCircle, Trash2, Calendar, Mail, Phone, Paperclip, Image, Pencil, X, AlertTriangle, DollarSign, ExternalLink, MailCheck, Send } from 'lucide-react';
+import MetaChatPanel from '../components/quotes/MetaChatPanel';
 
 // ─── SELECT STYLE ────────────────────────────────────────────────────────────
 const selectStyle = {
@@ -767,6 +768,11 @@ const QuoteDetailPage: React.FC = () => {
               {deletingId ? 'Deleting...' : 'Delete Quote'}
             </Button>
           </div>
+        </div>
+
+        {/* Meta Messenger / Instagram conversation history (only renders if quote came from Meta) */}
+        <div className="mt-6">
+          <MetaChatPanel quoteId={quote.id} quote={quote} />
         </div>
       </div>
     </div>

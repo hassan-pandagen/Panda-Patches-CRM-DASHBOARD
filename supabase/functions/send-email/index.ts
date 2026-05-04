@@ -109,6 +109,9 @@ const getEmailSubject = (templateId: string, data: any): string => {
     // Order message thread templates
     'AGENT_NEW_CUSTOMER_MESSAGE': `[Customer Message] ${data.customer_name || 'A customer'} replied on order ${orderNumber}`,
     'CUSTOMER_NEW_AGENT_MESSAGE': `New message on your order ${orderNumber}`,
+
+    // Stripe payment link sent by agent
+    'CUSTOMER_PAYMENT_LINK': `Payment link for your Panda Patches order ${orderNumber}`,
   };
 
   return subjects[templateId] || `Update from Panda Patches - ${orderNumber}`;
@@ -167,6 +170,9 @@ const getTemplateMessage = (templateId: string, data?: any): string => {
     // Order message thread templates
     'AGENT_NEW_CUSTOMER_MESSAGE': `${data?.customer_name || 'A customer'} just sent a message on order ${data?.order_number || ''}.\n\nMessage: "${(data?.message_content || '').substring(0, 1000)}"\n\nReply through the order in the CRM to keep the conversation in one place.`,
     'CUSTOMER_NEW_AGENT_MESSAGE': `Your account manager just replied on order ${data?.order_number || ''}.\n\n"${(data?.message_content || '').substring(0, 1000)}"\n\nView the full conversation and reply in your portal.`,
+
+    // Stripe payment link
+    'CUSTOMER_PAYMENT_LINK': `Hi ${data?.customer_name || 'there'}, here's your secure payment link for order ${data?.order_number || ''} (${data?.payment_kind || 'payment'} — ${data?.amount || ''}). Tap the button below to pay securely with Stripe. The link is valid for 7 days. Once paid, your order moves to the next stage automatically. Thank you!`,
   };
 
   return messages[templateId] || 'Thank you for your order! Our team is working on your custom patches.';
@@ -268,6 +274,7 @@ const shouldShowFullDetails = (templateId: string): boolean => {
     'CUSTOMER_PASSWORD_RESET',
     'AGENT_NEW_CUSTOMER_MESSAGE',
     'CUSTOMER_NEW_AGENT_MESSAGE',
+    'CUSTOMER_PAYMENT_LINK',
   ];
 
   return !minimalDetailsTemplates.includes(templateId);
@@ -801,7 +808,7 @@ const buildEmailHTML = (templateId: string, data: any): string => {
   </table>
   ` : ''}
 
-  ${(templateId === 'CUSTOMER_WELCOME_INVITE' || templateId === 'CUSTOMER_RETURNING_LOGIN' || templateId === 'CUSTOMER_PASSWORD_RESET') && data.portal_action_url ? `
+  ${(templateId === 'CUSTOMER_WELCOME_INVITE' || templateId === 'CUSTOMER_RETURNING_LOGIN' || templateId === 'CUSTOMER_PASSWORD_RESET' || templateId === 'CUSTOMER_PAYMENT_LINK') && data.portal_action_url ? `
   <!-- CUSTOMER PORTAL CTA BUTTON (mobile-optimized) -->
   <table border="0" cellpadding="0" cellspacing="0" class="module" data-type="button" role="module" style="table-layout: fixed;" width="100%">
     <tbody>
@@ -812,7 +819,7 @@ const buildEmailHTML = (templateId: string, data: any): string => {
               <tr>
                 <td align="center" bgcolor="#FB6E1D" class="inner-td" style="border-radius:8px; font-size:18px; text-align:center; background-color:#FB6E1D;">
                   <a href="${escapeHtml(data.portal_action_url)}" style="background-color:#FB6E1D; border:1px solid #FB6E1D; border-radius:8px; color:#ffffff; display:block; font-size:18px; font-weight:bold; line-height:1.3; padding:18px 24px; text-align:center; text-decoration:none; font-family: 'lucida sans unicode', 'lucida grande', sans-serif;" target="_blank">
-                    ${templateId === 'CUSTOMER_WELCOME_INVITE' ? 'Set Your Password &rarr;' : templateId === 'CUSTOMER_PASSWORD_RESET' ? 'Reset Password &rarr;' : 'Log In &amp; Track Order &rarr;'}
+                    ${templateId === 'CUSTOMER_WELCOME_INVITE' ? 'Set Your Password &rarr;' : templateId === 'CUSTOMER_PASSWORD_RESET' ? 'Reset Password &rarr;' : templateId === 'CUSTOMER_PAYMENT_LINK' ? 'Pay Now &rarr;' : 'Log In &amp; Track Order &rarr;'}
                   </a>
                 </td>
               </tr>

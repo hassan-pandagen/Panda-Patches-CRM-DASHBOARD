@@ -30,6 +30,7 @@ import OrderNotesSection from '../components/orders/OrderNotesSection';
 import OrderMessageThread from '../components/messaging/OrderMessageThread';
 import MarkAsPaidModal from '../components/orders/MarkAsPaidModal';
 import MetaCapiPanel from '../components/orders/MetaCapiPanel';
+import GeneratePaymentLinkModal from '../components/orders/GeneratePaymentLinkModal';
 
 // --- CONFIRMATION MODAL ---
 const ConfirmationModal: React.FC<{
@@ -76,6 +77,7 @@ const OrderPage: React.FC = () => {
     const [isEditingProduction, setIsEditingProduction] = React.useState(false);
     const [isSendingPaymentEmail, setIsSendingPaymentEmail] = React.useState(false);
     const [isMarkPaidModalOpen, setIsMarkPaidModalOpen] = React.useState(false);
+    const [isGenerateLinkModalOpen, setIsGenerateLinkModalOpen] = React.useState(false);
 
     // --- PERMISSION CHECKS ---
     const isAdmin = role === UserRole.ADMIN;
@@ -280,6 +282,18 @@ const OrderPage: React.FC = () => {
                 orderNumber={order.orderNumber}
                 orderAmount={order.orderAmount || 0}
                 amountAlreadyPaid={order.amountPaid || 0}
+            />
+
+            <GeneratePaymentLinkModal
+                isOpen={isGenerateLinkModalOpen}
+                onClose={() => setIsGenerateLinkModalOpen(false)}
+                orderId={order.id}
+                orderNumber={order.orderNumber}
+                orderAmount={order.orderAmount || 0}
+                amountAlreadyPaid={order.amountPaid || 0}
+                customerName={order.customerName}
+                customerEmail={order.customerEmail}
+                customerPhone={order.customerPhone}
             />
 
             {/* Image Preview Modal */}
@@ -716,6 +730,21 @@ const OrderPage: React.FC = () => {
                         {isAdmin && order && (
                             <div className="pt-2">
                                 <MetaCapiPanel orderId={order.id} orderNumber={order.orderNumber} />
+                            </div>
+                        )}
+
+                        {/* GENERATE STRIPE PAYMENT LINK — agent sends to customer */}
+                        {canViewFinancials && order && (order.amountRemaining || 0) > 0 && (
+                            <div className="pt-2">
+                                <Button
+                                    variant="primary"
+                                    size="sm"
+                                    onClick={() => setIsGenerateLinkModalOpen(true)}
+                                    className="w-full bg-blue-500/10 text-blue-400 hover:bg-blue-500/20 hover:text-blue-300 border border-blue-500/30"
+                                >
+                                    <Copy size={14} />
+                                    <span>Generate Stripe Payment Link</span>
+                                </Button>
                             </div>
                         )}
 
