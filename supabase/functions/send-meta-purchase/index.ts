@@ -93,6 +93,47 @@ async function hashIf(v: string | null): Promise<string | undefined> {
 // ─────────────────────────────────────────────────────────────
 // Build user_data with all available signals
 // ─────────────────────────────────────────────────────────────
+// Parse free-text US shipping address into city/state/zip components.
+// Real data shows formats like:
+//   "68 Talcott Ave, Crystal Lake, IL 60014"
+//   "1234 Main St Apt 5, Los Angeles, CA 90001-1234"
+//   "PO Box 99, Some Town, TX 75001"
+// Strategy: ZIP is the most reliable anchor (5-digit pattern). State is the
+// 2-letter code right before the ZIP. City is what's between the previous
+// comma and the state code. Returns nulls when parsing fails — partial data
+// is fine for Meta CAPI (it just lowers EMQ contribution from those fields).
+function parseUsAddress(addr: string | null | undefined): {
+  city: string | null;
+  state: string | null;
+  zip: string | null;
+} {
+  if (!addr) return { city: null, state: null, zip: null };
+
+  // ZIP: first 5-digit run (allows "90001-1234" — we keep just the 5)
+  const zipMatch = addr.match(/\b(\d{5})(?:-\d{4})?\b/);
+  const zip = zipMatch ? zipMatch[1] : null;
+
+  // State: 2-letter uppercase code immediately before the ZIP
+  let state: string | null = null;
+  if (zipMatch) {
+    const beforeZip = addr.slice(0, zipMatch.index).trimEnd();
+    const stateMatch = beforeZip.match(/\b([A-Z]{2})\s*,?\s*$/);
+    if (stateMatch) state = stateMatch[1];
+  }
+
+  // City: text between the LAST comma before the state and the state itself
+  let city: string | null = null;
+  if (state && zipMatch) {
+    const beforeState = addr.slice(0, zipMatch.index).replace(/\s*,?\s*[A-Z]{2}\s*,?\s*$/, '');
+    const lastComma = beforeState.lastIndexOf(',');
+    if (lastComma >= 0) {
+      city = beforeState.slice(lastComma + 1).trim();
+    }
+  }
+
+  return { city, state, zip };
+}
+
 async function buildUserData(order: any) {
   const ud: Record<string, any> = {};
 
@@ -112,9 +153,24 @@ async function buildUserData(order: any) {
     if (ln) ud.ln = [ln];
   }
 
-  // City / state / zip — try to extract from shipping_address if present
-  // shipping_address is free-text so we can't always parse, but country we can.
-  const cn = await hashIf(norm.country(order.country));
+  // ── Address (parsed from shipping_address free-text) ────
+  // Real data analysis showed shipping_address follows US format ~90% of the
+  // time. Adding ct/st/zp is the highest-EMQ-impact change since none of these
+  // were being sent before, and Meta's matcher heavily weights geographic data.
+  const parsed = parseUsAddress(order.shipping_address);
+  const ct = await hashIf(norm.city(parsed.city));
+  if (ct) ud.ct = [ct];
+
+  const st = await hashIf(norm.state(parsed.state));
+  if (st) ud.st = [st];
+
+  const zp = await hashIf(norm.zip(parsed.zip));
+  if (zp) ud.zp = [zp];
+
+  // Country — fall back to 'us' when null because real data shows all web
+  // orders are US (the country dropdown is only used for agent-created orders).
+  const countryRaw = order.country || (parsed.zip ? 'us' : null);
+  const cn = await hashIf(norm.country(countryRaw));
   if (cn) ud.country = [cn];
 
   // external_id — hashed customer email is the most stable customer identifier
@@ -129,9 +185,10 @@ async function buildUserData(order: any) {
   if (attr.fbp) ud.fbp = String(attr.fbp);
   if (attr.fbc) ud.fbc = String(attr.fbc);
   if (attr.client_ip || attr.ip) ud.client_ip_address = String(attr.client_ip || attr.ip);
-  if (attr.user_agent || attr.client_user_agent) {
-    ud.client_user_agent = String(attr.user_agent || attr.client_user_agent);
-  }
+  // Accept both `client_ua` (website's chosen field name) and the older
+  // `user_agent`/`client_user_agent` keys for backward compatibility.
+  const ua = attr.client_ua || attr.user_agent || attr.client_user_agent;
+  if (ua) ud.client_user_agent = String(ua);
 
   return ud;
 }

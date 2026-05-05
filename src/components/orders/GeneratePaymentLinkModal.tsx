@@ -55,6 +55,10 @@ const GeneratePaymentLinkModal: React.FC<Props> = ({
     }
   }, [isOpen, remainingDefault, amountAlreadyPaid]);
 
+  // Async pattern: kick off the Stripe call (returns instantly with request_id),
+  // then poll get_stripe_payment_link_response every second until it returns
+  // status=ready or status=error. This avoids holding a Postgres connection open
+  // for the 10s Stripe takes — see migrations/stripe_payment_link_async_pattern.sql.
   const generate = useMutation({
     mutationFn: async () => {
       const amountNum = parseFloat(amount);
@@ -63,15 +67,47 @@ const GeneratePaymentLinkModal: React.FC<Props> = ({
         throw new Error(`Amount exceeds remaining balance ($${remainingDefault.toFixed(2)})`);
       }
 
-      const { data, error } = await supabase.functions.invoke('create-stripe-checkout', {
-        body: { order_id: orderId, amount: amountNum, label },
-      });
-      if (error || data?.error) {
-        throw new Error(data?.error || error?.message || 'Failed to create payment link');
+      // 1. Kick off the request — returns instantly
+      const { data: requestData, error: requestErr } = await supabase.rpc(
+        'create_stripe_payment_link_request',
+        { p_order_id: orderId, p_amount: amountNum, p_label: label }
+      );
+      if (requestErr) {
+        throw new Error(requestErr.message || 'Failed to create payment link');
       }
-      return data;
+      const requestId = requestData?.request_id;
+      const ctx = {
+        order_number: requestData?.order_number,
+        customer_email: requestData?.customer_email,
+        customer_name: requestData?.customer_name,
+        amount: requestData?.amount,
+      };
+      if (!requestId) throw new Error('No request_id returned');
+
+      // 2. Poll for result — up to 30s (Stripe usually responds in 8-12s)
+      const maxAttempts = 30;
+      const intervalMs = 1000;
+      for (let i = 0; i < maxAttempts; i++) {
+        await new Promise(r => setTimeout(r, intervalMs));
+        const { data: respData, error: respErr } = await supabase.rpc(
+          'get_stripe_payment_link_response',
+          { p_request_id: requestId }
+        );
+        if (respErr) throw new Error(respErr.message);
+        if (respData?.status === 'ready') {
+          return { ...respData, ...ctx };
+        }
+        if (respData?.status === 'error') {
+          throw new Error(respData.message || 'Stripe rejected the request');
+        }
+        if (respData?.status === 'timeout') {
+          throw new Error('Stripe did not respond in time. Please try again.');
+        }
+        // status === 'pending' — keep polling
+      }
+      throw new Error('Stripe did not respond within 30 seconds');
     },
-    onSuccess: (data) => {
+    onSuccess: (data: any) => {
       setGenerated({
         url: data.url,
         amount: data.amount,

@@ -154,12 +154,22 @@ Deno.serve(async (req: Request) => {
 
     const VERIFY_TOKEN = Deno.env.get('META_WEBHOOK_VERIFY_TOKEN') ?? '';
 
-    if (mode === 'subscribe' && token === VERIFY_TOKEN && challenge) {
+    // Constant-time verify_token compare (prevents timing-leak token discovery)
+    let tokenOk = false;
+    if (token && VERIFY_TOKEN && token.length === VERIFY_TOKEN.length) {
+      let diff = 0;
+      for (let i = 0; i < token.length; i++) {
+        diff |= token.charCodeAt(i) ^ VERIFY_TOKEN.charCodeAt(i);
+      }
+      tokenOk = diff === 0;
+    }
+
+    if (mode === 'subscribe' && tokenOk && challenge) {
       console.log('[meta-webhook] Verification successful');
       return new Response(challenge, { status: 200, headers: { 'Content-Type': 'text/plain' } });
     }
 
-    console.warn('[meta-webhook] Verification failed', { mode, token: token ? '***' : 'missing' });
+    console.warn('[meta-webhook] Verification failed', { mode, hasToken: !!token });
     return new Response('Forbidden', { status: 403 });
   }
 

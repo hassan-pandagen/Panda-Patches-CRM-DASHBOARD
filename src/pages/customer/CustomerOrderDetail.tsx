@@ -543,7 +543,12 @@ const SpecItem: React.FC<{ label: string; value: string; highlight?: boolean }> 
   </div>
 );
 
-// ── Pay Balance via Stripe (hits create-stripe-checkout edge function) ──
+// ── Pay Balance via Stripe (async pg_net pattern) ──
+// Kicks off Stripe Payment Link creation via create_stripe_payment_link_request,
+// then polls get_stripe_payment_link_response until ready. Avoids holding a
+// Postgres connection open for the 10s Stripe takes — keeps statement timeout
+// at default 8s while still handling slow external calls correctly.
+// See migrations/stripe_payment_link_async_pattern.sql.
 const PayBalanceButton: React.FC<{ orderId: number; amount: number }> = ({ orderId, amount }) => {
   const [isCreating, setIsCreating] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
@@ -552,15 +557,32 @@ const PayBalanceButton: React.FC<{ orderId: number; amount: number }> = ({ order
     setIsCreating(true);
     setError(null);
     try {
-      const { data, error: fnErr } = await supabase.functions.invoke('create-stripe-checkout', {
-        body: { order_id: orderId },
-      });
-      if (fnErr || data?.error) {
-        throw new Error(data?.error || fnErr?.message || 'Could not create checkout session');
+      // 1. Kick off the request
+      const { data: reqData, error: reqErr } = await supabase.rpc(
+        'create_stripe_payment_link_request',
+        { p_order_id: orderId, p_label: 'balance' }
+      );
+      if (reqErr) throw new Error(reqErr.message || 'Could not start checkout');
+      const requestId = reqData?.request_id;
+      if (!requestId) throw new Error('No request_id returned');
+
+      // 2. Poll for the URL (up to 30s)
+      let url: string | undefined;
+      for (let i = 0; i < 30; i++) {
+        await new Promise(r => setTimeout(r, 1000));
+        const { data: respData, error: respErr } = await supabase.rpc(
+          'get_stripe_payment_link_response',
+          { p_request_id: requestId }
+        );
+        if (respErr) throw new Error(respErr.message);
+        if (respData?.status === 'ready') { url = respData.url; break; }
+        if (respData?.status === 'error') throw new Error(respData.message || 'Stripe rejected the request');
+        if (respData?.status === 'timeout') throw new Error('Stripe did not respond. Try again.');
       }
-      if (!data?.url) throw new Error('No checkout URL returned');
-      // Redirect to Stripe-hosted Checkout
-      window.location.href = data.url;
+      if (!url) throw new Error('Stripe did not respond in time');
+
+      // Redirect to Stripe-hosted payment link
+      window.location.href = url;
     } catch (err: any) {
       setError(err.message || 'Something went wrong. Try again.');
       setIsCreating(false);

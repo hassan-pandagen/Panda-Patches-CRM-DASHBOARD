@@ -11,6 +11,7 @@ import Button from "../components/ui/Button";
 import GlassCard from "../components/ui/GlassCard";
 import SpotlightCard from "../components/ui/SpotlightCard";
 import { ChangePasswordForm } from "../components/settings/ChangePasswordForm";
+import MetaConnectionPanel from "../components/settings/MetaConnectionPanel";
 import Spinner from "../components/ui/Spinner";
 import { CheckCircle, X, Trash2, Search, HardDrive, AlertTriangle } from "lucide-react";
 import { scanOrphanedFiles, deleteOrphanedFiles, type CleanupReport, type OrphanedFile } from "../services/storageCleanup";
@@ -172,6 +173,9 @@ const SettingsPage: React.FC = () => {
       )}
 
       <ChangePasswordForm />
+
+      {/* Meta / Facebook Page Connection — Admin Only */}
+      {role === UserRole.ADMIN && <MetaConnectionPanel />}
 
       {/* Storage Cleanup — Admin Only */}
       {role === UserRole.ADMIN && <StorageCleanupSection />}

@@ -1,13 +1,27 @@
 // MetaChatPanel — shows on Quote detail when the quote originated from Messenger or Instagram DM.
-// Displays: channel badge, ad attribution badge, full message history, "Open in Business Suite" deep link.
-// Reps reply via Business Suite (Meta's tool) — we record inbound messages here for context only.
+// Displays: channel badge, ad attribution badge, full message history, inline reply composer.
+// Reps can reply directly from CRM via send-meta-message edge function.
 
-import React from 'react';
-import { useQuery } from '@tanstack/react-query';
+import React, { useState, useMemo, useRef } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../../services/supabaseClient';
+import { useToast } from '../../hooks/useToast';
 import {
   MessageSquare, Instagram, Megaphone, ExternalLink, User, Image as ImageIcon,
+  Send, AlertTriangle,
 } from 'lucide-react';
+
+// Meta requires a tag for messages sent >24h after the customer's last inbound.
+// POST_PURCHASE_UPDATE covers most CRM use cases ("your patches shipped",
+// "ready for QA approval"). HUMAN_AGENT covers ad-hoc human follow-ups.
+type MessageTag = 'POST_PURCHASE_UPDATE' | 'CONFIRMED_EVENT_UPDATE' | 'ACCOUNT_UPDATE' | 'HUMAN_AGENT';
+
+const TAG_OPTIONS: { id: MessageTag; label: string; hint: string }[] = [
+  { id: 'POST_PURCHASE_UPDATE',    label: 'Post-Purchase Update', hint: 'Order/shipping status updates' },
+  { id: 'CONFIRMED_EVENT_UPDATE',  label: 'Confirmed Event',      hint: 'Reminders for confirmed appointments' },
+  { id: 'ACCOUNT_UPDATE',          label: 'Account Update',       hint: 'Customer profile or account changes' },
+  { id: 'HUMAN_AGENT',             label: 'Human Agent',          hint: 'Live agent follow-up within 7 days' },
+];
 
 interface Props {
   quoteId: number;
@@ -20,6 +34,12 @@ const MetaChatPanel: React.FC<Props> = ({ quoteId, quote }) => {
 
   const channel: 'messenger' | 'instagram' = quote.meta_channel || 'messenger';
   const isFromAd = !!quote.meta_ad_id;
+
+  const queryClient = useQueryClient();
+  const { success: showSuccess, error: showError } = useToast();
+  const [replyText, setReplyText] = useState('');
+  const [selectedTag, setSelectedTag] = useState<MessageTag>('POST_PURCHASE_UPDATE');
+  const lastSendAtRef = useRef<number>(0); // 250ms throttle (Meta per-page rate limit)
 
   const { data: messages = [], isLoading } = useQuery({
     queryKey: ['meta-messages', quoteId],
@@ -36,10 +56,50 @@ const MetaChatPanel: React.FC<Props> = ({ quoteId, quote }) => {
     refetchInterval: 30000,
   });
 
+  // Compute whether we're inside Meta's 24h freeform messaging window.
+  // Outside the window, Meta requires a MESSAGE_TAG (POST_PURCHASE_UPDATE etc).
+  const lastInboundMs = useMemo(() => {
+    const lastInbound = [...messages].reverse().find((m: any) => m.direction === 'inbound');
+    return lastInbound ? new Date(lastInbound.received_at).getTime() : 0;
+  }, [messages]);
+
+  const hoursSinceInbound = lastInboundMs > 0 ? (Date.now() - lastInboundMs) / 3_600_000 : Infinity;
+  const insideWindow = hoursSinceInbound < 24;
+
   const businessSuiteUrl =
     channel === 'instagram'
       ? 'https://business.facebook.com/latest/inbox/instagram'
       : 'https://business.facebook.com/latest/inbox/messenger';
+
+  const sendMessage = useMutation({
+    mutationFn: async () => {
+      const text = replyText.trim();
+      if (!text) throw new Error('Message is empty');
+      if (text.length > 2000) throw new Error('Message exceeds 2000 characters');
+
+      // 250ms throttle (Meta per-page rate limit ~40 msgs/sec)
+      const since = Date.now() - lastSendAtRef.current;
+      if (since < 250) {
+        await new Promise(r => setTimeout(r, 250 - since));
+      }
+      lastSendAtRef.current = Date.now();
+
+      const body: any = { quote_id: quoteId, text };
+      if (!insideWindow) body.tag = selectedTag;
+
+      const { data, error } = await supabase.functions.invoke('send-meta-message', { body });
+      if (error || data?.error) {
+        throw new Error(data?.error || error?.message || 'Failed to send message');
+      }
+      return data;
+    },
+    onSuccess: () => {
+      setReplyText('');
+      showSuccess('Message sent');
+      queryClient.invalidateQueries({ queryKey: ['meta-messages', quoteId] });
+    },
+    onError: (err: any) => showError('Send failed', err?.message || 'Try again'),
+  });
 
   return (
     <div className="bg-slate-900/60 backdrop-blur-xl border border-white/10 rounded-2xl overflow-hidden">
@@ -125,12 +185,80 @@ const MetaChatPanel: React.FC<Props> = ({ quoteId, quote }) => {
         )}
       </div>
 
-      {/* Footer note */}
-      <div className="px-5 py-3 border-t border-white/10 bg-slate-900/40">
-        <p className="text-[11px] text-slate-500">
-          💡 Reply to this customer in <strong className="text-slate-400">Meta Business Suite</strong>.
-          Inbound messages auto-log here for context. Outbound messages are not tracked.
-        </p>
+      {/* Reply composer */}
+      <div className="border-t border-white/10 bg-slate-900/40">
+        {/* Outside-window banner with tag selector */}
+        {!insideWindow && (
+          <div className="px-5 py-3 bg-amber-500/5 border-b border-amber-500/20">
+            <div className="flex items-start gap-2 mb-2">
+              <AlertTriangle className="w-4 h-4 text-amber-400 mt-0.5 shrink-0" />
+              <div className="text-xs text-amber-200">
+                <p className="font-medium mb-0.5">Outside 24h window</p>
+                <p className="text-amber-200/70">
+                  {lastInboundMs === 0
+                    ? 'Customer has not messaged yet — pick a message tag.'
+                    : `Last reply was ${Math.round(hoursSinceInbound)}h ago. Pick a message tag below.`}
+                </p>
+              </div>
+            </div>
+            <select
+              value={selectedTag}
+              onChange={(e) => setSelectedTag(e.target.value as MessageTag)}
+              className="w-full px-3 py-2 bg-slate-800 border border-amber-500/30 rounded-lg text-xs text-white focus:outline-none focus:border-amber-500/60"
+            >
+              {TAG_OPTIONS.map(opt => (
+                <option key={opt.id} value={opt.id}>{opt.label} — {opt.hint}</option>
+              ))}
+            </select>
+          </div>
+        )}
+
+        <div className="p-3">
+          <textarea
+            value={replyText}
+            onChange={(e) => setReplyText(e.target.value)}
+            onKeyDown={(e) => {
+              if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+                e.preventDefault();
+                if (replyText.trim() && !sendMessage.isPending) sendMessage.mutate();
+              }
+            }}
+            placeholder={insideWindow
+              ? `Reply to ${quote.customer_name || 'customer'}…  (Cmd+Enter to send)`
+              : `Send tagged message…  (Cmd+Enter to send)`}
+            rows={2}
+            maxLength={2000}
+            className="w-full px-3 py-2 bg-slate-800 border border-white/10 rounded-lg text-sm text-white placeholder-slate-500 focus:outline-none focus:border-brand-orange/50 resize-none"
+          />
+          <div className="flex items-center justify-between mt-2">
+            <p className="text-[10px] text-slate-500">
+              {replyText.length}/2000 · sent via Meta {channel === 'instagram' ? 'Instagram' : 'Messenger'}
+            </p>
+            <button
+              onClick={() => sendMessage.mutate()}
+              disabled={!replyText.trim() || sendMessage.isPending}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-brand-orange hover:bg-brand-orange/90 disabled:opacity-30 disabled:cursor-not-allowed text-white rounded-lg text-xs font-medium transition-all"
+            >
+              <Send className="w-3 h-3" />
+              {sendMessage.isPending ? 'Sending…' : 'Send'}
+            </button>
+          </div>
+        </div>
+
+        <div className="px-5 py-2 border-t border-white/5 flex items-center justify-between">
+          <p className="text-[10px] text-slate-500">
+            💡 Replies sync to {channel === 'instagram' ? 'Instagram' : 'Messenger'}.
+          </p>
+          <a
+            href={businessSuiteUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-[10px] text-slate-500 hover:text-slate-300 inline-flex items-center gap-1"
+          >
+            Or open in Business Suite
+            <ExternalLink className="w-2.5 h-2.5" />
+          </a>
+        </div>
       </div>
     </div>
   );
