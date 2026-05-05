@@ -75,6 +75,16 @@ export const mapDbToQuote = (data: any): Quote => {
 
     attribution: data.attribution ?? null,
 
+    // Meta chat fields (preserve snake_case keys — MetaChatPanel reads these directly)
+    meta_psid: data.meta_psid ?? null,
+    meta_ig_id: data.meta_ig_id ?? null,
+    meta_channel: data.meta_channel ?? null,
+    meta_first_message_at: data.meta_first_message_at ?? null,
+    meta_ad_id: data.meta_ad_id ?? null,
+    meta_ad_creative_id: data.meta_ad_creative_id ?? null,
+    meta_ctwa_clid: data.meta_ctwa_clid ?? null,
+    meta_referral_source: data.meta_referral_source ?? null,
+
     notes: data.notes,
     mockupUrls: Array.isArray(data.mockupUrls ?? data.mockup_urls) ? (data.mockupUrls ?? data.mockup_urls) : [],
     customerAttachmentUrls: Array.isArray(data.customerAttachmentUrls ?? data.customer_attachment_urls) ? (data.customerAttachmentUrls ?? data.customer_attachment_urls) : [],

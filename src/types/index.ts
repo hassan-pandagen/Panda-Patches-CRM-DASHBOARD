@@ -214,6 +214,16 @@ export interface Quote {
    // --- Marketing Attribution (for Meta CAPI etc.) ---
    attribution: Record<string, unknown> | null;
 
+   // --- Meta Messenger / Instagram chat (snake_case to match DB column names) ---
+   meta_psid?: string | null;
+   meta_ig_id?: string | null;
+   meta_channel?: 'messenger' | 'instagram' | null;
+   meta_first_message_at?: string | null;
+   meta_ad_id?: string | null;
+   meta_ad_creative_id?: string | null;
+   meta_ctwa_clid?: string | null;
+   meta_referral_source?: string | null;
+
    // --- Notes & Attachments ---
    notes?: string;
    mockupUrls?: string[];
