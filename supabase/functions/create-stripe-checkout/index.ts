@@ -7,7 +7,7 @@
 // which fires the CAPI Purchase event via the Postgres trigger.
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import Stripe from "https://esm.sh/stripe@18.5.0?target=denonext";
+import Stripe from "https://esm.sh/stripe@14?target=denonext";
 import { z } from "https://deno.land/x/zod@v3.22.4/mod.ts";
 
 const ALLOWED_ORIGINS = [
@@ -51,10 +51,10 @@ Deno.serve(async (req: Request) => {
     if (!SUPABASE_URL || !SERVICE_KEY || !ANON_KEY) throw new Error("Supabase env vars missing");
     if (!STRIPE_KEY) throw new Error("STRIPE_SECRET_KEY not configured");
 
-    // Stripe SDK in Deno — let it use its default API version (matches account dashboard setting)
+    // Stripe SDK pinned to v14 — the version Supabase's official example uses for Deno Edge Functions.
+    // v18.x has export-map issues that cause boot failures (502 Bad Gateway).
     const stripe = new Stripe(STRIPE_KEY, {
-      // @ts-ignore: Stripe types lag behind actual API versions
-      apiVersion: "2025-06-30.basil",
+      apiVersion: "2024-11-20",
       httpClient: Stripe.createFetchHttpClient(),
     });
 

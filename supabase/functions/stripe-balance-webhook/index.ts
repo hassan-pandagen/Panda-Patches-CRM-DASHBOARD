@@ -10,7 +10,7 @@
 // IMPORTANT: This webhook must use raw body for Stripe signature verification.
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import Stripe from "https://esm.sh/stripe@18.5.0?target=denonext";
+import Stripe from "https://esm.sh/stripe@14?target=denonext";
 
 Deno.serve(async (req: Request) => {
   if (req.method !== "POST") {
@@ -30,11 +30,15 @@ Deno.serve(async (req: Request) => {
       throw new Error("Supabase env vars not configured");
     }
 
+    // Stripe SDK pinned to v14 — version Supabase's official example uses for Deno Edge Functions.
+    // v18.x has export-map issues that cause boot failures (502 Bad Gateway).
+    // For webhook signature verification we need createSubtleCryptoProvider (Web Crypto API
+    // works in Deno; createFetchHttpClient is for outbound calls, not signature verification).
     const stripe = new Stripe(STRIPE_KEY, {
-      // @ts-ignore: Stripe types lag behind actual API versions
-      apiVersion: "2025-06-30.basil",
+      apiVersion: "2024-11-20",
       httpClient: Stripe.createFetchHttpClient(),
     });
+    const cryptoProvider = Stripe.createSubtleCryptoProvider();
 
     // Stripe requires the raw body string to verify the signature
     const rawBody = await req.text();
@@ -43,18 +47,29 @@ Deno.serve(async (req: Request) => {
 
     let event: Stripe.Event;
     try {
-      event = await stripe.webhooks.constructEventAsync(rawBody, sig, WEBHOOK_SECRET);
+      event = await stripe.webhooks.constructEventAsync(rawBody, sig, WEBHOOK_SECRET, undefined, cryptoProvider);
     } catch (err: any) {
       console.error("[stripe-balance-webhook] signature verification failed:", err.message);
       return new Response(`Webhook Error: ${err.message}`, { status: 400 });
     }
 
-    // ACK immediately, then process async-style (Deno keeps the function alive)
-    // We deliberately do NOT await the processing here in a separate fire-and-forget
-    // because Supabase Edge Functions don't support background tasks. So we DO process
-    // synchronously and respond at the end. This is < 5s for our use case.
-
     const admin = createClient(SUPABASE_URL, SERVICE_KEY);
+
+    // Idempotency: Stripe retries aggressively on transient failures. Without dedup on event.id
+    // a single payment could increment amount_paid twice. Insert event.id into stripe_webhook_events
+    // (unique constraint) — if duplicate, ACK and skip processing.
+    const { error: dedupErr } = await admin
+      .from("stripe_webhook_events")
+      .insert({ event_id: event.id, event_type: event.type });
+    if (dedupErr) {
+      // Postgres unique-violation code is 23505 — duplicate event, already processed
+      if ((dedupErr as any).code === "23505") {
+        console.log(`[stripe-balance-webhook] duplicate event ${event.id} ignored`);
+        return new Response(JSON.stringify({ received: true, deduped: true }), { status: 200 });
+      }
+      console.error("[stripe-balance-webhook] dedup insert failed:", dedupErr);
+      // Don't block on dedup table errors — proceed (webhook handler is still idempotent at order level via amount_paid recalc)
+    }
 
     if (event.type === "checkout.session.completed") {
       const session = event.data.object as Stripe.Checkout.Session;
