@@ -8,7 +8,8 @@ export const PATCHES_TYPE_OPTIONS: string[] = [
   'Glitter+Embroidery', 'Glitter+Chenille', 'Glitter+Embroidery 3D',
   'DTF+Chenille', 'DTF+Embroidery', 'Embroidery Transfer',
   'DST Service', 'Challenge Coin',
-  'PVC Keychains', 'Embroidered Keychains', 'Leather Keychains'
+  'PVC Keychains', 'Embroidered Keychains', 'Leather Keychains',
+  'Sample Box', 'Customize Sample Box'
 ];
 export const DESIGN_BACKING_OPTIONS: string[] = ['Iron-on', 'Velcro', 'Adhesive', 'None'];
 // Shipping countries we sell into. Extend this list AND the CHECK constraint in
@@ -19,6 +20,7 @@ export const COUNTRY_OPTIONS: string[] = [
   'CANADA',
   'NEW ZEALAND',
   'UK',
+  'ICELAND',
 ];
 
 export const LEAD_SOURCE_OPTIONS: string[] = [
