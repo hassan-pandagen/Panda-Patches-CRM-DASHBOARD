@@ -5,10 +5,17 @@
 //
 // In both cases, on payment our stripe-balance-webhook updates orders.amount_paid,
 // which fires the CAPI Purchase event via the Postgres trigger.
+//
+// We call Stripe's REST API directly via fetch instead of importing the Stripe SDK.
+// The SDK (any version) has had recurring import/boot failures on Supabase Edge Runtime
+// (Deno) — esm.sh's bundle for the SDK trips up the loader. Direct REST calls work always.
 
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import Stripe from "https://esm.sh/stripe@14?target=denonext";
+// Pin to 2.49.10+ — 2.49.9 had a JSR resolution bug that caused gateway 502s on boot.
+// See: https://github.com/orgs/supabase/discussions/36109
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.10";
 import { z } from "https://deno.land/x/zod@v3.22.4/mod.ts";
+
+const STRIPE_API = "https://api.stripe.com/v1";
 
 const ALLOWED_ORIGINS = [
   "https://login.pandapatches.com",
@@ -30,12 +37,55 @@ function getCorsHeaders(req: Request) {
 
 const bodySchema = z.object({
   order_id: z.number().int().positive(),
-  // Optional: agent can specify amount (defaults to remaining balance).
-  // Useful for collecting deposits like 50% upfront.
   amount: z.number().positive().optional(),
-  // Optional: agent label for the payment (e.g. "Deposit", "Balance", "Custom")
   label: z.enum(['deposit', 'balance', 'full', 'custom']).optional().default('custom'),
 });
+
+// Stripe expects application/x-www-form-urlencoded with bracketed nested keys:
+//   line_items[0][price_data][currency]=usd
+// This helper turns a plain object/array structure into that form.
+function stripeFormEncode(obj: Record<string, any>, prefix = ""): string {
+  const parts: string[] = [];
+  for (const key of Object.keys(obj)) {
+    const value = obj[key];
+    if (value === undefined || value === null) continue;
+    const fieldName = prefix ? `${prefix}[${key}]` : key;
+    if (Array.isArray(value)) {
+      value.forEach((item, idx) => {
+        if (typeof item === "object" && item !== null) {
+          parts.push(stripeFormEncode(item, `${fieldName}[${idx}]`));
+        } else {
+          parts.push(`${encodeURIComponent(`${fieldName}[${idx}]`)}=${encodeURIComponent(String(item))}`);
+        }
+      });
+    } else if (typeof value === "object") {
+      parts.push(stripeFormEncode(value, fieldName));
+    } else {
+      parts.push(`${encodeURIComponent(fieldName)}=${encodeURIComponent(String(value))}`);
+    }
+  }
+  return parts.filter(Boolean).join("&");
+}
+
+async function stripeRequest(path: string, body: Record<string, any>, secretKey: string): Promise<any> {
+  const res = await fetch(`${STRIPE_API}${path}`, {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${secretKey}`,
+      "Content-Type": "application/x-www-form-urlencoded",
+    },
+    body: stripeFormEncode(body),
+  });
+  const json = await res.json();
+  if (!res.ok) {
+    const err = new Error(json?.error?.message || `Stripe API ${res.status}`);
+    (err as any).code = json?.error?.code;
+    (err as any).type = json?.error?.type;
+    (err as any).status = res.status;
+    throw err;
+  }
+  return json;
+}
 
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
@@ -50,13 +100,6 @@ Deno.serve(async (req: Request) => {
 
     if (!SUPABASE_URL || !SERVICE_KEY || !ANON_KEY) throw new Error("Supabase env vars missing");
     if (!STRIPE_KEY) throw new Error("STRIPE_SECRET_KEY not configured");
-
-    // Stripe SDK pinned to v14 — the version Supabase's official example uses for Deno Edge Functions.
-    // v18.x has export-map issues that cause boot failures (502 Bad Gateway).
-    const stripe = new Stripe(STRIPE_KEY, {
-      apiVersion: "2024-11-20",
-      httpClient: Stripe.createFetchHttpClient(),
-    });
 
     // ── Authenticate the caller ──────────────────────────
     const authHeader = req.headers.get("Authorization");
@@ -108,7 +151,6 @@ Deno.serve(async (req: Request) => {
         );
       }
     }
-    // Staff are allowed to generate links for any order — no further auth needed.
 
     // ── Validate balance ─────────────────────────────────
     const remaining = (order.order_amount || 0) - (order.amount_paid || 0);
@@ -127,8 +169,6 @@ Deno.serve(async (req: Request) => {
     }
 
     // ── Determine charge amount ──────────────────────────
-    // Customer always pays the full remaining balance.
-    // Staff can specify a partial amount (e.g. 50% deposit).
     let chargeAmount = remaining;
     if (isStaff && amount) {
       if (amount > remaining + 0.01) {
@@ -147,10 +187,9 @@ Deno.serve(async (req: Request) => {
         ? `${order.patches_type || "Patches"} × ${order.patches_quantity} (${order.design_name})`
         : `Order ${order.order_number}`;
 
-    // Friendly label on the Checkout page
     const labelText = (() => {
       const isPartial = chargeAmount < remaining - 0.01;
-      const labelMap = {
+      const labelMap: Record<string, string> = {
         deposit: ' — Deposit Payment',
         balance: ' — Balance Payment',
         full: '',
@@ -159,46 +198,48 @@ Deno.serve(async (req: Request) => {
       return labelMap[label] ?? '';
     })();
 
+    const sessionParams: Record<string, any> = {
+      mode: "payment",
+      line_items: [
+        {
+          price_data: {
+            currency: "usd",
+            product_data: {
+              name: `${productLabel}${labelText}`,
+              description: order.design_name
+                ? `Order ${order.order_number} · ${order.design_name}`
+                : `Order ${order.order_number}`,
+            },
+            unit_amount: Math.round(chargeAmount * 100),
+          },
+          quantity: 1,
+        },
+      ],
+      metadata: {
+        order_id: String(order.id),
+        order_number: String(order.order_number || ""),
+        payment_kind: label,
+        capi_event_id: `order_${order.id}_purchase`,
+        origin: isStaff ? "crm_agent" : "customer_portal",
+        agent_user_id: isStaff ? String(user.id) : "",
+        fbp: String(order.attribution?.fbp || ""),
+        fbc: String(order.attribution?.fbc || ""),
+      },
+      success_url: isStaff
+        ? `https://portal.pandapatches.com/order/${order.order_number}?paid=1`
+        : `https://login.pandapatches.com/customer/order/${order.order_number}?paid=1`,
+      cancel_url: isStaff
+        ? `https://portal.pandapatches.com/order/${order.order_number}?cancelled=1`
+        : `https://login.pandapatches.com/customer/order/${order.order_number}?cancelled=1`,
+      expires_at: Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 7, // 7 days
+    };
+
+    if (orderEmail) sessionParams.customer_email = orderEmail;
+
     let session;
     try {
-      session = await stripe.checkout.sessions.create({
-        mode: "payment",
-        line_items: [
-          {
-            price_data: {
-              currency: "usd",
-              product_data: {
-                name: `${productLabel}${labelText}`,
-                description: order.design_name
-                  ? `Order ${order.order_number} · ${order.design_name}`
-                  : `Order ${order.order_number}`,
-              },
-              unit_amount: Math.round(chargeAmount * 100),
-            },
-            quantity: 1,
-          },
-        ],
-        customer_email: orderEmail || undefined,
-        metadata: {
-          order_id: String(order.id),
-          order_number: String(order.order_number || ""),
-          payment_kind: label,
-          capi_event_id: `order_${order.id}_purchase`,
-          origin: isStaff ? "crm_agent" : "customer_portal",
-          agent_user_id: isStaff ? String(user.id) : "",
-          fbp: String(order.attribution?.fbp || ""),
-          fbc: String(order.attribution?.fbc || ""),
-        },
-        success_url: isStaff
-          ? `https://portal.pandapatches.com/order/${order.order_number}?paid=1`
-          : `https://login.pandapatches.com/customer/order/${order.order_number}?paid=1`,
-        cancel_url: isStaff
-          ? `https://portal.pandapatches.com/order/${order.order_number}?cancelled=1`
-          : `https://login.pandapatches.com/customer/order/${order.order_number}?cancelled=1`,
-        expires_at: Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 7, // 7 days
-      });
+      session = await stripeRequest("/checkout/sessions", sessionParams, STRIPE_KEY);
     } catch (stripeErr: any) {
-      // Surface the actual Stripe error to caller for easier debugging
       console.error("[create-stripe-checkout] Stripe API error:", stripeErr?.message, stripeErr?.code, stripeErr?.type);
       return new Response(
         JSON.stringify({

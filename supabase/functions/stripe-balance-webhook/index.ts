@@ -4,13 +4,76 @@
 // which automatically triggers the CAPI Purchase event via the
 // fire_capi_purchase_on_paid Postgres trigger.
 //
-// Idempotency: the trigger checks capi_purchase_sent flag, so duplicate webhook
-// deliveries are safe.
+// Two layers of idempotency:
+//   1. stripe_webhook_events table dedupes on event.id (Stripe retries up to 3 days)
+//   2. capi_purchase_sent flag on orders table prevents duplicate CAPI fires
 //
 // IMPORTANT: This webhook must use raw body for Stripe signature verification.
+// We do signature verification with native Web Crypto (HMAC-SHA256) — no Stripe SDK.
+// SDK has had recurring import/boot issues on Supabase Edge Runtime.
 
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import Stripe from "https://esm.sh/stripe@14?target=denonext";
+// Pin to 2.49.10+ — 2.49.9 had a JSR resolution bug that caused gateway 502s on boot.
+// See: https://github.com/orgs/supabase/discussions/36109
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.10";
+
+// ── Stripe signature verification (no SDK) ────────────────────────────────
+// Stripe sends a header like:
+//   stripe-signature: t=1492774577,v1=5257a869...,v0=...
+// Algorithm:
+//   1. Parse header into timestamp `t` and signatures `v1`
+//   2. Compute HMAC-SHA256 of `${t}.${rawBody}` using your webhook secret
+//   3. Compare hex result against any v1 (constant time)
+//   4. Reject if timestamp is older than tolerance window (default 5 min)
+const enc = new TextEncoder();
+
+async function hmacSha256Hex(key: string, data: string): Promise<string> {
+  const cryptoKey = await crypto.subtle.importKey(
+    "raw",
+    enc.encode(key),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"]
+  );
+  const sig = await crypto.subtle.sign("HMAC", cryptoKey, enc.encode(data));
+  return [...new Uint8Array(sig)].map(b => b.toString(16).padStart(2, "0")).join("");
+}
+
+function constantTimeEqual(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return diff === 0;
+}
+
+async function verifyStripeSignature(
+  rawBody: string,
+  sigHeader: string,
+  secret: string,
+  toleranceSeconds = 300,
+): Promise<{ valid: boolean; reason?: string }> {
+  const parts = sigHeader.split(",").map(p => p.trim());
+  let timestamp: string | null = null;
+  const v1Sigs: string[] = [];
+  for (const p of parts) {
+    const [k, v] = p.split("=");
+    if (k === "t") timestamp = v;
+    else if (k === "v1") v1Sigs.push(v);
+  }
+  if (!timestamp || v1Sigs.length === 0) {
+    return { valid: false, reason: "Malformed signature header" };
+  }
+
+  const ageSec = Math.floor(Date.now() / 1000) - parseInt(timestamp, 10);
+  if (ageSec > toleranceSeconds) {
+    return { valid: false, reason: `Timestamp too old (${ageSec}s)` };
+  }
+
+  const expected = await hmacSha256Hex(secret, `${timestamp}.${rawBody}`);
+  for (const sig of v1Sigs) {
+    if (constantTimeEqual(expected, sig)) return { valid: true };
+  }
+  return { valid: false, reason: "Signature mismatch" };
+}
 
 Deno.serve(async (req: Request) => {
   if (req.method !== "POST") {
@@ -20,59 +83,41 @@ Deno.serve(async (req: Request) => {
   try {
     const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
     const SERVICE_KEY  = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
-    const STRIPE_KEY   = Deno.env.get("STRIPE_SECRET_KEY") ?? "";
     const WEBHOOK_SECRET = Deno.env.get("STRIPE_BALANCE_WEBHOOK_SECRET") ?? "";
 
-    if (!STRIPE_KEY || !WEBHOOK_SECRET) {
-      throw new Error("Stripe env vars not configured");
-    }
-    if (!SUPABASE_URL || !SERVICE_KEY) {
-      throw new Error("Supabase env vars not configured");
-    }
+    if (!WEBHOOK_SECRET) throw new Error("STRIPE_BALANCE_WEBHOOK_SECRET not configured");
+    if (!SUPABASE_URL || !SERVICE_KEY) throw new Error("Supabase env vars not configured");
 
-    // Stripe SDK pinned to v14 — version Supabase's official example uses for Deno Edge Functions.
-    // v18.x has export-map issues that cause boot failures (502 Bad Gateway).
-    // For webhook signature verification we need createSubtleCryptoProvider (Web Crypto API
-    // works in Deno; createFetchHttpClient is for outbound calls, not signature verification).
-    const stripe = new Stripe(STRIPE_KEY, {
-      apiVersion: "2024-11-20",
-      httpClient: Stripe.createFetchHttpClient(),
-    });
-    const cryptoProvider = Stripe.createSubtleCryptoProvider();
-
-    // Stripe requires the raw body string to verify the signature
     const rawBody = await req.text();
     const sig = req.headers.get("stripe-signature");
-    if (!sig) throw new Error("Missing stripe-signature header");
-
-    let event: Stripe.Event;
-    try {
-      event = await stripe.webhooks.constructEventAsync(rawBody, sig, WEBHOOK_SECRET, undefined, cryptoProvider);
-    } catch (err: any) {
-      console.error("[stripe-balance-webhook] signature verification failed:", err.message);
-      return new Response(`Webhook Error: ${err.message}`, { status: 400 });
+    if (!sig) {
+      return new Response("Missing stripe-signature header", { status: 400 });
     }
 
+    const { valid, reason } = await verifyStripeSignature(rawBody, sig, WEBHOOK_SECRET);
+    if (!valid) {
+      console.error("[stripe-balance-webhook] signature verification failed:", reason);
+      return new Response(`Webhook Error: ${reason}`, { status: 400 });
+    }
+
+    const event = JSON.parse(rawBody);
     const admin = createClient(SUPABASE_URL, SERVICE_KEY);
 
-    // Idempotency: Stripe retries aggressively on transient failures. Without dedup on event.id
-    // a single payment could increment amount_paid twice. Insert event.id into stripe_webhook_events
-    // (unique constraint) — if duplicate, ACK and skip processing.
+    // ── Idempotency: dedup on event.id ───────────────────────────────────
+    // Stripe retries up to 3 days. Without dedup, a single payment could double-add.
     const { error: dedupErr } = await admin
       .from("stripe_webhook_events")
       .insert({ event_id: event.id, event_type: event.type });
     if (dedupErr) {
-      // Postgres unique-violation code is 23505 — duplicate event, already processed
       if ((dedupErr as any).code === "23505") {
         console.log(`[stripe-balance-webhook] duplicate event ${event.id} ignored`);
         return new Response(JSON.stringify({ received: true, deduped: true }), { status: 200 });
       }
       console.error("[stripe-balance-webhook] dedup insert failed:", dedupErr);
-      // Don't block on dedup table errors — proceed (webhook handler is still idempotent at order level via amount_paid recalc)
     }
 
     if (event.type === "checkout.session.completed") {
-      const session = event.data.object as Stripe.Checkout.Session;
+      const session = event.data.object;
       const meta = session.metadata || {};
       const orderId = parseInt(meta.order_id || "0", 10);
 
@@ -81,7 +126,6 @@ Deno.serve(async (req: Request) => {
         return new Response(JSON.stringify({ received: true, skipped: "no order_id" }), { status: 200 });
       }
 
-      // Pull current order to compute new amount_paid
       const { data: order, error: orderErr } = await admin
         .from("orders")
         .select("id, order_number, amount_paid, order_amount, attribution")
@@ -97,7 +141,7 @@ Deno.serve(async (req: Request) => {
       const newAmountPaid = (order.amount_paid || 0) + paidAmount;
 
       // Carry forward attribution from session metadata if order doesn't have it
-      // (so CAPI Purchase event has fbp/fbc when fired by the trigger)
+      // (so CAPI Purchase has fbp/fbc when fired by the trigger).
       const updatePayload: any = { amount_paid: newAmountPaid };
       if ((!order.attribution || (!order.attribution.fbp && !order.attribution.fbc))
           && (meta.fbp || meta.fbc)) {
@@ -132,7 +176,6 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    // Other event types we just ACK
     return new Response(JSON.stringify({ received: true, type: event.type }), {
       status: 200,
       headers: { "Content-Type": "application/json" },
