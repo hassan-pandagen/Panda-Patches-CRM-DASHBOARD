@@ -10,8 +10,9 @@ import Button from '../components/ui/Button';
 import Skeleton from '../components/ui/Skeleton';
 import SpotlightCard from '../components/ui/SpotlightCard';
 import { useToast } from '../hooks/useToast';
-import { ArrowLeft, CheckCircle, Trash2, Calendar, Mail, Phone, Paperclip, Image, Pencil, X, AlertTriangle, DollarSign, ExternalLink, MailCheck, Send } from 'lucide-react';
+import { ArrowLeft, CheckCircle, Trash2, Calendar, Mail, Phone, Paperclip, Image, Pencil, X, AlertTriangle, DollarSign, ExternalLink, MailCheck, Send, CreditCard } from 'lucide-react';
 import MetaChatPanel from '../components/quotes/MetaChatPanel';
+import GeneratePaymentLinkModal from '../components/orders/GeneratePaymentLinkModal';
 
 // ─── SELECT STYLE ────────────────────────────────────────────────────────────
 const selectStyle = {
@@ -34,6 +35,7 @@ const QuoteDetailPage: React.FC = () => {
 
   const [showEditModal, setShowEditModal] = useState(false);
   const [showConvertModal, setShowConvertModal] = useState(false);
+  const [showPaymentLinkModal, setShowPaymentLinkModal] = useState(false);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [convertingId, setConvertingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -177,6 +179,7 @@ const QuoteDetailPage: React.FC = () => {
   );
 
   return (
+    <>
     <div className="space-y-6 min-h-screen pb-10">
 
       {/* ─── EDIT QUOTE MODAL ─────────────────────────────────────────────── */}
@@ -760,6 +763,17 @@ const QuoteDetailPage: React.FC = () => {
 
             <Button
               variant="secondary"
+              onClick={() => setShowPaymentLinkModal(true)}
+              disabled={!quote.estimatedAmount}
+              className="w-full bg-blue-600/20 border border-blue-600/50 text-blue-400 hover:bg-blue-600/30 disabled:opacity-40 disabled:cursor-not-allowed"
+              title={!quote.estimatedAmount ? 'Set an estimated amount on the quote first' : 'Generate Stripe payment link'}
+            >
+              <CreditCard className="w-4 h-4 mr-2" />
+              Generate Payment Link
+            </Button>
+
+            <Button
+              variant="secondary"
               onClick={handleDeleteQuote}
               disabled={deletingId === quote.quoteNumber}
               className="w-full bg-red-600/20 border border-red-600/50 text-red-400 hover:bg-red-600/30"
@@ -776,6 +790,22 @@ const QuoteDetailPage: React.FC = () => {
         </div>
       </div>
     </div>
+
+    {/* Payment link modal — quote mode */}
+    {showPaymentLinkModal && quote && (
+      <GeneratePaymentLinkModal
+        isOpen={showPaymentLinkModal}
+        onClose={() => setShowPaymentLinkModal(false)}
+        mode="quote"
+        quoteId={quote.id}
+        quoteNumber={quote.quoteNumber}
+        quoteAmount={quote.estimatedAmount || 0}
+        customerName={quote.customerName}
+        customerEmail={quote.customerEmail}
+        customerPhone={quote.customerPhone || null}
+      />
+    )}
+    </>
   );
 };
 

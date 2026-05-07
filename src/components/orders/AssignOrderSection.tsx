@@ -53,7 +53,7 @@ const AssignOrderSection: React.FC<AssignOrderSectionProps> = ({
         const { data: users, error: usersError } = await supabase
           .from('user_profiles')
           .select('email, full_name, role')
-          .in('role', ['ADMIN', 'AGENT', 'USER']) // Only sales agents, not PRODUCTION
+          .in('role', ['ADMIN', 'SALES_AGENT'])
           .order('full_name');
 
         if (usersError) throw usersError;

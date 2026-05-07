@@ -256,12 +256,14 @@ export const createQuote = async (quoteData: Omit<Quote, 'id' | 'quoteNumber' | 
   }
 };
 
-// Get all quotes
+// Get all quotes — excludes Meta-chat auto-created rows (those live in /inbox)
 export const getAllQuotes = async (): Promise<Quote[]> => {
   try {
     const { data, error } = await supabase
       .from('quotes')
       .select('*')
+      .is('meta_psid', null)
+      .is('meta_ig_id', null)
       .order('created_at', { ascending: false });
 
     if (error) throw error;

@@ -13,6 +13,7 @@ import {
   Activity,
   DollarSign,
   Bell,
+  Inbox,
 } from "lucide-react";
 import { useAuth } from "../../contexts/AuthContext";
 import { useQueryPrefetch } from "../../hooks/useQueryPrefetch";
@@ -112,6 +113,12 @@ const Sidebar: React.FC<SidebarProps> = ({ onNavigate }) => {
       to: "/activity",
       label: "Activity",
       icon: <Bell className="w-5 h-5" />,
+      prefetchType: "none" as const,
+    },
+    {
+      to: "/inbox",
+      label: "Inbox",
+      icon: <Inbox className="w-5 h-5" />,
       prefetchType: "none" as const,
     },
   ];

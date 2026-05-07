@@ -6,6 +6,7 @@
 //   2. We verify the caller is staff (admin or assigned sales agent)
 //   3. POST to Meta Graph API /me/messages with PAGE_TOKEN
 //   4. On success, save the outbound message to meta_messages with direction='outbound'
+//   5. If conversation had no assignee, auto-assign it to the replying agent
 //
 // 24-hour messaging window:
 //   Meta only allows freeform replies within 24h of the customer's last message.
@@ -46,15 +47,15 @@ type MessageTag =
   | 'HUMAN_AGENT';
 
 interface RequestBody {
-  quote_id: number;
+  conversation_id: number;
   text: string;
   tag?: MessageTag; // required if 24h window has elapsed
 }
 
 function validateBody(raw: any): RequestBody {
   if (!raw || typeof raw !== 'object') throw new Error('Body must be a JSON object');
-  if (!Number.isInteger(raw.quote_id) || raw.quote_id <= 0) {
-    throw new Error('quote_id must be a positive integer');
+  if (!Number.isInteger(raw.conversation_id) || raw.conversation_id <= 0) {
+    throw new Error('conversation_id must be a positive integer');
   }
   if (typeof raw.text !== 'string' || raw.text.trim().length === 0) {
     throw new Error('text must be a non-empty string');
@@ -72,7 +73,7 @@ function validateBody(raw: any): RequestBody {
     }
     tag = raw.tag;
   }
-  return { quote_id: raw.quote_id, text: raw.text.trim(), tag };
+  return { conversation_id: raw.conversation_id, text: raw.text.trim(), tag };
 }
 
 Deno.serve(async (req: Request) => {
@@ -89,8 +90,6 @@ Deno.serve(async (req: Request) => {
     if (!PAGE_TOKEN) throw new Error('META_PAGE_ACCESS_TOKEN not configured');
 
     // ── Authenticate caller (staff only) ────────────────────────
-    // Decode JWT manually — gateway already verified it. Avoids hanging
-    // auth.getUser() network call.
     const authHeader = req.headers.get('Authorization');
     if (!authHeader) throw new Error('Missing Authorization header');
 
@@ -106,7 +105,6 @@ Deno.serve(async (req: Request) => {
 
     const admin = createClient(SUPABASE_URL, SERVICE_KEY);
 
-    // Only staff can send outbound (customers don't have access to Meta page tokens)
     const { data: staff } = await admin
       .from('user_profiles')
       .select('id, email, role')
@@ -120,42 +118,41 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    const { quote_id, text, tag } = validateBody(await req.json());
+    const { conversation_id, text, tag } = validateBody(await req.json());
 
-    // ── Load quote + check assignment ───────────────────────────
-    const { data: quote, error: quoteErr } = await admin
-      .from('quotes')
-      .select('id, quote_number, sales_agent, meta_psid, meta_ig_id, meta_channel, customer_name')
-      .eq('id', quote_id)
+    // ── Load conversation ───────────────────────────────────────
+    const { data: conv, error: convErr } = await admin
+      .from('conversations')
+      .select('id, channel, meta_psid, meta_ig_id, assignee_user_id, customer_name, status')
+      .eq('id', conversation_id)
       .single();
 
-    if (quoteErr || !quote) throw new Error('Quote not found');
+    if (convErr || !conv) throw new Error('Conversation not found');
 
-    const recipientId = quote.meta_channel === 'instagram' ? quote.meta_ig_id : quote.meta_psid;
+    const recipientId = conv.channel === 'instagram' ? conv.meta_ig_id : conv.meta_psid;
     if (!recipientId) {
       return new Response(
-        JSON.stringify({ error: 'This quote has no Meta PSID/IG ID' }),
+        JSON.stringify({ error: 'This conversation has no Meta PSID/IG ID' }),
         { headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' }, status: 400 }
       );
     }
 
-    // Authorization: admin OR the assigned sales agent
+    // Authorization: admin OR the assigned agent
     const isAdmin = staff.role === 'ADMIN';
-    const isAssignedAgent = quote.sales_agent && staff.email
-      && quote.sales_agent.toLowerCase() === staff.email.toLowerCase();
+    const isAssigned = conv.assignee_user_id === staff.id;
 
-    if (!isAdmin && !isAssignedAgent) {
+    if (!isAdmin && !isAssigned) {
       return new Response(
-        JSON.stringify({ error: 'Only admin or assigned sales agent can reply' }),
+        JSON.stringify({ error: 'Only admin or assigned agent can reply' }),
         { headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' }, status: 403 }
       );
     }
 
-    // ── Determine messaging_type/tag based on 24h window ────────
+    // ── Check 24h window ────────────────────────────────────────
     const { data: lastInbound } = await admin
       .from('meta_messages')
       .select('received_at')
-      .eq('quote_id', quote_id)
+      .eq('conversation_id', conversation_id)
       .eq('direction', 'inbound')
       .order('received_at', { ascending: false })
       .limit(1)
@@ -192,9 +189,6 @@ Deno.serve(async (req: Request) => {
     }
 
     // ── POST to Meta ────────────────────────────────────────────
-    // Endpoint differs by channel:
-    //   Messenger: graph.facebook.com/v25.0/me/messages?access_token=...
-    //   Instagram: same /me/messages endpoint when using Page-scoped IG token
     const metaUrl = `https://graph.facebook.com/${META_GRAPH_VERSION}/me/messages?access_token=${PAGE_TOKEN}`;
     const metaRes = await fetch(metaUrl, {
       method: 'POST',
@@ -215,16 +209,28 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    // ── Persist outbound message in meta_messages ───────────────
+    const sentAt = new Date().toISOString();
+
+    // ── Persist outbound message ────────────────────────────────
     await admin.from('meta_messages').insert({
-      quote_id,
+      conversation_id,
       direction: 'outbound',
-      channel: quote.meta_channel,
+      channel: conv.channel,
       meta_message_id: metaJson.message_id ?? null,
       text,
       attachments: null,
-      received_at: new Date().toISOString(), // outbound time = sent time
+      received_at: sentAt,
+      sender_user_id: staff.id,
+      sender_email: staff.email,
     });
+
+    // ── Auto-claim: assign conversation to first replier if unassigned ──
+    if (!conv.assignee_user_id) {
+      await admin
+        .from('conversations')
+        .update({ assignee_user_id: staff.id, updated_at: sentAt })
+        .eq('id', conversation_id);
+    }
 
     return new Response(
       JSON.stringify({
@@ -232,6 +238,7 @@ Deno.serve(async (req: Request) => {
         message_id: metaJson.message_id,
         recipient_id: metaJson.recipient_id,
         used_tag: !insideWindow ? tag : null,
+        auto_claimed: !conv.assignee_user_id,
       }),
       { headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' }, status: 200 }
     );

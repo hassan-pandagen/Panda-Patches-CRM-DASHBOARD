@@ -11,28 +11,44 @@ import {
   X, CreditCard, Copy, MessageCircle, Mail, ExternalLink, Check, Send,
 } from 'lucide-react';
 
-interface Props {
-  isOpen: boolean;
-  onClose: () => void;
+type OrderModeProps = {
+  mode?: 'order';
   orderId: number;
   orderNumber: string;
   orderAmount: number;
   amountAlreadyPaid: number;
+};
+
+type QuoteModeProps = {
+  mode: 'quote';
+  quoteId: number;
+  quoteNumber: string;
+  quoteAmount: number;
+};
+
+type Props = {
+  isOpen: boolean;
+  onClose: () => void;
   customerName: string | null;
   customerEmail: string | null;
   customerPhone: string | null;
-}
+} & (OrderModeProps | QuoteModeProps);
 
 type PaymentLabel = 'deposit' | 'balance' | 'full' | 'custom';
 
-const GeneratePaymentLinkModal: React.FC<Props> = ({
-  isOpen, onClose, orderId, orderNumber, orderAmount, amountAlreadyPaid,
-  customerName, customerEmail, customerPhone,
-}) => {
-  const { success: showSuccess, error: showError } = useToast();
-  const remainingDefault = Math.max(orderAmount - amountAlreadyPaid, 0);
+const GeneratePaymentLinkModal: React.FC<Props> = (props) => {
+  const { isOpen, onClose, customerName, customerEmail, customerPhone } = props;
+  const isQuoteMode = props.mode === 'quote';
 
-  const [label, setLabel] = useState<PaymentLabel>(amountAlreadyPaid === 0 ? 'deposit' : 'balance');
+  // Derived values per mode
+  const refNumber  = isQuoteMode ? props.quoteNumber  : (props as OrderModeProps).orderNumber;
+  const totalAmount = isQuoteMode ? props.quoteAmount  : (props as OrderModeProps).orderAmount;
+  const alreadyPaid = isQuoteMode ? 0                 : (props as OrderModeProps).amountAlreadyPaid;
+
+  const { success: showSuccess, error: showError } = useToast();
+  const remainingDefault = Math.max(totalAmount - alreadyPaid, 0);
+
+  const [label, setLabel] = useState<PaymentLabel>(alreadyPaid === 0 ? 'deposit' : 'balance');
   const [amount, setAmount] = useState(remainingDefault.toFixed(2));
   const [copied, setCopied] = useState(false);
   const [sentViaEmail, setSentViaEmail] = useState(false);
@@ -46,14 +62,13 @@ const GeneratePaymentLinkModal: React.FC<Props> = ({
   // Reset state on reopen
   useEffect(() => {
     if (isOpen) {
-      const startLabel: PaymentLabel = amountAlreadyPaid === 0 ? 'deposit' : 'balance';
-      setLabel(startLabel);
+      setLabel(alreadyPaid === 0 ? 'deposit' : 'balance');
       setAmount(remainingDefault.toFixed(2));
       setCopied(false);
       setSentViaEmail(false);
       setGenerated(null);
     }
-  }, [isOpen, remainingDefault, amountAlreadyPaid]);
+  }, [isOpen, remainingDefault, alreadyPaid]);
 
   // Async pattern: kick off the Stripe call (returns instantly with request_id),
   // then poll get_stripe_payment_link_response every second until it returns
@@ -68,16 +83,20 @@ const GeneratePaymentLinkModal: React.FC<Props> = ({
       }
 
       // 1. Kick off the request — returns instantly
-      const { data: requestData, error: requestErr } = await supabase.rpc(
-        'create_stripe_payment_link_request',
-        { p_order_id: orderId, p_amount: amountNum, p_label: label }
-      );
+      const rpcName = isQuoteMode
+        ? 'create_stripe_quote_payment_link_request'
+        : 'create_stripe_payment_link_request';
+      const rpcParams = isQuoteMode
+        ? { p_quote_id: (props as QuoteModeProps).quoteId, p_amount: amountNum, p_label: label }
+        : { p_order_id: (props as OrderModeProps).orderId, p_amount: amountNum, p_label: label };
+
+      const { data: requestData, error: requestErr } = await supabase.rpc(rpcName, rpcParams);
       if (requestErr) {
         throw new Error(requestErr.message || 'Failed to create payment link');
       }
       const requestId = requestData?.request_id;
       const ctx = {
-        order_number: requestData?.order_number,
+        order_number: requestData?.order_number ?? requestData?.quote_number,
         customer_email: requestData?.customer_email,
         customer_name: requestData?.customer_name,
         amount: requestData?.amount,
@@ -130,7 +149,7 @@ const GeneratePaymentLinkModal: React.FC<Props> = ({
     if (!generated || !customerPhone) return;
     const firstName = (generated.customerName || 'there').split(' ')[0];
     const msg =
-      `Hi ${firstName}! Here's your secure payment link for order ${orderNumber} ` +
+      `Hi ${firstName}! Here's your secure payment link for ${isQuoteMode ? 'quote' : 'order'} ${refNumber} ` +
       `(${label} — $${generated.amount.toFixed(2)} USD):\n\n${generated.url}\n\n` +
       `Once paid, you'll see the update in your portal. Thanks! — Panda Patches`;
     const cleanPhone = customerPhone.replace(/\D/g, '');
@@ -149,7 +168,7 @@ const GeneratePaymentLinkModal: React.FC<Props> = ({
           template_id: 'CUSTOMER_PAYMENT_LINK',
           dynamic_data: {
             customer_name: firstName,
-            order_number: orderNumber,
+            order_number: refNumber,
             amount: `$${generated.amount.toFixed(2)}`,
             payment_kind: label,
             portal_action_url: generated.url,
@@ -182,7 +201,7 @@ const GeneratePaymentLinkModal: React.FC<Props> = ({
             </div>
             <div>
               <h2 className="text-lg font-semibold text-white">Generate Stripe Payment Link</h2>
-              <p className="text-xs text-slate-400">Order {orderNumber}</p>
+              <p className="text-xs text-slate-400">{isQuoteMode ? 'Quote' : 'Order'} {refNumber}</p>
             </div>
           </div>
           <button
@@ -205,15 +224,17 @@ const GeneratePaymentLinkModal: React.FC<Props> = ({
                   </span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-slate-400">Order Total</span>
-                  <span className="text-white font-medium">${orderAmount.toFixed(2)}</span>
+                  <span className="text-slate-400">{isQuoteMode ? 'Quote Amount' : 'Order Total'}</span>
+                  <span className="text-white font-medium">${totalAmount.toFixed(2)}</span>
                 </div>
-                <div className="flex justify-between">
-                  <span className="text-slate-400">Already Paid</span>
-                  <span className="text-emerald-400 font-medium">${amountAlreadyPaid.toFixed(2)}</span>
-                </div>
+                {!isQuoteMode && (
+                  <div className="flex justify-between">
+                    <span className="text-slate-400">Already Paid</span>
+                    <span className="text-emerald-400 font-medium">${alreadyPaid.toFixed(2)}</span>
+                  </div>
+                )}
                 <div className="flex justify-between border-t border-white/10 pt-1.5">
-                  <span className="text-slate-400">Remaining</span>
+                  <span className="text-slate-400">{isQuoteMode ? 'Charge Amount' : 'Remaining'}</span>
                   <span className="text-brand-orange font-bold">${remainingDefault.toFixed(2)}</span>
                 </div>
               </div>
@@ -264,7 +285,7 @@ const GeneratePaymentLinkModal: React.FC<Props> = ({
                 </div>
                 <div className="flex gap-2 mt-2 flex-wrap">
                   {[0.3, 0.5, 1].map(pct => {
-                    const val = (orderAmount * pct).toFixed(2);
+                    const val = (totalAmount * pct).toFixed(2);
                     return (
                       <button
                         key={pct}
@@ -293,11 +314,18 @@ const GeneratePaymentLinkModal: React.FC<Props> = ({
               </div>
 
               <div className="bg-blue-500/10 border border-blue-500/20 rounded-lg p-3 text-xs text-blue-200">
-                <p>
-                  📌 The link expires in 7 days. Once paid, the order auto-updates to
-                  partially_paid (deposit) or paid (full/balance), and Meta CAPI Purchase
-                  fires automatically.
-                </p>
+                {isQuoteMode ? (
+                  <p>
+                    📌 The link expires in 7 days. Once the customer pays, a new order is
+                    created automatically and Meta CAPI Purchase fires. The quote is deleted.
+                  </p>
+                ) : (
+                  <p>
+                    📌 The link expires in 7 days. Once paid, the order auto-updates to
+                    partially_paid (deposit) or paid (full/balance), and Meta CAPI Purchase
+                    fires automatically.
+                  </p>
+                )}
               </div>
             </>
           ) : (

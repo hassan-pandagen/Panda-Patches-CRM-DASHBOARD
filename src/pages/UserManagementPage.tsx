@@ -129,10 +129,10 @@ const UserManagementPage: React.FC = () => {
     email: '',
     name: '',
     password: '',
-    role: UserRole.USER,
+    role: UserRole.SALES_AGENT,
     permissions: PERMISSION_PRESETS.sales,
   });
-  
+
   // UI state
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
   const [passwordCopied, setPasswordCopied] = useState(false);
@@ -230,7 +230,7 @@ const UserManagementPage: React.FC = () => {
       email: '',
       name: '',
       password: '',
-      role: UserRole.USER,
+      role: UserRole.SALES_AGENT,
       permissions: PERMISSION_PRESETS.sales,
     });
     setValidationErrors({});
@@ -426,8 +426,10 @@ const UserManagementPage: React.FC = () => {
                       <td className="px-6 py-4 text-sm text-slate-300">{user.full_name || '-'}</td>
                       <td className="px-6 py-4 text-sm">
                         <span className={`px-3 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                          user.role === 'ADMIN' ? 'bg-brand-orange/20 text-brand-orange' : 'bg-brand-green/20 text-brand-green'
-                        }`}>{user.role}</span>
+                          user.role === 'ADMIN' ? 'bg-brand-orange/20 text-brand-orange' :
+                          user.role === 'PRODUCTION' ? 'bg-blue-500/20 text-blue-400' :
+                          'bg-brand-green/20 text-brand-green'
+                        }`}>{user.role === 'SALES_AGENT' ? 'Sales Agent' : user.role === 'PRODUCTION' ? 'Production' : user.role}</span>
                       </td>
                       <td className="px-6 py-4 text-sm">
                         <div className="flex flex-wrap gap-2">
@@ -473,8 +475,10 @@ const UserManagementPage: React.FC = () => {
                     <p className="text-xs text-slate-400 truncate mt-0.5">{user.email}</p>
                   </div>
                   <span className={`px-3 py-1 text-xs font-semibold rounded-full flex-shrink-0 ${
-                    user.role === 'ADMIN' ? 'bg-brand-orange/20 text-brand-orange' : 'bg-brand-green/20 text-brand-green'
-                  }`}>{user.role}</span>
+                    user.role === 'ADMIN' ? 'bg-brand-orange/20 text-brand-orange' :
+                    user.role === 'PRODUCTION' ? 'bg-blue-500/20 text-blue-400' :
+                    'bg-brand-green/20 text-brand-green'
+                  }`}>{user.role === 'SALES_AGENT' ? 'Sales Agent' : user.role === 'PRODUCTION' ? 'Production' : user.role}</span>
                 </div>
                 <div className="flex flex-wrap gap-1.5">
                   {Object.entries(user.permissions || {}).filter(([_, v]) => v).slice(0, 3).map(([p]) => (
@@ -572,8 +576,7 @@ const UserManagementPage: React.FC = () => {
                   onChange={(e) => setFormData({...formData, role: e.target.value as UserRole})}
                   className="w-full px-4 py-2 bg-slate-800 border border-white/10 rounded-lg text-white focus:outline-none focus:border-brand-orange transition-colors"
                 >
-                  <option value={UserRole.USER}>User (Sales Agent)</option>
-                  <option value={UserRole.AGENT}>Agent</option>
+                  <option value={UserRole.SALES_AGENT}>Sales Agent</option>
                   <option value={UserRole.PRODUCTION}>Production</option>
                   <option value={UserRole.ADMIN}>Admin</option>
                 </select>
@@ -689,8 +692,7 @@ const UserManagementPage: React.FC = () => {
                   onChange={(e) => setFormData({...formData, role: e.target.value as UserRole})}
                   className="w-full px-4 py-2 bg-slate-800 border border-white/10 rounded-lg text-white focus:outline-none focus:border-brand-orange transition-colors"
                 >
-                  <option value={UserRole.USER}>User (Sales Agent)</option>
-                  <option value={UserRole.AGENT}>Agent</option>
+                  <option value={UserRole.SALES_AGENT}>Sales Agent</option>
                   <option value={UserRole.PRODUCTION}>Production</option>
                   <option value={UserRole.ADMIN}>Admin</option>
                 </select>

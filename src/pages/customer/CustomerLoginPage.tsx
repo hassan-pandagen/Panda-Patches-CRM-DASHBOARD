@@ -68,6 +68,20 @@ const CustomerLoginPage: React.FC = () => {
           : error.message);
         return;
       }
+      // Route staff to CRM, customers to portal
+      const { data: { session: newSession } } = await supabase.auth.getSession();
+      const uid = newSession?.user?.id;
+      if (uid) {
+        const { data: staffRow } = await supabase
+          .from('user_profiles')
+          .select('id')
+          .eq('id', uid)
+          .maybeSingle();
+        if (staffRow) {
+          navigate('/', { replace: true });
+          return;
+        }
+      }
       navigate('/customer/dashboard', { replace: true });
     } catch (err: any) {
       setError(err.message || 'Something went wrong. Please try again.');

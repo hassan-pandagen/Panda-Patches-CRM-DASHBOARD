@@ -41,13 +41,13 @@ const Navbar: React.FC = () => {
     >
       <div className="flex justify-around items-center w-full gap-6">
         {/* Common Links */}
-        {role === UserRole.PRODUCTION || role === UserRole.AGENT ? ( // Added UserRole.AGENT here
+        {role === UserRole.PRODUCTION ? (
           <NavItem to="/reports" icon={<DashboardIcon />} label="Reports" />
         ) : (
           <NavItem to="/" icon={<DashboardIcon />} label="Dashboard" />
         )}
-        
-        {role !== UserRole.PRODUCTION && role !== UserRole.AGENT && <NavItem to="/new-order" icon={<PlusIcon />} label="New Order" />} {/* Added UserRole.AGENT here */}
+
+        {role !== UserRole.PRODUCTION && <NavItem to="/new-order" icon={<PlusIcon />} label="New Order" />}
 
         {/* Admin-only */}
         {role === "ADMIN" && (

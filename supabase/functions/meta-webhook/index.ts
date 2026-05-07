@@ -7,10 +7,11 @@
 //
 // On inbound message:
 //   1. Verify HMAC signature using META_APP_SECRET (security)
-//   2. Find or create a `quotes` row for this PSID/IG_ID
+//   2. Find or create a `conversations` row for this PSID/IG_ID
 //   3. Save the message to `meta_messages` (idempotent via meta_message_id unique)
-//   4. If new lead: fire CAPI Lead event (with ctwa_clid → fbc for ad attribution)
-//   5. Notify all admins + the assigned sales agent (activity_notifications + email)
+//   4. Update conversation last_message_at / last_message_preview / unread_count
+//   5. If new conversation: fire CAPI Lead event (with ctwa_clid → fbc for ad attribution)
+//   6. Notify all admins + the assigned agent (activity_notifications)
 //
 // IMPORTANT — JWT verification must be OFF on this function (Meta doesn't send a Supabase JWT).
 // Verification is via Meta's HMAC + the verify token.
@@ -57,8 +58,6 @@ async function verifyMetaSignature(rawBody: string, signature: string | null, ap
 
 // ── Fetch user profile from Meta Graph API ──────────────────────
 async function fetchUserProfile(psid: string, channel: 'messenger' | 'instagram', token: string) {
-  // Messenger profile: first_name, last_name, profile_pic
-  // Instagram: name, username (less detail)
   const fields = channel === 'messenger' ? 'first_name,last_name,profile_pic' : 'name,username,profile_pic';
   const url = `https://graph.facebook.com/${META_GRAPH_VERSION}/${psid}?fields=${fields}&access_token=${token}`;
   try {
@@ -70,11 +69,11 @@ async function fetchUserProfile(psid: string, channel: 'messenger' | 'instagram'
   }
 }
 
-// ── Fire CAPI Lead event for new chat ─────────────────────────────
-async function fireCapiLead(quote: any, ctwaClid: string | null, capiToken: string) {
+// ── Fire CAPI Lead event for new conversation ─────────────────────────────
+async function fireCapiLead(conv: any, ctwaClid: string | null, capiToken: string) {
   const userData: Record<string, any> = {};
-  const fn = await hashIf(normName(quote.first_name || (quote.customer_name?.split(' ')[0])));
-  const ln = await hashIf(normName(quote.last_name || (quote.customer_name?.split(' ').slice(1).join(' '))));
+  const fn = await hashIf(normName(conv.customer_name?.split(' ')[0]));
+  const ln = await hashIf(normName(conv.customer_name?.split(' ').slice(1).join(' ')));
   if (fn) userData.fn = [fn];
   if (ln) userData.ln = [ln];
 
@@ -88,13 +87,13 @@ async function fireCapiLead(quote: any, ctwaClid: string | null, capiToken: stri
       {
         event_name: 'Lead',
         event_time: Math.floor(Date.now() / 1000),
-        event_id: `meta_chat_${quote.id}`,
+        event_id: `meta_conv_${conv.id}`,
         action_source: 'business_messaging',
         user_data: userData,
         custom_data: {
-          content_name: `Meta ${quote.meta_channel} chat started`,
-          content_category: quote.meta_ad_id ? 'chat_from_ad' : 'chat_organic',
-          ad_id: quote.meta_ad_id || undefined,
+          content_name: `Meta ${conv.channel} chat started`,
+          content_category: conv.meta_ad_id ? 'chat_from_ad' : 'chat_organic',
+          ad_id: conv.meta_ad_id || undefined,
         },
       },
     ],
@@ -115,9 +114,8 @@ async function fireCapiLead(quote: any, ctwaClid: string | null, capiToken: stri
   }
 }
 
-// ── Notify staff of new chat ─────────────────────────────────────
-async function notifyStaffOfChat(admin: any, quote: any, messageText: string) {
-  // Get all admin user IDs
+// ── Notify staff of new conversation ─────────────────────────────────────
+async function notifyStaffOfConversation(admin: any, conv: any, messageText: string) {
   const { data: admins } = await admin
     .from('user_profiles')
     .select('id, email')
@@ -125,17 +123,17 @@ async function notifyStaffOfChat(admin: any, quote: any, messageText: string) {
 
   if (!admins || admins.length === 0) return;
 
-  const channelLabel = quote.meta_channel === 'instagram' ? 'Instagram' : 'Messenger';
-  const senderName = quote.customer_name || 'Unknown';
+  const channelLabel = conv.channel === 'instagram' ? 'Instagram' : 'Messenger';
+  const senderName = conv.customer_name || 'Unknown';
   const truncated = messageText.length > 200 ? messageText.substring(0, 200) + '...' : messageText;
-  const isFromAd = !!quote.meta_ad_id;
+  const isFromAd = !!conv.meta_ad_id;
 
   const notifRows = admins.map((a: any) => ({
     recipient_id: a.id,
     type: 'customer_message',
-    title: `${isFromAd ? '📱 [AD] ' : '💬 '}New ${channelLabel} chat from ${senderName}`,
+    title: `${isFromAd ? '📱 [AD] ' : '💬 '}New ${channelLabel} message from ${senderName}`,
     body: truncated,
-    link: `/quote/${quote.quote_number}`,
+    link: `/inbox/${conv.id}`,
     related_order_id: null,
   }));
 
@@ -154,7 +152,7 @@ Deno.serve(async (req: Request) => {
 
     const VERIFY_TOKEN = Deno.env.get('META_WEBHOOK_VERIFY_TOKEN') ?? '';
 
-    // Constant-time verify_token compare (prevents timing-leak token discovery)
+    // Constant-time verify_token compare
     let tokenOk = false;
     if (token && VERIFY_TOKEN && token.length === VERIFY_TOKEN.length) {
       let diff = 0;
@@ -240,8 +238,22 @@ async function handleMessagingEvent(
   const messageText = message?.text || '';
   const attachments = message?.attachments || null;
   const referral = message?.referral || event.postback?.referral;
+  const isFirstReferral = !!referral && !message;
 
-  // Idempotency — skip if we already saw this exact message
+  // Skip delivery/read receipts and empty events with no referral
+  const hasContent = !!messageText || (Array.isArray(attachments) && attachments.length > 0);
+  if (!hasContent && !isFirstReferral) {
+    return;
+  }
+
+  // Meta timestamps are unix ms
+  const eventTimestampMs =
+    typeof event.timestamp === 'number' && event.timestamp > 1_000_000_000_000
+      ? event.timestamp
+      : Date.now();
+  const receivedAt = new Date(eventTimestampMs).toISOString();
+
+  // Idempotency — skip if we already stored this exact message
   if (messageId) {
     const { data: existingMsg } = await admin
       .from('meta_messages')
@@ -251,85 +263,98 @@ async function handleMessagingEvent(
     if (existingMsg) return;
   }
 
-  // Find existing quote (lead) for this PSID/IG_ID
+  // ── Find or create conversation ───────────────────────────────
   const psidField = channel === 'messenger' ? 'meta_psid' : 'meta_ig_id';
+
   const { data: existing } = await admin
-    .from('quotes')
+    .from('conversations')
     .select('*')
     .eq(psidField, psid)
     .maybeSingle();
 
-  let quote = existing;
-  let isNewLead = false;
+  let conv = existing;
+  let isNewConversation = false;
 
-  if (!quote) {
-    isNewLead = true;
-    // Fetch profile from Meta
+  if (!conv) {
+    isNewConversation = true;
+
+    // Fetch profile from Meta Graph API
     const profile = pageToken ? await fetchUserProfile(psid, channel, pageToken) : {};
     const customerName = profile.first_name && profile.last_name
       ? `${profile.first_name} ${profile.last_name}`
       : profile.name || profile.first_name || `Meta ${channel} user`;
 
-    // Build attribution JSONB so the value persists to the order on conversion.
-    // ctwa_clid → formatted fbc string is what Meta CAPI expects when the order
-    // eventually fires Purchase. Without this, ad-attributed chats lose their
-    // fbc signal at the quote→order step (EMQ drops 9.0 → 7.5).
+    // Build attribution JSONB
     const attribution: Record<string, any> = {
       source: channel === 'messenger' ? 'meta_messenger' : 'meta_instagram',
-      first_seen_at: new Date(event.timestamp || Date.now()).toISOString(),
+      first_seen_at: receivedAt,
     };
     if (referral?.ctwa_clid) {
-      // Meta's required fbc format: fb.1.{unix_ms}.{click_id}
       attribution.fbc = `fb.1.${Date.now()}.${referral.ctwa_clid}`;
       attribution.ctwa_clid = referral.ctwa_clid;
     }
     if (referral?.ad_id) attribution.ad_id = referral.ad_id;
     if (referral?.source) attribution.referral_source = referral.source;
 
-    // Insert as new quote — note: quote_number is auto-generated by trigger
-    const { data: newQuote, error: insertErr } = await admin
-      .from('quotes')
+    const { data: newConv, error: insertErr } = await admin
+      .from('conversations')
       .insert({
-        customer_name: customerName,
-        sales_agent: 'unassigned',
-        lead_source: channel === 'messenger' ? 'meta_messenger' : 'meta_instagram',
+        channel,
         [psidField]: psid,
-        meta_channel: channel,
-        meta_first_message_at: new Date(event.timestamp || Date.now()).toISOString(),
+        customer_name: customerName,
+        customer_profile_pic: profile.profile_pic || null,
         meta_ad_id: referral?.ad_id || null,
         meta_ad_creative_id: referral?.creative_id || null,
         meta_ctwa_clid: referral?.ctwa_clid || null,
         meta_referral_source: referral?.source || null,
         attribution,
+        status: 'open',
+        last_message_at: receivedAt,
+        last_message_preview: messageText.substring(0, 140) || null,
+        last_message_direction: 'inbound',
+        unread_count: hasContent ? 1 : 0,
       })
       .select()
       .single();
 
     if (insertErr) {
-      console.error('[meta-webhook] insert quote failed:', insertErr);
+      console.error('[meta-webhook] insert conversation failed:', insertErr);
       return;
     }
-    quote = newQuote;
+    conv = newConv;
 
-    // Fire CAPI Lead event
-    if (capiToken && quote) {
-      await fireCapiLead(quote, referral?.ctwa_clid || null, capiToken);
+    // Fire CAPI Lead for new chat lead
+    if (capiToken && conv) {
+      await fireCapiLead(conv, referral?.ctwa_clid || null, capiToken);
     }
   }
 
-  // Save the message
-  await admin.from('meta_messages').insert({
-    quote_id: quote.id,
-    direction: 'inbound',
-    channel,
-    meta_message_id: messageId,
-    text: messageText,
-    attachments,
-    received_at: new Date(event.timestamp || Date.now()).toISOString(),
-  });
+  // ── Save the message ──────────────────────────────────────────
+  if (hasContent || isFirstReferral) {
+    const { error: msgErr } = await admin.from('meta_messages').insert({
+      conversation_id: conv.id,
+      direction: 'inbound',
+      channel,
+      meta_message_id: messageId,
+      text: messageText || null,
+      attachments,
+      received_at: receivedAt,
+    });
 
-  // Notify staff (only on new chats — repeat messages on existing chats don't spam)
-  if (isNewLead) {
-    await notifyStaffOfChat(admin, quote, messageText);
+    if (msgErr) {
+      console.error('[meta-webhook] insert message failed:', msgErr);
+    }
+  }
+
+  // ── Increment unread_count on follow-up messages ─────────────
+  // last_message_at/preview/direction are updated by the DB trigger on insert.
+  // unread_count needs a separate RPC since PostgREST can't do col = col + 1.
+  if (!isNewConversation && hasContent) {
+    await admin.rpc('increment_conversation_unread', { conv_id: conv.id });
+  }
+
+  // ── Notify staff (only on new conversations to avoid spam) ────
+  if (isNewConversation && hasContent) {
+    await notifyStaffOfConversation(admin, conv, messageText);
   }
 }

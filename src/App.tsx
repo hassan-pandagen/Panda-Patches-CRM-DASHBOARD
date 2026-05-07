@@ -32,6 +32,7 @@ const PerformanceMetricsPage = lazy(() => import('@/pages/PerformanceMetricsPage
 const BulkCostEntryPage = lazy(() => import('@/pages/BulkCostEntryPage'));
 const CustomersPage = lazy(() => import('@/pages/CustomersPage'));
 const ActivityPage = lazy(() => import('@/pages/ActivityPage'));
+const InboxPage = lazy(() => import('@/pages/InboxPage'));
 
 // Protection
 import ProtectedRoute from './ProtectedRoute';
@@ -87,6 +88,8 @@ const App: React.FC = () => {
               <Route path="/settings" element={<SettingsPage />} />
               <Route path="/search" element={<SearchResultsPage />} />
               <Route path="/activity" element={<ActivityPage />} />
+              <Route path="/inbox" element={<InboxPage />} />
+              <Route path="/inbox/:conversationId" element={<InboxPage />} />
     
               {/* Attendance */}
               <Route path="/clock-in-out" element={<ClockInOutPage />} />

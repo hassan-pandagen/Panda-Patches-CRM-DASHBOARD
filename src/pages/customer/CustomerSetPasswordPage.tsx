@@ -83,6 +83,20 @@ const CustomerSetPasswordPage: React.FC = () => {
       // Refresh session so the JWT picks up new app_metadata
       await supabase.auth.refreshSession();
 
+      // Route to CRM if staff, customer portal if customer
+      const { data: { session: newSession } } = await supabase.auth.getSession();
+      const uid = newSession?.user?.id;
+      if (uid) {
+        const { data: staffRow } = await supabase
+          .from('user_profiles')
+          .select('id')
+          .eq('id', uid)
+          .maybeSingle();
+        if (staffRow) {
+          navigate('/', { replace: true }); // CRM dashboard
+          return;
+        }
+      }
       navigate('/customer/dashboard', { replace: true });
     } catch (err: any) {
       setError(err.message || 'Could not set your password. Please try again.');

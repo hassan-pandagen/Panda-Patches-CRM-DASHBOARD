@@ -83,7 +83,7 @@ export const orderSchema = z.object({
 export const userSchema = z.object({
   email: z.string().email('Invalid email address'),
   fullName: z.string().min(2, 'Name required'),
-  role: z.enum(['ADMIN', 'USER', 'PRODUCTION', 'AGENT']).optional(),
+  role: z.enum(['ADMIN', 'SALES_AGENT', 'PRODUCTION']).optional(),
 });
 
 export const passwordChangeSchema = z.object({

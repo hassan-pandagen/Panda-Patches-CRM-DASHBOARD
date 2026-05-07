@@ -120,12 +120,102 @@ Deno.serve(async (req: Request) => {
       const session = event.data.object;
       const meta = session.metadata || {};
       const orderId = parseInt(meta.order_id || "0", 10);
+      const quoteId = parseInt(meta.quote_id || "0", 10);
+      const paidAmount = (session.amount_total || 0) / 100;
 
-      if (!orderId) {
-        console.warn("[stripe-balance-webhook] checkout.session.completed without order_id metadata");
-        return new Response(JSON.stringify({ received: true, skipped: "no order_id" }), { status: 200 });
+      if (!orderId && !quoteId) {
+        console.warn("[stripe-balance-webhook] checkout.session.completed without order_id or quote_id metadata");
+        return new Response(JSON.stringify({ received: true, skipped: "no order_id or quote_id" }), { status: 200 });
       }
 
+      // ── Quote payment → auto-create order ─────────────────────────────────
+      // Customer paid via a link generated from a Quote. We:
+      //   1. Fetch the quote
+      //   2. INSERT a new order with amount_paid already set (CAPI trigger fires on INSERT)
+      //   3. Delete the quote — it has served its purpose
+      if (quoteId) {
+        const { data: quote, error: quoteErr } = await admin
+          .from("quotes")
+          .select("*")
+          .eq("id", quoteId)
+          .single();
+
+        if (quoteErr || !quote) {
+          console.error(`[stripe-balance-webhook] quote ${quoteId} not found:`, quoteErr);
+          return new Response(JSON.stringify({ received: true, error: "quote not found" }), { status: 200 });
+        }
+
+        // Build attribution — prefer quote's stored fbc/fbp, fall back to session metadata
+        const attribution = {
+          ...(quote.attribution || {}),
+          ...(meta.fbp && !quote.attribution?.fbp ? { fbp: meta.fbp } : {}),
+          ...(meta.fbc && !quote.attribution?.fbc ? { fbc: meta.fbc } : {}),
+          source: quote.attribution?.source || "crm_quote_payment",
+        };
+
+        // Insert order — trigger_fire_capi_purchase fires on INSERT when amount_paid > 0
+        const { data: newOrder, error: orderErr } = await admin
+          .from("orders")
+          .insert({
+            customer_name:            quote.customer_name,
+            customer_email:           quote.customer_email,
+            customer_phone:           quote.customer_phone || null,
+            customer_profile_url:     quote.customer_profile_url || null,
+            design_name:              quote.design_name || null,
+            patches_quantity:         quote.patches_quantity || 0,
+            patches_type:             quote.patches_type || null,
+            design_size:              quote.design_size || null,
+            design_backing:           quote.design_backing || null,
+            instructions:             quote.instructions || null,
+            order_amount:             quote.estimated_amount || 0,
+            amount_paid:              paidAmount,
+            amount_remaining:         Math.max((quote.estimated_amount || 0) - paidAmount, 0),
+            production_cost:          0,
+            shipping_cost:            0,
+            marketing_cost:           0,
+            sales_agent:              quote.sales_agent,
+            lead_source:              quote.lead_source || null,
+            attribution,
+            mockup_urls:              quote.mockup_urls || [],
+            customer_attachment_urls: quote.customer_attachment_urls || [],
+            is_urgent:                false,
+            status:                   "NEW_ORDER",
+          })
+          .select("id, order_number")
+          .single();
+
+        if (orderErr || !newOrder) {
+          console.error(`[stripe-balance-webhook] failed to create order from quote ${quoteId}:`, orderErr);
+          return new Response(JSON.stringify({ received: true, error: "order creation failed" }), { status: 200 });
+        }
+
+        // Log in order history
+        await admin.from("order_history").insert({
+          order_id:      newOrder.id,
+          user_email:    "stripe_webhook",
+          field_changed: "ORDER_CREATED",
+          old_value:     null,
+          new_value:     `Auto-created from Quote ${quote.quote_number} via Stripe payment ($${paidAmount})`,
+        }).catch(() => {}); // non-critical
+
+        // Delete quote — order is safely created
+        await admin.from("quotes").delete().eq("id", quoteId);
+
+        console.log(`[stripe-balance-webhook] quote ${quote.quote_number} → order ${newOrder.order_number}: $${paidAmount} paid, CAPI queued`);
+
+        return new Response(
+          JSON.stringify({
+            received:     true,
+            quote_id:     quoteId,
+            order_id:     newOrder.id,
+            order_number: newOrder.order_number,
+            paid:         paidAmount,
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } }
+        );
+      }
+
+      // ── Existing order payment → update amount_paid ───────────────────────
       const { data: order, error: orderErr } = await admin
         .from("orders")
         .select("id, order_number, amount_paid, order_amount, attribution")
@@ -137,11 +227,9 @@ Deno.serve(async (req: Request) => {
         return new Response(JSON.stringify({ received: true, error: "order not found" }), { status: 200 });
       }
 
-      const paidAmount = (session.amount_total || 0) / 100;
       const newAmountPaid = (order.amount_paid || 0) + paidAmount;
 
       // Carry forward attribution from session metadata if order doesn't have it
-      // (so CAPI Purchase has fbp/fbc when fired by the trigger).
       const updatePayload: any = { amount_paid: newAmountPaid };
       if ((!order.attribution || (!order.attribution.fbp && !order.attribution.fbc))
           && (meta.fbp || meta.fbc)) {
@@ -167,9 +255,9 @@ Deno.serve(async (req: Request) => {
 
       return new Response(
         JSON.stringify({
-          received: true,
-          order_id: orderId,
-          paid: paidAmount,
+          received:       true,
+          order_id:       orderId,
+          paid:           paidAmount,
           new_amount_paid: newAmountPaid,
         }),
         { status: 200, headers: { "Content-Type": "application/json" } }

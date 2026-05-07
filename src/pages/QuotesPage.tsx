@@ -210,12 +210,21 @@ const QuotesPage: React.FC = () => {
                           <span className="w-1 h-1 rounded-full bg-slate-500" />
                           <span className="font-mono font-medium text-slate-200">{quote.quoteNumber}</span>
                           <span className="w-1 h-1 rounded-full bg-slate-500" />
-                          <span className="text-slate-400">{quote.patchesType || 'Custom'}</span>
-                          {quote.designName && (
-                            <>
-                              <span className="w-1 h-1 rounded-full bg-slate-500" />
-                              <span className="text-slate-400">{quote.designName}</span>
-                            </>
+                          <span className="text-slate-400">
+                            {[
+                              quote.patchesQuantity ? `${quote.patchesQuantity} pcs` : null,
+                              quote.patchesType || 'Custom',
+                              quote.designName,
+                            ].filter(Boolean).join(' · ')}
+                          </span>
+                          {/* Mockup thumbnail — key differentiator when same customer has multiple quotes */}
+                          {quote.mockupUrls && quote.mockupUrls.length > 0 && (
+                            <img
+                              src={quote.mockupUrls[0]}
+                              alt="mockup"
+                              className="w-7 h-7 rounded object-cover border border-white/10 shrink-0"
+                              onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                            />
                           )}
                         </div>
                       </div>
