@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "../contexts/AuthContext";
+import { logger } from "../services/logger";
 import { localMidnightISO, localNextDayISO } from "../utils/dateFilters";
 import SpotlightCard from "../components/ui/SpotlightCard";
 import ToggleButtons from "../components/ui/ToggleButtons";
@@ -61,6 +62,7 @@ import CustomerFeedbackReport from "../components/Reports/CustomerFeedbackReport
 import FormFeedbackReport from "../components/Reports/FormFeedbackReport";
 import IncomeStatementReport from "../components/Reports/IncomeStatementReport";
 import ProductMixAnalysis from "../components/Reports/ProductMixAnalysis";
+import LeadSourceDistribution from "../components/Reports/LeadSourceDistribution";
 import { SOURCE_COLORS, PATCH_TYPE_COLORS } from "../constants/colors";
 
 const containerVariants: Variants = {
@@ -83,7 +85,7 @@ const cardVariants: Variants = {
 interface ReportComponentProps {
   orders: Order[];
   role?: UserRole | null;
-  dateRange?: DateRange;
+  dateRange: DateRange;
 }
 
 // --- UI COMPONENTS ---
@@ -1087,6 +1089,14 @@ const LeadSourceReportComponent: React.FC<ReportComponentProps> = ({
         </div>
       </div>
       </div>
+
+      {/* Lead Source Distribution — quote-side funnel (volume vs revenue) */}
+      <div className="mt-6">
+        <LeadSourceDistribution
+          startDate={dateRange ? new Date(`${dateRange.startDate}T00:00:00`) : null}
+          endDate={dateRange ? new Date(`${dateRange.endDate}T23:59:59`) : null}
+        />
+      </div>
     </div>
   );
 };
@@ -1475,7 +1485,7 @@ const ReportsPage: React.FC = () => {
 
   // --- 3. DATA FETCHING (Trusting the Database) ---
   const { data: filteredOrders = [], isLoading: isQueryLoading } = useQuery({
-    queryKey: queryKeys.orders.report(dateRange.startDate, dateRange.endDate),
+    queryKey: queryKeys.orders.report({ startDate: dateRange.startDate, endDate: dateRange.endDate }),
     queryFn: async () => {
       if (!user) return [];
 
@@ -1683,7 +1693,7 @@ const ReportsPage: React.FC = () => {
             <SalesReportComponent orders={filteredOrders} role={role} dateRange={dateRange} />
           )}
           {activeReport === "production" && (
-            <ProductionReportComponent orders={filteredOrders} />
+            <ProductionReportComponent orders={filteredOrders} dateRange={dateRange} />
           )}
           {activeReport === "leadSource" && (
             <LeadSourceReportComponent orders={filteredOrders} dateRange={dateRange} />
