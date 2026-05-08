@@ -62,28 +62,39 @@ Deno.serve(async (req: Request) => {
     if (!META_TOKEN) throw new Error("META_ACCESS_TOKEN not configured");
 
     // ── Authenticate caller ──────────────────────────────
+    // Two paths:
+    //   1. System trigger (Postgres net.http_post on order cancel) — uses service role JWT
+    //   2. Admin manual retry from CRM UI — uses a logged-in user JWT
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) throw new Error("Missing Authorization header");
 
-    const userClient = createClient(SUPABASE_URL, ANON_KEY, {
-      global: { headers: { Authorization: authHeader } },
-    });
-    const { data: { user }, error: userErr } = await userClient.auth.getUser();
-    if (userErr || !user) throw new Error("Invalid session");
-
-    // Must be staff
     const admin = createClient(SUPABASE_URL, SERVICE_KEY);
-    const { data: staffProfile } = await admin
-      .from("user_profiles")
-      .select("id, role")
-      .eq("id", user.id)
-      .maybeSingle();
-    if (!staffProfile) {
-      return new Response(
-        JSON.stringify({ error: "Only staff can reverse CAPI events" }),
-        { headers: { ...getCorsHeaders(req), "Content-Type": "application/json" }, status: 403 }
-      );
+    const bearerToken = authHeader.replace(/^Bearer\s+/i, "");
+    const isSystemCall = bearerToken === SERVICE_KEY;
+    let attemptedBy: string = "system_trigger";
+
+    if (!isSystemCall) {
+      // User-auth path — must be logged-in staff
+      const userClient = createClient(SUPABASE_URL, ANON_KEY, {
+        global: { headers: { Authorization: authHeader } },
+      });
+      const { data: { user }, error: userErr } = await userClient.auth.getUser();
+      if (userErr || !user) throw new Error("Invalid session");
+
+      const { data: staffProfile } = await admin
+        .from("user_profiles")
+        .select("id, role")
+        .eq("id", user.id)
+        .maybeSingle();
+      if (!staffProfile) {
+        return new Response(
+          JSON.stringify({ error: "Only staff can reverse CAPI events" }),
+          { headers: { ...getCorsHeaders(req), "Content-Type": "application/json" }, status: 403 }
+        );
+      }
+      attemptedBy = user.email ?? user.id;
     }
+    // If isSystemCall: trusted call from Postgres trigger — proceed with admin client
 
     const { order_id, reason } = bodySchema.parse(await req.json());
 
@@ -155,7 +166,7 @@ Deno.serve(async (req: Request) => {
         ...(order.capi_purchase_response || {}),
         reversal: {
           attempted_at: new Date().toISOString(),
-          attempted_by: user.email,
+          attempted_by: attemptedBy,
           reason: reason || null,
           success,
           response: metaJson,
