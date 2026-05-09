@@ -1,6 +1,6 @@
 // /activity — dedicated notifications inbox for staff (industry-standard pattern).
 // Replaces toast spam. Click a notification to navigate to the source + auto-mark-read.
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate } from 'react-router-dom';
 import { supabase } from '../services/supabaseClient';
@@ -42,10 +42,15 @@ interface ActivityNotification {
 type FilterTab = 'all' | 'unread' | 'customer_message' | 'order' | 'mention';
 
 const ActivityPage: React.FC = () => {
-  const { user } = useAuth();
+  const { user, role } = useAuth();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [filter, setFilter] = useState<FilterTab>('unread');
+
+  // Production users don't need customer-facing notifications — redirect to orders
+  useEffect(() => {
+    if (role === 'PRODUCTION') navigate('/orders', { replace: true });
+  }, [role, navigate]);
 
   const { data: notifications = [], isLoading } = useQuery({
     queryKey: ['activity-notifications', user?.id],

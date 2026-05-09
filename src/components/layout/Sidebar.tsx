@@ -134,11 +134,15 @@ const Sidebar: React.FC<SidebarProps> = ({ onNavigate }) => {
       <nav className="grow space-y-2 p-4 overflow-y-auto custom-scrollbar">
         {navItems
           .filter((item) => {
+            const isProduction = role === "PRODUCTION";
             if (item.to === "/") return canViewFinancials;
             if (item.to === "/orders") return true;
             if (item.to === "/reports")
               return canViewFinancials || canViewProduction;
             if (item.to === "/clock-in-out") return true;
+            // Activity + Inbox are sales/admin tools — hide from PRODUCTION
+            if (item.to === "/activity") return !isProduction;
+            if (item.to === "/inbox") return !isProduction;
             return true;
           })
           .map((item) => (

@@ -290,11 +290,16 @@ const AssigneeDropdown: React.FC<{
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 const InboxPage: React.FC = () => {
-  const { user } = useAuth();
+  const { user, role } = useAuth();
   const navigate = useNavigate();
   const { conversationId } = useParams<{ conversationId: string }>();
   const queryClient = useQueryClient();
   const { success: showSuccess, error: showError } = useToast();
+
+  // Production users have no business in customer inbox — redirect to orders
+  useEffect(() => {
+    if (role === 'PRODUCTION') navigate('/orders', { replace: true });
+  }, [role, navigate]);
 
   const [activeFilter, setActiveFilter] = useState<FilterTab>('all');
   const [selectedId, setSelectedId] = useState<number | null>(
