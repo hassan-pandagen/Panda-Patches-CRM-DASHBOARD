@@ -35,6 +35,7 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import ToggleButtons from '../components/ui/ToggleButtons';
+import AttributionQualityBadge, { getAttributionQualityFromOrder } from '../components/AttributionQualityBadge';
 import DateRangeFilter, { DateRange } from '../components/ui/DateRangeFilter';
 
 const AgentDropdown: React.FC<{ agents: string[]; value: string; onChange: (v: string) => void }> = ({ agents, value, onChange }) => {
@@ -820,6 +821,11 @@ const AllOrdersPage: React.FC = () => {
                                                                 URGENT
                                                             </span>
                                                         )}
+                                                        <AttributionQualityBadge
+                                                            quality={getAttributionQualityFromOrder(order)}
+                                                            size="sm"
+                                                            showLabel={false}
+                                                        />
                                                     </div>
                                                     <div className="flex flex-wrap items-center gap-3 text-sm text-slate-300 mt-1">
                                                         {order.createdAt && (

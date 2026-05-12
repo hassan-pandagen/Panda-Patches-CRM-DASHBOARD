@@ -180,6 +180,10 @@ Deno.serve(async (req: Request) => {
             customer_attachment_urls: quote.customer_attachment_urls || [],
             is_urgent:                false,
             status:                   "NEW_ORDER",
+            // Track conversion lineage (quote deleted below but these survive)
+            converted_from_quote_id:     quote.id,
+            converted_from_quote_number: quote.quote_number,
+            had_prior_quote_request:     true,
           })
           .select("id, order_number")
           .single();

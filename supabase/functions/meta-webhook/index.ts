@@ -230,10 +230,16 @@ async function handleMessagingEvent(
   pageToken: string,
   capiToken: string
 ) {
-  const psid = event.sender?.id;
+  const message = event.message;
+  // Detect echo events — Meta sends these when an agent replies via Business Suite
+  // OR when our own /me/messages send-meta-message edge function sends a reply.
+  // For echoes, sender.id = PAGE ID and recipient.id = CUSTOMER PSID (swapped).
+  // We capture them so the CRM thread shows agent replies regardless of where they were sent from.
+  const isEcho = message?.is_echo === true;
+  const direction: 'inbound' | 'outbound' = isEcho ? 'outbound' : 'inbound';
+  const psid = isEcho ? event.recipient?.id : event.sender?.id;
   if (!psid) return;
 
-  const message = event.message;
   const messageId = message?.mid;
   const messageText = message?.text || '';
   const attachments = message?.attachments || null;
@@ -333,7 +339,7 @@ async function handleMessagingEvent(
   if (hasContent || isFirstReferral) {
     const { error: msgErr } = await admin.from('meta_messages').insert({
       conversation_id: conv.id,
-      direction: 'inbound',
+      direction,
       channel,
       meta_message_id: messageId,
       text: messageText || null,
@@ -346,15 +352,16 @@ async function handleMessagingEvent(
     }
   }
 
-  // ── Increment unread_count on follow-up messages ─────────────
-  // last_message_at/preview/direction are updated by the DB trigger on insert.
-  // unread_count needs a separate RPC since PostgREST can't do col = col + 1.
-  if (!isNewConversation && hasContent) {
+  // ── Increment unread_count on follow-up INBOUND messages only ─
+  // Echo events (outbound from Business Suite or our own reply API) shouldn't
+  // mark the conversation as unread for staff — staff sent them.
+  if (!isNewConversation && hasContent && direction === 'inbound') {
     await admin.rpc('increment_conversation_unread', { conv_id: conv.id });
   }
 
-  // ── Notify staff (only on new conversations to avoid spam) ────
-  if (isNewConversation && hasContent) {
+  // ── Notify staff only for NEW INBOUND conversations ───────────
+  // Skip notification for echoes (they're outbound from our own team).
+  if (isNewConversation && hasContent && direction === 'inbound') {
     await notifyStaffOfConversation(admin, conv, messageText);
   }
 }

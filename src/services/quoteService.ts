@@ -355,6 +355,12 @@ export const convertQuoteToOrder = async (quote: Quote): Promise<Order> => {
       // data when this order is paid. Keep NULL as NULL (do not coerce to {}).
       attribution: quote.attribution ?? null,
 
+      // Track conversion lineage — preserved even after this quote is deleted below.
+      // Powers the Funnel & Attribution report.
+      convertedFromQuoteId:     quote.id,
+      convertedFromQuoteNumber: quote.quoteNumber,
+      hadPriorQuoteRequest:     true,
+
       shippingAddress: '',
       shippingCarrier: '',
       shippingTrackingNumber: '',

@@ -28,6 +28,7 @@ import AssignOrderSection from '../components/orders/AssignOrderSection';
 import EmailLogsSection from '../components/orders/EmailLogsSection';
 import OrderNotesSection from '../components/orders/OrderNotesSection';
 import OrderMessageThread from '../components/messaging/OrderMessageThread';
+import AttributionQualityBadge, { getAttributionQualityFromOrder } from '../components/AttributionQualityBadge';
 import MarkAsPaidModal from '../components/orders/MarkAsPaidModal';
 import MetaCapiPanel from '../components/orders/MetaCapiPanel';
 import GeneratePaymentLinkModal from '../components/orders/GeneratePaymentLinkModal';
@@ -336,8 +337,9 @@ const OrderPage: React.FC = () => {
                             <button onClick={() => navigate(-1)} className="flex items-center gap-2 text-sm text-slate-400 hover:text-white transition-colors mb-2">
                                 <ArrowLeft size={16} /> Back to All Orders
                             </button>
-                            <h1 className="text-3xl font-bold text-white flex items-center gap-3">
+                            <h1 className="text-3xl font-bold text-white flex items-center gap-3 flex-wrap">
                                 Order {order.orderNumber}
+                                <AttributionQualityBadge quality={getAttributionQualityFromOrder(order)} />
                                 {order.isUrgent && (
                                     <div className="flex items-center gap-2 flex-wrap">
                                         <span className={`text-sm px-3 py-1 rounded-full border font-bold ${order.isUrgentApproved

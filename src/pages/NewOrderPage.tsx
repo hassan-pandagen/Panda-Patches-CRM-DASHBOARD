@@ -12,7 +12,7 @@ import UnsavedChangesModal from "../components/ui/UnsavedChangesModal";
 import { useAuth } from "../contexts/AuthContext";
 import { useToast } from "../hooks/useToast";
 import { logger } from "../services/logger";
-import { Copy } from "lucide-react";
+import { Copy, AlertTriangle, Inbox, FileText, X } from "lucide-react";
 
 const NewOrderPage: React.FC = () => {
   const [isSaving, setIsSaving] = React.useState<boolean>(false);
@@ -20,6 +20,10 @@ const NewOrderPage: React.FC = () => {
   const [isDirty, setIsDirty] = React.useState(false);
   const [navigateTo, setNavigateTo] = React.useState<string | null>(null); // NEW: For synchronized navigation
   const [allowNavigation, setAllowNavigation] = React.useState(false); // NEW: For navigation shield
+  // Attribution warning banner — dismissed per-user via localStorage so we don't nag forever
+  const [showAttrWarning, setShowAttrWarning] = React.useState(
+    typeof window !== 'undefined' && localStorage.getItem('attr_warning_dismissed') !== 'true'
+  );
   
   const navigate = useNavigate();
   const location = useLocation(); // Hook to get the passed data
@@ -217,7 +221,56 @@ const NewOrderPage: React.FC = () => {
           <p>{error}</p>
         </div>
       )}
-      
+
+      {/* Attribution loss warning — only for fresh "New Order" (not for repeat orders).
+          Teaches agents to use the Inbox/Quote flow when customer came from Meta. */}
+      {showAttrWarning && !sourceOrder && (
+        <div className="mb-6 p-4 bg-amber-500/10 border border-amber-500/30 rounded-xl flex items-start gap-3">
+          <AlertTriangle className="w-5 h-5 text-amber-400 mt-0.5 shrink-0" />
+          <div className="flex-1 min-w-0">
+            <h4 className="font-semibold text-amber-200 text-sm mb-1">
+              Customer came from Facebook or Instagram?
+            </h4>
+            <p className="text-xs text-amber-200/80 leading-relaxed mb-3">
+              Don't create the order here — you'll lose Meta ad attribution (no fbc) and CAPI Purchase
+              fires with low quality. Instead, use the right flow so Meta knows which ad converted:
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => navigate('/inbox')}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-500/20 hover:bg-blue-500/30 text-blue-300 border border-blue-500/30 rounded-lg text-xs font-medium transition-all"
+              >
+                <Inbox className="w-3 h-3" />
+                Open Inbox → Convert to Quote
+              </button>
+              <button
+                type="button"
+                onClick={() => navigate('/quotes')}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-700/50 hover:bg-slate-700 text-slate-300 border border-white/10 rounded-lg text-xs font-medium transition-all"
+              >
+                <FileText className="w-3 h-3" />
+                Open Quotes → Convert to Order
+              </button>
+              <span className="text-[10px] text-amber-200/60 self-center ml-2">
+                Phone / WhatsApp / repeat customer? New Order is fine.
+              </span>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              localStorage.setItem('attr_warning_dismissed', 'true');
+              setShowAttrWarning(false);
+            }}
+            className="p-1 text-amber-400/60 hover:text-amber-300 hover:bg-white/5 rounded transition-all shrink-0"
+            title="Dismiss (won't show again)"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
       {/* Pass the sanitized 'initialData' to the form to pre-fill it */}
       <OrderForm 
         onSave={handleSave} 

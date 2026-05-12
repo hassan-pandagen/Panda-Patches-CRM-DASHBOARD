@@ -179,6 +179,7 @@ export const mapDbToOrder = (data: any): Order => {
     country: data.country ?? null,
 
     attribution: data.attribution ?? null,
+    attributionQuality: data.attribution_quality ?? null,
 
     createdAt: data.createdAt ?? data.created_at,
     updatedAt: data.updatedAt ?? data.updated_at,
@@ -484,6 +485,23 @@ export const createOrder = async (orderData: any, userEmail: string) => {
 
     // Step 4: Convert to database format
     const payload = toSnakeCase({ ...safeData, salesAgent: userEmail });
+
+    // Step 4b: Detect "agent bypassed quote" — if this customer already has a quote
+    // in the system but the agent didn't use Convert to Order, flag it.
+    // This populates had_prior_quote_request even for orders NOT going through convertQuoteToOrder.
+    if (safeData.customerEmail && !payload.had_prior_quote_request) {
+      try {
+        const { count } = await supabase
+          .from('quotes')
+          .select('id', { count: 'exact', head: true })
+          .ilike('customer_email', safeData.customerEmail);
+        if (count && count > 0) {
+          payload.had_prior_quote_request = true;
+        }
+      } catch {
+        // Non-critical — don't block order creation if this check fails
+      }
+    }
 
     // Step 5: Insert into database
     const { data, error } = await supabase

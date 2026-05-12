@@ -12,8 +12,8 @@ import Textarea from '../ui/Textarea';
 import { LEAD_SOURCE_OPTIONS, PATCHES_TYPE_OPTIONS, COUNTRY_OPTIONS } from '../../constants/index';
 import { supabase } from '../../services/supabaseClient';
 import { logger } from '../../services/logger';
-import { sanitizeOrFilterValue } from '../../utils/supabaseFilters';
-import { History, UserCheck, ExternalLink, Copy } from 'lucide-react';
+import { sanitizeOrFilterValue, sanitizeIlikePattern } from '../../utils/supabaseFilters';
+import { History, UserCheck, ExternalLink, Copy, FileText, AlertTriangle } from 'lucide-react';
 
 const CANCELLATION_REASONS = [
   "Customer Ghosted / No Reply",
@@ -234,6 +234,16 @@ const OrderForm: React.FC<OrderFormProps> = ({
   // ✅ State for live customer check
   const [existingCustomer, setExistingCustomer] = useState<ExistingCustomerInfo | null>(null);
   const [isCheckingCustomer, setIsCheckingCustomer] = useState(false);
+  // Live check: does this customer already have a quote in the system?
+  // If yes, we nudge the agent to use Convert to Order on the quote instead of
+  // creating a fresh order (preserves attribution, prevents data clutter).
+  const [pendingQuote, setPendingQuote] = useState<{
+    id: number;
+    quote_number: string;
+    customer_name: string | null;
+    estimated_amount: number | null;
+    created_at: string;
+  } | null>(null);
 
   const { register, handleSubmit, watch, formState: { errors, isDirty }, reset, setValue } = useForm<SaveData>({
     defaultValues: formDefaultValues,
@@ -307,6 +317,51 @@ const OrderForm: React.FC<OrderFormProps> = ({
 
     return () => clearTimeout(handler);
   }, [watchEmail, watchPhone, isNewOrder, setValue, watch]);
+
+  // --- LIVE QUOTE CHECK (separate from customer check) ---
+  // If this email/phone has an open quote, nudge the agent to use Convert to Order
+  // instead of creating a fresh order — preserves attribution + keeps data clean.
+  useEffect(() => {
+    if (!isNewOrder) {
+      setPendingQuote(null);
+      return;
+    }
+    const handler = setTimeout(async () => {
+      const email = (watchEmail || '').trim();
+      const phone = (watchPhone || '').trim();
+      if (!email && !phone) {
+        setPendingQuote(null);
+        return;
+      }
+      try {
+        let query = supabase
+          .from('quotes')
+          .select('id, quote_number, customer_name, estimated_amount, created_at')
+          .order('created_at', { ascending: false })
+          .limit(1);
+
+        if (email && phone) {
+          const safeEmail = sanitizeOrFilterValue(email);
+          const safePhone = sanitizeOrFilterValue(phone);
+          query = query.or(`customer_email.eq.${safeEmail},customer_phone.eq.${safePhone}`);
+        } else if (email) {
+          query = query.ilike('customer_email', sanitizeIlikePattern(email));
+        } else if (phone) {
+          query = query.eq('customer_phone', sanitizeOrFilterValue(phone));
+        }
+
+        const { data, error } = await query;
+        if (error || !data || data.length === 0) {
+          setPendingQuote(null);
+          return;
+        }
+        setPendingQuote(data[0] as any);
+      } catch {
+        setPendingQuote(null);
+      }
+    }, 750);
+    return () => clearTimeout(handler);
+  }, [watchEmail, watchPhone, isNewOrder]);
 
   const onSubmit = async (data: SaveData) => {
     console.log('📝 Form submitted with data:', data);
@@ -422,6 +477,58 @@ const OrderForm: React.FC<OrderFormProps> = ({
         <div className="grid grid-cols-1 md:grid-cols-2 gap-5 md:gap-8">
           
           {/* --- LIVE CUSTOMER INSIGHTS --- */}
+          {/* Pending Quote warning — pops up when this email/phone already has a quote.
+              The goal: nudge agent to use Convert to Order on the quote rather than
+              creating a fresh order (which loses attribution + clutters data). */}
+          {pendingQuote && (
+            <div className="md:col-span-2 mb-6 p-4 bg-amber-500/10 border border-amber-500/40 rounded-xl animate-in fade-in slide-in-from-top-2">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="flex items-start gap-3">
+                  <div className="p-2 bg-amber-500/20 rounded-lg text-amber-400 flex-shrink-0">
+                    <AlertTriangle className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-bold text-amber-200 flex items-center gap-2 flex-wrap">
+                      Quote already exists for this customer
+                      <span className="text-xs font-normal bg-amber-500/30 text-amber-200 px-2 py-0.5 rounded-full font-mono">
+                        {pendingQuote.quote_number}
+                      </span>
+                    </h4>
+                    <p className="text-xs text-amber-200/80 mt-0.5">
+                      {pendingQuote.customer_name || 'Unknown'}
+                      {pendingQuote.estimated_amount != null && (
+                        <> · Quote total: <span className="font-semibold">${Number(pendingQuote.estimated_amount).toFixed(2)}</span></>
+                      )}
+                    </p>
+                    <p className="text-[11px] text-amber-200/70 mt-1.5 leading-relaxed">
+                      Creating a new order here will <strong>lose Meta attribution</strong> and
+                      leave a stale quote in the system. Use <strong>Convert to Order</strong>
+                      on the quote instead.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 ml-11 sm:ml-0 shrink-0">
+                  <a
+                    href={`/quote/${pendingQuote.quote_number}`}
+                    className="flex items-center gap-1.5 px-4 py-2.5 bg-brand-orange hover:bg-orange-600 border border-orange-500/30 rounded-lg text-xs font-bold text-white transition-all"
+                  >
+                    <FileText className="w-3.5 h-3.5" />
+                    Open Quote
+                  </a>
+                  <button
+                    type="button"
+                    onClick={() => setPendingQuote(null)}
+                    className="flex items-center gap-1.5 px-3 py-2.5 bg-slate-900/50 hover:bg-slate-800 border border-white/10 rounded-lg text-xs font-medium text-slate-400 hover:text-slate-200 transition-all"
+                    title="I know — proceed anyway"
+                  >
+                    Dismiss
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
           {existingCustomer && (
             <div className="md:col-span-2 mb-6 p-4 bg-blue-500/10 border border-blue-500/30 rounded-xl animate-in fade-in slide-in-from-top-2">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">

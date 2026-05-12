@@ -17,10 +17,12 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { supabase } from '../services/supabaseClient';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../hooks/useToast';
+import { sanitizeIlikePattern } from '../utils/supabaseFilters';
 import {
   MessageSquare, Instagram, Megaphone, Send, AlertTriangle,
   User, Image as ImageIcon, ChevronDown, Check, RefreshCw, X,
-  Lock, FileText, ExternalLink,
+  Lock, FileText, ExternalLink, Pencil, Phone, Mail, Search,
+  Package, DollarSign,
 } from 'lucide-react';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -31,6 +33,8 @@ interface Conversation {
   meta_psid: string | null;
   meta_ig_id: string | null;
   customer_name: string | null;
+  customer_email: string | null;
+  customer_phone: string | null;
   customer_profile_pic: string | null;
   meta_ad_id: string | null;
   meta_ctwa_clid: string | null;
@@ -38,6 +42,8 @@ interface Conversation {
   assignee_user_id: string | null;
   status: 'open' | 'closed';
   promoted_quote_id: number | null;
+  promoted_to_order_id: number | null;
+  agreed_price: number | null;
   last_message_at: string | null;
   last_message_preview: string | null;
   last_message_direction: 'inbound' | 'outbound' | null;
@@ -287,6 +293,395 @@ const AssigneeDropdown: React.FC<{
   );
 };
 
+// ─── Customer Info Edit Modal ─────────────────────────────────────────────────
+// Lets agents fill in real customer details (name, email, phone) after they ask
+// the customer in chat. Critical because Meta's API returns "Meta messenger user"
+// without app-review approval for the pages_user_name permission.
+// Better customer data → better CAPI EMQ → better ad attribution.
+
+const CustomerInfoModal: React.FC<{
+  conv: Conversation;
+  onClose: () => void;
+  onSaved: () => void;
+}> = ({ conv, onClose, onSaved }) => {
+  const [name, setName] = useState(conv.customer_name ?? '');
+  const [email, setEmail] = useState(conv.customer_email ?? '');
+  const [phone, setPhone] = useState(conv.customer_phone ?? '');
+  const [agreedPrice, setAgreedPrice] = useState(
+    conv.agreed_price != null ? String(conv.agreed_price) : ''
+  );
+  const [saving, setSaving] = useState(false);
+  const { success: showSuccess, error: showError } = useToast();
+
+  const save = async () => {
+    setSaving(true);
+    const priceNum = agreedPrice.trim() ? parseFloat(agreedPrice) : null;
+    const { error } = await supabase
+      .from('conversations')
+      .update({
+        customer_name: name.trim() || null,
+        customer_email: email.trim() || null,
+        customer_phone: phone.trim() || null,
+        agreed_price: (priceNum != null && !isNaN(priceNum) && priceNum > 0) ? priceNum : null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', conv.id);
+    setSaving(false);
+    if (error) {
+      showError('Failed to save', error.message);
+      return;
+    }
+    showSuccess('Customer info saved');
+    onSaved();
+    onClose();
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative bg-slate-900 border border-white/10 rounded-2xl w-full max-w-md shadow-2xl">
+        <div className="px-6 py-4 border-b border-white/10 flex items-center justify-between">
+          <h3 className="text-base font-semibold text-white">Edit Customer Info</h3>
+          <button
+            onClick={onClose}
+            className="p-1.5 text-slate-400 hover:text-white hover:bg-white/10 rounded-lg"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        <div className="p-6 space-y-4">
+          <div className="bg-blue-500/10 border border-blue-500/20 rounded-lg p-3 text-xs text-blue-200">
+            💡 Ask the customer their name, email, and phone in the chat — then save
+            here. This improves Meta CAPI ad attribution and lets you find them faster.
+          </div>
+
+          <div>
+            <label className="block text-[10px] uppercase tracking-wider text-slate-400 mb-1.5 font-semibold">
+              Customer Name
+            </label>
+            <div className="relative">
+              <User className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                value={name}
+                onChange={e => setName(e.target.value)}
+                placeholder="e.g., John Smith"
+                className="w-full pl-9 pr-3 py-2 bg-slate-800 border border-white/10 rounded-lg text-sm text-white placeholder-slate-500 focus:outline-none focus:border-brand-orange/50"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-[10px] uppercase tracking-wider text-slate-400 mb-1.5 font-semibold">
+              Email
+            </label>
+            <div className="relative">
+              <Mail className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
+              <input
+                type="email"
+                value={email}
+                onChange={e => setEmail(e.target.value)}
+                placeholder="customer@email.com"
+                className="w-full pl-9 pr-3 py-2 bg-slate-800 border border-white/10 rounded-lg text-sm text-white placeholder-slate-500 focus:outline-none focus:border-brand-orange/50"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-[10px] uppercase tracking-wider text-slate-400 mb-1.5 font-semibold">
+              Phone
+            </label>
+            <div className="relative">
+              <Phone className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
+              <input
+                type="tel"
+                value={phone}
+                onChange={e => setPhone(e.target.value)}
+                placeholder="+1 555 123 4567"
+                className="w-full pl-9 pr-3 py-2 bg-slate-800 border border-white/10 rounded-lg text-sm text-white placeholder-slate-500 focus:outline-none focus:border-brand-orange/50"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-[10px] uppercase tracking-wider text-slate-400 mb-1.5 font-semibold">
+              Agreed Price (optional)
+            </label>
+            <div className="relative">
+              <DollarSign className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
+              <input
+                type="number"
+                step="0.01"
+                min="0"
+                value={agreedPrice}
+                onChange={e => setAgreedPrice(e.target.value)}
+                placeholder="200.00"
+                className="w-full pl-9 pr-3 py-2 bg-slate-800 border border-white/10 rounded-lg text-sm text-white placeholder-slate-500 focus:outline-none focus:border-brand-orange/50"
+              />
+            </div>
+            <p className="text-[10px] text-slate-500 mt-1">
+              Save the price you quoted in chat — it'll auto-fill when you click "To Order".
+            </p>
+          </div>
+        </div>
+
+        <div className="px-6 py-4 border-t border-white/10 flex justify-end gap-2">
+          <button
+            onClick={onClose}
+            className="px-4 py-2 text-sm text-slate-400 hover:text-white border border-white/10 rounded-lg transition-all"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={save}
+            disabled={saving}
+            className="px-4 py-2 bg-brand-orange hover:bg-brand-orange/90 disabled:opacity-50 text-white text-sm font-medium rounded-lg transition-all"
+          >
+            {saving ? 'Saving…' : 'Save'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ─── Convert to Order Modal ──────────────────────────────────────────────────
+// Lets agents skip the Quote step when customer has already verbally agreed
+// to a price in chat. Preserves the full attribution chain (fbc → order) so
+// CAPI Purchase fires with 🟢 Tracked quality.
+
+const ConvertToOrderModal: React.FC<{
+  conv: Conversation;
+  agentEmail: string | null;
+  agentUserId: string | null;
+  onClose: () => void;
+  onCreated: (orderNumber: string) => void;
+}> = ({ conv, agentEmail, agentUserId, onClose, onCreated }) => {
+  const [designName, setDesignName] = useState('');
+  const [patchType, setPatchType] = useState('Embroidered');
+  const [quantity, setQuantity] = useState('');
+  const [designSize, setDesignSize] = useState('');
+  const [designBacking, setDesignBacking] = useState('Iron-on');
+  const [orderAmount, setOrderAmount] = useState(
+    conv.agreed_price != null ? String(conv.agreed_price) : ''
+  );
+  const [instructions, setInstructions] = useState('');
+  const [creating, setCreating] = useState(false);
+  const { success: showSuccess, error: showError } = useToast();
+
+  // Warn if conversation is missing customer info — order is created from it
+  const missingInfo = !conv.customer_email && !conv.customer_phone;
+
+  const create = async () => {
+    if (!conv.customer_name) {
+      showError('Customer name required', 'Click the pencil icon in the header to add the customer name first.');
+      return;
+    }
+    const amountNum = parseFloat(orderAmount);
+    if (isNaN(amountNum) || amountNum <= 0) {
+      showError('Valid amount required', 'Enter the agreed-upon order total.');
+      return;
+    }
+    const qtyNum = parseInt(quantity, 10);
+    if (isNaN(qtyNum) || qtyNum <= 0) {
+      showError('Valid quantity required', 'How many patches?');
+      return;
+    }
+
+    setCreating(true);
+    try {
+      const { createOrder } = await import('../services/orderService');
+      const order = await createOrder({
+        customerName:        conv.customer_name,
+        customerEmail:       conv.customer_email || '',
+        customerPhone:       conv.customer_phone || '',
+        designName:          designName.trim(),
+        patchesType:         patchType,
+        patchesQuantity:     qtyNum,
+        designSize:          designSize.trim(),
+        designBacking,
+        instructions:        instructions.trim(),
+        orderAmount:         amountNum,
+        amountPaid:          0,
+        productionCost:      0,
+        shippingCost:        0,
+        marketingCost:       0,
+        salesAgent:          agentEmail ?? 'unassigned',
+        leadSource:          conv.channel === 'instagram' ? 'meta_instagram' : 'meta_messenger',
+        attribution:         conv.attribution ?? null,
+        isUrgent:            false,
+        status:              'NEW_ORDER',
+        mockupUrls:          [],
+        customerAttachmentUrls: [],
+        productionFileUrls:  [],
+        shippingAttachmentUrls: [],
+        redoAttachments:     [],
+      }, agentEmail ?? 'system@pandapatches.com');
+
+      // Stamp conversation as promoted to order
+      await supabase
+        .from('conversations')
+        .update({
+          promoted_to_order_id:         order.id,
+          promoted_to_order_at:         new Date().toISOString(),
+          promoted_to_order_by_user_id: agentUserId,
+          updated_at:                   new Date().toISOString(),
+        })
+        .eq('id', conv.id);
+
+      showSuccess(`Order ${order.orderNumber} created`);
+      onCreated(order.orderNumber);
+      onClose();
+    } catch (err: any) {
+      showError('Failed to create order', err?.message);
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative bg-slate-900 border border-white/10 rounded-2xl w-full max-w-lg shadow-2xl max-h-[90vh] overflow-y-auto">
+        <div className="px-6 py-4 border-b border-white/10 flex items-center justify-between sticky top-0 bg-slate-900 z-10">
+          <div>
+            <h3 className="text-base font-semibold text-white">Convert Chat to Order</h3>
+            <p className="text-xs text-slate-500 mt-0.5">
+              Skip the quote step — customer already agreed to a price
+            </p>
+          </div>
+          <button onClick={onClose} className="p-1.5 text-slate-400 hover:text-white hover:bg-white/10 rounded-lg">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        <div className="p-6 space-y-4">
+          {/* Customer info preview — read-only, edited via pencil in conversation header */}
+          <div className="bg-slate-800/50 rounded-lg p-3 border border-white/5">
+            <p className="text-[10px] uppercase tracking-wider text-slate-500 font-semibold mb-2">Customer (from conversation)</p>
+            <p className="text-sm font-medium text-white">{conv.customer_name || <em className="text-amber-400">No name — add via pencil ⚠️</em>}</p>
+            {conv.customer_email && <p className="text-xs text-slate-400 mt-0.5">{conv.customer_email}</p>}
+            {conv.customer_phone && <p className="text-xs text-slate-400">{conv.customer_phone}</p>}
+            {conv.agreed_price != null && (
+              <p className="text-xs text-emerald-400 mt-1 font-medium">💰 Agreed Price: ${Number(conv.agreed_price).toFixed(2)} (pre-filled below)</p>
+            )}
+            {missingInfo && (
+              <p className="text-[10px] text-amber-400 mt-2">
+                ⚠️ Missing email + phone. Email/phone help with Meta attribution quality. Add via the pencil icon in the conversation header before converting.
+              </p>
+            )}
+          </div>
+
+          {/* Order details */}
+          <div className="grid grid-cols-2 gap-3">
+            <div className="col-span-2">
+              <label className="block text-[10px] uppercase tracking-wider text-slate-400 mb-1.5 font-semibold">Design Name</label>
+              <input
+                type="text"
+                value={designName}
+                onChange={e => setDesignName(e.target.value)}
+                placeholder="e.g., Company Logo"
+                className="w-full px-3 py-2 bg-slate-800 border border-white/10 rounded-lg text-sm text-white placeholder-slate-500 focus:outline-none focus:border-brand-orange/50"
+              />
+            </div>
+            <div>
+              <label className="block text-[10px] uppercase tracking-wider text-slate-400 mb-1.5 font-semibold">Patch Type</label>
+              <select
+                value={patchType}
+                onChange={e => setPatchType(e.target.value)}
+                className="w-full px-3 py-2 bg-slate-800 border border-white/10 rounded-lg text-sm text-white focus:outline-none focus:border-brand-orange/50"
+              >
+                {['Embroidered', 'PVC', 'Woven', 'Chenille', 'Leather', '3D Embroidery Puff', 'Sublimation Patch', 'DTF Transfer'].map(t => (
+                  <option key={t} value={t}>{t}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-[10px] uppercase tracking-wider text-slate-400 mb-1.5 font-semibold">Quantity *</label>
+              <input
+                type="number"
+                value={quantity}
+                onChange={e => setQuantity(e.target.value)}
+                placeholder="100"
+                min="1"
+                className="w-full px-3 py-2 bg-slate-800 border border-white/10 rounded-lg text-sm text-white placeholder-slate-500 focus:outline-none focus:border-brand-orange/50"
+              />
+            </div>
+            <div>
+              <label className="block text-[10px] uppercase tracking-wider text-slate-400 mb-1.5 font-semibold">Size</label>
+              <input
+                type="text"
+                value={designSize}
+                onChange={e => setDesignSize(e.target.value)}
+                placeholder='e.g., 3"'
+                className="w-full px-3 py-2 bg-slate-800 border border-white/10 rounded-lg text-sm text-white placeholder-slate-500 focus:outline-none focus:border-brand-orange/50"
+              />
+            </div>
+            <div>
+              <label className="block text-[10px] uppercase tracking-wider text-slate-400 mb-1.5 font-semibold">Backing</label>
+              <select
+                value={designBacking}
+                onChange={e => setDesignBacking(e.target.value)}
+                className="w-full px-3 py-2 bg-slate-800 border border-white/10 rounded-lg text-sm text-white focus:outline-none focus:border-brand-orange/50"
+              >
+                {['Iron-on', 'Velcro', 'Adhesive', 'None'].map(b => (
+                  <option key={b} value={b}>{b}</option>
+                ))}
+              </select>
+            </div>
+            <div className="col-span-2">
+              <label className="block text-[10px] uppercase tracking-wider text-slate-400 mb-1.5 font-semibold">Order Total ($) *</label>
+              <input
+                type="number"
+                step="0.01"
+                value={orderAmount}
+                onChange={e => setOrderAmount(e.target.value)}
+                placeholder="200.00"
+                min="0.01"
+                className="w-full px-3 py-2 bg-slate-800 border border-brand-orange/30 rounded-lg text-sm text-white placeholder-slate-500 focus:outline-none focus:border-brand-orange/60"
+              />
+            </div>
+            <div className="col-span-2">
+              <label className="block text-[10px] uppercase tracking-wider text-slate-400 mb-1.5 font-semibold">Instructions (optional)</label>
+              <textarea
+                value={instructions}
+                onChange={e => setInstructions(e.target.value)}
+                placeholder="Any special notes from the customer…"
+                rows={2}
+                className="w-full px-3 py-2 bg-slate-800 border border-white/10 rounded-lg text-sm text-white placeholder-slate-500 focus:outline-none focus:border-brand-orange/50 resize-none"
+              />
+            </div>
+          </div>
+
+          {/* Attribution preserved indicator */}
+          {conv.attribution && (
+            <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-lg p-3 text-xs text-emerald-300">
+              ✅ Meta ad attribution will be preserved — CAPI Purchase will fire with full tracking when paid.
+            </div>
+          )}
+        </div>
+
+        <div className="px-6 py-4 border-t border-white/10 flex justify-end gap-2 sticky bottom-0 bg-slate-900">
+          <button
+            onClick={onClose}
+            className="px-4 py-2 text-sm text-slate-400 hover:text-white border border-white/10 rounded-lg transition-all"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={create}
+            disabled={creating}
+            className="px-4 py-2 bg-brand-orange hover:bg-brand-orange/90 disabled:opacity-50 text-white text-sm font-medium rounded-lg transition-all"
+          >
+            {creating ? 'Creating…' : 'Create Order'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 const InboxPage: React.FC = () => {
@@ -306,6 +701,16 @@ const InboxPage: React.FC = () => {
     conversationId ? parseInt(conversationId, 10) : null
   );
   const [composerMode, setComposerMode] = useState<ComposerMode>('reply');
+  const [editingCustomer, setEditingCustomer] = useState(false);
+  const [convertingDirectlyToOrder, setConvertingDirectlyToOrder] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+
+  // Debounce search input — 300ms so we don't query on every keystroke
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(searchQuery.trim()), 300);
+    return () => clearTimeout(t);
+  }, [searchQuery]);
   const [replyText, setReplyText] = useState('');
   const [selectedTag, setSelectedTag] = useState<MessageTag>('POST_PURCHASE_UPDATE');
   const lastSendAtRef = useRef<number>(0);
@@ -341,16 +746,55 @@ const InboxPage: React.FC = () => {
     staleTime: 60_000,
   });
 
+  // ── Message text search ─────────────────────────────────────
+  // When user types in search box, find conversation IDs whose messages match.
+  // We sanitize input to prevent PostgREST filter injection.
+  const { data: matchingConvIds = [] } = useQuery({
+    queryKey: ['inbox-search-message-conv-ids', debouncedSearch],
+    queryFn: async (): Promise<number[]> => {
+      if (!debouncedSearch || debouncedSearch.length < 2) return [];
+      const safe = sanitizeIlikePattern(debouncedSearch);
+      if (!safe) return [];
+      const { data, error } = await supabase
+        .from('meta_messages')
+        .select('conversation_id')
+        .ilike('text', `%${safe}%`)
+        .limit(500);
+      if (error) return [];
+      const ids = new Set<number>();
+      (data || []).forEach((m: any) => { if (m.conversation_id) ids.add(m.conversation_id); });
+      return Array.from(ids);
+    },
+    enabled: debouncedSearch.length >= 2,
+    staleTime: 10_000,
+  });
+
   // ── Filter ───────────────────────────────────────────────────
   const filtered = useMemo(() => {
+    const q = debouncedSearch.toLowerCase();
+    const idSet = new Set(matchingConvIds);
     return conversations.filter(c => {
-      if (activeFilter === 'closed') return c.status === 'closed';
-      if (c.status === 'closed') return false;
-      if (activeFilter === 'mine') return c.assignee_user_id === user?.id;
-      if (activeFilter === 'unassigned') return !c.assignee_user_id;
+      // Tab filters
+      if (activeFilter === 'closed') {
+        if (c.status !== 'closed') return false;
+      } else {
+        if (c.status === 'closed') return false;
+        if (activeFilter === 'mine' && c.assignee_user_id !== user?.id) return false;
+        if (activeFilter === 'unassigned' && c.assignee_user_id) return false;
+      }
+      // Search filter — match name, email, phone, last message preview, OR message body
+      if (q.length >= 2) {
+        const matchesMeta =
+          (c.customer_name?.toLowerCase().includes(q) ?? false) ||
+          (c.customer_email?.toLowerCase().includes(q) ?? false) ||
+          (c.customer_phone?.toLowerCase().includes(q) ?? false) ||
+          (c.last_message_preview?.toLowerCase().includes(q) ?? false);
+        const matchesMessage = idSet.has(c.id);
+        if (!matchesMeta && !matchesMessage) return false;
+      }
       return true;
     });
-  }, [conversations, activeFilter, user?.id]);
+  }, [conversations, activeFilter, user?.id, debouncedSearch, matchingConvIds]);
 
   const selectedConv = conversations.find(c => c.id === selectedId) ?? null;
 
@@ -475,10 +919,14 @@ const InboxPage: React.FC = () => {
     setConvertingToQuote(true);
     try {
       // Insert a new quote pre-filled from the conversation
+      // Pull customer_email/phone from conversation if agent filled them in
+      // (otherwise quote starts blank and agent fills them on the quote page).
       const { data: newQuote, error: qErr } = await supabase
         .from('quotes')
         .insert({
           customer_name: selectedConv.customer_name || 'Unknown',
+          customer_email: selectedConv.customer_email || null,
+          customer_phone: selectedConv.customer_phone || null,
           sales_agent: 'unassigned',
           lead_source: selectedConv.channel === 'instagram' ? 'meta_instagram' : 'meta_messenger',
           attribution: selectedConv.attribution,
@@ -555,6 +1003,29 @@ const InboxPage: React.FC = () => {
           </button>
         </div>
 
+        {/* Search bar — searches across customer name, email, phone, AND message body */}
+        <div className="px-4 py-2 border-b border-white/5">
+          <div className="relative">
+            <Search className="w-3.5 h-3.5 text-slate-500 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search name, email, or message…"
+              className="w-full pl-8 pr-8 py-1.5 bg-slate-800/60 border border-white/10 rounded-lg text-xs text-white placeholder-slate-500 focus:outline-none focus:border-brand-orange/50 transition-colors"
+            />
+            {searchQuery && (
+              <button
+                onClick={() => setSearchQuery('')}
+                className="absolute right-2 top-1/2 -translate-y-1/2 p-0.5 text-slate-500 hover:text-slate-300 rounded"
+                title="Clear search"
+              >
+                <X className="w-3 h-3" />
+              </button>
+            )}
+          </div>
+        </div>
+
         {/* Filter tabs */}
         <div className="flex border-b border-white/5">
           {filterTabs.map(tab => (
@@ -622,10 +1093,27 @@ const InboxPage: React.FC = () => {
                   : <MessageSquare className="w-4 h-4 text-blue-400" />}
               </div>
               <div className="min-w-0">
-                <p className="text-sm font-semibold text-white truncate">
-                  {selectedConv.customer_name || 'Unknown'}
+                <div className="flex items-center gap-1.5">
+                  <p className={`text-sm font-semibold truncate ${
+                    !selectedConv.customer_name || selectedConv.customer_name === 'Meta messenger user'
+                      ? 'text-slate-400 italic'
+                      : 'text-white'
+                  }`}>
+                    {selectedConv.customer_name || 'Unknown'}
+                  </p>
+                  <button
+                    onClick={() => setEditingCustomer(true)}
+                    className="p-1 rounded hover:bg-white/10 text-slate-500 hover:text-brand-orange transition-all shrink-0"
+                    title="Edit customer info (name, email, phone)"
+                  >
+                    <Pencil className="w-3 h-3" />
+                  </button>
+                </div>
+                <p className="text-xs text-slate-500 capitalize">
+                  {selectedConv.channel}
+                  {selectedConv.customer_email && <> · {selectedConv.customer_email}</>}
+                  {selectedConv.customer_phone && <> · {selectedConv.customer_phone}</>}
                 </p>
-                <p className="text-xs text-slate-500 capitalize">{selectedConv.channel}</p>
               </div>
               {selectedConv.meta_ad_id && (
                 <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-brand-orange/15 text-brand-orange shrink-0">
@@ -636,7 +1124,7 @@ const InboxPage: React.FC = () => {
             </div>
 
             <div className="flex items-center gap-2 shrink-0">
-              {/* Convert to Quote */}
+              {/* Convert to Quote — for customers who want a formal price email first */}
               <button
                 onClick={convertToQuote}
                 disabled={convertingToQuote}
@@ -649,6 +1137,32 @@ const InboxPage: React.FC = () => {
               >
                 <FileText className="w-3 h-3" />
                 {selectedConv.promoted_quote_id ? 'View Quote' : (convertingToQuote ? 'Creating…' : 'To Quote')}
+              </button>
+
+              {/* Convert directly to Order — for customers who already agreed to price in chat */}
+              <button
+                onClick={async () => {
+                  if (selectedConv.promoted_to_order_id) {
+                    // Already converted — open the order
+                    const { data } = await supabase
+                      .from('orders')
+                      .select('order_number')
+                      .eq('id', selectedConv.promoted_to_order_id)
+                      .single();
+                    if (data?.order_number) navigate(`/order/${data.order_number}`);
+                    return;
+                  }
+                  setConvertingDirectlyToOrder(true);
+                }}
+                className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                  selectedConv.promoted_to_order_id
+                    ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500/30'
+                    : 'bg-brand-orange/15 hover:bg-brand-orange/25 text-brand-orange border border-brand-orange/30'
+                }`}
+                title={selectedConv.promoted_to_order_id ? 'Open linked order' : 'Convert directly to Order (skip quote)'}
+              >
+                <Package className="w-3 h-3" />
+                {selectedConv.promoted_to_order_id ? 'View Order' : 'To Order'}
               </button>
 
               <a
@@ -818,6 +1332,29 @@ const InboxPage: React.FC = () => {
             </div>
           )}
         </div>
+      )}
+
+      {/* Customer info edit modal */}
+      {editingCustomer && selectedConv && (
+        <CustomerInfoModal
+          conv={selectedConv}
+          onClose={() => setEditingCustomer(false)}
+          onSaved={() => queryClient.invalidateQueries({ queryKey: ['inbox-conversations'] })}
+        />
+      )}
+
+      {/* Direct chat-to-order modal */}
+      {convertingDirectlyToOrder && selectedConv && (
+        <ConvertToOrderModal
+          conv={selectedConv}
+          agentEmail={user?.email ?? null}
+          agentUserId={user?.id ?? null}
+          onClose={() => setConvertingDirectlyToOrder(false)}
+          onCreated={(orderNumber) => {
+            queryClient.invalidateQueries({ queryKey: ['inbox-conversations'] });
+            navigate(`/order/${orderNumber}`);
+          }}
+        />
       )}
     </div>
   );

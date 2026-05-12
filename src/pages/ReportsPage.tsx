@@ -63,6 +63,7 @@ import FormFeedbackReport from "../components/Reports/FormFeedbackReport";
 import IncomeStatementReport from "../components/Reports/IncomeStatementReport";
 import ProductMixAnalysis from "../components/Reports/ProductMixAnalysis";
 import LeadSourceDistribution from "../components/Reports/LeadSourceDistribution";
+import FunnelAttributionReport from "../components/Reports/FunnelAttributionReport";
 import { SOURCE_COLORS, PATCH_TYPE_COLORS } from "../constants/colors";
 
 const containerVariants: Variants = {
@@ -1322,7 +1323,8 @@ type ReportType =
   | "incomeStatement"
   | "productMix"
   | "customerFeedback"
-  | "formFeedback";
+  | "formFeedback"
+  | "funnelAttribution";
 
 const ReportsPage: React.FC = () => {
    const { user, role, permissions, isLoading: isAuthLoading } = useAuth();
@@ -1432,6 +1434,7 @@ const ReportsPage: React.FC = () => {
         { key: "incomeStatement", label: "Income Statement", icon: DollarSign },
         { key: "profitLoss", label: "Profit & Loss", icon: FileText },
         { key: "leadSource", label: "Lead Source", icon: Share2 },
+        { key: "funnelAttribution", label: "Funnel & Attribution", icon: ShieldAlert },
         { key: "customerFeedback", label: "Customer Feedback", icon: MessageSquare },
         { key: "formFeedback", label: "Form Feedback", icon: ClipboardList },
       ];
@@ -1715,6 +1718,12 @@ const ReportsPage: React.FC = () => {
           )}
           {activeReport === "formFeedback" && (
             <FormFeedbackReport dateRange={dateRange} />
+          )}
+          {activeReport === "funnelAttribution" && (
+            <FunnelAttributionReport
+              startDate={new Date(`${dateRange.startDate}T00:00:00`)}
+              endDate={new Date(`${dateRange.endDate}T23:59:59`)}
+            />
           )}
         </motion.div>
       </div>

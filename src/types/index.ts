@@ -95,6 +95,7 @@ export interface Order {
 
   // --- Marketing Attribution (for Meta CAPI etc.) ---
   attribution: Record<string, unknown> | null;
+  attributionQuality?: 'tracked' | 'partial' | 'untracked' | null; // DB-generated column
 
   // --- Notes & Attachments (Arrays of URLs) ---
   revisionNotes?: string;
