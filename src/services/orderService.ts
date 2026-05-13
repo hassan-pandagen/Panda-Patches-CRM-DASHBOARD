@@ -24,7 +24,10 @@ const toSnakeCase = (data: any): any => {
   if (!data || typeof data !== 'object') return {};
 
   const readOnlyFields = new Set([
-    'id', 'orderNumber', 'createdAt', 'updatedAt', 'createdBy', 'profit', 'amountRemaining', 'changes'
+    'id', 'orderNumber', 'createdAt', 'updatedAt', 'createdBy', 'profit', 'amountRemaining', 'changes',
+    // attributionQuality is a Postgres GENERATED column — read-only by definition.
+    // Including it in an UPDATE causes "column can only be updated to DEFAULT" error.
+    'attributionQuality',
   ]);
 
   const snakeCaseObject: { [key: string]: any } = {};
