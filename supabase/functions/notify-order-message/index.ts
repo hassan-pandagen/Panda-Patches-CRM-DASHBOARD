@@ -115,7 +115,7 @@ Deno.serve(async (req: Request) => {
                 customer_name: sender_name,
                 order_number,
                 message_content: content,
-                order_link: `https://panda-patches-crm-dashboard.vercel.app/order/${order_number}`,
+                order_link: `https://portal.pandapatches.com/order/${order_number}`,
               },
             }),
           });

@@ -28,6 +28,8 @@ const toSnakeCase = (data: any): any => {
     // attributionQuality is a Postgres GENERATED column — read-only by definition.
     // Including it in an UPDATE causes "column can only be updated to DEFAULT" error.
     'attributionQuality',
+    // production_completed_* only written via mark_production_done / unmark_production_done RPCs
+    'productionCompletedAt', 'productionCompletedBy',
   ]);
 
   const snakeCaseObject: { [key: string]: any } = {};
@@ -174,6 +176,8 @@ export const mapDbToOrder = (data: any): Order => {
     isUrgent: data.isUrgent ?? data.is_urgent,
     isUrgentApproved: data.isUrgentApproved ?? data.is_urgent_approved,
     rushDate: data.rushDate ?? data.rush_date ?? undefined,
+    productionCompletedAt: data.productionCompletedAt ?? data.production_completed_at ?? null,
+    productionCompletedBy: data.productionCompletedBy ?? data.production_completed_by ?? null,
     leadSource: data.leadSource ?? data.lead_source,
     salesAgent: data.salesAgent ?? data.sales_agent,
     assignedBy: data.assignedBy ?? data.assigned_by,
@@ -380,7 +384,9 @@ export const triggerStatusEmail = async (order: Order, statusToCheck: string) =>
       const emailPayload: any = {
         to: req.to,
         template_id: req.template_id,
-        dynamic_data: emailData
+        dynamic_data: req.isInternal
+          ? { ...emailData, order_link: `https://portal.pandapatches.com/order/${order.orderNumber}` }
+          : emailData
       };
 
       // ✅ Add CC for all emails (both customer and internal)
@@ -701,19 +707,25 @@ export const sendPaymentConfirmationEmail = async (order: Order): Promise<void> 
     sales_agent_name: order.salesAgent || 'Panda Team',
   };
 
-  const requests: Array<{ to: string; template_id: string }> = [];
+  const requests: Array<{ to: string; template_id: string; isInternal: boolean }> = [];
 
   // Customer receipt
   if (order.customerEmail && isValidEmail(order.customerEmail)) {
-    requests.push({ to: order.customerEmail, template_id: 'CUSTOMER_PAYMENT_CONFIRMATION' });
+    requests.push({ to: order.customerEmail, template_id: 'CUSTOMER_PAYMENT_CONFIRMATION', isInternal: false });
   }
   // Internal alert → lance@pandapatches.com only
-  requests.push({ to: 'lance@pandapatches.com', template_id: 'INTERNAL_PAYMENT_NOTIFICATION' });
+  requests.push({ to: 'lance@pandapatches.com', template_id: 'INTERNAL_PAYMENT_NOTIFICATION', isInternal: true });
 
   const results = await Promise.allSettled(
     requests.map(req =>
       supabase.functions.invoke('send-email', {
-        body: { to: req.to, template_id: req.template_id, dynamic_data: emailData },
+        body: {
+          to: req.to,
+          template_id: req.template_id,
+          dynamic_data: req.isInternal
+            ? { ...emailData, order_link: `https://portal.pandapatches.com/order/${order.orderNumber}` }
+            : emailData,
+        },
       })
     )
   );

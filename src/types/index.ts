@@ -74,6 +74,10 @@ export interface Order {
   isUrgentApproved?: boolean;
   rushDate?: string; // Required ship-by date when order is marked urgent
 
+  // --- Production completion (separate from status; production team flag) ---
+  productionCompletedAt?: string | null;
+  productionCompletedBy?: string | null;
+
   // --- Financials ---
   orderAmount: number | null;
   amountPaid: number | null;

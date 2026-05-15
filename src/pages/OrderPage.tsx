@@ -167,12 +167,47 @@ const OrderPage: React.FC = () => {
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: queryKeys.orders.single(orderNumber) });
             queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.all() });
-            toast.success('Production Files Saved', 'Files have been updated successfully.');
+            showSuccess('Production Files Saved', 'Files have been updated successfully.');
             setIsEditingProduction(false);
         },
-        onError: (err) => {
-            toast.error('Save Failed', err.message);
+        onError: (err: any) => {
+            showError('Save Failed', err.message);
         }
+    });
+
+    // --- PRODUCTION COMPLETION MUTATIONS ---
+    const markProductionDoneMutation = useMutation({
+        mutationFn: async () => {
+            if (!order?.id) throw new Error('No order loaded');
+            const { error } = await supabase.rpc('mark_production_done', { p_order_id: order.id });
+            if (error) throw error;
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: queryKeys.orders.single(orderNumber) });
+            queryClient.invalidateQueries({ queryKey: queryKeys.orders.all() });
+            queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.all() });
+            showSuccess('Marked Production Complete', 'Removed from the production queue.');
+        },
+        onError: (err: any) => {
+            showError('Mark Failed', err?.message || 'Could not mark production done.');
+        },
+    });
+
+    const unmarkProductionDoneMutation = useMutation({
+        mutationFn: async () => {
+            if (!order?.id) throw new Error('No order loaded');
+            const { error } = await supabase.rpc('unmark_production_done', { p_order_id: order.id });
+            if (error) throw error;
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: queryKeys.orders.single(orderNumber) });
+            queryClient.invalidateQueries({ queryKey: queryKeys.orders.all() });
+            queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.all() });
+            showSuccess('Production Unmarked', 'Order is back in the production queue.');
+        },
+        onError: (err: any) => {
+            showError('Unmark Failed', err?.message || 'Could not unmark production.');
+        },
     });
 
     // --- APPROVAL MUTATIONS ---
@@ -203,13 +238,12 @@ const OrderPage: React.FC = () => {
             queryClient.invalidateQueries({ queryKey: queryKeys.orders.single(orderNumber) });
             queryClient.invalidateQueries({ queryKey: queryKeys.orders.urgent() });
             queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.all() });
-            toast.success('Urgent status updated successfully', 'The order priority has been changed.');
+            showSuccess('Urgent status updated successfully', 'The order priority has been changed.');
             setIsProcessing(false);
         },
-        onError: (err) => {
+        onError: (err: any) => {
             setIsProcessing(false);
-            // REPLACED ALERT WITH TOAST
-            toast.error('Update Failed', err.message);
+            showError('Update Failed', err.message);
         }
     });
 
@@ -229,11 +263,10 @@ const OrderPage: React.FC = () => {
             queryClient.invalidateQueries({ queryKey: queryKeys.orders.all() });
             queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.all() });
             navigate('/orders');
-            toast.success('Order Deleted', `Order ${order?.orderNumber} has been permanently removed.`);
+            showSuccess('Order Deleted', `Order ${order?.orderNumber} has been permanently removed.`);
         },
-        onError: (err) => {
-            // REPLACED ALERT WITH TOAST
-            toast.error('Delete Failed', err.message);
+        onError: (err: any) => {
+            showError('Delete Failed', err.message);
         }
     });
 
@@ -244,11 +277,11 @@ const OrderPage: React.FC = () => {
             await triggerStatusEmail(order, status);
         },
         onSuccess: () => {
-            toast.success('Email Sent', 'The order confirmation email has been resent to the customer.');
+            showSuccess('Email Sent', 'The order confirmation email has been resent to the customer.');
         },
         onError: (err: any) => {
             console.error('❌ Email resend failed:', err);
-            toast.error('Email Failed', err.message || 'Failed to send email. Check console for details.');
+            showError('Email Failed', err.message || 'Failed to send email. Check console for details.');
         }
     });
 
@@ -340,6 +373,44 @@ const OrderPage: React.FC = () => {
                             <h1 className="text-3xl font-bold text-white flex items-center gap-3 flex-wrap">
                                 Order {order.orderNumber}
                                 <AttributionQualityBadge quality={getAttributionQualityFromOrder(order)} />
+
+                                {/* Production Complete: action button (open) OR badge (already done) */}
+                                {order.productionCompletedAt ? (
+                                    <span
+                                        className="text-xs px-3 py-1 rounded-full border font-semibold bg-emerald-500/15 border-emerald-500/40 text-emerald-300 flex items-center gap-1.5"
+                                        title={`Marked by ${order.productionCompletedBy || 'unknown'} on ${new Date(order.productionCompletedAt).toLocaleString()}`}
+                                    >
+                                        <Check size={12} /> Production Complete
+                                        {isAdmin && (
+                                            <button
+                                                onClick={() => {
+                                                    if (window.confirm('Unmark production complete? This order will return to the production queue.')) {
+                                                        unmarkProductionDoneMutation.mutate();
+                                                    }
+                                                }}
+                                                disabled={unmarkProductionDoneMutation.isPending}
+                                                className="ml-1 text-emerald-400 hover:text-white transition-colors"
+                                                title="Admin: unmark production"
+                                            >
+                                                <X size={12} />
+                                            </button>
+                                        )}
+                                    </span>
+                                ) : (canViewProduction || isAdmin) && (
+                                    <button
+                                        onClick={() => {
+                                            if (window.confirm('Mark this order as production complete? It will be removed from the production queue.')) {
+                                                markProductionDoneMutation.mutate();
+                                            }
+                                        }}
+                                        disabled={markProductionDoneMutation.isPending}
+                                        className="text-xs px-3 py-1.5 rounded-full border font-semibold bg-emerald-500/10 border-emerald-500/40 text-emerald-300 hover:bg-emerald-500/25 hover:text-white transition-colors flex items-center gap-1.5 disabled:opacity-50"
+                                    >
+                                        <Check size={12} />
+                                        {markProductionDoneMutation.isPending ? 'Marking…' : 'Production Mark this order as Complete'}
+                                    </button>
+                                )}
+
                                 {order.isUrgent && (
                                     <div className="flex items-center gap-2 flex-wrap">
                                         <span className={`text-sm px-3 py-1 rounded-full border font-bold ${order.isUrgentApproved

@@ -291,16 +291,37 @@ async function handleMessagingEvent(
       : profile.name || profile.first_name || `Meta ${channel} user`;
 
     // Build attribution JSONB
+    // Meta sends different click ID fields depending on ad type:
+    //   - WhatsApp CTM (Click-to-WhatsApp): ctwa_clid → use to build fbc
+    //   - Messenger CTM (Click-to-Messenger): ref → use as Messenger's equivalent of ctwa_clid
+    //   - Instagram CTM: ref OR ig_ref depending on payload version
+    // We capture all of them so CAPI can attribute to the ad regardless of channel.
     const attribution: Record<string, any> = {
       source: channel === 'messenger' ? 'meta_messenger' : 'meta_instagram',
       first_seen_at: receivedAt,
     };
+    // WhatsApp / Instagram CTWA — ctwa_clid is the strongest signal (becomes fbc)
     if (referral?.ctwa_clid) {
       attribution.fbc = `fb.1.${Date.now()}.${referral.ctwa_clid}`;
       attribution.ctwa_clid = referral.ctwa_clid;
     }
+    // Messenger / Instagram CTM — ref field (custom data set in the ad).
+    // Treat it as Messenger's equivalent of ctwa_clid for CAPI matching.
+    if (referral?.ref) {
+      attribution.ref = referral.ref;
+      // If no ctwa_clid was present, synthesize fbc from ref for Messenger ads.
+      // Meta's CAPI accepts fbc built from any click identifier as long as the
+      // event has action_source: business_messaging + ad_id.
+      if (!attribution.fbc) {
+        attribution.fbc = `fb.1.${Date.now()}.${referral.ref}`;
+      }
+    }
     if (referral?.ad_id) attribution.ad_id = referral.ad_id;
     if (referral?.source) attribution.referral_source = referral.source;
+    // Ad creative context for richer reporting (ad title, image, etc.)
+    if (referral?.ads_context_data) {
+      attribution.ads_context = referral.ads_context_data;
+    }
 
     const { data: newConv, error: insertErr } = await admin
       .from('conversations')

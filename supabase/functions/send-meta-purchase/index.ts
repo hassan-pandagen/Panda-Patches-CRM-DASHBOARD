@@ -251,6 +251,21 @@ Deno.serve(async (req: Request) => {
     const eventId = order.capi_purchase_event_id || `order_${order.id}_purchase`;
     const userData = await buildUserData(order);
     const hasBrowserContext = !!(userData.fbp || userData.fbc);
+    // Detect Messenger/Instagram ad source — even without fbc, ad_id allows Meta
+    // to credit the campaign. action_source must be 'business_messaging' for
+    // Meta to properly attribute Messenger/Instagram conversations to ads.
+    const attrSource = order.attribution?.source ?? '';
+    const isFromMetaChat = attrSource === 'meta_messenger' || attrSource === 'meta_instagram';
+    const adId = order.attribution?.ad_id ?? null;
+
+    // Pick the most accurate action_source:
+    //   - website (fbc/fbp present → user came from tracked website visit)
+    //   - business_messaging (Messenger/Instagram conversation, with or without ad_id)
+    //   - system_generated (no signals — agent-created, no marketing context)
+    let actionSource: 'website' | 'business_messaging' | 'system_generated';
+    if (hasBrowserContext) actionSource = 'website';
+    else if (isFromMetaChat) actionSource = 'business_messaging';
+    else actionSource = 'system_generated';
 
     const eventBody = {
       data: [
@@ -258,17 +273,18 @@ Deno.serve(async (req: Request) => {
           event_name: "Purchase",
           event_time: Math.floor(Date.now() / 1000),
           event_id: eventId,
-          action_source: hasBrowserContext ? "website" : "system_generated",
+          action_source: actionSource,
           // event_source_url only meaningful when action_source=website
           event_source_url: hasBrowserContext
             ? (order.attribution?.event_source_url || "https://pandapatches.com")
             : undefined,
+          // messaging_channel hint for Meta when action_source = business_messaging
+          messaging_channel: isFromMetaChat
+            ? (attrSource === 'meta_instagram' ? 'instagram' : 'messenger')
+            : undefined,
           user_data: userData,
           custom_data: {
             currency: "USD",
-            // Always send FULL contract value (industry standard for split-payment B2B).
-            // Even if customer only paid a deposit, Meta gets the full intended value
-            // so the algorithm can optimize for high-value conversions.
             value: Number(order.order_amount),
             order_id: String(order.id),
             content_type: "product",
@@ -282,8 +298,9 @@ Deno.serve(async (req: Request) => {
                 item_price: Number(order.order_amount) / Math.max(order.patches_quantity || 1, 1),
               },
             ],
-            // Internal-only: mark whether this fired on deposit or full payment
-            // (does not affect Meta optimization — for our analytics)
+            // Ad attribution — critical for Messenger/Instagram CTM ads
+            // where ctwa_clid isn't available. ad_id lets Meta credit the campaign.
+            ad_id: adId || undefined,
             payment_status_at_fire:
               order.amount_paid >= order.order_amount ? "fully_paid" : "deposit",
           },

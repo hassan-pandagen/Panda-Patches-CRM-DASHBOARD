@@ -185,7 +185,7 @@ async function fetchPaginatedOrders(params: {
     const from = (page - 1) * ITEMS_PER_PAGE;
     const to = from + ITEMS_PER_PAGE - 1;
 
-    const columns = 'id, order_number, customer_name, customer_email, design_name, status, created_at, sales_agent, order_amount, amount_paid, is_urgent';
+    const columns = 'id, order_number, customer_name, customer_email, design_name, status, created_at, sales_agent, order_amount, amount_paid, is_urgent, production_completed_at, production_completed_by';
 
     // --- IDS drill-down (from dashboard click) ---
     if (ids) {
@@ -207,6 +207,11 @@ async function fetchPaginatedOrders(params: {
     // ADMIN and PRODUCTION can see all orders
     if (userRole !== UserRole.ADMIN && userRole !== UserRole.PRODUCTION && userEmail) {
         query = query.eq('sales_agent', userEmail);
+    }
+
+    // Production users only see orders that aren't marked production-complete yet
+    if (userRole === UserRole.PRODUCTION) {
+        query = query.is('production_completed_at', null);
     }
 
     // Apply drill-down params
@@ -328,11 +333,16 @@ async function fetchTabCounts(params: {
     // This is lightweight — no large text fields
     let query = supabase
         .from('orders')
-        .select('status, is_urgent, created_at, order_amount, amount_paid, sales_agent');
+        .select('status, is_urgent, created_at, order_amount, amount_paid, sales_agent, production_completed_at');
 
     // AGENT/USER see only their assigned orders; ADMIN/PRODUCTION see all
     if (userRole !== UserRole.ADMIN && userRole !== UserRole.PRODUCTION && userEmail) {
         query = query.eq('sales_agent', userEmail);
+    }
+
+    // Production tab counts also exclude completed
+    if (userRole === UserRole.PRODUCTION) {
+        query = query.is('production_completed_at', null);
     }
 
     if (salesAgent) query = query.eq('sales_agent', salesAgent);
