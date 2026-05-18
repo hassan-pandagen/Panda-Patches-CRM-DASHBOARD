@@ -470,14 +470,32 @@ const OrderPage: React.FC = () => {
                                 </Link>
                             )}
 
-                            {/* ✅ NEW: Production Edit toggle for production users */}
+                            {/* ✅ Production Edit toggle for production users — Done Editing forces an immediate save */}
                             {canViewProduction && !isAdmin && (
                                 <Button
                                     variant={isEditingProduction ? "primary" : "secondary"}
                                     size="md"
-                                    onClick={() => setIsEditingProduction(!isEditingProduction)}
+                                    disabled={updateProductionFilesMutation.isPending}
+                                    onClick={() => {
+                                        if (isEditingProduction) {
+                                            // Force-save pending changes before exiting edit mode
+                                            const hasChanged = JSON.stringify(productionFiles) !== JSON.stringify(order.productionFileUrls || []);
+                                            if (hasChanged) {
+                                                updateProductionFilesMutation.mutate(productionFiles);
+                                                // setIsEditingProduction(false) is already called inside mutation onSuccess
+                                            } else {
+                                                setIsEditingProduction(false);
+                                            }
+                                        } else {
+                                            setIsEditingProduction(true);
+                                        }
+                                    }}
                                 >
-                                    <Upload size={16} /> {isEditingProduction ? 'Done Editing' : 'Edit Production'}
+                                    <Upload size={16} /> {
+                                        updateProductionFilesMutation.isPending
+                                            ? 'Saving…'
+                                            : isEditingProduction ? 'Done Editing' : 'Edit Production'
+                                    }
                                 </Button>
                             )}
 
