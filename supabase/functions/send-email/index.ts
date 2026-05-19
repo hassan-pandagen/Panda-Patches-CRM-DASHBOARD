@@ -1039,20 +1039,30 @@ serve(async (req) => {
     console.log(`📧 Available data fields:`, Object.keys(processedData));
 
     // --- A. PROCESS WINNER (The Lightbox Image) ---
+    // Max 2MB for winner (inline images add to ZeptoMail payload size limit)
+    const MAX_WINNER_SIZE_MB = 2;
     if (processedData.winner_file && processedData.winner_file.url) {
         const file = await fetchFile(processedData.winner_file.url);
 
         if (file && file.isImage) {
-            // IMAGE -> INLINE (Use Content-ID for Lightbox)
-            const cid = 'winner_img';
-            inlineAttachments.push({
-                "Content-type": file.type,
-                "Filename": `Preview-${file.filename}`,
-                "ContentID": cid,
-                "Base64Content": file.content
-            });
-            processedData.winner_file.preview = `cid:${cid}`;
-            processedData.winner_file.is_image = true;
+            const fileSizeMB = (file.content.length * 0.75) / (1024 * 1024);
+            if (fileSizeMB <= MAX_WINNER_SIZE_MB) {
+                // IMAGE -> INLINE (Use Content-ID for Lightbox)
+                const cid = 'winner_img';
+                inlineAttachments.push({
+                    "Content-type": file.type,
+                    "Filename": `Preview-${file.filename}`,
+                    "ContentID": cid,
+                    "Base64Content": file.content
+                });
+                processedData.winner_file.preview = `cid:${cid}`;
+                processedData.winner_file.is_image = true;
+            } else {
+                // Too large — link to it instead of embedding
+                console.warn(`Winner image too large (${fileSizeMB.toFixed(1)}MB > ${MAX_WINNER_SIZE_MB}MB), linking instead`);
+                processedData.winner_file.preview = processedData.winner_file.url;
+                processedData.winner_file.is_image = false;
+            }
         }
         else if (file && !file.isImage) {
             // PDF -> ATTACHMENT (Never Inline)
