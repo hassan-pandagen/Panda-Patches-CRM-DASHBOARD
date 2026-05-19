@@ -812,10 +812,10 @@ const OrderForm: React.FC<OrderFormProps> = ({
           </div>
           <div>
             <label className="block text-sm font-medium text-slate-300">
-              Country <span className="text-red-400">*</span>
+              Country
             </label>
             <select
-              {...register('country', { required: 'Country is required' })}
+              {...register('country')}
               className="mt-1 block w-full bg-slate-800 border-slate-600 rounded-md text-white focus:ring-brand-orange focus:border-brand-orange"
             >
               <option value="" disabled hidden>Select country...</option>

@@ -37,9 +37,9 @@ const QuotesPage: React.FC = () => {
 
     const query = searchQuery.toLowerCase();
     return quotes.filter(q =>
-      q.customerName.toLowerCase().includes(query) ||
-      q.quoteNumber.toLowerCase().includes(query) ||
-      q.customerEmail.toLowerCase().includes(query) ||
+      q.customerName?.toLowerCase().includes(query) ||
+      q.quoteNumber?.toLowerCase().includes(query) ||
+      q.customerEmail?.toLowerCase().includes(query) ||
       q.customerPhone?.toLowerCase().includes(query) ||
       q.designName?.toLowerCase().includes(query)
     );
