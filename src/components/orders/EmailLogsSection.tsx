@@ -86,8 +86,42 @@ const EmailLogsSection: React.FC<EmailLogsSectionProps> = ({ order }) => {
     }
   };
 
+  const handleSendMissedNewOrder = async () => {
+    setResendingId(-1);
+    try {
+      const { triggerStatusEmail } = await import('../../services/orderService');
+      await triggerStatusEmail(order, 'NEW_ORDER');
+      showSuccess('Order confirmation email sent!');
+      queryClient.invalidateQueries({ queryKey: queryKeys.communications.byOrderId(order.id) });
+    } catch (err: any) {
+      showError(`Send failed: ${err?.message || 'Unknown error'}`);
+    } finally {
+      setResendingId(null);
+    }
+  };
+
   if (isLoading) return null;
-  if (communications.length === 0) return null;
+
+  // No logs yet — show a send button in case email was missed (e.g. order created without email)
+  if (communications.length === 0) {
+    return (
+      <SpotlightCard className="p-6">
+        <div className="flex items-center gap-2 mb-4">
+          <Mail className="w-5 h-5 text-brand-orange" />
+          <h3 className="text-lg font-semibold text-white">Email Communications</h3>
+        </div>
+        <p className="text-sm text-slate-400 mb-4">No emails sent yet for this order.</p>
+        <button
+          onClick={handleSendMissedNewOrder}
+          disabled={resendingId === -1}
+          className="flex items-center gap-2 px-4 py-2 bg-brand-orange/10 border border-brand-orange/30 text-brand-orange rounded-lg text-sm font-medium hover:bg-brand-orange/20 transition-colors disabled:opacity-50"
+        >
+          <RefreshCw className={`w-4 h-4 ${resendingId === -1 ? 'animate-spin' : ''}`} />
+          {resendingId === -1 ? 'Sending…' : 'Send NEW_ORDER Confirmation Email'}
+        </button>
+      </SpotlightCard>
+    );
+  }
 
   return (
     <SpotlightCard className="p-6">

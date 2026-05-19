@@ -478,6 +478,10 @@ const ConvertToOrderModal: React.FC<{
       showError('Customer name required', 'Click the pencil icon in the header to add the customer name first.');
       return;
     }
+    if (!conv.customer_email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(conv.customer_email)) {
+      showError('Customer email required', 'Add a valid customer email first — the order confirmation email won\'t send without it.');
+      return;
+    }
     const amountNum = parseFloat(orderAmount);
     if (isNaN(amountNum) || amountNum <= 0) {
       showError('Valid amount required', 'Enter the agreed-upon order total.');
