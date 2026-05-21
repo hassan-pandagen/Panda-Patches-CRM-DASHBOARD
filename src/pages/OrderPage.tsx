@@ -356,6 +356,17 @@ const OrderPage: React.FC = () => {
                                 src={previewUrl}
                                 alt="Image Preview"
                                 className="max-w-full max-h-[70vh] rounded"
+                                onError={(e) => {
+                                    const target = e.currentTarget;
+                                    target.style.display = 'none';
+                                    const parent = target.parentElement;
+                                    if (parent && !parent.querySelector('.img-error-msg')) {
+                                        const msg = document.createElement('div');
+                                        msg.className = 'img-error-msg text-center text-slate-400 py-8 px-6';
+                                        msg.innerHTML = '<div class="text-4xl mb-3">🖼️</div><div class="text-sm font-medium text-slate-300 mb-1">Image not available</div><div class="text-xs text-slate-500">The file may have failed to upload. Ask the customer to re-send the artwork.</div><a href="' + previewUrl + '" target="_blank" rel="noopener noreferrer" class="mt-3 inline-block text-xs text-brand-orange underline">Try opening directly →</a>';
+                                        parent.appendChild(msg);
+                                    }
+                                }}
                             />
                         </div>
                     </div>

@@ -4,13 +4,24 @@
 import React from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../../services/supabaseClient';
-import { resendFailedEmail } from '../../services/orderService';
+import { resendFailedEmail, triggerStatusEmail } from '../../services/orderService';
 import { queryKeys } from '../../constants/queryKeys';
 import { Order } from '../../types';
 import { useToast } from '../../hooks/useToast';
+import { useAuth } from '../../contexts/AuthContext';
 import SpotlightCard from '../ui/SpotlightCard';
-import { CheckCircle, XCircle, RefreshCw, Mail, AlertTriangle, Lightbulb } from 'lucide-react';
+import { CheckCircle, XCircle, RefreshCw, Mail, AlertTriangle, Lightbulb, Send } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
+
+const MANUAL_SEND_OPTIONS = [
+  { label: 'New Order Confirmation',   status: 'NEW_ORDER' },
+  { label: 'Mockup Ready',             status: 'AWAITING_APPROVAL' },
+  { label: 'Revision In Progress',     status: 'REVISION_REQUESTED' },
+  { label: 'Production Started',       status: 'IN_PRODUCTION' },
+  { label: 'Shipped',                  status: 'SHIPPED' },
+  { label: 'Delivered',                status: 'DELIVERED' },
+  { label: 'Remake',                   status: 'REMAKE' },
+];
 
 // ─── HELPERS ──────────────────────────────────────────────────────────────────
 
@@ -52,7 +63,26 @@ interface EmailLogsSectionProps {
 const EmailLogsSection: React.FC<EmailLogsSectionProps> = ({ order }) => {
   const queryClient = useQueryClient();
   const { success: showSuccess, error: showError } = useToast();
+  const { role } = useAuth();
+  const isAdmin = role === 'ADMIN';
   const [resendingId, setResendingId] = React.useState<number | null>(null);
+  const [manualStatus, setManualStatus] = React.useState('');
+  const [sendingManual, setSendingManual] = React.useState(false);
+
+  const handleManualSend = async () => {
+    if (!manualStatus) return;
+    setSendingManual(true);
+    try {
+      await triggerStatusEmail(order, manualStatus);
+      showSuccess('Email sent!', `${MANUAL_SEND_OPTIONS.find(o => o.status === manualStatus)?.label} email sent successfully.`);
+      queryClient.invalidateQueries({ queryKey: queryKeys.communications.byOrderId(order.id) });
+      setManualStatus('');
+    } catch (err: any) {
+      showError('Send failed', err?.message || 'Unknown error');
+    } finally {
+      setSendingManual(false);
+    }
+  };
 
   const { data: communications = [], isLoading } = useQuery({
     queryKey: queryKeys.communications.byOrderId(order.id),
@@ -102,7 +132,7 @@ const EmailLogsSection: React.FC<EmailLogsSectionProps> = ({ order }) => {
 
   if (isLoading) return null;
 
-  // No logs yet — show a send button in case email was missed (e.g. order created without email)
+  // No logs yet — show manual send panel
   if (communications.length === 0) {
     return (
       <SpotlightCard className="p-6">
@@ -111,24 +141,60 @@ const EmailLogsSection: React.FC<EmailLogsSectionProps> = ({ order }) => {
           <h3 className="text-lg font-semibold text-white">Email Communications</h3>
         </div>
         <p className="text-sm text-slate-400 mb-4">No emails sent yet for this order.</p>
-        <button
-          onClick={handleSendMissedNewOrder}
-          disabled={resendingId === -1}
-          className="flex items-center gap-2 px-4 py-2 bg-brand-orange/10 border border-brand-orange/30 text-brand-orange rounded-lg text-sm font-medium hover:bg-brand-orange/20 transition-colors disabled:opacity-50"
-        >
-          <RefreshCw className={`w-4 h-4 ${resendingId === -1 ? 'animate-spin' : ''}`} />
-          {resendingId === -1 ? 'Sending…' : 'Send NEW_ORDER Confirmation Email'}
-        </button>
+        {isAdmin && (
+          <div className="flex items-center gap-2">
+            <select
+              value={manualStatus}
+              onChange={e => setManualStatus(e.target.value)}
+              className="flex-1 bg-slate-800 border border-slate-600 text-white text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-brand-orange"
+            >
+              <option value="">Select email to send…</option>
+              {MANUAL_SEND_OPTIONS.map(o => (
+                <option key={o.status} value={o.status}>{o.label}</option>
+              ))}
+            </select>
+            <button
+              onClick={handleManualSend}
+              disabled={!manualStatus || sendingManual}
+              className="flex items-center gap-1.5 px-4 py-2 bg-brand-orange hover:bg-orange-500 disabled:bg-slate-700 disabled:text-slate-500 text-white text-sm font-semibold rounded-lg transition-colors"
+            >
+              <Send className={`w-4 h-4 ${sendingManual ? 'animate-pulse' : ''}`} />
+              {sendingManual ? 'Sending…' : 'Send'}
+            </button>
+          </div>
+        )}
       </SpotlightCard>
     );
   }
 
   return (
     <SpotlightCard className="p-6">
-      <div className="flex items-center gap-2 mb-5">
+      <div className="flex items-center gap-2 mb-5 flex-wrap">
         <Mail className="w-5 h-5 text-brand-orange" />
         <h3 className="text-lg font-semibold text-white">Email Communications</h3>
-        <span className="ml-auto text-xs text-slate-500">{sent.length} sent · {failed.length} failed</span>
+        <span className="text-xs text-slate-500">{sent.length} sent · {failed.length} failed</span>
+        {isAdmin && (
+          <div className="ml-auto flex items-center gap-2">
+            <select
+              value={manualStatus}
+              onChange={e => setManualStatus(e.target.value)}
+              className="bg-slate-800 border border-slate-600 text-white text-xs rounded-lg px-2 py-1.5 focus:outline-none focus:border-brand-orange"
+            >
+              <option value="">Resend / send email…</option>
+              {MANUAL_SEND_OPTIONS.map(o => (
+                <option key={o.status} value={o.status}>{o.label}</option>
+              ))}
+            </select>
+            <button
+              onClick={handleManualSend}
+              disabled={!manualStatus || sendingManual}
+              className="flex items-center gap-1 px-3 py-1.5 bg-brand-orange hover:bg-orange-500 disabled:bg-slate-700 disabled:text-slate-500 text-white text-xs font-semibold rounded-lg transition-colors"
+            >
+              <Send className={`w-3.5 h-3.5 ${sendingManual ? 'animate-pulse' : ''}`} />
+              {sendingManual ? 'Sending…' : 'Send'}
+            </button>
+          </div>
+        )}
       </div>
 
       {/* ── FAILED EMAILS ───────────────────────────────────────────── */}

@@ -131,7 +131,9 @@ export const sendQuoteEmail = async (quote: Quote): Promise<void> => {
 
     const isImage = (url: string) => /\.(jpg|jpeg|png|gif|webp)(\?|$)/i.test(url);
     const mockupUrls = quote.mockupUrls || [];
-    const sortedMockups = [...mockupUrls].reverse();
+    // Fall back to customer artwork if no mockups uploaded yet
+    const allFiles = mockupUrls.length > 0 ? mockupUrls : (quote.customerAttachmentUrls || []);
+    const sortedMockups = [...allFiles].reverse();
     const winnerUrl = sortedMockups.find(url => isImage(url)) || sortedMockups[0] || "";
     const galleryUrls = sortedMockups.filter(url => url !== winnerUrl);
 
@@ -374,8 +376,9 @@ export const convertQuoteToOrder = async (quote: Quote): Promise<Order> => {
 
     const order = await createOrder(orderData, userEmail);
 
-    // Delete the quote after successful conversion
-    await deleteQuote(quote.quoteNumber);
+    // Delete the quote record after successful conversion — skip file cleanup
+    // because the files are now referenced by the order's customerAttachmentUrls/mockupUrls
+    await deleteQuote(quote.quoteNumber, true);
     
     // Invalidate quotes list cache to refresh UI
     queryClient.invalidateQueries({ queryKey: queryKeys.quotes?.all?.() });
@@ -403,26 +406,29 @@ export const markQuoteAsSent = async (quoteNumber: string): Promise<void> => {
 };
 
 // Delete a quote
-export const deleteQuote = async (quoteNumber: string): Promise<void> => {
+// skipFileCleanup=true when called from convertQuoteToOrder — files are now owned by the order
+export const deleteQuote = async (quoteNumber: string, skipFileCleanup = false): Promise<void> => {
   try {
-    // Fetch quote first to get file URLs for cleanup
-    const { data: quote } = await supabase
-      .from('quotes')
-      .select('mockup_urls, customer_attachment_urls')
-      .eq('quote_number', quoteNumber)
-      .single();
+    if (!skipFileCleanup) {
+      // Fetch quote first to get file URLs for cleanup
+      const { data: quote } = await supabase
+        .from('quotes')
+        .select('mockup_urls, customer_attachment_urls')
+        .eq('quote_number', quoteNumber)
+        .single();
 
-    // Clean up storage files before deleting the record
-    if (quote) {
-      const { deleteFilesByUrls } = await import('./storageCleanup');
-      const allUrls = [
-        ...((quote as any).mockup_urls || []),
-        ...((quote as any).customer_attachment_urls || []),
-      ].filter(Boolean);
-      if (allUrls.length > 0) {
-        await deleteFilesByUrls(allUrls).catch(err =>
-          logger.error('Failed to cleanup quote files (continuing with delete)', err)
-        );
+      // Clean up storage files before deleting the record
+      if (quote) {
+        const { deleteFilesByUrls } = await import('./storageCleanup');
+        const allUrls = [
+          ...((quote as any).mockup_urls || []),
+          ...((quote as any).customer_attachment_urls || []),
+        ].filter(Boolean);
+        if (allUrls.length > 0) {
+          await deleteFilesByUrls(allUrls).catch(err =>
+            logger.error('Failed to cleanup quote files (continuing with delete)', err)
+          );
+        }
       }
     }
 

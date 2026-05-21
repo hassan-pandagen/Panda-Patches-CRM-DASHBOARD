@@ -1039,8 +1039,11 @@ serve(async (req) => {
     console.log(`📧 Available data fields:`, Object.keys(processedData));
 
     // --- A. PROCESS WINNER (The Lightbox Image) ---
-    // Max 2MB for winner (inline images add to ZeptoMail payload size limit)
-    const MAX_WINNER_SIZE_MB = 2;
+    // Total budget across winner + gallery = 6MB to stay under ZeptoMail's limit
+    const MAX_WINNER_SIZE_MB = 4;
+    const TOTAL_BUDGET_MB = 6;
+    let usedBudgetMB = 0;
+
     if (processedData.winner_file && processedData.winner_file.url) {
         const file = await fetchFile(processedData.winner_file.url);
 
@@ -1057,6 +1060,7 @@ serve(async (req) => {
                 });
                 processedData.winner_file.preview = `cid:${cid}`;
                 processedData.winner_file.is_image = true;
+                usedBudgetMB += fileSizeMB;
             } else {
                 // Too large — link to it instead of embedding
                 console.warn(`Winner image too large (${fileSizeMB.toFixed(1)}MB > ${MAX_WINNER_SIZE_MB}MB), linking instead`);
@@ -1071,37 +1075,35 @@ serve(async (req) => {
                 "Filename": file.filename,
                 "Base64Content": file.content
             });
-            // Give it a generic icon in the email body so it's not broken
             processedData.winner_file.preview = "https://cdn-icons-png.flaticon.com/512/337/337946.png";
             processedData.winner_file.is_image = false;
         }
     }
 
-    // --- B. PROCESS GALLERY (Limited to prevent memory issues) ---
-    // Limit: Max 2 gallery attachments, max 4MB total to prevent Edge Function memory limit
-    const MAX_GALLERY_ATTACHMENTS = 2;
-    const MAX_TOTAL_SIZE_MB = 4;
+    // --- B. PROCESS GALLERY ---
+    // Remaining budget after winner — max 1 gallery image to keep total under 6MB
+    const MAX_GALLERY_ATTACHMENTS = 1;
     let totalAttachmentSize = 0;
 
     if (processedData.gallery_files && Array.isArray(processedData.gallery_files)) {
         for (const item of processedData.gallery_files) {
-            // Stop if we hit the attachment limit
             if (attachments.length >= MAX_GALLERY_ATTACHMENTS) {
-                console.log(`📎 Gallery limit reached (${MAX_GALLERY_ATTACHMENTS} files max)`);
+                console.log(`📎 Gallery limit reached (${MAX_GALLERY_ATTACHMENTS} file max)`);
                 break;
             }
 
             const file = await fetchFile(item.url);
 
             if (file) {
-                // Check size (base64 is ~33% larger than original)
                 const fileSizeMB = (file.content.length * 0.75) / (1024 * 1024);
-                if (totalAttachmentSize + fileSizeMB > MAX_TOTAL_SIZE_MB) {
-                    console.log(`📎 Skipping file, would exceed ${MAX_TOTAL_SIZE_MB}MB limit`);
+                const remainingBudget = TOTAL_BUDGET_MB - usedBudgetMB;
+                if (fileSizeMB > remainingBudget) {
+                    console.log(`📎 Skipping gallery file (${fileSizeMB.toFixed(1)}MB) — would exceed total budget (${remainingBudget.toFixed(1)}MB remaining)`);
                     continue;
                 }
 
                 totalAttachmentSize += fileSizeMB;
+                usedBudgetMB += fileSizeMB;
                 attachments.push({
                     "Content-type": file.type,
                     "Filename": file.filename,
@@ -1109,8 +1111,7 @@ serve(async (req) => {
                 });
             }
         }
-        console.log(`📎 Gallery: ${attachments.length} files, ~${totalAttachmentSize.toFixed(1)}MB total`);
-        // CLEANUP: Empty the gallery list so the template doesn't try to render text
+        console.log(`📎 Gallery: ${attachments.length} files, ~${totalAttachmentSize.toFixed(1)}MB | Total payload: ~${usedBudgetMB.toFixed(1)}MB`);
         processedData.gallery_files = [];
         processedData.has_gallery = false;
     }
