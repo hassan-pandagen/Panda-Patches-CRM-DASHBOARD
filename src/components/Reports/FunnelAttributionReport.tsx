@@ -10,13 +10,13 @@
 //   - orders.attribution_quality (generated column)
 //   - orders.capi_purchase_sent + capi_purchase_sent_at
 
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../../services/supabaseClient';
 import Spinner from '../ui/Spinner';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, Legend, ComposedChart, Line } from 'recharts';
-import { Shield, ShieldAlert, ShieldOff, TrendingUp, AlertCircle, Send, Calendar } from 'lucide-react';
+import { Shield, ShieldAlert, ShieldOff, TrendingUp, AlertCircle, Send, Calendar, BarChart2 } from 'lucide-react';
 
 interface Props {
   startDate?: Date | null;
@@ -26,11 +26,14 @@ interface Props {
 interface OrderRow {
   id: number;
   order_number: string;
+  customer_name: string | null;
   customer_email: string | null;
   sales_agent: string | null;
   attribution_quality: 'tracked' | 'partial' | 'untracked' | null;
+  attribution: Record<string, any> | null;
   capi_purchase_sent: boolean | null;
   capi_purchase_sent_at: string | null;
+  lead_source: string | null;
   converted_from_quote_id: number | null;
   had_prior_quote_request: boolean | null;
   order_amount: number | null;
@@ -52,7 +55,7 @@ const FunnelAttributionReport: React.FC<Props> = ({ startDate, endDate }) => {
     queryFn: async () => {
       let q = supabase
         .from('orders')
-        .select('id, order_number, customer_email, sales_agent, attribution_quality, capi_purchase_sent, capi_purchase_sent_at, converted_from_quote_id, had_prior_quote_request, order_amount, created_at')
+        .select('id, order_number, customer_name, customer_email, sales_agent, lead_source, attribution_quality, attribution, capi_purchase_sent, capi_purchase_sent_at, converted_from_quote_id, had_prior_quote_request, order_amount, created_at')
         .order('created_at', { ascending: false });
       if (startDate) q = q.gte('created_at', startDate.toISOString());
       if (endDate)   q = q.lte('created_at', endDate.toISOString());
@@ -132,6 +135,34 @@ const FunnelAttributionReport: React.FC<Props> = ({ startDate, endDate }) => {
     const totalValue = sent.reduce((s, o) => s + Number(o.order_amount ?? 0), 0);
     return { sent: sent.length, tracked, partial, untracked, totalValue };
   }, [orders]);
+
+  // ── Lead source conversion table ────────────────────────────
+  const leadSourceStats = useMemo(() => {
+    const map = new Map<string, { orders: number; paid: number; revenue: number; amounts: number[] }>();
+    orders.forEach(o => {
+      const src = o.lead_source || 'Unknown';
+      const cur = map.get(src) ?? { orders: 0, paid: 0, revenue: 0, amounts: [] };
+      cur.orders++;
+      const amt = Number(o.order_amount ?? 0);
+      if (amt > 0) cur.amounts.push(amt);
+      cur.revenue += amt;
+      map.set(src, cur);
+    });
+    return Array.from(map.entries())
+      .map(([source, s]) => ({
+        source,
+        orders: s.orders,
+        revenue: s.revenue,
+        avg: s.amounts.length > 0 ? s.revenue / s.amounts.length : 0,
+      }))
+      .sort((a, b) => b.revenue - a.revenue);
+  }, [orders]);
+
+  const [lsSortKey, setLsSortKey] = useState<'revenue' | 'orders' | 'avg'>('revenue');
+  const sortedLeadSources = useMemo(() =>
+    [...leadSourceStats].sort((a, b) => b[lsSortKey] - a[lsSortKey]),
+    [leadSourceStats, lsSortKey]
+  );
 
   // ── CAPI events per day ──────────────────────────────────────
   const capiByDay = useMemo(() => {
@@ -405,6 +436,193 @@ const FunnelAttributionReport: React.FC<Props> = ({ startDate, endDate }) => {
             color="red"
           />
         </div>
+      </div>
+
+      {/* ── Lead Source conversion table ─────────────── */}
+      <div className="bg-slate-900/40 backdrop-blur-xl border border-white/10 rounded-2xl p-6 shadow-xl">
+        <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
+          <div>
+            <h4 className="text-lg font-semibold text-white flex items-center gap-2">
+              <BarChart2 className="w-4 h-4 text-brand-orange" />
+              Lead Source Performance
+            </h4>
+            <p className="text-xs text-slate-500 mt-0.5">Which channels bring the most revenue and highest average order value.</p>
+          </div>
+          <div className="flex items-center gap-1 text-xs">
+            <span className="text-slate-500 mr-1">Sort by:</span>
+            {(['revenue', 'orders', 'avg'] as const).map(k => (
+              <button
+                key={k}
+                onClick={() => setLsSortKey(k)}
+                className={`px-3 py-1.5 rounded-lg font-semibold transition-colors ${lsSortKey === k ? 'bg-brand-orange text-white' : 'bg-slate-800 text-slate-400 hover:text-white'}`}
+              >
+                {k === 'revenue' ? 'Revenue' : k === 'orders' ? 'Orders' : 'Avg Order'}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Bar chart for top sources */}
+        {sortedLeadSources.length > 0 && (
+          <ResponsiveContainer width="100%" height={220}>
+            <BarChart data={sortedLeadSources.slice(0, 8)} margin={{ top: 0, right: 0, left: 0, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
+              <XAxis dataKey="source" stroke="#94a3b8" tick={{ fontSize: 10 }} />
+              <YAxis stroke="#94a3b8" tick={{ fontSize: 10 }} tickFormatter={v => lsSortKey === 'orders' ? String(v) : `$${(v/1000).toFixed(0)}k`} />
+              <Tooltip
+                contentStyle={{ backgroundColor: '#0f172a', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', fontSize: '12px' }}
+                formatter={(val: any) => lsSortKey === 'orders' ? [val, 'Orders'] : [`$${Number(val).toLocaleString()}`, lsSortKey === 'revenue' ? 'Revenue' : 'Avg Order']}
+              />
+              <Bar dataKey={lsSortKey} fill="#fb6e1d" radius={[4, 4, 0, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        )}
+
+        <div className="overflow-x-auto mt-4">
+          <table className="w-full text-left text-sm">
+            <thead className="text-[10px] font-bold text-slate-400 uppercase tracking-wider border-b border-white/10">
+              <tr>
+                <th className="px-3 py-2">Source</th>
+                <th className="px-3 py-2 text-right cursor-pointer hover:text-white" onClick={() => setLsSortKey('orders')}>Orders {lsSortKey === 'orders' && '↓'}</th>
+                <th className="px-3 py-2 text-right cursor-pointer hover:text-white" onClick={() => setLsSortKey('revenue')}>Total Revenue {lsSortKey === 'revenue' && '↓'}</th>
+                <th className="px-3 py-2 text-right cursor-pointer hover:text-white" onClick={() => setLsSortKey('avg')}>Avg Order {lsSortKey === 'avg' && '↓'}</th>
+                <th className="px-3 py-2 text-right">Revenue Share</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-white/5">
+              {(() => {
+                const totalRev = sortedLeadSources.reduce((s, r) => s + r.revenue, 0);
+                const maxRev = sortedLeadSources[0]?.revenue || 1;
+                return sortedLeadSources.map((row, i) => (
+                  <tr key={row.source} className="hover:bg-white/5 transition-colors">
+                    <td className="px-3 py-2.5">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-slate-500 w-4">{i + 1}</span>
+                        <span className="text-slate-200 font-medium">{row.source}</span>
+                      </div>
+                    </td>
+                    <td className="px-3 py-2.5 text-right text-slate-300 font-mono">{row.orders}</td>
+                    <td className="px-3 py-2.5 text-right text-white font-semibold">${row.revenue.toLocaleString()}</td>
+                    <td className={`px-3 py-2.5 text-right font-semibold ${row.avg >= 300 ? 'text-emerald-400' : row.avg >= 200 ? 'text-amber-400' : 'text-slate-400'}`}>
+                      ${row.avg.toFixed(0)}
+                    </td>
+                    <td className="px-3 py-2.5 text-right">
+                      <div className="flex items-center justify-end gap-2">
+                        <div className="w-20 bg-slate-700 rounded-full h-1.5 overflow-hidden">
+                          <div
+                            className="h-full bg-brand-orange rounded-full"
+                            style={{ width: `${(row.revenue / maxRev) * 100}%` }}
+                          />
+                        </div>
+                        <span className="text-slate-400 text-xs w-10 text-right">
+                          {totalRev > 0 ? ((row.revenue / totalRev) * 100).toFixed(1) : 0}%
+                        </span>
+                      </div>
+                    </td>
+                  </tr>
+                ));
+              })()}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* ── Per-order CAPI breakdown ──────────────────── */}
+      <div className="bg-slate-900/40 backdrop-blur-xl border border-white/10 rounded-2xl p-6 shadow-xl">
+        <h4 className="text-lg font-semibold text-white mb-1 flex items-center gap-2">
+          <Send className="w-4 h-4 text-brand-orange" />
+          Order-level CAPI Breakdown
+        </h4>
+        <p className="text-xs text-slate-500 mb-4">
+          Every order sent to Meta — click any row to open the order. EMQ is estimated based on signals available.
+        </p>
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-sm">
+            <thead className="text-[10px] font-bold text-slate-400 uppercase tracking-wider border-b border-white/10">
+              <tr>
+                <th className="px-3 py-2">Order</th>
+                <th className="px-3 py-2">Customer</th>
+                <th className="px-3 py-2">Value</th>
+                <th className="px-3 py-2">Quality</th>
+                <th className="px-3 py-2">Est. EMQ</th>
+                <th className="px-3 py-2">Signals</th>
+                <th className="px-3 py-2">Sent At</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-white/5">
+              {orders
+                .filter(o => o.capi_purchase_sent)
+                .sort((a, b) => (b.capi_purchase_sent_at || '').localeCompare(a.capi_purchase_sent_at || ''))
+                .map(o => {
+                  const attr = o.attribution || {};
+                  const hasFbc  = !!(attr.fbc  || attr.ctwa_clid || attr.ref);
+                  const hasFbp  = !!(attr.fbp);
+                  const hasIp   = !!(attr.client_ip);
+                  const hasUa   = !!(attr.client_ua);
+                  const hasEmail = !!(o.customer_email);
+                  const hasUtm  = !!(attr.utm_source);
+
+                  // EMQ estimate: each signal adds points
+                  let emq = 0;
+                  if (hasEmail) emq += 2.5;
+                  if (hasFbc)   emq += 2.0;
+                  if (hasFbp)   emq += 1.5;
+                  if (hasIp)    emq += 1.0;
+                  if (hasUa)    emq += 0.5;
+                  if (hasUtm && !hasFbc) emq += 0.5;
+                  emq = Math.min(emq, 10);
+
+                  const q = o.attribution_quality ?? 'untracked';
+                  const qConfig = {
+                    tracked:   { label: '🟢 Tracked',   cls: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30' },
+                    partial:   { label: '🟡 Partial',   cls: 'bg-amber-500/15   text-amber-300   border-amber-500/30'   },
+                    untracked: { label: '🔴 Untracked', cls: 'bg-red-500/15     text-red-300     border-red-500/30'     },
+                  }[q];
+
+                  const emqColor = emq >= 7 ? 'text-emerald-400' : emq >= 4 ? 'text-amber-400' : 'text-red-400';
+
+                  const signals = [
+                    hasEmail && 'Email',
+                    hasFbc   && 'FBC',
+                    hasFbp   && 'FBP',
+                    hasIp    && 'IP',
+                    hasUa    && 'UA',
+                    hasUtm   && 'UTM',
+                  ].filter(Boolean).join(', ') || 'None';
+
+                  return (
+                    <tr
+                      key={o.id}
+                      className="hover:bg-white/5 transition-colors cursor-pointer"
+                      onClick={() => navigate(`/order/${o.order_number}`)}
+                    >
+                      <td className="px-3 py-2.5 font-mono text-brand-orange text-xs font-semibold">{o.order_number}</td>
+                      <td className="px-3 py-2.5 text-slate-300 text-xs">{o.customer_name || o.customer_email || '—'}</td>
+                      <td className="px-3 py-2.5 text-slate-300 text-xs">${Number(o.order_amount || 0).toLocaleString()}</td>
+                      <td className="px-3 py-2.5">
+                        <span className={`text-[10px] px-2 py-0.5 rounded-full border font-semibold ${qConfig.cls}`}>
+                          {qConfig.label}
+                        </span>
+                      </td>
+                      <td className={`px-3 py-2.5 font-bold text-sm ${emqColor}`}>{emq.toFixed(1)}</td>
+                      <td className="px-3 py-2.5 text-slate-400 text-xs">{signals}</td>
+                      <td className="px-3 py-2.5 text-slate-500 text-xs">
+                        {o.capi_purchase_sent_at ? new Date(o.capi_purchase_sent_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—'}
+                      </td>
+                    </tr>
+                  );
+                })}
+              {orders.filter(o => o.capi_purchase_sent).length === 0 && (
+                <tr>
+                  <td colSpan={7} className="px-3 py-8 text-center text-slate-500 text-sm">No CAPI events in this period</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+        <p className="mt-3 text-[10px] text-slate-600">
+          EMQ estimated based on: Email (+2.5), FBC/CTWA/ref (+2.0), FBP (+1.5), IP (+1.0), UA (+0.5), UTM only (+0.5). Max 10.
+        </p>
       </div>
 
     </div>
