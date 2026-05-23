@@ -23,6 +23,14 @@ interface Props {
   endDate?: Date | null;
 }
 
+interface CapiLeadEvent {
+  event_name: 'Lead' | 'InitiateCheckout';
+  event_id: string;
+  fired_at: string;
+  action_source: string;
+  success: boolean;
+}
+
 interface OrderRow {
   id: number;
   order_number: string;
@@ -33,6 +41,7 @@ interface OrderRow {
   attribution: Record<string, any> | null;
   capi_purchase_sent: boolean | null;
   capi_purchase_sent_at: string | null;
+  capi_lead_events: CapiLeadEvent[] | null;
   lead_source: string | null;
   converted_from_quote_id: number | null;
   had_prior_quote_request: boolean | null;
@@ -55,7 +64,7 @@ const FunnelAttributionReport: React.FC<Props> = ({ startDate, endDate }) => {
     queryFn: async () => {
       let q = supabase
         .from('orders')
-        .select('id, order_number, customer_name, customer_email, sales_agent, lead_source, attribution_quality, attribution, capi_purchase_sent, capi_purchase_sent_at, converted_from_quote_id, had_prior_quote_request, order_amount, created_at')
+        .select('id, order_number, customer_name, customer_email, sales_agent, lead_source, attribution_quality, attribution, capi_purchase_sent, capi_purchase_sent_at, capi_lead_events, converted_from_quote_id, had_prior_quote_request, order_amount, created_at')
         .order('created_at', { ascending: false });
       if (startDate) q = q.gte('created_at', startDate.toISOString());
       if (endDate)   q = q.lte('created_at', endDate.toISOString());
@@ -545,8 +554,10 @@ const FunnelAttributionReport: React.FC<Props> = ({ startDate, endDate }) => {
                 <th className="px-3 py-2">Value</th>
                 <th className="px-3 py-2">Quality</th>
                 <th className="px-3 py-2">Est. EMQ</th>
+                <th className="px-3 py-2 text-center">Lead</th>
+                <th className="px-3 py-2 text-center">Checkout</th>
+                <th className="px-3 py-2 text-center">Purchase</th>
                 <th className="px-3 py-2">Signals</th>
-                <th className="px-3 py-2">Sent At</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-white/5">
@@ -590,6 +601,22 @@ const FunnelAttributionReport: React.FC<Props> = ({ startDate, endDate }) => {
                     hasUtm   && 'UTM',
                   ].filter(Boolean).join(', ') || 'None';
 
+                  const leadEvents: CapiLeadEvent[] = Array.isArray(o.capi_lead_events) ? o.capi_lead_events : [];
+                  const leadEvent     = leadEvents.find(e => e.event_name === 'Lead');
+                  const checkoutEvent = leadEvents.find(e => e.event_name === 'InitiateCheckout');
+
+                  const StageCell = ({ event }: { event: CapiLeadEvent | undefined }) => {
+                    if (!event) return <td className="px-3 py-2.5 text-center text-slate-600 text-xs">—</td>;
+                    return (
+                      <td className="px-3 py-2.5 text-center">
+                        <span title={`Fired ${new Date(event.fired_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} · ${event.action_source}`}
+                          className={`text-sm ${event.success ? 'text-emerald-400' : 'text-red-400'}`}>
+                          {event.success ? '✓' : '✗'}
+                        </span>
+                      </td>
+                    );
+                  };
+
                   return (
                     <tr
                       key={o.id}
@@ -605,16 +632,20 @@ const FunnelAttributionReport: React.FC<Props> = ({ startDate, endDate }) => {
                         </span>
                       </td>
                       <td className={`px-3 py-2.5 font-bold text-sm ${emqColor}`}>{emq.toFixed(1)}</td>
-                      <td className="px-3 py-2.5 text-slate-400 text-xs">{signals}</td>
-                      <td className="px-3 py-2.5 text-slate-500 text-xs">
-                        {o.capi_purchase_sent_at ? new Date(o.capi_purchase_sent_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—'}
+                      <StageCell event={leadEvent} />
+                      <StageCell event={checkoutEvent} />
+                      <td className="px-3 py-2.5 text-center">
+                        <span className={`text-sm ${o.capi_purchase_sent ? 'text-emerald-400' : 'text-slate-600'}`} title={o.capi_purchase_sent_at ? `Fired ${new Date(o.capi_purchase_sent_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}` : 'Not sent'}>
+                          {o.capi_purchase_sent ? '✓' : '—'}
+                        </span>
                       </td>
+                      <td className="px-3 py-2.5 text-slate-400 text-xs">{signals}</td>
                     </tr>
                   );
                 })}
               {orders.filter(o => o.capi_purchase_sent).length === 0 && (
                 <tr>
-                  <td colSpan={7} className="px-3 py-8 text-center text-slate-500 text-sm">No CAPI events in this period</td>
+                  <td colSpan={9} className="px-3 py-8 text-center text-slate-500 text-sm">No CAPI events in this period</td>
                 </tr>
               )}
             </tbody>
@@ -622,6 +653,8 @@ const FunnelAttributionReport: React.FC<Props> = ({ startDate, endDate }) => {
         </div>
         <p className="mt-3 text-[10px] text-slate-600">
           EMQ estimated based on: Email (+2.5), FBC/CTWA/ref (+2.0), FBP (+1.5), IP (+1.0), UA (+0.5), UTM only (+0.5). Max 10.
+          &nbsp;·&nbsp; <strong className="text-slate-500">Lead</strong> fires when mockup is sent (AWAITING_APPROVAL).
+          &nbsp;·&nbsp; <strong className="text-slate-500">Checkout</strong> fires when customer approves (IN_PRODUCTION). Hover checkmarks for date &amp; source.
         </p>
       </div>
 
