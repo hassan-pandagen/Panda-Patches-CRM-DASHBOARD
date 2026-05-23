@@ -110,6 +110,20 @@ const isValidEmail = (email: string): boolean => {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
 };
 
+// Fire a Meta CAPI pipeline-stage event in the background (non-blocking).
+// Maps CRM status transitions to Meta's Conversion Leads event taxonomy:
+//   AWAITING_APPROVAL → Lead            (mockup sent = qualified lead)
+//   IN_PRODUCTION / APPROVED → InitiateCheckout (customer approved = intent)
+const fireLeadEvent = (orderId: number, eventName: 'Lead' | 'InitiateCheckout') => {
+  supabase.functions.invoke('send-meta-lead-event', {
+    body: { order_id: orderId, event_name: eventName },
+  }).then(({ error }) => {
+    if (error) logger.error(`[CAPI-Lead] ${eventName} invoke failed for order ${orderId}`, error);
+  }).catch(err => {
+    logger.error(`[CAPI-Lead] ${eventName} network error for order ${orderId}`, err);
+  });
+};
+
 // ✅ Get internal team emails based on patch type
 const getInternalEmails = (patchType?: string): string[] => {
   // PVC orders go only to Arsalan (vendor)
@@ -642,6 +656,16 @@ export const updateOrderDetails = async (
       console.error("❌ Email failed:", err);
       logger.error("⚠️ Email trigger failed (background):", err);
     });
+
+    // Meta CAPI pipeline-stage events — fire & forget, never blocks the save
+    if (newOrder.status === OrderStatus.AWAITING_APPROVAL) {
+      fireLeadEvent(newOrder.id, 'Lead');
+    } else if (
+      newOrder.status === OrderStatus.IN_PRODUCTION ||
+      newOrder.status === OrderStatus.APPROVED
+    ) {
+      fireLeadEvent(newOrder.id, 'InitiateCheckout');
+    }
   }
 
   await queryClient.invalidateQueries({ queryKey: queryKeys.orders.report('', '') });
