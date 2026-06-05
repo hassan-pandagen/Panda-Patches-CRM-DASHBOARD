@@ -140,9 +140,10 @@ Deno.serve(async (req: Request) => {
           design_size:      tokenRow.design_size      || null,
           design_backing:   tokenRow.design_backing   || null,
           instructions:     tokenRow.instructions     || null,
+          mockup_urls:      Array.isArray(tokenRow.mockup_urls) ? tokenRow.mockup_urls : [],
           order_amount:     orderAmount,
           amount_paid:      paidAmount,
-          amount_remaining: Math.max(orderAmount - paidAmount, 0),
+          // amount_remaining is NOT a real column (derived on the frontend) — inserting it errors.
           production_cost:  0,
           shipping_cost:    0,
           marketing_cost:   0,
@@ -176,13 +177,28 @@ Deno.serve(async (req: Request) => {
         order_number: newOrder.order_number,
       }).eq('token', referenceId);
 
-      // Notify agent via activity_notifications
-      await admin.from('activity_notifications').insert({
-        type:       'new_order',
-        order_id:   newOrder.id,
-        message:    `New order ${newOrder.order_number} created via Payment Form — $${paidAmount} paid by ${tokenRow.customer_name || tokenRow.customer_email}`,
-        created_by: 'square_webhook',
-      }).catch(() => {});
+      // Notify staff in-app via activity_notifications (one row per recipient).
+      // Recipients = all admins (payment-form orders have sales_agent = hello@pandapatches.com).
+      try {
+        const { data: admins } = await admin
+          .from('user_profiles')
+          .select('id')
+          .eq('role', 'ADMIN');
+        // type must be one of the activity_notifications CHECK values; 'order_paid' fits a paid payment-form order.
+        const notifRows = (admins || []).map((a: { id: string }) => ({
+          recipient_id:     a.id,
+          type:             'order_paid',
+          title:            `New order ${newOrder.order_number} via Payment Form`,
+          body:             `$${paidAmount} paid by ${tokenRow.customer_name || tokenRow.customer_email}`,
+          link:             `/order/${newOrder.order_number}`,
+          related_order_id: newOrder.id,
+        }));
+        if (notifRows.length > 0) {
+          await admin.from('activity_notifications').insert(notifRows);
+        }
+      } catch (notifErr) {
+        console.error(`[square-payment-webhook] activity_notifications insert failed for ${newOrder.order_number}:`, notifErr);
+      }
 
       console.log(`[square-payment-webhook] token ${referenceId} → order ${newOrder.order_number}: $${paidAmount} paid, CAPI queued`);
 

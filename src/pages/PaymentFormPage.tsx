@@ -6,12 +6,14 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../services/supabaseClient';
+import { uploadFile } from '../services/storageService';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../hooks/useToast';
 import SpotlightCard from '../components/ui/SpotlightCard';
 import {
   Link, Copy, Check, Plus, ExternalLink, Trash2,
   CreditCard, ChevronDown, ChevronUp, MessageCircle, Mail,
+  ImagePlus, Loader2, X,
 } from 'lucide-react';
 import { format, parseISO, isPast } from 'date-fns';
 
@@ -20,6 +22,8 @@ const PATCH_TYPES = [
   'Leather Patches', 'Chenille Patches', 'Custom 3D Embroidered Transfers',
   'Heat Transfer', 'Screen Print',
 ];
+
+const BACKING_OPTIONS = ['Iron-on', 'Velcro', 'Sew-on', 'No Backing', 'Adhesive'];
 
 interface Token {
   id: number;
@@ -57,9 +61,14 @@ const PaymentFormPage: React.FC = () => {
     patches_quantity: '',
     design_name:      '',
     design_size:      '',
+    design_backing:   '',
     instructions:     '',
     order_amount:     '',
   });
+
+  // Design/mockup images the agent attaches at link creation → copied to the order on payment
+  const [mockupUrls, setMockupUrls] = useState<string[]>([]);
+  const [uploading, setUploading] = useState(false);
 
   const { data: tokens = [], isLoading } = useQuery({
     queryKey: ['payment-form-tokens'],
@@ -93,7 +102,9 @@ const PaymentFormPage: React.FC = () => {
       if (form.patches_quantity)        payload.patches_quantity = parseInt(form.patches_quantity);
       if (form.design_name.trim())      payload.design_name      = form.design_name.trim();
       if (form.design_size.trim())      payload.design_size      = form.design_size.trim();
+      if (form.design_backing)          payload.design_backing   = form.design_backing;
       if (form.instructions.trim())     payload.instructions     = form.instructions.trim();
+      if (mockupUrls.length > 0)        payload.mockup_urls      = mockupUrls;
 
       const { data, error } = await supabase
         .from('payment_form_tokens')
@@ -136,8 +147,26 @@ const PaymentFormPage: React.FC = () => {
     window.open(`https://wa.me/${phone}?text=${encodeURIComponent(msg)}`, '_blank', 'noopener,noreferrer');
   };
 
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    e.target.value = ''; // allow re-selecting the same file
+    if (files.length === 0) return;
+    setUploading(true);
+    try {
+      const urls = await Promise.all(files.map(f => uploadFile(f)));
+      setMockupUrls(prev => [...prev, ...urls]);
+    } catch (err: any) {
+      showError('Image upload failed', err?.message);
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const removeImage = (url: string) => setMockupUrls(prev => prev.filter(u => u !== url));
+
   const resetForm = () => {
-    setForm({ customer_name: '', customer_email: '', customer_phone: '', patches_type: '', patches_quantity: '', design_name: '', design_size: '', instructions: '', order_amount: '' });
+    setForm({ customer_name: '', customer_email: '', customer_phone: '', patches_type: '', patches_quantity: '', design_name: '', design_size: '', design_backing: '', instructions: '', order_amount: '' });
+    setMockupUrls([]);
     setGeneratedToken(null);
     setShowForm(false);
   };
@@ -225,6 +254,14 @@ const PaymentFormPage: React.FC = () => {
                     <FI label="Size" value={form.design_size} onChange={v => setForm(f => ({ ...f, design_size: v }))} placeholder='3"x3"' />
                   </div>
                   <FI label="Design Name" value={form.design_name} onChange={v => setForm(f => ({ ...f, design_name: v }))} placeholder="Company Logo" />
+                  <div>
+                    <label className="block text-xs text-slate-400 mb-1">Backing</label>
+                    <select value={form.design_backing} onChange={e => setForm(f => ({ ...f, design_backing: e.target.value }))}
+                      className="w-full bg-slate-800 border border-slate-700 text-white text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-brand-orange">
+                      <option value="">— Customer selects —</option>
+                      {BACKING_OPTIONS.map(b => <option key={b} value={b}>{b}</option>)}
+                    </select>
+                  </div>
                 </div>
               </div>
 
@@ -235,10 +272,38 @@ const PaymentFormPage: React.FC = () => {
                   className="w-full bg-slate-800 border border-slate-700 text-white text-sm rounded-lg px-3 py-2 placeholder-slate-600 focus:outline-none focus:border-brand-orange resize-none" />
               </div>
 
+              {/* Design / mockup images (optional) — attached to the order on payment */}
+              <div className="mt-3">
+                <label className="block text-xs text-slate-400 mb-1">Design / Reference Images (optional)</label>
+                <div className="flex flex-wrap items-center gap-3">
+                  {mockupUrls.map(url => (
+                    <div key={url} className="relative w-20 h-20 rounded-lg overflow-hidden border border-slate-700 group">
+                      <img src={url} alt="Design reference" className="w-full h-full object-cover" />
+                      <button
+                        type="button"
+                        onClick={() => removeImage(url)}
+                        className="absolute top-1 right-1 p-0.5 bg-black/70 hover:bg-red-600 rounded text-white opacity-0 group-hover:opacity-100 transition-opacity"
+                        title="Remove image"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    </div>
+                  ))}
+                  <label className={`w-20 h-20 flex flex-col items-center justify-center gap-1 rounded-lg border border-dashed border-slate-600 text-slate-400 hover:border-brand-orange hover:text-brand-orange cursor-pointer transition-colors ${uploading ? 'opacity-60 pointer-events-none' : ''}`}>
+                    {uploading ? <Loader2 className="w-5 h-5 animate-spin" /> : <ImagePlus className="w-5 h-5" />}
+                    <span className="text-[10px]">{uploading ? 'Uploading…' : 'Add image'}</span>
+                    <input type="file" accept="image/*" multiple onChange={handleImageUpload} className="hidden" disabled={uploading} />
+                  </label>
+                </div>
+                <p className="text-[10px] text-slate-500 mt-1.5">
+                  Attach the customer's design so production has the reference image when the order is created.
+                </p>
+              </div>
+
               <div className="mt-5 flex gap-3">
                 <button
                   onClick={() => createToken.mutate()}
-                  disabled={createToken.isPending || !form.order_amount || parseFloat(form.order_amount) <= 0}
+                  disabled={createToken.isPending || uploading || !form.order_amount || parseFloat(form.order_amount) <= 0}
                   className="flex-1 flex items-center justify-center gap-2 py-3 bg-brand-orange hover:bg-orange-500 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-xl text-sm font-semibold transition-colors"
                 >
                   <Link className="w-4 h-4" />
