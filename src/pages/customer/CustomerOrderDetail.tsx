@@ -1,5 +1,5 @@
 import React from 'react';
-import { useParams, NavLink } from 'react-router-dom';
+import { useParams, NavLink, useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../../services/supabaseClient';
 import { mapDbToOrder } from '../../services/orderService';
@@ -11,6 +11,56 @@ import {
   CreditCard,
 } from 'lucide-react';
 import OrderMessageThread from '../../components/messaging/OrderMessageThread';
+
+// ── Browser signal helpers ────────────────────────────────────────────────────
+
+function getCookie(name: string): string | null {
+  const found = document.cookie.split('; ').find(r => r.startsWith(name + '='));
+  return found ? found.split('=')[1] : null;
+}
+
+// Capture fbp/fbc from browser cookies + URL params, then persist to Supabase
+// via store-attribution edge function so the Stripe webhook has signals.
+// Fire-and-forget — never blocks page render.
+function captureAndStoreAttribution(orderNumber: string) {
+  try {
+    const fbp = getCookie('_fbp');
+    let fbc = getCookie('_fbc');
+    const params = new URLSearchParams(window.location.search);
+    const fbclid = params.get('fbclid');
+    if (!fbc && fbclid) {
+      fbc = `fb.1.${Date.now()}.${fbclid}`;
+    }
+    supabase.functions.invoke('store-attribution', {
+      body: {
+        order_number: orderNumber,
+        fbp:          fbp || null,
+        fbc:          fbc || null,
+        client_ua:    navigator.userAgent,
+        page_url:     window.location.href,
+        referrer:     document.referrer || null,
+      },
+    }).catch(() => {}); // silently ignore — attribution is best-effort
+  } catch { /* ignore */ }
+}
+
+// Fire client-side Meta Pixel Purchase event for deduplication with server CAPI.
+// event_id must match what send-meta-purchase uses: "order_<id>_purchase"
+// This runs on the thank-you page (?paid=1) so Meta can dedup browser + server.
+declare global { interface Window { fbq?: (...args: any[]) => void; } }
+
+function firePixelPurchase(orderId: number, orderAmount: number) {
+  try {
+    if (typeof window.fbq === 'function') {
+      window.fbq('track', 'Purchase', {
+        value:    orderAmount,
+        currency: 'USD',
+      }, {
+        eventID: `order_${orderId}_purchase`,
+      });
+    }
+  } catch { /* ignore */ }
+}
 
 // ── Timeline ─────────────────────────────────────────────────────────────────
 
@@ -299,8 +349,30 @@ const MockupApproval: React.FC<{ order: Order; onApproved: () => void }> = ({ or
 const CustomerOrderDetail: React.FC = () => {
   const { orderNumber }    = useParams<{ orderNumber: string }>();
   const { profile }        = useCustomerAuth();
+  const [searchParams]     = useSearchParams();
   const [previewUrl, setPreviewUrl] = React.useState<string | null>(null);
   const [approved, setApproved]     = React.useState(false);
+  const [showPaidBanner, setShowPaidBanner] = React.useState(searchParams.get('paid') === '1');
+
+  // Capture browser attribution signals on first load so the Stripe webhook
+  // has fbp/fbc/IP/UA when it fires the CAPI Purchase event.
+  React.useEffect(() => {
+    if (orderNumber) captureAndStoreAttribution(orderNumber);
+  }, [orderNumber]);
+
+  // Fire client-side Pixel Purchase on thank-you page (?paid=1) for Meta dedup.
+  // Runs once when order data becomes available after Stripe redirect.
+  const pixelFired = React.useRef(false);
+  React.useEffect(() => {
+    if (showPaidBanner && order && !pixelFired.current) {
+      pixelFired.current = true;
+      firePixelPurchase(order.id, order.orderAmount || 0);
+      // Clean ?paid=1 from URL without navigation so a refresh doesn't re-fire
+      const url = new URL(window.location.href);
+      url.searchParams.delete('paid');
+      window.history.replaceState({}, '', url.toString());
+    }
+  }, [showPaidBanner, order]);
 
   const { data: order, isLoading, error } = useQuery({
     queryKey: ['customer-order', orderNumber],
@@ -382,6 +454,28 @@ const CustomerOrderDetail: React.FC = () => {
           </span>
         </div>
       </div>
+
+      {/* Payment Success Banner — shown after Stripe redirect (?paid=1) */}
+      {showPaidBanner && (
+        <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-2xl p-5 flex items-start gap-4">
+          <div className="p-2 bg-emerald-500/20 rounded-lg shrink-0">
+            <CheckCircle className="w-6 h-6 text-emerald-400" />
+          </div>
+          <div className="flex-1">
+            <h3 className="text-base font-semibold text-emerald-300 mb-1">Payment received — thank you!</h3>
+            <p className="text-sm text-slate-400">
+              Your payment has been confirmed. Your order status will update shortly.
+              We'll email you when there's an update.
+            </p>
+          </div>
+          <button
+            onClick={() => setShowPaidBanner(false)}
+            className="text-slate-500 hover:text-white transition-colors text-xl leading-none shrink-0"
+          >
+            &times;
+          </button>
+        </div>
+      )}
 
       {/* Mockup Approval Banner — shows only when status = AWAITING_CUSTOMER_APPROVAL */}
       {!approved && <MockupApproval order={order} onApproved={() => setApproved(true)} />}

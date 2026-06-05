@@ -392,6 +392,9 @@ const OrderPage: React.FC = () => {
                                         title={`Marked by ${order.productionCompletedBy || 'unknown'} on ${new Date(order.productionCompletedAt).toLocaleString()}`}
                                     >
                                         <Check size={12} /> Production Complete
+                                        <span className="text-emerald-400/70 font-normal">
+                                            · {new Date(order.productionCompletedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                                        </span>
                                         {isAdmin && (
                                             <button
                                                 onClick={() => {
@@ -418,7 +421,7 @@ const OrderPage: React.FC = () => {
                                         className="text-xs px-3 py-1.5 rounded-full border font-semibold bg-emerald-500/10 border-emerald-500/40 text-emerald-300 hover:bg-emerald-500/25 hover:text-white transition-colors flex items-center gap-1.5 disabled:opacity-50"
                                     >
                                         <Check size={12} />
-                                        {markProductionDoneMutation.isPending ? 'Marking…' : 'Production Mark this order as Complete'}
+                                        {markProductionDoneMutation.isPending ? 'Marking…' : 'Mark Production Complete'}
                                     </button>
                                 )}
 

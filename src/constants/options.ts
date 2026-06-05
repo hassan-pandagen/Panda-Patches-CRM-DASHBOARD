@@ -36,6 +36,7 @@ export const LEAD_SOURCE_OPTIONS: string[] = [
   'WhatsApp',
   'RingCentral',
   'ChatGPT',
+  'Gemini',
   'Tawk.to',
   'Checkout',
   'Referral',

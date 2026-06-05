@@ -33,6 +33,7 @@ const BulkCostEntryPage = lazy(() => import('@/pages/BulkCostEntryPage'));
 const CustomersPage = lazy(() => import('@/pages/CustomersPage'));
 const ActivityPage = lazy(() => import('@/pages/ActivityPage'));
 const InboxPage = lazy(() => import('@/pages/InboxPage'));
+const PaymentFormPage = lazy(() => import('@/pages/PaymentFormPage'));
 
 // Protection
 import ProtectedRoute from './ProtectedRoute';
@@ -42,6 +43,7 @@ import HostnameRouter from './HostnameRouter';
 
 // Customer Portal Pages (Lazy)
 const CustomerLoginPage = lazy(() => import('@/pages/customer/CustomerLoginPage'));
+const PaymentFormLandingPage = lazy(() => import('@/pages/customer/PaymentFormLandingPage'));
 const CustomerAuthCallback = lazy(() => import('@/pages/customer/CustomerAuthCallback'));
 const CustomerSetPasswordPage = lazy(() => import('@/pages/customer/CustomerSetPasswordPage'));
 const CustomerDashboard = lazy(() => import('@/pages/customer/CustomerDashboard'));
@@ -90,6 +92,7 @@ const App: React.FC = () => {
               <Route path="/activity" element={<ActivityPage />} />
               <Route path="/inbox" element={<InboxPage />} />
               <Route path="/inbox/:conversationId" element={<InboxPage />} />
+              <Route path="/payment-forms" element={<PaymentFormPage />} />
     
               {/* Attendance */}
               <Route path="/clock-in-out" element={<ClockInOutPage />} />
@@ -107,6 +110,10 @@ const App: React.FC = () => {
 
           {/* ====== CUSTOMER PORTAL ROUTES ====== */}
           {/* Public customer routes */}
+          {/* Public payment form — no auth required */}
+          <Route path="/pay/:token" element={<ErrorBoundary><PaymentFormLandingPage /></ErrorBoundary>} />
+          <Route path="/pay/:token/thank-you" element={<ErrorBoundary><PaymentFormLandingPage /></ErrorBoundary>} />
+
           <Route path="/customer/login" element={<ErrorBoundary><CustomerLoginPage /></ErrorBoundary>} />
           <Route path="/customer/auth/callback" element={<ErrorBoundary><CustomerAuthCallback /></ErrorBoundary>} />
           <Route path="/customer/set-password" element={<ErrorBoundary><CustomerSetPasswordPage /></ErrorBoundary>} />

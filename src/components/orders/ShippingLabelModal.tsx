@@ -1,8 +1,9 @@
 // src/components/orders/ShippingLabelModal.tsx
 import React from 'react';
 import { Order } from '../../types';
-import { X, Package, Copy, Check } from 'lucide-react';
+import { X, Package, Copy, Check, AlertTriangle } from 'lucide-react';
 import { useToast } from '../../hooks/useToast';
+import { getCustomsData, formatCustomsText } from '../../services/customsService';
 
 interface ShippingLabelModalProps {
     isOpen: boolean;
@@ -28,13 +29,16 @@ const ShippingLabelModal: React.FC<ShippingLabelModalProps> = ({ isOpen, onClose
     if (!isOpen) return null;
 
     // Format the shipping address for better display
-    const formatAddress = (address: string) => {
+    const formatAddress = (address?: string) => {
         if (!address) return 'No address provided';
         return address;
     };
 
     // Get the first reference image if available
     const referenceImage = order.mockupUrls?.[0] || order.customerAttachmentUrls?.[0];
+
+    // Derive commercial-invoice / customs data on-demand from patch type + backing + country
+    const customs = getCustomsData(order);
 
     // Copy entire label
     const copyEntireLabel = async () => {
@@ -50,6 +54,8 @@ ${formatAddress(order.shippingAddress)}
 PRODUCT DETAILS:
 Patch Type: ${order.patchesType || 'Custom'}
 Quantity: ${order.patchesQuantity?.toLocaleString() || '0'} pieces
+
+${formatCustomsText(customs, order.orderNumber)}
         `.trim();
 
         try {
@@ -222,6 +228,60 @@ Quantity: ${order.patchesQuantity?.toLocaleString() || '0'} pieces
                             </div>
                         </div>
 
+                        {/* Commercial Invoice / Customs */}
+                        <div className="mt-6 pt-6 border-t-2 border-black relative group">
+                            <button
+                                onClick={() => copySection('Customs', formatCustomsText(customs, order.orderNumber))}
+                                className="absolute top-4 right-0 p-1.5 bg-white hover:bg-slate-200 rounded-md transition-colors opacity-0 group-hover:opacity-100 print:hidden border border-slate-300 z-10"
+                                title="Copy commercial invoice block"
+                            >
+                                {copiedSection === 'Customs' ? (
+                                    <Check className="w-4 h-4 text-green-600" />
+                                ) : (
+                                    <Copy className="w-4 h-4 text-slate-600" />
+                                )}
+                            </button>
+
+                            <p className="text-sm font-bold uppercase tracking-wide mb-3">Commercial Invoice / Customs</p>
+
+                            {/* Confirmation / country warnings */}
+                            {(customs.needsConfirmation || customs.countryMissing) && (
+                                <div className="mb-3 flex items-start gap-2 bg-yellow-50 border border-yellow-400 rounded-md p-2.5 text-yellow-900 print:border-yellow-600">
+                                    <AlertTriangle className="w-4 h-4 mt-0.5 flex-shrink-0" />
+                                    <div className="text-xs leading-snug">
+                                        {customs.needsConfirmation && customs.confirmationNote && (
+                                            <p className="font-semibold">Confirm HTS: {customs.confirmationNote}</p>
+                                        )}
+                                        {customs.htsAlt && (
+                                            <p>Primary: {customs.htsCode} · Alternate: {customs.htsAlt}</p>
+                                        )}
+                                        {customs.countryMissing && (
+                                            <p>Destination country not set — HTS shown as US 10-digit. Set country for international 6-digit HS.</p>
+                                        )}
+                                    </div>
+                                </div>
+                            )}
+
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-2 text-sm print:grid-cols-2">
+                                <CustomsRow label="Manufacturer" value={customs.manufacturerName} />
+                                <CustomsRow label="Country of Origin" value={`${customs.countryOfOrigin} (${customs.isoCountryCode})`} />
+                                <div className="md:col-span-2">
+                                    <CustomsRow label="Address" value={customs.manufacturerAddress} />
+                                </div>
+                                <CustomsRow label="MID" value={customs.midCode} />
+                                <CustomsRow
+                                    label={customs.isInternational ? 'HTS (6-digit HS)' : 'HTS Code'}
+                                    value={customs.isShippable && customs.htsCode ? customs.htsCode : '— manual classification required'}
+                                />
+                                <div className="md:col-span-2">
+                                    <CustomsRow label="Material" value={customs.material || '— review manually'} />
+                                </div>
+                                <CustomsRow label="Quantity" value={`${customs.quantity.toLocaleString()} pcs`} />
+                                <CustomsRow label="Reason for Export" value={customs.reasonForExport} />
+                                <CustomsRow label="Incoterms" value={customs.incoterms} />
+                            </div>
+                        </div>
+
                     </div>
 
                     {/* Print and Copy Instructions */}
@@ -242,5 +302,13 @@ Quantity: ${order.patchesQuantity?.toLocaleString() || '0'} pieces
         </div>
     );
 };
+
+// Single label/value row for the customs block
+const CustomsRow: React.FC<{ label: string; value: string }> = ({ label, value }) => (
+    <div>
+        <p className="text-[10px] font-bold uppercase text-slate-500">{label}</p>
+        <p className="text-sm font-medium leading-snug break-words">{value}</p>
+    </div>
+);
 
 export default ShippingLabelModal;

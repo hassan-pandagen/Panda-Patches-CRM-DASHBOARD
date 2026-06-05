@@ -14,6 +14,7 @@ import {
   DollarSign,
   Bell,
   Inbox,
+  CreditCard,
 } from "lucide-react";
 import { useAuth } from "../../contexts/AuthContext";
 import { useQueryPrefetch } from "../../hooks/useQueryPrefetch";
@@ -168,6 +169,15 @@ const Sidebar: React.FC<SidebarProps> = ({ onNavigate }) => {
             to="/quotes"
             label="Quotes"
             icon={<FileText className="w-5 h-5" />}
+            onClick={onNavigate}
+          />
+        )}
+
+        {permissions?.orders_create && (
+          <SidebarItem
+            to="/payment-forms"
+            label="Payment Forms"
+            icon={<CreditCard className="w-5 h-5" />}
             onClick={onNavigate}
           />
         )}

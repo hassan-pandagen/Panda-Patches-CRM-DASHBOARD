@@ -24,7 +24,8 @@ export const HostnameRouter: React.FC<Props> = ({ children }) => {
   const onLocalDev   = isLocalhost(hostname);
 
   // On the portal subdomain, force ALL traffic to /customer/* routes
-  if (onPortalHost && !location.pathname.startsWith('/customer')) {
+  // Exception: /pay/:token is a public payment form — no login required
+  if (onPortalHost && !location.pathname.startsWith('/customer') && !location.pathname.startsWith('/pay/')) {
     return <Navigate to="/customer/login" replace />;
   }
 
