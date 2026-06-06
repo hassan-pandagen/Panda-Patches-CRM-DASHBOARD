@@ -185,7 +185,7 @@ async function fetchPaginatedOrders(params: {
     const from = (page - 1) * ITEMS_PER_PAGE;
     const to = from + ITEMS_PER_PAGE - 1;
 
-    const columns = 'id, order_number, customer_name, customer_email, design_name, status, created_at, sales_agent, order_amount, amount_paid, is_urgent, production_completed_at, production_completed_by';
+    const columns = 'id, order_number, customer_name, customer_email, design_name, status, created_at, sales_agent, order_amount, amount_paid, is_urgent, production_completed_at, production_completed_by, attribution, attribution_quality';
 
     // --- IDS drill-down (from dashboard click) ---
     if (ids) {
