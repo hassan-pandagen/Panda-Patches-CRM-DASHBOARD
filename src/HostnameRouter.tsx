@@ -1,43 +1,20 @@
 // HostnameRouter.tsx
-// Routes traffic based on hostname:
-//   - portal.pandapatches.com (or whatever PORTAL_HOSTNAME is set to)
-//       → only customer portal routes are valid; everything else redirects to /customer/login
-//   - any other hostname (CRM URL, localhost)
-//       → both CRM and customer portal routes are available
+// The customer login portal has moved to the marketing website. This app now only serves:
+//   - the staff CRM (Orders, Dashboard, etc.)
+//   - the public agent-generated payment form at /pay/:token
 //
-// When the CEO sets up the real subdomain, just update PORTAL_HOSTNAME in src/config/portal.ts
-// and Vercel domain mapping — no other code changes needed.
+// There is no longer any hostname-based redirect to do — every remaining route is valid on
+// any host, and unknown paths fall through to the 404. Kept as a thin pass-through so the
+// existing <HostnameRouter> usage in App.tsx doesn't need to change, and so reinstating
+// host-specific behavior later is a one-file edit.
 
 import * as React from 'react';
-import { Navigate, useLocation } from 'react-router-dom';
-import { isPortalHost, isLocalhost } from './config/portal';
 
 interface Props {
   children: React.ReactNode;
 }
 
 export const HostnameRouter: React.FC<Props> = ({ children }) => {
-  const location = useLocation();
-  const hostname = typeof window !== 'undefined' ? window.location.hostname : '';
-
-  const onPortalHost = isPortalHost(hostname);
-  const onLocalDev   = isLocalhost(hostname);
-
-  // On the portal subdomain, force ALL traffic to /customer/* routes
-  // Exception: /pay/:token is a public payment form — no login required
-  if (onPortalHost && !location.pathname.startsWith('/customer') && !location.pathname.startsWith('/pay/')) {
-    return <Navigate to="/customer/login" replace />;
-  }
-
-  // On CRM hostname, prevent /customer/* routes from rendering (push them away)
-  // EXCEPT during local dev where both should be accessible
-  if (!onPortalHost && !onLocalDev && location.pathname.startsWith('/customer')) {
-    // In production: customer trying to use CRM domain — let them through
-    // because we can't 100% distinguish "shared a customer URL" from "wrong host"
-    // The CustomerProtectedRoute handles staff-bouncing logic.
-    // This is a soft guard: customer routes work on either hostname for now.
-  }
-
   return <>{children}</>;
 };
 

@@ -38,9 +38,13 @@ const ProtectedRoute: React.FC = () => {
     return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
-  // Customer logged into CRM by mistake — bounce to portal
+  // Customer logged into the CRM by mistake — the customer portal now lives on the
+  // marketing website, so send them there (external redirect, not a CRM route).
   if (isCustomer) {
-    return <Navigate to="/customer/dashboard" replace />;
+    if (typeof window !== 'undefined') {
+      window.location.href = 'https://pandapatches.com/login';
+    }
+    return <AppLoader />;
   }
 
   return <Outlet />;

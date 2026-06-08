@@ -8,8 +8,10 @@ import { encode } from "https://deno.land/std@0.168.0/encoding/base64.ts";
 import { z } from "https://deno.land/x/zod@v3.22.4/mod.ts";
 
 const ALLOWED_ORIGINS = [
-  'https://portal.pandapatches.com',
-  'https://panda-patches-crm-dashboard.vercel.app',
+  'https://portal.pandapatches.com',                // CRM (staff)
+  'https://panda-patches-crm-dashboard.vercel.app', // CRM (vercel)
+  'https://pandapatches.com',                       // marketing website
+  'https://www.pandapatches.com',                   // marketing website (www)
 ];
 
 function isAllowedOrigin(origin: string): boolean {
@@ -106,6 +108,12 @@ const getEmailSubject = (templateId: string, data: any): string => {
     'CUSTOMER_RETURNING_LOGIN': `Track Your New Order - ${orderNumber}`,
     'CUSTOMER_PASSWORD_RESET': `Reset Your Panda Patches Portal Password`,
 
+    // Website auth templates (pandapatches.com customer portal)
+    'WEBSITE_AUTH_SIGNUP_CONFIRM':  'Confirm your Panda Patches account',
+    'WEBSITE_AUTH_MAGIC_LINK':      'Your sign-in link for Panda Patches',
+    'WEBSITE_AUTH_PASSWORD_RESET':  'Reset your Panda Patches password',
+    'WEBSITE_AUTH_EMAIL_CHANGE':    'Confirm your new Panda Patches email',
+
     // Order message thread templates
     'AGENT_NEW_CUSTOMER_MESSAGE': `[Customer Message] ${data.customer_name || 'A customer'} replied on order ${orderNumber}`,
     'CUSTOMER_NEW_AGENT_MESSAGE': `New message on your order ${orderNumber}`,
@@ -159,13 +167,23 @@ const getTemplateMessage = (templateId: string, data?: any): string => {
     'INTERNAL_REMAKE': internalRemakeMessages[remakeReason] || 'URGENT REMAKE REQUIRED: The customer was not satisfied with the patches we produced. This order needs to be remade immediately. Please contact the sales agent to get full details about what the customer wants changed. Review all specifications carefully and ask questions if anything is unclear. This is our second chance to get it right - quality check everything before shipping.',
 
     // Payment templates
-    'CUSTOMER_PAYMENT_CONFIRMATION': 'We have received your payment — thank you! Your order is confirmed and our team is working on your mockup. You will receive your mockup in 24 hours.',
+    'CUSTOMER_PAYMENT_CONFIRMATION': 'We have received your payment — thank you! Your order is confirmed. Here\'s what happens next: our design team will send your mockup within 24 hours for approval, and once you approve it your order moves straight into production. Track every step below.',
     'INTERNAL_PAYMENT_NOTIFICATION': 'A payment has been recorded for this order. Please review the payment details below and update records accordingly.',
 
     // Customer portal invite templates
     'CUSTOMER_WELCOME_INVITE': 'Thank you for your order! We\'ve created a Customer Portal account for you so you can track your order in real time, view your mockups, and see every step of your patch journey. Tap the button below to set your password — takes less than 30 seconds.',
     'CUSTOMER_RETURNING_LOGIN': 'Thank you for your new order! Your Customer Portal is ready — tap the button below to log in and track this order along with your previous ones. The link expires in 1 hour; after that, just sign in with your email and password.',
     'CUSTOMER_PASSWORD_RESET': 'A password reset was requested for your Panda Patches Customer Portal. Tap the button below to choose a new password. The link expires in 1 hour. If you didn\'t request this, you can safely ignore this email.',
+
+    // Website auth templates (pandapatches.com customer portal)
+    'WEBSITE_AUTH_SIGNUP_CONFIRM':
+      'Thanks for creating a Panda Patches account! To finish setting up your account, please confirm your email address by clicking the button below. Once confirmed you can track every order in real time, view your mockups, and reorder past designs in one click.',
+    'WEBSITE_AUTH_MAGIC_LINK':
+      'Use the button below to sign in to your Panda Patches account. This link signs you in instantly — no password needed. The link is good for the next 60 minutes and can only be used once.',
+    'WEBSITE_AUTH_PASSWORD_RESET':
+      'We received a request to reset the password for your Panda Patches account. Click the button below to set a new password. The link is good for the next 60 minutes and can only be used once. If you did not request this, you can ignore this email — your password will stay the same.',
+    'WEBSITE_AUTH_EMAIL_CHANGE':
+      `We received a request to change the email address on your Panda Patches account to ${data?.new_email || 'a new address'}. Confirm the change by clicking the button below. The change does not take effect until you click the link. If you did not request this, you can ignore this email.`,
 
     // Order message thread templates
     'AGENT_NEW_CUSTOMER_MESSAGE': `${data?.customer_name || 'A customer'} just sent a message on order ${data?.order_number || ''}.\n\nMessage: "${(data?.message_content || '').substring(0, 1000)}"\n\nReply through the order in the CRM to keep the conversation in one place.`,
@@ -275,6 +293,11 @@ const shouldShowFullDetails = (templateId: string): boolean => {
     'AGENT_NEW_CUSTOMER_MESSAGE',
     'CUSTOMER_NEW_AGENT_MESSAGE',
     'CUSTOMER_PAYMENT_LINK',
+    // Website auth templates (pandapatches.com customer portal)
+    'WEBSITE_AUTH_SIGNUP_CONFIRM',
+    'WEBSITE_AUTH_MAGIC_LINK',
+    'WEBSITE_AUTH_PASSWORD_RESET',
+    'WEBSITE_AUTH_EMAIL_CHANGE',
   ];
 
   return !minimalDetailsTemplates.includes(templateId);
@@ -814,7 +837,7 @@ const buildEmailHTML = (templateId: string, data: any): string => {
   </table>
   ` : ''}
 
-  ${(templateId === 'CUSTOMER_WELCOME_INVITE' || templateId === 'CUSTOMER_RETURNING_LOGIN' || templateId === 'CUSTOMER_PASSWORD_RESET' || templateId === 'CUSTOMER_PAYMENT_LINK') && data.portal_action_url ? `
+  ${(templateId === 'CUSTOMER_WELCOME_INVITE' || templateId === 'CUSTOMER_RETURNING_LOGIN' || templateId === 'CUSTOMER_PASSWORD_RESET' || templateId === 'CUSTOMER_PAYMENT_LINK' || templateId === 'CUSTOMER_PAYMENT_CONFIRMATION' || templateId === 'WEBSITE_AUTH_SIGNUP_CONFIRM' || templateId === 'WEBSITE_AUTH_MAGIC_LINK' || templateId === 'WEBSITE_AUTH_PASSWORD_RESET' || templateId === 'WEBSITE_AUTH_EMAIL_CHANGE') && data.portal_action_url ? `
   <!-- CUSTOMER PORTAL CTA BUTTON (mobile-optimized) -->
   <table border="0" cellpadding="0" cellspacing="0" class="module" data-type="button" role="module" style="table-layout: fixed;" width="100%">
     <tbody>
@@ -825,7 +848,7 @@ const buildEmailHTML = (templateId: string, data: any): string => {
               <tr>
                 <td align="center" bgcolor="#FB6E1D" class="inner-td" style="border-radius:8px; font-size:18px; text-align:center; background-color:#FB6E1D;">
                   <a href="${escapeHtml(data.portal_action_url)}" style="background-color:#FB6E1D; border:1px solid #FB6E1D; border-radius:8px; color:#ffffff; display:block; font-size:18px; font-weight:bold; line-height:1.3; padding:18px 24px; text-align:center; text-decoration:none; font-family: 'lucida sans unicode', 'lucida grande', sans-serif;" target="_blank">
-                    ${templateId === 'CUSTOMER_WELCOME_INVITE' ? 'Set Your Password &rarr;' : templateId === 'CUSTOMER_PASSWORD_RESET' ? 'Reset Password &rarr;' : templateId === 'CUSTOMER_PAYMENT_LINK' ? 'Pay Now &rarr;' : 'Log In &amp; Track Order &rarr;'}
+                    ${templateId === 'CUSTOMER_WELCOME_INVITE' ? 'Set Your Password &rarr;' : templateId === 'CUSTOMER_PASSWORD_RESET' ? 'Reset Password &rarr;' : templateId === 'CUSTOMER_PAYMENT_LINK' ? 'Pay Now &rarr;' : templateId === 'WEBSITE_AUTH_SIGNUP_CONFIRM' ? 'Confirm My Email &rarr;' : templateId === 'WEBSITE_AUTH_MAGIC_LINK' ? 'Sign In To My Account &rarr;' : templateId === 'WEBSITE_AUTH_PASSWORD_RESET' ? 'Reset My Password &rarr;' : templateId === 'WEBSITE_AUTH_EMAIL_CHANGE' ? 'Confirm Email Change &rarr;' : 'Log In &amp; Track Order &rarr;'}
                   </a>
                 </td>
               </tr>

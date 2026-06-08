@@ -177,6 +177,40 @@ Deno.serve(async (req: Request) => {
         order_number: newOrder.order_number,
       }).eq('token', referenceId);
 
+      // ── CUSTOMER "Payment Received" email — real gateway payment confirmed ──
+      // Fires here (and ONLY here / in stripe-balance-webhook) so it never sends for
+      // agent-created or manually-collected orders. Guarded by customer_confirmation_sent_at.
+      if (tokenRow.customer_email) {
+        try {
+          const { data: custStamped } = await admin
+            .from('orders')
+            .update({ customer_confirmation_sent_at: new Date().toISOString() })
+            .eq('id', newOrder.id)
+            .is('customer_confirmation_sent_at', null)
+            .select('id');
+          if (custStamped && custStamped.length > 0) {
+            await fetch(`${SUPABASE_URL}/functions/v1/send-email`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${SERVICE_KEY}` },
+              body: JSON.stringify({
+                to: tokenRow.customer_email,
+                template_id: 'CUSTOMER_PAYMENT_CONFIRMATION',
+                dynamic_data: {
+                  customer_name: tokenRow.customer_name || 'there',
+                  order_number: newOrder.order_number,
+                  amount_paid: `$${paidAmount.toFixed(2)}`,
+                  total_amount: `$${(orderAmount || paidAmount).toFixed(2)}`,
+                  portal_action_url: 'https://pandapatches.com/login',
+                },
+              }),
+            });
+            console.log(`[square-payment-webhook] customer payment-confirmation email sent for ${newOrder.order_number}`);
+          }
+        } catch (custErr) {
+          console.error(`[square-payment-webhook] customer email failed for ${newOrder.order_number}:`, custErr);
+        }
+      }
+
       // Notify staff in-app via activity_notifications (one row per recipient).
       // Recipients = all admins (payment-form orders have sales_agent = hello@pandapatches.com).
       try {

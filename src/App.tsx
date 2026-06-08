@@ -1,5 +1,5 @@
 import React, { lazy, Suspense } from 'react';
-import { Routes, Route, Navigate } from 'react-router-dom';
+import { Routes, Route } from 'react-router-dom';
 
 // Layouts & UI
 import AppLayout from '@/components/layout/AppLayout';
@@ -38,19 +38,11 @@ const PaymentFormPage = lazy(() => import('@/pages/PaymentFormPage'));
 // Protection
 import ProtectedRoute from './ProtectedRoute';
 import AdminRoute from './AdminRoute';
-import CustomerProtectedRoute from './CustomerProtectedRoute';
 import HostnameRouter from './HostnameRouter';
 
-// Customer Portal Pages (Lazy)
-const CustomerLoginPage = lazy(() => import('@/pages/customer/CustomerLoginPage'));
+// Public payment form — agent-generated /pay/:token flow (NOT part of the customer login portal,
+// which now lives on the marketing website).
 const PaymentFormLandingPage = lazy(() => import('@/pages/customer/PaymentFormLandingPage'));
-const CustomerAuthCallback = lazy(() => import('@/pages/customer/CustomerAuthCallback'));
-const CustomerSetPasswordPage = lazy(() => import('@/pages/customer/CustomerSetPasswordPage'));
-const CustomerDashboard = lazy(() => import('@/pages/customer/CustomerDashboard'));
-const CustomerOrderDetail = lazy(() => import('@/pages/customer/CustomerOrderDetail'));
-const CustomerProfilePage = lazy(() => import('@/pages/customer/CustomerProfilePage'));
-const CustomerHelpPage = lazy(() => import('@/pages/customer/CustomerHelpPage'));
-const CustomerLayout = lazy(() => import('@/components/customer/CustomerLayout'));
 
 // 404
 import NotFoundPage from '@/pages/NotFoundPage';
@@ -108,28 +100,11 @@ const App: React.FC = () => {
             </Route>
           </Route>
 
-          {/* ====== CUSTOMER PORTAL ROUTES ====== */}
-          {/* Public customer routes */}
-          {/* Public payment form — no auth required */}
+          {/* ====== PUBLIC PAYMENT FORM ====== */}
+          {/* Agent-generated payment link — no auth required. The customer login portal
+              now lives on the marketing website; only this payment flow remains here. */}
           <Route path="/pay/:token" element={<ErrorBoundary><PaymentFormLandingPage /></ErrorBoundary>} />
           <Route path="/pay/:token/thank-you" element={<ErrorBoundary><PaymentFormLandingPage /></ErrorBoundary>} />
-
-          <Route path="/customer/login" element={<ErrorBoundary><CustomerLoginPage /></ErrorBoundary>} />
-          <Route path="/customer/auth/callback" element={<ErrorBoundary><CustomerAuthCallback /></ErrorBoundary>} />
-          <Route path="/customer/set-password" element={<ErrorBoundary><CustomerSetPasswordPage /></ErrorBoundary>} />
-
-          {/* Protected customer routes */}
-          <Route element={<CustomerProtectedRoute />}>
-            <Route element={<ErrorBoundary><CustomerLayout /></ErrorBoundary>}>
-              <Route path="/customer/dashboard" element={<CustomerDashboard />} />
-              <Route path="/customer/order/:orderNumber" element={<CustomerOrderDetail />} />
-              <Route path="/customer/profile" element={<CustomerProfilePage />} />
-              <Route path="/customer/help" element={<CustomerHelpPage />} />
-            </Route>
-          </Route>
-
-          {/* Redirect /customer to login */}
-          <Route path="/customer" element={<Navigate to="/customer/login" replace />} />
 
           {/* 404 — outside protected routes so all unknown paths return not-found */}
           <Route path="*" element={<NotFoundPage />} />

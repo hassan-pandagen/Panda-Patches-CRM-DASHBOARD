@@ -79,16 +79,20 @@ serve(async (req) => {
 
     console.log(`📧 [Checkout Webhook] ${eventType} order: ${orderNumber}, agent: ${salesAgent}`);
 
-    // ✅ Only fire for checkout orders (web_checkout or hello@pandapatches.com)
-    if (!CHECKOUT_AGENTS.includes(salesAgent.toLowerCase())) {
-      console.log(`⏭️ Skipping - not a checkout order (agent: ${salesAgent})`);
-      return new Response(JSON.stringify({ skipped: true, reason: 'not a checkout order' }), { status: 200 });
-    }
-
     const SUPABASE_URL = Deno.env.get('SUPABASE_URL');
     const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
     if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
       throw new Error('Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY');
+    }
+
+    // NOTE: The CUSTOMER "Payment Received" email is intentionally NOT sent here.
+    // It must fire ONLY on a real gateway payment, so it lives inside the payment webhooks
+    // (square-payment-webhook / stripe-balance-webhook) — never on agent-created orders.
+
+    // ✅ Internal production email path is checkout-only (web_checkout or hello@pandapatches.com)
+    if (!CHECKOUT_AGENTS.includes(salesAgent.toLowerCase())) {
+      console.log(`⏭️ Skipping internal production email - not a checkout order (agent: ${salesAgent})`);
+      return new Response(JSON.stringify({ skipped: true, reason: 'not a checkout order', customerEmailHandled: true }), { status: 200 });
     }
 
     // ── Customer portal invite — fire once on INSERT (independent of production readiness) ──
