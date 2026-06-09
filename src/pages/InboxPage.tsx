@@ -15,6 +15,7 @@ import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useParams } from 'react-router-dom';
 import { supabase } from '../services/supabaseClient';
+import { uploadFile } from '../services/storageService';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../hooks/useToast';
 import { sanitizeIlikePattern } from '../utils/supabaseFilters';
@@ -22,7 +23,7 @@ import {
   MessageSquare, Instagram, Megaphone, Send, AlertTriangle,
   User, Image as ImageIcon, ChevronDown, Check, RefreshCw, X,
   Lock, FileText, ExternalLink, Pencil, Phone, Mail, Search,
-  Package, DollarSign,
+  Package, DollarSign, ImagePlus, Loader2,
 } from 'lucide-react';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -468,7 +469,26 @@ const ConvertToOrderModal: React.FC<{
   );
   const [instructions, setInstructions] = useState('');
   const [creating, setCreating] = useState(false);
+  // Customer artwork/logo from the chat — attached so production + the customer email have the design
+  const [artworkUrls, setArtworkUrls] = useState<string[]>([]);
+  const [uploadingArtwork, setUploadingArtwork] = useState(false);
   const { success: showSuccess, error: showError } = useToast();
+
+  const handleArtworkUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    e.target.value = '';
+    if (files.length === 0) return;
+    setUploadingArtwork(true);
+    try {
+      const urls = await Promise.all(files.map(f => uploadFile(f)));
+      setArtworkUrls(prev => [...prev, ...urls]);
+    } catch (err: any) {
+      showError('Artwork upload failed', err?.message);
+    } finally {
+      setUploadingArtwork(false);
+    }
+  };
+  const removeArtwork = (url: string) => setArtworkUrls(prev => prev.filter(u => u !== url));
 
   // Warn if conversation is missing customer info — order is created from it
   const missingInfo = !conv.customer_email && !conv.customer_phone;
@@ -516,8 +536,8 @@ const ConvertToOrderModal: React.FC<{
         attribution:         conv.attribution ?? null,
         isUrgent:            false,
         status:              'NEW_ORDER',
-        mockupUrls:          [],
-        customerAttachmentUrls: [],
+        mockupUrls:          artworkUrls,
+        customerAttachmentUrls: artworkUrls,
         productionFileUrls:  [],
         shippingAttachmentUrls: [],
         redoAttachments:     [],
@@ -656,6 +676,34 @@ const ConvertToOrderModal: React.FC<{
                 className="w-full px-3 py-2 bg-slate-800 border border-white/10 rounded-lg text-sm text-white placeholder-slate-500 focus:outline-none focus:border-brand-orange/50 resize-none"
               />
             </div>
+
+            {/* Customer artwork / logo — attached so production + the customer email include the design */}
+            <div className="col-span-2">
+              <label className="block text-[10px] uppercase tracking-wider text-slate-400 mb-1.5 font-semibold">Customer Artwork / Logo</label>
+              <div className="flex flex-wrap items-center gap-2.5">
+                {artworkUrls.map(url => (
+                  <div key={url} className="relative w-16 h-16 rounded-lg overflow-hidden border border-white/10 group">
+                    <img src={url} alt="Customer artwork" className="w-full h-full object-cover" />
+                    <button
+                      type="button"
+                      onClick={() => removeArtwork(url)}
+                      className="absolute top-0.5 right-0.5 p-0.5 bg-black/70 hover:bg-red-600 rounded text-white opacity-0 group-hover:opacity-100 transition-opacity"
+                      title="Remove"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </div>
+                ))}
+                <label className={`w-16 h-16 flex flex-col items-center justify-center gap-0.5 rounded-lg border border-dashed border-white/20 text-slate-400 hover:border-brand-orange hover:text-brand-orange cursor-pointer transition-colors ${uploadingArtwork ? 'opacity-60 pointer-events-none' : ''}`}>
+                  {uploadingArtwork ? <Loader2 className="w-4 h-4 animate-spin" /> : <ImagePlus className="w-4 h-4" />}
+                  <span className="text-[9px]">{uploadingArtwork ? '…' : 'Add'}</span>
+                  <input type="file" accept="image/*" multiple onChange={handleArtworkUpload} className="hidden" disabled={uploadingArtwork} />
+                </label>
+              </div>
+              <p className="text-[10px] text-slate-500 mt-1.5">
+                Upload the logo/design the customer sent in chat so production and the order email include the artwork.
+              </p>
+            </div>
           </div>
 
           {/* Attribution preserved indicator */}
@@ -675,7 +723,7 @@ const ConvertToOrderModal: React.FC<{
           </button>
           <button
             onClick={create}
-            disabled={creating}
+            disabled={creating || uploadingArtwork}
             className="px-4 py-2 bg-brand-orange hover:bg-brand-orange/90 disabled:opacity-50 text-white text-sm font-medium rounded-lg transition-all"
           >
             {creating ? 'Creating…' : 'Create Order'}
