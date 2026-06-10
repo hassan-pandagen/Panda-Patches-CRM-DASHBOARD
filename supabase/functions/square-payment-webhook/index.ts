@@ -38,6 +38,39 @@ function isUUID(s: string): boolean {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s);
 }
 
+// Derive the REAL marketing lead source from attribution (utm_source → referrer).
+// sales_agent stays WEB_CHECKOUT (we know they self-paid); lead_source = where they came FROM.
+// Falls back to 'Checkout' only when no attribution signal exists.
+function resolveLeadSource(attribution: any): string {
+  const utm = (attribution?.utm_source || '').toString().toLowerCase();
+  const utmMap: Record<string, string> = {
+    facebook: 'Facebook', fb: 'Facebook', instagram: 'Instagram', ig: 'Instagram',
+    google: 'Google', bing: 'Bing', tiktok: 'TikTok', youtube: 'YouTube',
+    linkedin: 'LinkedIn', twitter: 'Twitter', reddit: 'Reddit', snapchat: 'Snapchat',
+    email: 'Email', newsletter: 'Email', 'chatgpt.com': 'ChatGPT', chatgpt: 'ChatGPT',
+    perplexity: 'Perplexity', claude: 'Claude', gemini: 'Gemini', copilot: 'Copilot',
+  };
+  if (utm && utmMap[utm]) return utmMap[utm];
+
+  const ref = (attribution?.referrer || attribution?.page_url || '').toString();
+  const refRules: Array<[RegExp, string]> = [
+    [/chat\.?openai\.com|chatgpt\.com/i, 'ChatGPT'], [/perplexity\.ai/i, 'Perplexity'],
+    [/claude\.ai|anthropic\.com/i, 'Claude'], [/gemini\.google\.com|bard\.google/i, 'Gemini'],
+    [/copilot\.microsoft|bing\.com\/chat/i, 'Copilot'],
+    [/facebook\.com|fb\.com|m\.facebook/i, 'Facebook'], [/instagram\.com/i, 'Instagram'],
+    [/tiktok\.com/i, 'TikTok'], [/youtube\.com|youtu\.be/i, 'YouTube'],
+    [/linkedin\.com|lnkd\.in/i, 'LinkedIn'], [/twitter\.com|x\.com|t\.co/i, 'Twitter'],
+    [/reddit\.com/i, 'Reddit'], [/snapchat\.com/i, 'Snapchat'],
+    [/google\.[a-z.]+/i, 'Google'], [/bing\.com/i, 'Bing'],
+    [/whatsapp\.com|wa\.me/i, 'WhatsApp'],
+  ];
+  for (const [re, label] of refRules) if (re.test(ref)) return label;
+
+  // utm_source present but unmapped → use it raw (capitalized); else Checkout
+  if (utm) return utm.charAt(0).toUpperCase() + utm.slice(1);
+  return 'Checkout';
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method !== 'POST') return new Response('Method not allowed', { status: 405 });
 
@@ -148,7 +181,7 @@ Deno.serve(async (req: Request) => {
           shipping_cost:    0,
           marketing_cost:   0,
           sales_agent:      tokenRow.created_by,
-          lead_source:      'Payment Form',
+          lead_source:      resolveLeadSource(attribution),
           attribution,
           is_urgent:        false,
           status:           'NEW_ORDER',

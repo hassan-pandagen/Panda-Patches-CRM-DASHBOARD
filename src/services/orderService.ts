@@ -198,6 +198,7 @@ export const mapDbToOrder = (data: any): Order => {
     assignedAt: data.assignedAt ?? data.assigned_at,
 
     country: data.country ?? null,
+    purchaseOrder: data.purchaseOrder ?? data.purchase_order ?? null,
 
     attribution: data.attribution ?? null,
     attributionQuality: data.attribution_quality ?? null,

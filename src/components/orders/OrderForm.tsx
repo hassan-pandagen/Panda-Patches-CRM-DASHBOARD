@@ -56,6 +56,7 @@ export interface SaveData {
   ccEmail?: string;
   customerPhone?: string;
   customerProfileUrl?: string;
+  purchaseOrder?: string;
   shippingAddress?: string;
   designName?: string;
   patchesQuantity: number;
@@ -125,6 +126,7 @@ const transformOrderToFormData = (order: Order | null | undefined): SaveData => 
       customerEmail: '',
       customerPhone: '',
       customerProfileUrl: '',
+      purchaseOrder: '',
       
       // ✅ CRITICAL: Status always has default value
       status: OrderStatus.NEW_ORDER,  // NEVER undefined
@@ -602,6 +604,10 @@ const OrderForm: React.FC<OrderFormProps> = ({
           <div>
             <label className="block text-sm font-medium text-slate-300">Profile URL</label>
             <input type="url" {...register('customerProfileUrl')} className="mt-1 block w-full bg-slate-800 border-slate-600 rounded-md text-white focus:ring-brand-orange focus:border-brand-orange" />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-300">Purchase Order</label>
+            <input type="text" {...register('purchaseOrder')} placeholder="Customer PO # (searchable)" className="mt-1 block w-full bg-slate-800 border-slate-600 rounded-md text-white placeholder-slate-500 focus:ring-brand-orange focus:border-brand-orange" />
           </div>
         </div>
       </FormSectionWrapper>

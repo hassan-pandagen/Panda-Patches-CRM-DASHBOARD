@@ -61,6 +61,7 @@ export interface Order {
   ccEmail?: string; // Secondary/CC email for companies with multiple contacts
   customerPhone?: string;
   customerProfileUrl?: string;
+  purchaseOrder?: string; // Customer PO number/reference — searchable
 
   // --- Design & Production Details ---
   designName?: string;

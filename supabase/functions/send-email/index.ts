@@ -1070,26 +1070,12 @@ serve(async (req) => {
     if (processedData.winner_file && processedData.winner_file.url) {
         const file = await fetchFile(processedData.winner_file.url);
 
-        if (file && file.isImage) {
-            const fileSizeMB = (file.content.length * 0.75) / (1024 * 1024);
-            if (fileSizeMB <= MAX_WINNER_SIZE_MB) {
-                // IMAGE -> INLINE (Use Content-ID for Lightbox)
-                const cid = 'winner_img';
-                inlineAttachments.push({
-                    "Content-type": file.type,
-                    "Filename": `Preview-${file.filename}`,
-                    "ContentID": cid,
-                    "Base64Content": file.content
-                });
-                processedData.winner_file.preview = `cid:${cid}`;
-                processedData.winner_file.is_image = true;
-                usedBudgetMB += fileSizeMB;
-            } else {
-                // Too large — link to it instead of embedding
-                console.warn(`Winner image too large (${fileSizeMB.toFixed(1)}MB > ${MAX_WINNER_SIZE_MB}MB), linking instead`);
-                processedData.winner_file.preview = processedData.winner_file.url;
-                processedData.winner_file.is_image = false;
-            }
+        if (processedData.winner_file && /\.(jpg|jpeg|png|gif|webp)$/i.test((processedData.winner_file.url || '').split('?')[0])) {
+            // Images live in a PUBLIC bucket — reference the URL directly so email
+            // clients load it. Avoids the flaky download/base64 embed that caused
+            // intermittent "File Attached" placeholders when emails fire concurrently.
+            processedData.winner_file.preview = processedData.winner_file.url;
+            processedData.winner_file.is_image = true;
         }
         else if (file && !file.isImage) {
             // PDF -> ATTACHMENT (Never Inline)

@@ -185,7 +185,7 @@ async function fetchPaginatedOrders(params: {
     const from = (page - 1) * ITEMS_PER_PAGE;
     const to = from + ITEMS_PER_PAGE - 1;
 
-    const columns = 'id, order_number, customer_name, customer_email, design_name, status, created_at, sales_agent, order_amount, amount_paid, is_urgent, production_completed_at, production_completed_by, attribution, attribution_quality';
+    const columns = 'id, order_number, customer_name, customer_email, design_name, status, created_at, sales_agent, order_amount, amount_paid, is_urgent, production_completed_at, production_completed_by, attribution, attribution_quality, purchase_order';
 
     // --- IDS drill-down (from dashboard click) ---
     if (ids) {
@@ -274,7 +274,7 @@ async function fetchPaginatedOrders(params: {
     // Apply search (server-side ilike across multiple columns)
     if (search) {
         query = query.or(
-            `customer_name.ilike.%${search}%,order_number.ilike.%${search}%,customer_email.ilike.%${search}%,customer_phone.ilike.%${search}%,design_name.ilike.%${search}%,sales_agent.ilike.%${search}%`
+            `customer_name.ilike.%${search}%,order_number.ilike.%${search}%,customer_email.ilike.%${search}%,customer_phone.ilike.%${search}%,design_name.ilike.%${search}%,sales_agent.ilike.%${search}%,purchase_order.ilike.%${search}%`
         );
     }
 
