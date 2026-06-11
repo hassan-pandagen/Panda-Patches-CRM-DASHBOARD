@@ -3,6 +3,8 @@ import { PDFDownloadLink } from '@react-pdf/renderer';
 import InvoiceDocument from './InvoiceDocument';
 import { Order } from '../../types';
 import { X, FileText, Download } from 'lucide-react';
+// Dark logo for the white invoice (bundled via Vite — same-origin URL, can't 404 like the old one).
+import invoiceLogo from '../../assets/invoice-logo.png';
 
 interface InvoiceModalProps {
   isOpen: boolean;
@@ -12,10 +14,11 @@ interface InvoiceModalProps {
 
 const InvoiceModal: React.FC<InvoiceModalProps> = ({ isOpen, onClose, order }) => {
   const [companyName, setCompanyName] = useState(order.customerName);
-  const [poNumber, setPoNumber] = useState('');
+  // Pre-fill from the order's saved Purchase Order field; agent can still edit/override.
+  const [poNumber, setPoNumber] = useState(order.purchaseOrder || '');
 
-  // --- FIX: CORRECT LOGO URL (Removed extra 'public' segment) ---
-  const logoUrl = "https://uxgzlneefybifvccfhwp.supabase.co/storage/v1/object/public/logos/company-logo-1763645030861.png";
+  // Bundled dark logo (imported above) — resolves to a hashed same-origin asset URL in prod.
+  const logoUrl = invoiceLogo;
 
   if (!isOpen) return null;
 

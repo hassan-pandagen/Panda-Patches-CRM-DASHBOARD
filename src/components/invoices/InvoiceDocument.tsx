@@ -27,8 +27,10 @@ const styles = StyleSheet.create({
   headerContainer: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 20 },
   brandSection: { width: '60%' },
   logo: {
+    // Box ratio matches the trimmed logo (1238x538 ≈ 2.30:1) so there's no side-padding —
+    // the logo's left edge sits flush with the "Panda Patches" text column below it.
     width: 140,
-    height: 60,
+    height: 61,
     objectFit: 'contain',
     marginBottom: 10
   },
@@ -133,8 +135,37 @@ const styles = StyleSheet.create({
     fontSize: 8,
     color: '#9CA3AF'
   },
-  link: { color: '#7C3AED', textDecoration: 'none' }
+  link: { color: '#7C3AED', textDecoration: 'none' },
+
+  // --- PAID / STATUS ---
+  paidStamp: {
+    position: 'absolute',
+    top: 150,
+    right: 55,
+    borderWidth: 3,
+    borderColor: '#16A34A',
+    borderRadius: 8,
+    paddingVertical: 4,
+    paddingHorizontal: 16,
+    transform: 'rotate(-16deg)',
+  },
+  paidStampText: { fontSize: 26, fontWeight: 'bold', color: '#16A34A', letterSpacing: 3 },
+  paidStampSub: { fontSize: 7, color: '#16A34A', textAlign: 'center', marginTop: 1 },
+  statusPill: {
+    alignSelf: 'flex-end',
+    paddingVertical: 2,
+    paddingHorizontal: 8,
+    borderRadius: 10,
+    marginTop: 2,
+  },
+  statusPillText: { fontSize: 9, fontWeight: 'bold' },
 });
+
+// Format a date the same way across the invoice.
+const fmtDate = (d?: string | null) => {
+  const dt = d ? new Date(d) : new Date();
+  return dt.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+};
 
 interface InvoiceProps {
   order: Order;
@@ -148,15 +179,28 @@ const InvoiceDocument: React.FC<InvoiceProps> = ({ order, poNumber, companyName,
   const qty = order.patchesQuantity || 1;
 
   // --- REFACTORED MATH LOGIC ---
-  const rate = Number((order.orderAmount / qty).toFixed(2)); // Calculate rate first with rounding
+  const rate = Number(((order.orderAmount || 0) / qty).toFixed(2)); // Calculate rate first with rounding
   const amount = rate * qty; // Derive the final amount from the rounded rate
-  const balanceDue = amount - order.amountPaid; // Recalculate balance due based on the derived amount
+  const amountPaid = order.amountPaid || 0;
+  const balanceDue = Math.max(0, amount - amountPaid); // Recalculate balance due based on the derived amount
+
+  // Payment state — drives the PAID stamp and the totals breakdown.
+  const isPaid = amountPaid > 0 && balanceDue <= 0;           // fully paid
+  const isPartiallyPaid = amountPaid > 0 && balanceDue > 0;   // deposit / partial
 
 
   return (
     <Document>
       <Page size="A4" style={styles.page}>
-        
+
+        {/* PAID STAMP — only when fully paid */}
+        {isPaid && (
+          <View style={styles.paidStamp}>
+            <Text style={styles.paidStampText}>PAID</Text>
+            <Text style={styles.paidStampSub}>{fmtDate(order.updatedAt)}</Text>
+          </View>
+        )}
+
         {/* HEADER */}
         <View style={styles.headerContainer}>
           <View style={styles.brandSection}>
@@ -173,8 +217,21 @@ const InvoiceDocument: React.FC<InvoiceProps> = ({ order, poNumber, companyName,
           <View style={styles.invoiceTitleSection}>
             <Text style={styles.invoiceTitle}>INVOICE</Text>
             <Text style={styles.invoiceNumber}># INV-{order.orderNumber.replace('PP-', '')}</Text>
-            <Text style={styles.balanceDueHeader}>Balance Due</Text>
-            <Text style={styles.balanceDueAmount}>${balanceDue.toLocaleString()}</Text>
+            <Text style={styles.balanceDueHeader}>{isPaid ? 'Amount Paid' : 'Balance Due'}</Text>
+            <Text style={[styles.balanceDueAmount, isPaid ? { color: '#16A34A' } : {}]}>
+              ${(isPaid ? amountPaid : balanceDue).toLocaleString()}
+            </Text>
+            <View style={[
+              styles.statusPill,
+              { backgroundColor: isPaid ? '#DCFCE7' : isPartiallyPaid ? '#FEF3C7' : '#FEE2E2' },
+            ]}>
+              <Text style={[
+                styles.statusPillText,
+                { color: isPaid ? '#16A34A' : isPartiallyPaid ? '#B45309' : '#DC2626' },
+              ]}>
+                {isPaid ? 'PAID' : isPartiallyPaid ? 'PARTIALLY PAID' : 'UNPAID'}
+              </Text>
+            </View>
           </View>
         </View>
 
@@ -187,8 +244,11 @@ const InvoiceDocument: React.FC<InvoiceProps> = ({ order, poNumber, companyName,
           </View>
           <View style={styles.datesSection}>
             <View style={styles.dateRow}><Text style={styles.dateLabel}>Invoice Date :</Text><Text style={styles.dateValue}>{date}</Text></View>
+            {poNumber ? (
+              <View style={styles.dateRow}><Text style={styles.dateLabel}>P.O. Number :</Text><Text style={styles.dateValue}>{poNumber}</Text></View>
+            ) : null}
             <View style={styles.dateRow}><Text style={styles.dateLabel}>Terms :</Text><Text style={styles.dateValue}>Due on Receipt</Text></View>
-            <View style={styles.dateRow}><Text style={styles.dateLabel}>Due Date :</Text><Text style={styles.dateValue}>{date}</Text></View>
+            <View style={styles.dateRow}><Text style={styles.dateLabel}>Due Date :</Text><Text style={styles.dateValue}>{isPaid ? '—' : date}</Text></View>
           </View>
         </View>
 
@@ -219,14 +279,32 @@ const InvoiceDocument: React.FC<InvoiceProps> = ({ order, poNumber, companyName,
             <View style={styles.totalsBox}>
                 <View style={styles.totalRow}><Text style={styles.totalLabel}>Sub Total</Text><Text style={styles.totalValue}>{amount.toLocaleString()}</Text></View>
                 <View style={styles.totalRowFinal}><Text style={[styles.totalLabel, {fontWeight: 'bold', color: '#000'}]}>Total</Text><Text style={{fontWeight: 'bold'}}>${amount.toLocaleString()}</Text></View>
-                <View style={styles.balanceDueBox}><Text style={{fontWeight: 'bold', fontSize: 10}}>Balance Due</Text><Text style={{fontWeight: 'bold', fontSize: 10}}>${balanceDue.toLocaleString()}</Text></View>
+                {amountPaid > 0 && (
+                  <View style={styles.totalRow}>
+                    <Text style={[styles.totalLabel, { color: '#16A34A' }]}>Amount Paid</Text>
+                    <Text style={[styles.totalValue, { color: '#16A34A' }]}>-${amountPaid.toLocaleString()}</Text>
+                  </View>
+                )}
+                <View style={[styles.balanceDueBox, isPaid ? { backgroundColor: '#DCFCE7' } : {}]}>
+                  <Text style={{fontWeight: 'bold', fontSize: 10, color: isPaid ? '#16A34A' : '#000'}}>{isPaid ? 'Balance Due (Paid)' : 'Balance Due'}</Text>
+                  <Text style={{fontWeight: 'bold', fontSize: 10, color: isPaid ? '#16A34A' : '#000'}}>${balanceDue.toLocaleString()}</Text>
+                </View>
             </View>
         </View>
 
         <View style={styles.spacer} />
 
-        {/* BANK INFO */}
-        <View style={styles.bankContainer}>
+        {/* BANK INFO — payment instructions only when there's still a balance.
+            A fully-paid invoice reads as a receipt, so we show a thank-you instead. */}
+        {isPaid ? (
+          <View style={styles.bankContainer}>
+            <Text style={[styles.bankTitle, { color: '#16A34A' }]}>Payment Received — Thank You!</Text>
+            <Text style={styles.bankSubTitle}>
+              This invoice has been paid in full. No further payment is due. We appreciate your business.
+            </Text>
+          </View>
+        ) : (
+          <View style={styles.bankContainer}>
              <Text style={styles.bankTitle}>MC Patches LLC Domestic Transfer Details</Text>
              <Text style={styles.bankSubTitle}>Use these details to send both domestic wires and ACH transfers to MC Patches LLC.</Text>
 
@@ -243,7 +321,8 @@ const InvoiceDocument: React.FC<InvoiceProps> = ({ order, poNumber, companyName,
                  <Text style={styles.bankDetail}>Address: 1110 Gorgas Avenue, Suite A4-700, San Francisco, CA 94129, US</Text>
                </View>
              </View>
-        </View>
+          </View>
+        )}
 
         <View style={styles.footer}>
            <Text style={styles.footerText}>Crafted with ease using Panda Patches CRM</Text>

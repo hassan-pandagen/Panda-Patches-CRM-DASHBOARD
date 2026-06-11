@@ -35,6 +35,7 @@ interface Token {
   patches_type: string | null;
   patches_quantity: number | null;
   order_amount: number | null;
+  is_deposit: boolean | null;
   expires_at: string;
   used_at: string | null;
   order_number: string | null;
@@ -64,6 +65,7 @@ const PaymentFormPage: React.FC = () => {
     design_backing:   '',
     instructions:     '',
     order_amount:     '',
+    is_deposit:       false,
   });
 
   // Design/mockup images the agent attaches at link creation → copied to the order on payment
@@ -92,7 +94,8 @@ const PaymentFormPage: React.FC = () => {
       const payload: any = {
         created_by:   user?.email || 'unknown',
         order_amount: parseFloat(form.order_amount),
-        allow_deposit: false, // agent controls amount — no toggle needed
+        is_deposit:   form.is_deposit, // agent flags this charge as a deposit (partial payment)
+        allow_deposit: false,
         deposit_pct_options: null,
       };
       if (form.customer_name.trim())    payload.customer_name    = form.customer_name.trim();
@@ -165,7 +168,7 @@ const PaymentFormPage: React.FC = () => {
   const removeImage = (url: string) => setMockupUrls(prev => prev.filter(u => u !== url));
 
   const resetForm = () => {
-    setForm({ customer_name: '', customer_email: '', customer_phone: '', patches_type: '', patches_quantity: '', design_name: '', design_size: '', design_backing: '', instructions: '', order_amount: '' });
+    setForm({ customer_name: '', customer_email: '', customer_phone: '', patches_type: '', patches_quantity: '', design_name: '', design_size: '', design_backing: '', instructions: '', order_amount: '', is_deposit: false });
     setMockupUrls([]);
     setGeneratedToken(null);
     setShowForm(false);
@@ -229,6 +232,22 @@ const PaymentFormPage: React.FC = () => {
                 <p className="text-xs text-slate-500 mt-1.5">
                   This is exactly what the customer will pay — deposit, full, or any amount you agree on.
                 </p>
+
+                {/* Deposit toggle — marks the charge as a partial payment on the customer page */}
+                <label className="flex items-start gap-2.5 mt-3 max-w-md cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={form.is_deposit}
+                    onChange={e => setForm(f => ({ ...f, is_deposit: e.target.checked }))}
+                    className="mt-0.5 w-4 h-4 rounded border-slate-600 bg-slate-800 text-brand-orange focus:ring-brand-orange focus:ring-offset-0"
+                  />
+                  <span className="text-xs text-slate-300">
+                    This is a <span className="font-semibold text-brand-orange">deposit</span> (partial payment)
+                    <span className="block text-slate-500 mt-0.5">
+                      The customer's page will clearly show it's a deposit, not full payment. Collect the balance separately later.
+                    </span>
+                  </span>
+                </label>
               </div>
 
               {/* Customer + Order details in a compact grid */}
@@ -430,10 +449,15 @@ const TokenRow: React.FC<{
       : 'border-white/10 bg-slate-800/30 hover:bg-slate-800/50'
     }`}>
       {/* Amount badge */}
-      <div className="w-16 text-center">
+      <div className="w-16 text-center shrink-0">
         <p className="text-base font-bold text-brand-orange">
           {t.order_amount ? `$${Number(t.order_amount).toFixed(0)}` : '—'}
         </p>
+        {t.is_deposit && (
+          <span className="inline-block mt-0.5 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide rounded bg-amber-500/20 text-amber-300">
+            Deposit
+          </span>
+        )}
       </div>
 
       {/* Info */}

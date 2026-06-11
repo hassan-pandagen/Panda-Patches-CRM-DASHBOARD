@@ -121,7 +121,8 @@ const PaymentForm: React.FC<{ tokenData: any }> = ({ tokenData: tokenDataRaw }) 
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   const orderAmount  = parseFloat(form.order_amount) || 0;
-  const chargeAmount = orderAmount; // agent sets exact amount — no deposit toggle
+  const chargeAmount = orderAmount; // agent sets exact amount
+  const isDeposit    = !!tokenData?.is_deposit; // agent flagged this charge as a deposit
 
   const validate = () => {
     const e: Record<string, string> = {};
@@ -164,7 +165,7 @@ const PaymentForm: React.FC<{ tokenData: any }> = ({ tokenData: tokenDataRaw }) 
             instructions:     form.instructions.trim() || null,
             order_amount:     orderAmount,
             charge_amount:    chargeAmount,
-            payment_type:     'full',
+            payment_type:     isDeposit ? 'deposit' : 'full',
             deposit_pct:      null,
           }),
         }
@@ -288,11 +289,24 @@ const PaymentForm: React.FC<{ tokenData: any }> = ({ tokenData: tokenDataRaw }) 
 
           {/* Summary */}
           {chargeAmount > 0 && (
-            <div className="mt-4 p-4 bg-slate-800/50 rounded-xl border border-white/10">
+            <div className={`mt-4 p-4 rounded-xl border ${isDeposit ? 'bg-amber-500/5 border-amber-500/25' : 'bg-slate-800/50 border-white/10'}`}>
+              {isDeposit && (
+                <div className="flex items-center gap-1.5 mb-2">
+                  <span className="px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide rounded bg-amber-500/20 text-amber-300">
+                    Deposit
+                  </span>
+                  <span className="text-xs text-amber-200/80">Partial payment — not full</span>
+                </div>
+              )}
               <div className="flex justify-between text-sm">
-                <span className="text-slate-400">You'll be charged today</span>
+                <span className="text-slate-400">{isDeposit ? "Deposit due today" : "You'll be charged today"}</span>
                 <span className="text-white font-bold text-lg">${chargeAmount.toFixed(2)}</span>
               </div>
+              {isDeposit && (
+                <p className="text-[11px] text-amber-200/70 mt-2">
+                  This is a deposit to start your order. The remaining balance will be arranged with your sales agent.
+                </p>
+              )}
               <p className="text-[10px] text-slate-600 mt-2">
                 Secure payment via Square · You'll be redirected to Square's checkout page.
               </p>
@@ -313,7 +327,7 @@ const PaymentForm: React.FC<{ tokenData: any }> = ({ tokenData: tokenDataRaw }) 
             <CreditCard className="w-5 h-5" />
             {createSquareCheckout.isPending
               ? 'Redirecting to Square…'
-              : `Pay $${chargeAmount.toFixed(2)} via Square`}
+              : `Pay $${chargeAmount.toFixed(2)}${isDeposit ? ' Deposit' : ''} via Square`}
           </button>
         </Section>
       </div>

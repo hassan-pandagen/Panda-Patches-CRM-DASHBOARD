@@ -80,7 +80,7 @@ Deno.serve(async (req: Request) => {
     ].filter(Boolean).join(" ");
 
     const paymentLabel = body.payment_type === "deposit"
-      ? `${body.deposit_pct}% Deposit`
+      ? (body.deposit_pct ? `${body.deposit_pct}% Deposit` : "Deposit")
       : "Full Payment";
 
     // Amount in cents

@@ -35,7 +35,11 @@ const inviteSchema = z.object({
   mode: z.enum(['auto', 'reset_password']).optional().default('auto'),
 });
 
+// Customer portal now lives on the marketing website (CRM /customer/* routes were removed).
+// Invite/recovery links must land on the WEBSITE's live, Supabase-allow-listed routes.
 const DEFAULT_PORTAL_URL = 'https://login.pandapatches.com';
+const WEBSITE_SET_PASSWORD_URL = 'https://www.pandapatches.com/reset-password';
+const WEBSITE_LOGIN_CALLBACK_URL = 'https://www.pandapatches.com/auth/callback';
 
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {
@@ -53,8 +57,9 @@ Deno.serve(async (req: Request) => {
     const { email, customer_name, order_number, portal_url, mode } = inviteSchema.parse(body);
 
     const portal = (portal_url || DEFAULT_PORTAL_URL).replace(/\/$/, '');
-    const setPasswordRedirect = `${portal}/customer/set-password`;
-    const loginRedirect = `${portal}/customer/auth/callback`;
+    // Land on the WEBSITE (customer portal moved there; CRM /customer/* routes were removed).
+    const setPasswordRedirect = WEBSITE_SET_PASSWORD_URL;
+    const loginRedirect = WEBSITE_LOGIN_CALLBACK_URL;
 
     // 1. Block staff members from being invited as customers
     const { data: staffMember } = await admin
@@ -80,6 +85,9 @@ Deno.serve(async (req: Request) => {
     // 3. Generate the right link for the situation
     let actionLink: string;
     let templateId: string;
+    // Track a freshly-created auth user so we can clean up the orphan if the email send fails.
+    let createdNow = false;
+    let createdUserId: string | null = null;
 
     if (!existing) {
       // New customer flow:
@@ -87,14 +95,14 @@ Deno.serve(async (req: Request) => {
       //   2. If not, create the auth user with app_metadata flags
       //   3. Generate an invite link that lands on /customer/set-password
 
-      // Step 1: check for existing auth user (rare edge case)
+      // Step 1: check for existing auth user (orphan from a prior failed invite)
       const { data: { users: existingUsers } } = await admin.auth.admin.listUsers();
       const existingAuthUser = existingUsers.find(u => u.email?.toLowerCase() === email.toLowerCase());
 
       if (!existingAuthUser) {
         // Step 2: Create the user with proper app_metadata
         // app_metadata is server-controlled — users CANNOT modify it from the client
-        const { error: createErr } = await admin.auth.admin.createUser({
+        const { data: created, error: createErr } = await admin.auth.admin.createUser({
           email,
           email_confirm: true,
           user_metadata: { full_name: customer_name, is_customer: true },
@@ -104,21 +112,40 @@ Deno.serve(async (req: Request) => {
           },
         });
         if (createErr) throw createErr;
+        createdNow = true;
+        createdUserId = created.user?.id ?? null;
       }
 
-      // Step 3: Generate the invite link
-      // This link will log them in, but the password_set: false flag
-      // FORCES them through /customer/set-password before they can reach the dashboard.
-      const { data, error } = await admin.auth.admin.generateLink({
-        type: 'invite',
-        email,
-        options: {
-          redirectTo: setPasswordRedirect,
-          data: { full_name: customer_name, is_customer: true },
-        },
-      });
-      if (error) throw error;
-      actionLink = data.properties?.action_link ?? '';
+      // Step 3: Generate the link.
+      //   - Brand-new user  → 'invite' link (lands on set-password).
+      //   - Orphan user (prior failed invite left an unconfirmed/passwordless auth row) →
+      //     'recovery' link instead. generateLink type:'invite' ERRORS when the user already
+      //     exists, which is exactly what left customers permanently stuck. Recovery works for
+      //     existing users and still lands on set-password. Confirm the email first so the
+      //     recovery link is valid.
+      if (createdNow) {
+        const { data, error } = await admin.auth.admin.generateLink({
+          type: 'invite',
+          email,
+          options: {
+            redirectTo: setPasswordRedirect,
+            data: { full_name: customer_name, is_customer: true },
+          },
+        });
+        if (error) throw error;
+        actionLink = data.properties?.action_link ?? '';
+      } else {
+        if (existingAuthUser && !existingAuthUser.email_confirmed_at) {
+          await admin.auth.admin.updateUserById(existingAuthUser.id, { email_confirm: true }).catch(() => {});
+        }
+        const { data, error } = await admin.auth.admin.generateLink({
+          type: 'recovery',
+          email,
+          options: { redirectTo: setPasswordRedirect },
+        });
+        if (error) throw error;
+        actionLink = data.properties?.action_link ?? '';
+      }
       templateId = 'CUSTOMER_WELCOME_INVITE';
     } else {
       // Returning customer
@@ -161,13 +188,18 @@ Deno.serve(async (req: Request) => {
           customer_name,
           order_number,
           portal_action_url: actionLink,
-          portal_login_url: `${portal}/customer/login`,
+          portal_login_url: 'https://www.pandapatches.com/login',
         },
       }),
     });
 
     if (!emailResp.ok) {
       const text = await emailResp.text();
+      // Cleanup: if we just created this auth user and the email failed, delete the orphan
+      // so a retry starts clean instead of getting stuck on a passwordless/unconfirmed row.
+      if (createdNow && createdUserId) {
+        await admin.auth.admin.deleteUser(createdUserId).catch(() => {});
+      }
       throw new Error(`send-email failed: ${text}`);
     }
 

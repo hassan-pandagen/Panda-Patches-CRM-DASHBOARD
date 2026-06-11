@@ -160,6 +160,14 @@ Deno.serve(async (req: Request) => {
       // Get full order amount from token metadata
       const orderAmount = tokenRow.order_amount || paidAmount;
 
+      // Deposit orders: stamp a marker on the instructions so staff know to collect the balance.
+      const depositNote = tokenRow.is_deposit
+        ? `[DEPOSIT — $${paidAmount.toFixed(2)} paid; remaining balance to collect separately]`
+        : '';
+      const orderInstructions = [depositNote, tokenRow.instructions]
+        .filter((s) => s && String(s).trim())
+        .join('\n') || null;
+
       // Create order — trigger fires CAPI Purchase automatically
       const { data: newOrder, error: orderErr } = await admin
         .from('orders')
@@ -172,7 +180,7 @@ Deno.serve(async (req: Request) => {
           patches_quantity: tokenRow.patches_quantity || 0,
           design_size:      tokenRow.design_size      || null,
           design_backing:   tokenRow.design_backing   || null,
-          instructions:     tokenRow.instructions     || null,
+          instructions:     orderInstructions,
           mockup_urls:      Array.isArray(tokenRow.mockup_urls) ? tokenRow.mockup_urls : [],
           order_amount:     orderAmount,
           amount_paid:      paidAmount,
