@@ -126,7 +126,30 @@ serve(async (req) => {
       return new Response(JSON.stringify({ skipped: true, reason: 'incomplete', missing, invited: isInsert }), { status: 200 });
     }
 
-    // ✅ Complete → build + send the internal production email
+    const admin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+
+    // ✅ ATOMIC CLAIM **before** sending — prevents the duplicate-email race.
+    // The website Stripe webhook fires this trigger several times in quick succession
+    // (INSERT + UPDATEs). The old code stamped production_notified_at AFTER sending, so
+    // every concurrent fire read it as null and each sent an email. Claiming the row
+    // FIRST (atomic conditional UPDATE) means exactly ONE fire wins and sends; the rest
+    // get 0 rows back and skip.
+    const { data: claimed, error: claimErr } = await admin
+      .from('orders')
+      .update({ production_notified_at: new Date().toISOString() })
+      .eq('id', record.id)
+      .is('production_notified_at', null)
+      .select('id');
+    if (claimErr) {
+      console.error(`❌ [Checkout Webhook] Claim failed for ${orderNumber}:`, claimErr);
+      return new Response(JSON.stringify({ success: false, error: claimErr.message }), { status: 500 });
+    }
+    if (!claimed || claimed.length === 0) {
+      console.log(`⏭️ Production email already claimed by a concurrent fire for ${orderNumber}, skipping`);
+      return new Response(JSON.stringify({ skipped: true, reason: 'already claimed (race)', invited: isInsert }), { status: 200 });
+    }
+
+    // ✅ We won the claim → build + send the internal production email
     const patchType = record.patches_type || '';
     const internalEmails = getInternalEmails(patchType);
     const primaryRecipient = internalEmails[0];
@@ -176,24 +199,13 @@ serve(async (req) => {
 
     const emailResult = await emailResponse.text();
     if (!emailResponse.ok) {
-      console.error(`❌ [Checkout Webhook] Email send failed:`, emailResult);
+      // Roll back the claim so a later trigger fire can retry the send.
+      await admin.from('orders').update({ production_notified_at: null }).eq('id', record.id);
+      console.error(`❌ [Checkout Webhook] Email send failed (claim rolled back):`, emailResult);
       return new Response(JSON.stringify({ success: false, error: emailResult }), { status: 500 });
     }
 
-    // ✅ Stamp production_notified_at so this fires exactly once.
-    // Guard the update on production_notified_at IS NULL to avoid a race double-send.
-    const admin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
-    const { error: stampErr } = await admin
-      .from('orders')
-      .update({ production_notified_at: new Date().toISOString() })
-      .eq('id', record.id)
-      .is('production_notified_at', null);
-    if (stampErr) {
-      console.error(`⚠️ [Checkout Webhook] Failed to stamp production_notified_at for ${orderNumber}:`, stampErr);
-      // Email already sent; not fatal, but log so we can investigate a possible duplicate risk.
-    }
-
-    console.log(`✅ [Checkout Webhook] Production email sent + stamped for order ${orderNumber}`);
+    console.log(`✅ [Checkout Webhook] Production email sent (claimed) for order ${orderNumber}`);
 
     return new Response(
       JSON.stringify({ success: true, order: orderNumber, sent_to: primaryRecipient, cc: ccEmails, invited: isInsert }),
