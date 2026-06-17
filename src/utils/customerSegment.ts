@@ -46,6 +46,7 @@ export interface OrderLike {
   customer_name?: string | null;
   order_amount?: number | null;
   created_at?: string | null;
+  order_number?: string | null;
 }
 
 export interface CompanyAccount {
@@ -59,12 +60,13 @@ export interface CompanyAccount {
   firstOrder: string;        // ISO
   lastOrder: string;         // ISO
   daysSinceLast: number;
+  orderNumbers: string[];    // all order #s under this account (for "view orders")
 }
 
 /** Group every BUSINESS-domain order into company accounts (one row per company domain). */
 export function buildCompanyAccounts(orders: OrderLike[], nowMs: number = Date.now()): CompanyAccount[] {
   const map = new Map<string, {
-    revenue: number; orders: number; emails: Set<string>; names: Set<string>; first: number; last: number;
+    revenue: number; orders: number; emails: Set<string>; names: Set<string>; first: number; last: number; nums: string[];
   }>();
 
   for (const o of orders) {
@@ -74,9 +76,10 @@ export function buildCompanyAccounts(orders: OrderLike[], nowMs: number = Date.n
     const amt = Number(o.order_amount) || 0;
     const t = o.created_at ? new Date(o.created_at).getTime() : nowMs;
     let acc = map.get(domain);
-    if (!acc) { acc = { revenue: 0, orders: 0, emails: new Set(), names: new Set(), first: t, last: t }; map.set(domain, acc); }
+    if (!acc) { acc = { revenue: 0, orders: 0, emails: new Set(), names: new Set(), first: t, last: t, nums: [] }; map.set(domain, acc); }
     acc.revenue += amt;
     acc.orders += 1;
+    if (o.order_number) acc.nums.push(o.order_number);
     if (o.customer_email) acc.emails.add(o.customer_email.toLowerCase());
     if (o.customer_name && o.customer_name.trim()) acc.names.add(o.customer_name.trim());
     acc.first = Math.min(acc.first, t);
@@ -96,6 +99,7 @@ export function buildCompanyAccounts(orders: OrderLike[], nowMs: number = Date.n
       firstOrder: new Date(a.first).toISOString(),
       lastOrder: new Date(a.last).toISOString(),
       daysSinceLast: Math.floor((nowMs - a.last) / 86_400_000),
+      orderNumbers: a.nums,
     });
   }
   return out;
@@ -105,7 +109,7 @@ export function buildCompanyAccounts(orders: OrderLike[], nowMs: number = Date.n
  *  Returned in the same shape as CompanyAccount so the same table can render both:
  *  here `company` = the person's name and `domain` = their email. */
 export function buildPersonalCustomers(orders: OrderLike[], nowMs: number = Date.now()): CompanyAccount[] {
-  const map = new Map<string, { revenue: number; orders: number; name: string; first: number; last: number }>();
+  const map = new Map<string, { revenue: number; orders: number; name: string; first: number; last: number; nums: string[] }>();
   for (const o of orders) {
     if (classifySegment(o.customer_email) !== 'Personal') continue;
     const email = (o.customer_email || '').trim().toLowerCase();
@@ -113,9 +117,10 @@ export function buildPersonalCustomers(orders: OrderLike[], nowMs: number = Date
     const amt = Number(o.order_amount) || 0;
     const t = o.created_at ? new Date(o.created_at).getTime() : nowMs;
     let acc = map.get(email);
-    if (!acc) { acc = { revenue: 0, orders: 0, name: (o.customer_name || '').trim() || email, first: t, last: t }; map.set(email, acc); }
+    if (!acc) { acc = { revenue: 0, orders: 0, name: (o.customer_name || '').trim() || email, first: t, last: t, nums: [] }; map.set(email, acc); }
     acc.revenue += amt;
     acc.orders += 1;
+    if (o.order_number) acc.nums.push(o.order_number);
     if (o.customer_name && o.customer_name.trim()) acc.name = o.customer_name.trim();
     acc.first = Math.min(acc.first, t);
     acc.last = Math.max(acc.last, t);
@@ -133,6 +138,7 @@ export function buildPersonalCustomers(orders: OrderLike[], nowMs: number = Date
       firstOrder: new Date(a.first).toISOString(),
       lastOrder: new Date(a.last).toISOString(),
       daysSinceLast: Math.floor((nowMs - a.last) / 86_400_000),
+      orderNumbers: a.nums,
     });
   }
   return out;

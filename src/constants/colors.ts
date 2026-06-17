@@ -53,6 +53,7 @@ export const SOURCE_COLORS: Record<string, string> = {
     'Gemini': '#6366F1', // Indigo
     'Copilot': '#60A5FA', // Microsoft Light Blue
     'Meta AI': '#0866FF', // Meta Blue
+    'DeepSeek': '#4D6BFE', // DeepSeek Blue
     // Other
     'Email': '#F59E0B', // Amber
     'Direct': '#8B5CF6', // Purple

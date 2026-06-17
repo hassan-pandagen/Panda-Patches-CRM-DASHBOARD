@@ -1,14 +1,17 @@
 // src/pages/CompaniesPage.tsx
 // B2B intelligence: groups customers into COMPANY accounts by email domain (the "Accounts +
 // Contacts" model), surfaces repeat resellers, and reports monthly Agency-vs-Personal split.
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '../services/supabaseClient';
 import Spinner from '../components/ui/Spinner';
 import {
   Building2, Search, X, Users, DollarSign, Repeat, Trophy,
-  ArrowUpDown, ArrowUp, ArrowDown, ExternalLink,
+  ArrowUpDown, ArrowUp, ArrowDown, ExternalLink, ChevronLeft, ChevronRight,
 } from 'lucide-react';
+
+const PAGE_SIZE = 15;
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend, CartesianGrid,
 } from 'recharts';
@@ -27,10 +30,12 @@ const formatDateOnly = (d: Date) =>
 type SortKey = 'company' | 'orders' | 'contacts' | 'revenue' | 'avgOrder' | 'lastOrder';
 
 const CompaniesPage: React.FC = () => {
+  const navigate = useNavigate();
   const [search, setSearch] = useState('');
   const [repeatOnly, setRepeatOnly] = useState(false);
   const [sortKey, setSortKey] = useState<SortKey>('revenue');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
+  const [page, setPage] = useState(1);
   // Segment switch driven by the chart legend: 'both' = compare; click a series to focus it,
   // which also switches the list below between companies (Business) and individuals (Personal).
   const [focusSegment, setFocusSegment] = useState<'both' | 'business' | 'personal'>('both');
@@ -40,7 +45,7 @@ const CompaniesPage: React.FC = () => {
     queryFn: async (): Promise<OrderLike[]> => {
       const { data, error } = await supabase
         .from('orders')
-        .select('customer_email, customer_name, order_amount, created_at')
+        .select('customer_email, customer_name, order_amount, created_at, order_number')
         .not('customer_email', 'is', null);
       if (error) throw error;
       return (data || []) as OrderLike[];
@@ -124,6 +129,13 @@ const CompaniesPage: React.FC = () => {
     });
     return arr;
   }, [accounts, search, repeatOnly, sortKey, sortDir]);
+
+  // Pagination (matches the Orders page)
+  const totalPages = Math.max(1, Math.ceil(visible.length / PAGE_SIZE));
+  const safePage = Math.min(page, totalPages);
+  const paged = visible.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
+  // Jump back to page 1 whenever the result set changes (filter/search/sort/view)
+  useEffect(() => { setPage(1); }, [search, repeatOnly, focusSegment, dateRange, sortKey, sortDir]);
 
   const toggleSort = (k: SortKey) => {
     if (k === sortKey) setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
@@ -271,8 +283,11 @@ const CompaniesPage: React.FC = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-white/5">
-                {visible.map((a) => (
-                  <tr key={a.domain} className="hover:bg-white/5 transition-colors">
+                {paged.map((a) => (
+                  <tr key={a.domain}
+                    onClick={() => a.orderNumbers.length && navigate(`/orders?ids=${encodeURIComponent(a.orderNumbers.join(', '))}`)}
+                    className="hover:bg-white/5 transition-colors cursor-pointer"
+                    title="View this account's orders">
                     <td className="px-4 py-3">
                       <div className="font-medium text-white flex items-center gap-2">
                         {a.company}
@@ -285,6 +300,7 @@ const CompaniesPage: React.FC = () => {
                           <span className="text-slate-400">{a.domain}</span>
                         ) : (
                           <a href={`https://${a.domain}`} target="_blank" rel="noopener noreferrer"
+                            onClick={(e) => e.stopPropagation()}
                             className="text-slate-400 hover:text-brand-orange inline-flex items-center gap-1">
                             {a.domain} <ExternalLink className="w-3 h-3" />
                           </a>
@@ -309,6 +325,30 @@ const CompaniesPage: React.FC = () => {
           </div>
         )}
       </div>
+
+      {/* Pagination */}
+      {totalPages > 1 && (
+        <div className="flex justify-center items-center gap-4 pt-1">
+          <button
+            disabled={safePage === 1}
+            onClick={() => setPage((p) => Math.max(p - 1, 1))}
+            className="flex items-center gap-1 px-4 py-2 bg-slate-800 border border-slate-600 text-white text-sm rounded-lg hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          >
+            <ChevronLeft className="w-4 h-4" /> Previous
+          </button>
+          <span className="text-slate-300 font-medium text-sm">
+            Page <span className="text-white font-bold">{safePage}</span> of {totalPages}
+            <span className="text-slate-500 ml-2">({visible.length} {isPersonalView ? 'customers' : 'companies'})</span>
+          </span>
+          <button
+            disabled={safePage === totalPages}
+            onClick={() => setPage((p) => Math.min(p + 1, totalPages))}
+            className="flex items-center gap-1 px-4 py-2 bg-slate-800 border border-slate-600 text-white text-sm rounded-lg hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          >
+            Next <ChevronRight className="w-4 h-4" />
+          </button>
+        </div>
+      )}
 
       <p className="text-xs text-slate-600">
         Showing {visible.length} {repeatOnly ? 'repeat ' : ''}{isPersonalView ? 'individual customer' : 'business account'}{visible.length === 1 ? '' : 's'}.

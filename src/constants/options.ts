@@ -40,6 +40,7 @@ export const LEAD_SOURCE_OPTIONS: string[] = [
   'Perplexity',
   'Claude',
   'Meta AI',
+  'DeepSeek',
   'Tawk.to',
   'Checkout',
   'Referral',

@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, useRef, useEffect } from "react";
 import { Outlet, useLocation } from "react-router-dom";
 import { motion } from "framer-motion";
 import Sidebar from "./Sidebar";
@@ -13,6 +13,18 @@ const AppLayout: React.FC = () => {
 
   const toggleSidebar = useCallback(() => setSidebarOpen((prev) => !prev), []);
   const closeSidebar = useCallback(() => setSidebarOpen(false), []);
+
+  // Reset the scroll container to the top on every route change (instant — overrides scroll-smooth),
+  // so navigating (or pressing Back) never lands you mid-list at the previous scroll position.
+  const mainRef = useRef<HTMLElement>(null);
+  useEffect(() => {
+    const el = mainRef.current;
+    if (!el) return;
+    const prev = el.style.scrollBehavior;
+    el.style.scrollBehavior = 'auto';
+    el.scrollTop = 0;
+    el.style.scrollBehavior = prev;
+  }, [location.pathname]);
 
   return (
     <div className="flex h-screen bg-[#0B1120] text-slate-200 overflow-hidden relative selection:bg-brand-orange/30">
@@ -55,7 +67,7 @@ const AppLayout: React.FC = () => {
       {/* Main Area */}
       <div className="relative z-10 flex flex-1 flex-col overflow-hidden w-full">
         <Header onMenuToggle={toggleSidebar} />
-        <main className="relative z-20 flex-1 overflow-y-auto p-4 md:p-6 lg:p-8 pb-24 md:pb-6 custom-scrollbar scroll-smooth">
+        <main ref={mainRef} className="relative z-20 flex-1 overflow-y-auto p-4 md:p-6 lg:p-8 pb-24 md:pb-6 custom-scrollbar scroll-smooth">
           <motion.div
             key={location.pathname}
             initial={{ opacity: 0 }}

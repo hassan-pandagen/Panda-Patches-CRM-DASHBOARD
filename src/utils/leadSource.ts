@@ -13,7 +13,7 @@ export type LeadSource =
   | 'Facebook Ad' | 'Google Ad' | 'Bing Ad' | 'TikTok Ad'
   | 'Facebook' | 'Instagram' | 'Google' | 'Bing' | 'TikTok' | 'YouTube'
   | 'LinkedIn' | 'Twitter' | 'Reddit' | 'Snapchat' | 'WhatsApp'
-  | 'ChatGPT' | 'Perplexity' | 'Claude' | 'Gemini' | 'Copilot' | 'Meta AI'
+  | 'ChatGPT' | 'Perplexity' | 'Claude' | 'Gemini' | 'Copilot' | 'Meta AI' | 'DeepSeek'
   | 'Email' | 'Tawk.to' | 'Direct' | 'Repeat Order' | 'Referral' | 'Other';
 
 const REFERRER_MAP: Array<[RegExp, LeadSource]> = [
@@ -24,6 +24,7 @@ const REFERRER_MAP: Array<[RegExp, LeadSource]> = [
   [/gemini\.google\.com|bard\.google\.com/i,  'Gemini'],
   [/copilot\.microsoft\.com|bing\.com\/chat/i,'Copilot'],
   [/meta\.ai/i,                               'Meta AI'],
+  [/deepseek\.com/i,                          'DeepSeek'],
 
   // Social
   [/facebook\.com|fb\.com|m\.facebook/i,       'Facebook'],
@@ -67,6 +68,7 @@ const UTM_MAP: Record<string, LeadSource> = {
   perplexity: 'Perplexity',
   metaai:     'Meta AI',
   'meta.ai':  'Meta AI',
+  deepseek:   'DeepSeek',
 };
 
 export interface AttributionLike {
@@ -152,6 +154,7 @@ export function getSourceBadgeClasses(source: LeadSource): string {
     'Gemini':       'bg-indigo-500/15 text-indigo-300 border-indigo-500/30',
     'Copilot':      'bg-blue-400/15 text-blue-200 border-blue-400/30',
     'Meta AI':      'bg-blue-600/15 text-blue-200 border-blue-600/30',
+    'DeepSeek':     'bg-indigo-500/15 text-indigo-300 border-indigo-500/30',
     'Email':        'bg-amber-500/15 text-amber-300 border-amber-500/30',
     'Tawk.to':      'bg-blue-600/15 text-blue-300 border-blue-600/30',
     'Direct':       'bg-purple-500/15 text-purple-300 border-purple-500/30',
