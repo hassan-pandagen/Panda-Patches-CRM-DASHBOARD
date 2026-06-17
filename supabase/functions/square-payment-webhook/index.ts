@@ -78,6 +78,7 @@ Deno.serve(async (req: Request) => {
     const SUPABASE_URL = Deno.env.get('SUPABASE_URL') ?? '';
     const SERVICE_KEY  = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
     const SIG_KEY      = Deno.env.get('SQUARE_WEBHOOK_SIGNATURE_KEY') ?? '';
+    const SQUARE_TOKEN = Deno.env.get('SQUARE_ACCESS_TOKEN') ?? '';
 
     if (!SUPABASE_URL || !SERVICE_KEY) throw new Error('Supabase env vars not configured');
     if (!SIG_KEY) throw new Error('SQUARE_WEBHOOK_SIGNATURE_KEY not configured');
@@ -124,10 +125,28 @@ Deno.serve(async (req: Request) => {
 
     // Cents → dollars
     const paidAmount  = (payment.amount_money?.amount ?? 0) / 100;
-    const referenceId = payment.reference_id || '';
+
+    // Resolve OUR token. Square Payment Links do NOT copy the order's reference_id onto the
+    // payment object, so payment.reference_id is almost always empty here (this is why orders
+    // were never being created). We DO set the token on the Square ORDER (reference_id +
+    // metadata.token) in create-square-checkout, so fall back to fetching the order by
+    // payment.order_id and reading the token from there.
+    let referenceId = payment.reference_id || '';
+    if (!referenceId && payment.order_id && SQUARE_TOKEN) {
+      try {
+        const orderRes = await fetch(`https://connect.squareup.com/v2/orders/${payment.order_id}`, {
+          headers: { 'Authorization': `Bearer ${SQUARE_TOKEN}`, 'Square-Version': '2025-05-21' },
+        });
+        const orderJson = await orderRes.json();
+        referenceId = orderJson?.order?.reference_id || orderJson?.order?.metadata?.token || '';
+        console.log(`[square-payment-webhook] resolved reference_id from Square order ${payment.order_id}: ${referenceId || '(none)'}`);
+      } catch (e) {
+        console.error('[square-payment-webhook] failed to fetch Square order for reference_id:', e);
+      }
+    }
 
     if (!referenceId) {
-      console.warn('[square-payment-webhook] no reference_id on payment', payment.id);
+      console.warn('[square-payment-webhook] no reference_id on payment or order', payment.id);
       return new Response(JSON.stringify({ received: true, skipped: 'no reference_id' }), { status: 200 });
     }
 

@@ -20,7 +20,7 @@ import { format, parseISO, isPast } from 'date-fns';
 const PATCH_TYPES = [
   'Embroidered Patches', 'Woven Patches', 'PVC Patches',
   'Leather Patches', 'Chenille Patches', 'Custom 3D Embroidered Transfers',
-  'Heat Transfer', 'Screen Print',
+  'Heat Transfer', 'Screen Print', 'Sublimation Patch',
 ];
 
 const BACKING_OPTIONS = ['Iron-on', 'Velcro', 'Sew-on', 'No Backing', 'Adhesive'];

@@ -89,8 +89,14 @@ serve(async (req) => {
     // It must fire ONLY on a real gateway payment, so it lives inside the payment webhooks
     // (square-payment-webhook / stripe-balance-webhook) — never on agent-created orders.
 
-    // ✅ Internal production email path is checkout-only (web_checkout or hello@pandapatches.com)
-    if (!CHECKOUT_AGENTS.includes(salesAgent.toLowerCase())) {
+    // Internal production email fires for checkout orders: web_checkout / hello@, OR any
+    // payment-form order created by the Square webhook from a payment LINK. Those have
+    // attribution.payment_form=true (or source 'square_payment_form') regardless of which
+    // agent generated the link — without this, agent-created payment links never notify production.
+    const isCheckoutOrder = CHECKOUT_AGENTS.includes(salesAgent.toLowerCase())
+      || record.attribution?.payment_form === true
+      || record.attribution?.source === 'square_payment_form';
+    if (!isCheckoutOrder) {
       console.log(`⏭️ Skipping internal production email - not a checkout order (agent: ${salesAgent})`);
       return new Response(JSON.stringify({ skipped: true, reason: 'not a checkout order', customerEmailHandled: true }), { status: 200 });
     }
