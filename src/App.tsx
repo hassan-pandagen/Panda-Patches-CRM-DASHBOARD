@@ -31,6 +31,7 @@ const ClockInOutPage = lazy(() => import('@/pages/ClockInOutPage'));
 const PerformanceMetricsPage = lazy(() => import('@/pages/PerformanceMetricsPage'));
 const BulkCostEntryPage = lazy(() => import('@/pages/BulkCostEntryPage'));
 const CustomersPage = lazy(() => import('@/pages/CustomersPage'));
+const CompaniesPage = lazy(() => import('@/pages/CompaniesPage'));
 const ActivityPage = lazy(() => import('@/pages/ActivityPage'));
 const InboxPage = lazy(() => import('@/pages/InboxPage'));
 const PaymentFormPage = lazy(() => import('@/pages/PaymentFormPage'));
@@ -95,6 +96,7 @@ const App: React.FC = () => {
                 <Route path="/user-management" element={<UserManagementPage />} />
                 <Route path="/performance-metrics" element={<PerformanceMetricsPage />} />
                 <Route path="/portal-customers" element={<CustomersPage />} />
+                <Route path="/companies" element={<CompaniesPage />} />
               </Route>
     
             </Route>

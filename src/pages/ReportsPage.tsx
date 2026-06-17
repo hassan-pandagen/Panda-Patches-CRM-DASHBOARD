@@ -791,6 +791,23 @@ const LeadSourceReportComponent: React.FC<ReportComponentProps> = ({
     [leadSourceStats]
   );
 
+  // Click-to-sort for the Top Repeat Customers table
+  const [repeatSort, setRepeatSort] = useState<{ key: 'orders' | 'revenue' | 'name' | 'lastOrder'; dir: 'asc' | 'desc' }>({ key: 'orders', dir: 'desc' });
+  const sortRepeat = (a: any, b: any) => {
+    const dir = repeatSort.dir === 'asc' ? 1 : -1;
+    let av: number | string; let bv: number | string;
+    switch (repeatSort.key) {
+      case 'revenue': av = a.totalRevenue; bv = b.totalRevenue; break;
+      case 'name': av = (a.customerName || '').toLowerCase(); bv = (b.customerName || '').toLowerCase(); break;
+      case 'lastOrder': av = new Date(a.lastOrderDate).getTime(); bv = new Date(b.lastOrderDate).getTime(); break;
+      default: av = a.orderCount; bv = b.orderCount;
+    }
+    return av < bv ? -dir : av > bv ? dir : 0;
+  };
+  const toggleRepeatSort = (key: 'orders' | 'revenue' | 'name' | 'lastOrder') =>
+    setRepeatSort((s) => (s.key === key ? { key, dir: s.dir === 'asc' ? 'desc' : 'asc' } : { key, dir: key === 'name' ? 'asc' : 'desc' }));
+  const repeatArrow = (key: string) => (repeatSort.key === key ? (repeatSort.dir === 'asc' ? ' ▲' : ' ▼') : '');
+
   // Repeat Customer Metrics
   const repeatCustomerMetrics = useMemo(() => {
     const customerOrders = new Map<string, Order[]>();
@@ -941,16 +958,16 @@ const LeadSourceReportComponent: React.FC<ReportComponentProps> = ({
             <table className="w-full text-left text-slate-200">
               <thead className="text-xs font-bold text-slate-400 uppercase bg-slate-800/50 sticky top-0 tracking-wider">
                 <tr>
-                  <th className="px-4 py-4 rounded-tl-lg">Customer</th>
-                  <th className="px-4 py-4 text-center">Orders</th>
+                  <th onClick={() => toggleRepeatSort('name')} className="px-4 py-4 rounded-tl-lg cursor-pointer select-none hover:text-white transition-colors">Customer{repeatArrow('name')}</th>
+                  <th onClick={() => toggleRepeatSort('orders')} className="px-4 py-4 text-center cursor-pointer select-none hover:text-white transition-colors">Orders{repeatArrow('orders')}</th>
                   <th className="px-4 py-4">Favorite Type</th>
-                  <th className="px-4 py-4 text-right">Revenue</th>
-                  <th className="px-4 py-4">Last Order</th>
+                  <th onClick={() => toggleRepeatSort('revenue')} className="px-4 py-4 text-right cursor-pointer select-none hover:text-white transition-colors">Revenue{repeatArrow('revenue')}</th>
+                  <th onClick={() => toggleRepeatSort('lastOrder')} className="px-4 py-4 cursor-pointer select-none hover:text-white transition-colors">Last Order{repeatArrow('lastOrder')}</th>
                   <th className="px-4 py-4 rounded-tr-lg text-center">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-white/5">
-                {repeatCustomerMetrics.detailedCustomers.map((customer, index) => (
+                {[...repeatCustomerMetrics.detailedCustomers].sort(sortRepeat).map((customer, index) => (
                   <tr key={index} className="hover:bg-white/5 transition-colors group">
                     <td className="px-4 py-3.5">
                       <div className="flex flex-col">
@@ -973,7 +990,7 @@ const LeadSourceReportComponent: React.FC<ReportComponentProps> = ({
 
           {/* Mobile: Card view */}
           <div className="md:hidden space-y-3 max-h-[500px] overflow-y-auto custom-scrollbar">
-            {repeatCustomerMetrics.detailedCustomers.map((customer, index) => (
+            {[...repeatCustomerMetrics.detailedCustomers].sort(sortRepeat).map((customer, index) => (
               <div key={index} className="bg-slate-800/40 rounded-xl p-4 border border-slate-700/50 space-y-2">
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0 flex-1">
@@ -991,7 +1008,7 @@ const LeadSourceReportComponent: React.FC<ReportComponentProps> = ({
             ))}
           </div>
           <div className="mt-4 pt-4 border-t border-white/10 text-sm text-slate-400">
-            Showing {repeatCustomerMetrics.detailedCustomers.length} repeat customers sorted by order count
+            Showing {repeatCustomerMetrics.detailedCustomers.length} repeat customers · click any column header to sort
           </div>
         </div>
       )}
@@ -1160,9 +1177,16 @@ const ProductionReportComponent: React.FC<ReportComponentProps> = ({
       const type = o.patchesType || "Unknown";
       stats[type] = (stats[type] || 0) + 1;
     });
-    return Object.entries(stats)
+    const sorted = Object.entries(stats)
       .map(([name, count]) => ({ name, count }))
       .sort((a, b) => b.count - a.count);
+    // Industry standard for categorical bar charts: show the top N + bucket the long tail
+    // into "Other" so a 30-type list stays readable instead of cramming every bar in.
+    const TOP_N = 10;
+    if (sorted.length <= TOP_N + 1) return sorted;
+    const top = sorted.slice(0, TOP_N);
+    const otherCount = sorted.slice(TOP_N).reduce((s, d) => s + d.count, 0);
+    return [...top, { name: "Other", count: otherCount }];
   }, [orders]);
 
   return (
@@ -1276,7 +1300,7 @@ const ProductionReportComponent: React.FC<ReportComponentProps> = ({
         </div>
         <div className="bg-slate-900/40 backdrop-blur-xl border border-white/10 rounded-2xl p-6 shadow-xl">
           <h4 className="text-lg font-semibold text-white mb-4">Patch Types</h4>
-          <ResponsiveContainer width="100%" height={300}>
+          <ResponsiveContainer width="100%" height={Math.max(340, patchTypeStats.length * 34)}>
             <BarChart
               data={patchTypeStats}
               layout="vertical"

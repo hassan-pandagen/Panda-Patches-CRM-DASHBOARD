@@ -15,6 +15,7 @@ import {
   Bell,
   Inbox,
   CreditCard,
+  Building2,
 } from "lucide-react";
 import { useAuth } from "../../contexts/AuthContext";
 import { useQueryPrefetch } from "../../hooks/useQueryPrefetch";
@@ -185,6 +186,12 @@ const Sidebar: React.FC<SidebarProps> = ({ onNavigate }) => {
         {isAdmin && (
           <>
             <div className="my-2 border-t border-white/10 mx-2" />
+            <SidebarItem
+              to="/companies"
+              label="Companies"
+              icon={<Building2 className="w-5 h-5" />}
+              onClick={onNavigate}
+            />
             <SidebarItem
               to="/portal-customers"
               label="Customers"

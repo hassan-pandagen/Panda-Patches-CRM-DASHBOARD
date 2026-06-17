@@ -38,6 +38,8 @@ export const LEAD_SOURCE_OPTIONS: string[] = [
   'ChatGPT',
   'Gemini',
   'Perplexity',
+  'Claude',
+  'Meta AI',
   'Tawk.to',
   'Checkout',
   'Referral',
