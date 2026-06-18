@@ -555,21 +555,10 @@ export const createOrder = async (orderData: any, userEmail: string) => {
       logger.error("[Email Service] Email trigger failed (background)", err);
     });
 
-    // Step 8b: Fire customer portal invite (fire-and-forget; new customer → set-password, returning → magic login)
-    if (mappedOrder.customerEmail) {
-      supabase.functions
-        .invoke('invite-customer', {
-          body: {
-            email: mappedOrder.customerEmail,
-            customer_name: mappedOrder.customerName || 'Customer',
-            order_number: mappedOrder.orderNumber,
-            portal_url: window.location.origin,
-          },
-        })
-        .catch((err) => {
-          logger.error('[Customer Portal] Invite trigger failed (background)', err);
-        });
-    }
+    // Step 8b: Customer portal account provisioning is handled server-side by the
+    // provision_customer_account() trigger (AFTER INSERT on orders → invite-customer), so it
+    // fires reliably for every order path — not just the ones created through this frontend.
+    // (Removed the old client-side invite-customer call to avoid double-provisioning the order.)
 
     end();
     return mappedOrder;

@@ -10,8 +10,8 @@
 //   - Only if the order is "complete enough": patch type + backing + size + ≥1 mockup/reference.
 //   When all hold → send production email, then stamp production_notified_at so it fires exactly once.
 //
-// On INSERT: also fire the customer portal invite (once).
-// On UPDATE: only the production-email release logic runs (no duplicate invite).
+// Customer-account provisioning is NOT done here — the provision_customer_account() trigger
+// (AFTER INSERT on orders → invite-customer) owns that. This handler only sends the internal email.
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.10";
@@ -101,24 +101,10 @@ serve(async (req) => {
       return new Response(JSON.stringify({ skipped: true, reason: 'not a checkout order', customerEmailHandled: true }), { status: 200 });
     }
 
-    // ── Customer portal invite — fire once on INSERT (independent of production readiness) ──
-    if (isInsert && record.customer_email) {
-      fetch(`${SUPABASE_URL}/functions/v1/invite-customer`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
-        },
-        body: JSON.stringify({
-          email: record.customer_email,
-          customer_name: record.customer_name || 'Customer',
-          order_number: orderNumber,
-        }),
-      })
-        .then((r) => r.text())
-        .then((t) => console.log(`[Checkout Webhook] invite-customer response:`, t))
-        .catch((err) => console.error(`[Checkout Webhook] invite-customer failed:`, err));
-    }
+    // Customer-account provisioning moved OUT of here. The provision_customer_account() trigger
+    // (AFTER INSERT on orders → invite-customer) now handles it once per non-website order, so this
+    // super-handler only owns the INTERNAL production email. Keeping the invite here too would
+    // double-provision the same order.
 
     // ── Production email: send exactly once, only when the order is complete ──
     if (record.production_notified_at) {

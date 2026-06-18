@@ -113,6 +113,7 @@ const getEmailSubject = (templateId: string, data: any): string => {
     'WEBSITE_AUTH_MAGIC_LINK':      'Your sign-in link for Panda Patches',
     'WEBSITE_AUTH_PASSWORD_RESET':  'Reset your Panda Patches password',
     'WEBSITE_AUTH_EMAIL_CHANGE':    'Confirm your new Panda Patches email',
+    'WEBSITE_AUTH_ORDER_ACCOUNT':   'Your Panda Patches account is ready',
 
     // Order message thread templates
     'AGENT_NEW_CUSTOMER_MESSAGE': `[Customer Message] ${data.customer_name || 'A customer'} replied on order ${orderNumber}`,
@@ -184,6 +185,8 @@ const getTemplateMessage = (templateId: string, data?: any): string => {
       'We received a request to reset the password for your Panda Patches account. Click the button below to set a new password. The link is good for the next 60 minutes and can only be used once. If you did not request this, you can ignore this email — your password will stay the same.',
     'WEBSITE_AUTH_EMAIL_CHANGE':
       `We received a request to change the email address on your Panda Patches account to ${data?.new_email || 'a new address'}. Confirm the change by clicking the button below. The change does not take effect until you click the link. If you did not request this, you can ignore this email.`,
+    'WEBSITE_AUTH_ORDER_ACCOUNT':
+      `Thanks for your order${data?.order_number && data.order_number !== 'N/A' ? ` (${data.order_number})` : ''}! We've set up a Panda Patches account for you so you can track this order in real time, view your mockups, and reorder past designs in one click. Tap the button below to set your password — it takes less than 30 seconds. The link is valid for 24 hours; if it expires, just use “Forgot password” on the site and we'll send you a fresh one.`,
 
     // Order message thread templates
     'AGENT_NEW_CUSTOMER_MESSAGE': `${data?.customer_name || 'A customer'} just sent a message on order ${data?.order_number || ''}.\n\nMessage: "${(data?.message_content || '').substring(0, 1000)}"\n\nReply through the order in the CRM to keep the conversation in one place.`,
@@ -298,6 +301,7 @@ const shouldShowFullDetails = (templateId: string): boolean => {
     'WEBSITE_AUTH_MAGIC_LINK',
     'WEBSITE_AUTH_PASSWORD_RESET',
     'WEBSITE_AUTH_EMAIL_CHANGE',
+    'WEBSITE_AUTH_ORDER_ACCOUNT',
   ];
 
   return !minimalDetailsTemplates.includes(templateId);
@@ -837,7 +841,7 @@ const buildEmailHTML = (templateId: string, data: any): string => {
   </table>
   ` : ''}
 
-  ${(templateId === 'CUSTOMER_WELCOME_INVITE' || templateId === 'CUSTOMER_RETURNING_LOGIN' || templateId === 'CUSTOMER_PASSWORD_RESET' || templateId === 'CUSTOMER_PAYMENT_LINK' || templateId === 'CUSTOMER_PAYMENT_CONFIRMATION' || templateId === 'WEBSITE_AUTH_SIGNUP_CONFIRM' || templateId === 'WEBSITE_AUTH_MAGIC_LINK' || templateId === 'WEBSITE_AUTH_PASSWORD_RESET' || templateId === 'WEBSITE_AUTH_EMAIL_CHANGE') && data.portal_action_url ? `
+  ${(templateId === 'CUSTOMER_WELCOME_INVITE' || templateId === 'CUSTOMER_RETURNING_LOGIN' || templateId === 'CUSTOMER_PASSWORD_RESET' || templateId === 'CUSTOMER_PAYMENT_LINK' || templateId === 'CUSTOMER_PAYMENT_CONFIRMATION' || templateId === 'WEBSITE_AUTH_SIGNUP_CONFIRM' || templateId === 'WEBSITE_AUTH_MAGIC_LINK' || templateId === 'WEBSITE_AUTH_PASSWORD_RESET' || templateId === 'WEBSITE_AUTH_EMAIL_CHANGE' || templateId === 'WEBSITE_AUTH_ORDER_ACCOUNT') && data.portal_action_url ? `
   <!-- CUSTOMER PORTAL CTA BUTTON (mobile-optimized) -->
   <table border="0" cellpadding="0" cellspacing="0" class="module" data-type="button" role="module" style="table-layout: fixed;" width="100%">
     <tbody>
@@ -848,7 +852,7 @@ const buildEmailHTML = (templateId: string, data: any): string => {
               <tr>
                 <td align="center" bgcolor="#FB6E1D" class="inner-td" style="border-radius:8px; font-size:18px; text-align:center; background-color:#FB6E1D;">
                   <a href="${escapeHtml(data.portal_action_url)}" style="background-color:#FB6E1D; border:1px solid #FB6E1D; border-radius:8px; color:#ffffff; display:block; font-size:18px; font-weight:bold; line-height:1.3; padding:18px 24px; text-align:center; text-decoration:none; font-family: 'lucida sans unicode', 'lucida grande', sans-serif;" target="_blank">
-                    ${templateId === 'CUSTOMER_WELCOME_INVITE' ? 'Set Your Password &rarr;' : templateId === 'CUSTOMER_PASSWORD_RESET' ? 'Reset Password &rarr;' : templateId === 'CUSTOMER_PAYMENT_LINK' ? 'Pay Now &rarr;' : templateId === 'WEBSITE_AUTH_SIGNUP_CONFIRM' ? 'Confirm My Email &rarr;' : templateId === 'WEBSITE_AUTH_MAGIC_LINK' ? 'Sign In To My Account &rarr;' : templateId === 'WEBSITE_AUTH_PASSWORD_RESET' ? 'Reset My Password &rarr;' : templateId === 'WEBSITE_AUTH_EMAIL_CHANGE' ? 'Confirm Email Change &rarr;' : 'Log In &amp; Track Order &rarr;'}
+                    ${templateId === 'CUSTOMER_WELCOME_INVITE' ? 'Set Your Password &rarr;' : templateId === 'CUSTOMER_PASSWORD_RESET' ? 'Reset Password &rarr;' : templateId === 'CUSTOMER_PAYMENT_LINK' ? 'Pay Now &rarr;' : templateId === 'WEBSITE_AUTH_SIGNUP_CONFIRM' ? 'Confirm My Email &rarr;' : templateId === 'WEBSITE_AUTH_MAGIC_LINK' ? 'Sign In To My Account &rarr;' : templateId === 'WEBSITE_AUTH_PASSWORD_RESET' ? 'Reset My Password &rarr;' : templateId === 'WEBSITE_AUTH_EMAIL_CHANGE' ? 'Confirm Email Change &rarr;' : templateId === 'WEBSITE_AUTH_ORDER_ACCOUNT' ? 'Set Your Password &rarr;' : 'Log In &amp; Track Order &rarr;'}
                   </a>
                 </td>
               </tr>

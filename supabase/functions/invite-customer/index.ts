@@ -1,8 +1,19 @@
 // supabase/functions/invite-customer/index.ts
-// Sends a customer portal invite after an order is placed.
-//   - New customer  -> invite link that lands on /customer/set-password
-//   - Existing customer -> magic login link that lands on /customer/auth/callback
-// Password-based login is used after the first password is set.
+// Provisions / re-invites a customer portal account after an order.
+//   - New customer       -> create account (no password) + WEBSITE_AUTH_ORDER_ACCOUNT
+//                           "set your password / track your order" email (lands on the website /reset-password)
+//   - Returning customer -> magic login link (CUSTOMER_RETURNING_LOGIN), or a forced password
+//                           reset (CUSTOMER_PASSWORD_RESET) when mode='reset_password'
+//
+// Callers:
+//   - provision_customer_account() Postgres trigger — fires once per non-website order (automatic).
+//   - Admin "Resend invite" button (CustomersPage) — manual, passes order_number 'N/A' and/or force:true.
+//
+// Idempotency: for a real order number (PP-…) the order's `invite_sent_at` is claimed atomically so
+// exactly ONE invite is ever sent per order, even if several paths fire (frontend + trigger during a
+// deploy gap). `force:true` or order_number 'N/A' (manual resend) bypasses the guard.
+//
+// Security: we NEVER email a password — only a time-limited Supabase invite/recovery link.
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { z } from "https://deno.land/x/zod@v3.22.4/mod.ts";
@@ -29,17 +40,35 @@ const inviteSchema = z.object({
   email: z.string().email().max(255),
   customer_name: z.string().max(200).optional().default('Customer'),
   order_number: z.string().max(100).optional().default('N/A'),
+  customer_phone: z.string().max(50).optional(),
   portal_url: z.string().url().optional(),
-  // 'auto' (default): new = invite, returning = magic link
+  // 'auto' (default): new = account email, returning = magic login link
   // 'reset_password': force a password recovery email even for returning customers
   mode: z.enum(['auto', 'reset_password']).optional().default('auto'),
+  // Manual resends bypass the per-order once-guard.
+  force: z.boolean().optional().default(false),
 });
 
-// Customer portal now lives on the marketing website (CRM /customer/* routes were removed).
+// Customer portal lives on the marketing website (CRM /customer/* routes were removed).
 // Invite/recovery links must land on the WEBSITE's live, Supabase-allow-listed routes.
-const DEFAULT_PORTAL_URL = 'https://login.pandapatches.com';
 const WEBSITE_SET_PASSWORD_URL = 'https://www.pandapatches.com/reset-password';
 const WEBSITE_LOGIN_CALLBACK_URL = 'https://www.pandapatches.com/auth/callback';
+
+// Patch phone into customer_profiles (the on_customer_signup trigger doesn't populate it). That row
+// is created by the trigger and may land a moment AFTER createUser returns, so retry briefly to win
+// the race instead of silently losing the phone. Best-effort, only fills an empty phone.
+async function patchCustomerPhone(admin: any, emailLc: string, phone: string): Promise<void> {
+  for (let i = 0; i < 5; i++) {
+    const { data } = await admin
+      .from('customer_profiles')
+      .update({ phone })
+      .ilike('email', emailLc)
+      .is('phone', null)
+      .select('id');
+    if (data && data.length > 0) return;
+    await new Promise((r) => setTimeout(r, 400));
+  }
+}
 
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {
@@ -54,18 +83,17 @@ Deno.serve(async (req: Request) => {
     const admin = createClient(SUPABASE_URL, SERVICE_KEY);
 
     const body = await req.json();
-    const { email, customer_name, order_number, portal_url, mode } = inviteSchema.parse(body);
+    const { email, customer_name, order_number, customer_phone, mode, force } = inviteSchema.parse(body);
 
-    const portal = (portal_url || DEFAULT_PORTAL_URL).replace(/\/$/, '');
-    // Land on the WEBSITE (customer portal moved there; CRM /customer/* routes were removed).
+    const emailLc = email.trim().toLowerCase();
     const setPasswordRedirect = WEBSITE_SET_PASSWORD_URL;
     const loginRedirect = WEBSITE_LOGIN_CALLBACK_URL;
 
-    // 1. Block staff members from being invited as customers
+    // 1. Block staff members from being invited as customers (case-insensitive).
     const { data: staffMember } = await admin
       .from('user_profiles')
-      .select('id, email')
-      .eq('email', email)
+      .select('id')
+      .ilike('email', emailLc)
       .maybeSingle();
 
     if (staffMember) {
@@ -75,138 +103,168 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    // 2. Is this customer already in the portal?
-    const { data: existing } = await admin
-      .from('customer_profiles')
-      .select('id, email')
-      .eq('email', email)
-      .maybeSingle();
+    // 2. Per-order idempotency claim (real order numbers only; manual resends bypass).
+    //    Atomic conditional UPDATE: only the first caller for this order proceeds; the rest skip.
+    const isRealOrder = /^PP-/i.test(order_number) && order_number !== 'N/A';
+    const useGuard = isRealOrder && !force;
+    if (useGuard) {
+      const { data: claimed, error: claimErr } = await admin
+        .from('orders')
+        .update({ invite_sent_at: new Date().toISOString() })
+        .eq('order_number', order_number)
+        .is('invite_sent_at', null)
+        .select('id');
+      if (claimErr) {
+        console.error('[invite-customer] claim failed:', claimErr.message);
+      } else if (!claimed || claimed.length === 0) {
+        // Already sent for this order (or order row not found) — nothing to do.
+        return new Response(
+          JSON.stringify({ success: true, skipped: true, reason: 'invite already sent for this order' }),
+          { headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' }, status: 200 }
+        );
+      }
+    }
 
-    // 3. Generate the right link for the situation
-    let actionLink: string;
-    let templateId: string;
-    // Track a freshly-created auth user so we can clean up the orphan if the email send fails.
-    let createdNow = false;
-    let createdUserId: string | null = null;
+    // Roll back the claim so a later retry can re-send if anything below fails.
+    const rollbackClaim = async () => {
+      if (useGuard) {
+        await admin.from('orders').update({ invite_sent_at: null }).eq('order_number', order_number).catch(() => {});
+      }
+    };
 
-    if (!existing) {
-      // New customer flow:
-      //   1. Check if auth.users entry already exists (e.g. from a prior failed invite)
-      //   2. If not, create the auth user with app_metadata flags
-      //   3. Generate an invite link that lands on /customer/set-password
+    try {
+      // 3. Is this customer already in the portal?
+      const { data: existing } = await admin
+        .from('customer_profiles')
+        .select('id')
+        .ilike('email', emailLc)
+        .maybeSingle();
 
-      // Step 1: check for existing auth user (orphan from a prior failed invite)
-      const { data: { users: existingUsers } } = await admin.auth.admin.listUsers();
-      const existingAuthUser = existingUsers.find(u => u.email?.toLowerCase() === email.toLowerCase());
+      let actionLink = '';
+      let templateId: string;
+      let createdNow = false;
+      let createdUserId: string | null = null;
 
-      if (!existingAuthUser) {
-        // Step 2: Create the user with proper app_metadata
-        // app_metadata is server-controlled — users CANNOT modify it from the client
+      if (!existing) {
+        // New customer: create the auth account (no password), then send the "set your password" email.
+        // app_metadata is server-controlled — users cannot modify it from the client.
+        // is_customer:true routes the on_customer_signup trigger to create the customer_profiles row.
         const { data: created, error: createErr } = await admin.auth.admin.createUser({
-          email,
-          email_confirm: true,
-          user_metadata: { full_name: customer_name, is_customer: true },
+          email: emailLc,
+          email_confirm: true, // a paying customer's email is already verified by the transaction
+          user_metadata: {
+            full_name: customer_name,
+            is_customer: true,
+            phone: customer_phone || null,
+            created_from: 'order',
+          },
           app_metadata: {
             role: 'customer',
-            password_set: false,  // ← will be flipped to true by mark-password-set after they set their password
+            password_set: false, // flipped to true by mark-password-set once they set a password
           },
         });
-        if (createErr) throw createErr;
-        createdNow = true;
-        createdUserId = created.user?.id ?? null;
-      }
 
-      // Step 3: Generate the link.
-      //   - Brand-new user  → 'invite' link (lands on set-password).
-      //   - Orphan user (prior failed invite left an unconfirmed/passwordless auth row) →
-      //     'recovery' link instead. generateLink type:'invite' ERRORS when the user already
-      //     exists, which is exactly what left customers permanently stuck. Recovery works for
-      //     existing users and still lands on set-password. Confirm the email first so the
-      //     recovery link is valid.
-      if (createdNow) {
-        const { data, error } = await admin.auth.admin.generateLink({
-          type: 'invite',
-          email,
-          options: {
-            redirectTo: setPasswordRedirect,
-            data: { full_name: customer_name, is_customer: true },
-          },
-        });
-        if (error) throw error;
-        actionLink = data.properties?.action_link ?? '';
-      } else {
-        if (existingAuthUser && !existingAuthUser.email_confirmed_at) {
-          await admin.auth.admin.updateUserById(existingAuthUser.id, { email_confirm: true }).catch(() => {});
+        if (createErr) {
+          // Atomic de-dup: an "already registered" error means an orphan auth user exists from a
+          // prior failed invite (no customer_profiles row). A recovery link works for existing users
+          // and still lands on set-password. (This replaces a listUsers() scan that silently capped at
+          // the first 50 users and missed orphans on our ~200-user base.)
+          if (/already|exists|registered|been registered/i.test(createErr.message || '')) {
+            const { data, error } = await admin.auth.admin.generateLink({
+              type: 'recovery',
+              email: emailLc,
+              options: { redirectTo: setPasswordRedirect },
+            });
+            if (error) throw error;
+            actionLink = data.properties?.action_link ?? '';
+          } else {
+            throw createErr;
+          }
+        } else {
+          createdNow = true;
+          createdUserId = created.user?.id ?? null;
+          const { data, error } = await admin.auth.admin.generateLink({
+            type: 'invite',
+            email: emailLc,
+            options: {
+              redirectTo: setPasswordRedirect,
+              data: { full_name: customer_name, is_customer: true },
+            },
+          });
+          if (error) throw error;
+          actionLink = data.properties?.action_link ?? '';
         }
-        const { data, error } = await admin.auth.admin.generateLink({
-          type: 'recovery',
-          email,
-          options: { redirectTo: setPasswordRedirect },
-        });
-        if (error) throw error;
-        actionLink = data.properties?.action_link ?? '';
-      }
-      templateId = 'CUSTOMER_WELCOME_INVITE';
-    } else {
-      // Returning customer
-      if (mode === 'reset_password') {
-        // Send password recovery email — lands on /customer/set-password
-        const { data, error } = await admin.auth.admin.generateLink({
-          type: 'recovery',
-          email,
-          options: { redirectTo: setPasswordRedirect },
-        });
-        if (error) throw error;
-        actionLink = data.properties?.action_link ?? '';
-        templateId = 'CUSTOMER_PASSWORD_RESET';
+
+        templateId = 'WEBSITE_AUTH_ORDER_ACCOUNT';
       } else {
-        // Default: magic login link for this new order
-        const { data, error } = await admin.auth.admin.generateLink({
-          type: 'magiclink',
-          email,
-          options: { redirectTo: loginRedirect },
-        });
-        if (error) throw error;
-        actionLink = data.properties?.action_link ?? '';
-        templateId = 'CUSTOMER_RETURNING_LOGIN';
+        // Returning customer
+        if (mode === 'reset_password') {
+          const { data, error } = await admin.auth.admin.generateLink({
+            type: 'recovery',
+            email: emailLc,
+            options: { redirectTo: setPasswordRedirect },
+          });
+          if (error) throw error;
+          actionLink = data.properties?.action_link ?? '';
+          templateId = 'CUSTOMER_PASSWORD_RESET';
+        } else {
+          // Default: magic login link so they can jump straight into tracking this new order.
+          const { data, error } = await admin.auth.admin.generateLink({
+            type: 'magiclink',
+            email: emailLc,
+            options: { redirectTo: loginRedirect },
+          });
+          if (error) throw error;
+          actionLink = data.properties?.action_link ?? '';
+          templateId = 'CUSTOMER_RETURNING_LOGIN';
+        }
       }
-    }
 
-    if (!actionLink) throw new Error('Failed to generate portal link');
+      if (!actionLink) throw new Error('Failed to generate portal link');
 
-    // 3. Send via the existing send-email function
-    const emailResp = await fetch(`${SUPABASE_URL}/functions/v1/send-email`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${SERVICE_KEY}`,
-      },
-      body: JSON.stringify({
-        to: email,
-        template_id: templateId,
-        dynamic_data: {
-          customer_name,
-          order_number,
-          portal_action_url: actionLink,
-          portal_login_url: 'https://www.pandapatches.com/login',
+      // 4. Send via the shared send-email function
+      const emailResp = await fetch(`${SUPABASE_URL}/functions/v1/send-email`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${SERVICE_KEY}`,
         },
-      }),
-    });
+        body: JSON.stringify({
+          to: emailLc,
+          template_id: templateId,
+          dynamic_data: {
+            customer_name,
+            order_number,
+            portal_action_url: actionLink,
+            portal_login_url: 'https://www.pandapatches.com/login',
+          },
+        }),
+      });
 
-    if (!emailResp.ok) {
-      const text = await emailResp.text();
-      // Cleanup: if we just created this auth user and the email failed, delete the orphan
-      // so a retry starts clean instead of getting stuck on a passwordless/unconfirmed row.
-      if (createdNow && createdUserId) {
-        await admin.auth.admin.deleteUser(createdUserId).catch(() => {});
+      if (!emailResp.ok) {
+        const text = await emailResp.text();
+        // Cleanup: if we just created this auth user and the email failed, delete the orphan so a
+        // retry starts clean instead of getting stuck on a passwordless/unconfirmed row.
+        if (createdNow && createdUserId) {
+          await admin.auth.admin.deleteUser(createdUserId).catch(() => {});
+        }
+        await rollbackClaim();
+        throw new Error(`send-email failed: ${text}`);
       }
-      throw new Error(`send-email failed: ${text}`);
-    }
 
-    return new Response(
-      JSON.stringify({ success: true, new_customer: !existing, template: templateId }),
-      { headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' }, status: 200 }
-    );
+      // New customer's profile row now exists (created by the signup trigger) — fill phone. Best-effort.
+      if (!existing && customer_phone) {
+        await patchCustomerPhone(admin, emailLc, customer_phone);
+      }
+
+      return new Response(
+        JSON.stringify({ success: true, new_customer: !existing, template: templateId }),
+        { headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' }, status: 200 }
+      );
+    } catch (innerErr) {
+      await rollbackClaim();
+      throw innerErr;
+    }
   } catch (error: any) {
     if (error.name === 'ZodError') {
       return new Response(
