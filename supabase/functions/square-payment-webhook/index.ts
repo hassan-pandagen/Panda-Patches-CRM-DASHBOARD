@@ -3,16 +3,15 @@
 //
 // Two flows:
 //   A) Token-based (payment form): reference_id is a UUID token
-//      → create new order from payment_form_tokens data + attribution
-//      → mark token as used
+//      -> create new order from payment_form_tokens data + attribution
+//      -> mark token as used
 //   B) Order-based (existing order): reference_id is PP-XXXXX or numeric order id
-//      → update orders.amount_paid
+//      -> update orders.amount_paid
 //
-// In both cases, fire_capi_purchase_on_paid Postgres trigger fires CAPI Purchase automatically.
+// Idempotency is at the PAYMENT level: Square emits MULTIPLE payment.updated events (each with its
+// own event_id) for the SAME payment, so per-event_id dedup is not enough — we claim payment.id once.
 //
-// Security: JWT verification DISABLED — Square can't send Supabase JWT.
-// Auth via HMAC-SHA256: base64(HMAC-SHA256(sigKey, webhookUrl + rawBody))
-// Square header: x-square-hmacsha256-signature
+// Security: JWT verification DISABLED. Auth via HMAC-SHA256 of (webhookUrl + rawBody).
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.10';
 
@@ -33,14 +32,10 @@ async function verifySquareSignature(rawBody: string, sigHeader: string, sigKey:
   } catch { return false; }
 }
 
-// UUID format check — token-based flow
 function isUUID(s: string): boolean {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s);
 }
 
-// Derive the REAL marketing lead source from attribution (utm_source → referrer).
-// sales_agent stays WEB_CHECKOUT (we know they self-paid); lead_source = where they came FROM.
-// Falls back to 'Checkout' only when no attribution signal exists.
 function resolveLeadSource(attribution: any): string {
   const utm = (attribution?.utm_source || '').toString().toLowerCase();
   const utmMap: Record<string, string> = {
@@ -48,7 +43,7 @@ function resolveLeadSource(attribution: any): string {
     google: 'Google', bing: 'Bing', tiktok: 'TikTok', youtube: 'YouTube',
     linkedin: 'LinkedIn', twitter: 'Twitter', reddit: 'Reddit', snapchat: 'Snapchat',
     email: 'Email', newsletter: 'Email', 'chatgpt.com': 'ChatGPT', chatgpt: 'ChatGPT',
-    perplexity: 'Perplexity', claude: 'Claude', gemini: 'Gemini', copilot: 'Copilot',
+    perplexity: 'Perplexity', claude: 'Claude', gemini: 'Gemini', copilot: 'Copilot', deepseek: 'DeepSeek',
   };
   if (utm && utmMap[utm]) return utmMap[utm];
 
@@ -56,7 +51,7 @@ function resolveLeadSource(attribution: any): string {
   const refRules: Array<[RegExp, string]> = [
     [/chat\.?openai\.com|chatgpt\.com/i, 'ChatGPT'], [/perplexity\.ai/i, 'Perplexity'],
     [/claude\.ai|anthropic\.com/i, 'Claude'], [/gemini\.google\.com|bard\.google/i, 'Gemini'],
-    [/copilot\.microsoft|bing\.com\/chat/i, 'Copilot'],
+    [/copilot\.microsoft|bing\.com\/chat/i, 'Copilot'], [/deepseek\.com/i, 'DeepSeek'],
     [/facebook\.com|fb\.com|m\.facebook/i, 'Facebook'], [/instagram\.com/i, 'Instagram'],
     [/tiktok\.com/i, 'TikTok'], [/youtube\.com|youtu\.be/i, 'YouTube'],
     [/linkedin\.com|lnkd\.in/i, 'LinkedIn'], [/twitter\.com|x\.com|t\.co/i, 'Twitter'],
@@ -66,7 +61,6 @@ function resolveLeadSource(attribution: any): string {
   ];
   for (const [re, label] of refRules) if (re.test(ref)) return label;
 
-  // utm_source present but unmapped → use it raw (capitalized); else Checkout
   if (utm) return utm.charAt(0).toUpperCase() + utm.slice(1);
   return 'Checkout';
 }
@@ -87,7 +81,7 @@ Deno.serve(async (req: Request) => {
     const sigHeader = req.headers.get('x-square-hmacsha256-signature') ?? '';
 
     if (!sigHeader) {
-      console.error('[square-payment-webhook] missing x-square-hmacsha256-signature header');
+      console.error('[square-payment-webhook] missing signature header');
       return new Response('Missing signature', { status: 400 });
     }
 
@@ -100,7 +94,7 @@ Deno.serve(async (req: Request) => {
     const event = JSON.parse(rawBody);
     const admin = createClient(SUPABASE_URL, SERVICE_KEY);
 
-    // ── Idempotency ──────────────────────────────────────────────────────────
+    // Idempotency (per webhook delivery) — catches literal retries of the SAME event_id.
     const { error: dedupErr } = await admin
       .from('square_webhook_events')
       .insert({ event_id: event.event_id, event_type: event.type });
@@ -123,14 +117,33 @@ Deno.serve(async (req: Request) => {
       return new Response(JSON.stringify({ received: true, skipped: `status=${payment.status}` }), { status: 200 });
     }
 
-    // Cents → dollars
     const paidAmount  = (payment.amount_money?.amount ?? 0) / 100;
 
-    // Resolve OUR token. Square Payment Links do NOT copy the order's reference_id onto the
-    // payment object, so payment.reference_id is almost always empty here (this is why orders
-    // were never being created). We DO set the token on the Square ORDER (reference_id +
-    // metadata.token) in create-square-checkout, so fall back to fetching the order by
-    // payment.order_id and reading the token from there.
+    // PAYMENT-LEVEL idempotency. Square emits MULTIPLE payment.updated events (each a distinct
+    // event_id) for the SAME payment as the payment object changes — the per-event_id dedup above
+    // does NOT catch them, which previously created duplicate orders (one per event). Claim the
+    // payment.id so each real payment is handled exactly once across BOTH flows. We claim BEFORE any
+    // order write so it holds even if the function is killed right after the INSERT. Released on a
+    // genuine failure below so a later event can still complete the work.
+    const { error: payClaimErr } = await admin
+      .from('square_processed_payments')
+      .insert({ payment_id: payment.id });
+    if (payClaimErr) {
+      if ((payClaimErr as any).code === '23505') {
+        console.log(`[square-payment-webhook] payment ${payment.id} already processed, skipping`);
+        return new Response(JSON.stringify({ received: true, deduped: 'payment already processed' }), { status: 200 });
+      }
+      // Unexpected error — fail OPEN (continue) so a DB hiccup never drops a real payment.
+      console.error('[square-payment-webhook] payment claim insert failed (continuing):', payClaimErr);
+    }
+    const releasePayment = async () => {
+      try { await admin.from('square_processed_payments').delete().eq('payment_id', payment.id); } catch (_e) { /* best-effort */ }
+    };
+
+    // Resolve OUR token. Square Payment Links do NOT copy the order's reference_id onto the payment
+    // object, so payment.reference_id is almost always empty (this is why orders were never created).
+    // We set the token on the Square ORDER (reference_id + metadata.token) in create-square-checkout,
+    // so fall back to fetching the order by payment.order_id and reading the token from there.
     let referenceId = payment.reference_id || '';
     if (!referenceId && payment.order_id && SQUARE_TOKEN) {
       try {
@@ -147,10 +160,11 @@ Deno.serve(async (req: Request) => {
 
     if (!referenceId) {
       console.warn('[square-payment-webhook] no reference_id on payment or order', payment.id);
+      await releasePayment();
       return new Response(JSON.stringify({ received: true, skipped: 'no reference_id' }), { status: 200 });
     }
 
-    // ── FLOW A: Token-based (UUID) → create new order ────────────────────────
+    // FLOW A: Token-based (UUID) -> create new order
     if (isUUID(referenceId)) {
       const { data: tokenRow, error: tokenErr } = await admin
         .from('payment_form_tokens')
@@ -160,34 +174,30 @@ Deno.serve(async (req: Request) => {
 
       if (tokenErr || !tokenRow) {
         console.error(`[square-payment-webhook] token ${referenceId} not found`);
+        await releasePayment();
         return new Response(JSON.stringify({ received: true, error: 'token not found' }), { status: 200 });
       }
 
       if (tokenRow.used_at) {
+        // Already converted to an order by an earlier payment for this token — nothing to do.
         console.log(`[square-payment-webhook] token ${referenceId} already used, skipping`);
         return new Response(JSON.stringify({ received: true, skipped: 'token already used' }), { status: 200 });
       }
 
-      // Merge attribution from token (captured on page load) with payment metadata
-      const meta = payment.note || '';
       const attribution = {
         ...(tokenRow.attribution || {}),
         source: tokenRow.attribution?.source || 'square_payment_form',
-        payment_type: payment.reference_id,
       };
 
-      // Get full order amount from token metadata
       const orderAmount = tokenRow.order_amount || paidAmount;
 
-      // Deposit orders: stamp a marker on the instructions so staff know to collect the balance.
       const depositNote = tokenRow.is_deposit
-        ? `[DEPOSIT — $${paidAmount.toFixed(2)} paid; remaining balance to collect separately]`
+        ? `[DEPOSIT - $${paidAmount.toFixed(2)} paid; remaining balance to collect separately]`
         : '';
       const orderInstructions = [depositNote, tokenRow.instructions]
         .filter((s) => s && String(s).trim())
         .join('\n') || null;
 
-      // Create order — trigger fires CAPI Purchase automatically
       const { data: newOrder, error: orderErr } = await admin
         .from('orders')
         .insert({
@@ -203,7 +213,6 @@ Deno.serve(async (req: Request) => {
           mockup_urls:      Array.isArray(tokenRow.mockup_urls) ? tokenRow.mockup_urls : [],
           order_amount:     orderAmount,
           amount_paid:      paidAmount,
-          // amount_remaining is NOT a real column (derived on the frontend) — inserting it errors.
           production_cost:  0,
           shipping_cost:    0,
           marketing_cost:   0,
@@ -218,10 +227,21 @@ Deno.serve(async (req: Request) => {
 
       if (orderErr || !newOrder) {
         console.error(`[square-payment-webhook] failed to create order from token ${referenceId}:`, orderErr);
+        await releasePayment();
         return new Response(JSON.stringify({ received: true, error: 'order creation failed' }), { status: 200 });
       }
 
-      // Log order creation
+      // Mark token used + link to the order. Best-effort: the payment.id claim above is the real
+      // idempotency guard, so even if this update doesn't land, no duplicate order can be created.
+      await admin.from('payment_form_tokens').update({
+        used_at:      new Date().toISOString(),
+        order_id:     newOrder.id,
+        order_number: newOrder.order_number,
+      }).eq('token', referenceId);
+
+      await admin.from('square_processed_payments')
+        .update({ order_number: newOrder.order_number }).eq('payment_id', payment.id);
+
       await admin.from('order_history').insert({
         order_id:      newOrder.id,
         user_email:    'square_webhook',
@@ -230,16 +250,7 @@ Deno.serve(async (req: Request) => {
         new_value:     `Created from Payment Form (token: ${referenceId}) via Square payment $${paidAmount}`,
       }).catch(() => {});
 
-      // Mark token as used
-      await admin.from('payment_form_tokens').update({
-        used_at:      new Date().toISOString(),
-        order_id:     newOrder.id,
-        order_number: newOrder.order_number,
-      }).eq('token', referenceId);
-
-      // ── CUSTOMER "Payment Received" email — real gateway payment confirmed ──
-      // Fires here (and ONLY here / in stripe-balance-webhook) so it never sends for
-      // agent-created or manually-collected orders. Guarded by customer_confirmation_sent_at.
+      // CUSTOMER "Payment Received" email — guarded by customer_confirmation_sent_at (exactly once)
       if (tokenRow.customer_email) {
         try {
           const { data: custStamped } = await admin
@@ -271,14 +282,12 @@ Deno.serve(async (req: Request) => {
         }
       }
 
-      // Notify staff in-app via activity_notifications (one row per recipient).
-      // Recipients = all admins (payment-form orders have sales_agent = hello@pandapatches.com).
+      // Notify admins in-app
       try {
         const { data: admins } = await admin
           .from('user_profiles')
           .select('id')
           .eq('role', 'ADMIN');
-        // type must be one of the activity_notifications CHECK values; 'order_paid' fits a paid payment-form order.
         const notifRows = (admins || []).map((a: { id: string }) => ({
           recipient_id:     a.id,
           type:             'order_paid',
@@ -294,7 +303,7 @@ Deno.serve(async (req: Request) => {
         console.error(`[square-payment-webhook] activity_notifications insert failed for ${newOrder.order_number}:`, notifErr);
       }
 
-      console.log(`[square-payment-webhook] token ${referenceId} → order ${newOrder.order_number}: $${paidAmount} paid, CAPI queued`);
+      console.log(`[square-payment-webhook] token ${referenceId} -> order ${newOrder.order_number}: $${paidAmount} paid, CAPI queued`);
 
       return new Response(
         JSON.stringify({ received: true, order_number: newOrder.order_number, paid: paidAmount }),
@@ -302,7 +311,7 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    // ── FLOW B: Existing order (PP-XXXXX or numeric id) ──────────────────────
+    // FLOW B: Existing order (PP-XXXXX or numeric id)
     const isOrderNumber = referenceId.startsWith('PP-');
     const { data: order, error: orderErr } = await admin
       .from('orders')
@@ -312,6 +321,7 @@ Deno.serve(async (req: Request) => {
 
     if (orderErr || !order) {
       console.error(`[square-payment-webhook] order not found for reference_id=${referenceId}:`, orderErr);
+      await releasePayment();
       return new Response(JSON.stringify({ received: true, error: 'order not found' }), { status: 200 });
     }
 
@@ -325,8 +335,12 @@ Deno.serve(async (req: Request) => {
     const { error: updateErr } = await admin.from('orders').update(updatePayload).eq('id', order.id);
     if (updateErr) {
       console.error(`[square-payment-webhook] failed to update order ${order.order_number}:`, updateErr);
+      await releasePayment();
       return new Response(JSON.stringify({ received: true, error: updateErr.message }), { status: 200 });
     }
+
+    await admin.from('square_processed_payments')
+      .update({ order_number: order.order_number }).eq('payment_id', payment.id);
 
     await admin.from('order_history').insert({
       order_id: order.id, user_email: 'square_webhook',
@@ -334,7 +348,7 @@ Deno.serve(async (req: Request) => {
       old_value: String(order.amount_paid || 0), new_value: String(newAmountPaid),
     }).catch(() => {});
 
-    console.log(`[square-payment-webhook] order ${order.order_number}: +$${paidAmount} → $${newAmountPaid}/${order.order_amount}`);
+    console.log(`[square-payment-webhook] order ${order.order_number}: +$${paidAmount} -> $${newAmountPaid}/${order.order_amount}`);
 
     return new Response(
       JSON.stringify({ received: true, order_number: order.order_number, paid: paidAmount, new_amount_paid: newAmountPaid }),

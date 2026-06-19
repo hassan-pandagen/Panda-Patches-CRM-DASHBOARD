@@ -151,6 +151,12 @@ serve(async (req) => {
       HELLO_EMAIL,
     ].filter(Boolean).join(',');
 
+    // Show the REAL sales agent who created the order so production contacts the right person.
+    // Anonymous web self-checkout (WEB_CHECKOUT / no agent) falls back to hello@pandapatches.com.
+    const displayAgent = (!salesAgent || salesAgent.toLowerCase() === 'web_checkout')
+      ? HELLO_EMAIL
+      : record.sales_agent;
+
     const dynamicData = {
       customer_name: record.customer_name || 'Unknown Customer',
       order_number: orderNumber,
@@ -164,7 +170,7 @@ serve(async (req) => {
       instructions: record.instructions || '',
       shipping_address: record.shipping_address || '',
       order_link: `https://portal.pandapatches.com/order/${orderNumber}`,
-      sales_agent_name: HELLO_EMAIL,
+      sales_agent_name: displayAgent,
       is_urgent: record.is_urgent || false,
       rush_date: record.rush_date ? new Date(record.rush_date).toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }) : null,
       has_winner: false,

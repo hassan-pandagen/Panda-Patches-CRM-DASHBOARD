@@ -106,21 +106,38 @@ export function detectLeadSource(input: AttributionLike): LeadSource {
     }
   }
 
-  // 4. Legacy lead_source field (manual entry — agents typed it)
+  // 4. Legacy lead_source field (manual entry — agents typed/picked it from the dropdown)
   const legacy = String(input.leadSource ?? input.lead_source ?? '').trim();
   if (legacy) {
-    // Map common legacy values to clean labels
+    // Normalize manual labels to clean LeadSource values. Mirrors the lead-source dropdown
+    // (constants/options.ts) so a hand-picked "Perplexity"/"Claude"/"DeepSeek"/"Meta AI"/etc.
+    // isn't silently lost to "Direct".
     const lower = legacy.toLowerCase();
-    if (lower === 'facebook' || lower === 'fb')                    return 'Facebook';
-    if (lower === 'instagram' || lower === 'ig')                   return 'Instagram';
-    if (lower === 'google')                                        return 'Google';
-    if (lower === 'tiktok')                                        return 'TikTok';
-    if (lower === 'whatsapp')                                      return 'WhatsApp';
-    if (lower === 'tawk.to' || lower === 'tawk')                   return 'Tawk.to';
-    if (lower === 'chatgpt')                                       return 'ChatGPT';
-    if (lower === 'repeat order' || lower === 'repeat')            return 'Repeat Order';
-    if (lower === 'referral')                                      return 'Referral';
-    if (lower === 'direct')                                        return 'Direct';
+    const LEGACY_MAP: Record<string, LeadSource> = {
+      'facebook': 'Facebook', 'fb': 'Facebook', 'facebook ad': 'Facebook Ad',
+      'instagram': 'Instagram', 'ig': 'Instagram',
+      'google': 'Google', 'google ad': 'Google Ad',
+      'bing': 'Bing', 'bing ad': 'Bing Ad', 'microsoft': 'Bing',
+      'tiktok': 'TikTok', 'tiktok ad': 'TikTok Ad',
+      'youtube': 'YouTube', 'linkedin': 'LinkedIn',
+      'twitter': 'Twitter', 'x': 'Twitter',
+      'reddit': 'Reddit', 'snapchat': 'Snapchat',
+      'whatsapp': 'WhatsApp',
+      'tawk.to': 'Tawk.to', 'tawk': 'Tawk.to',
+      'chatgpt': 'ChatGPT', 'openai': 'ChatGPT',
+      'perplexity': 'Perplexity',
+      'claude': 'Claude', 'anthropic': 'Claude',
+      'gemini': 'Gemini', 'bard': 'Gemini',
+      'copilot': 'Copilot',
+      'meta ai': 'Meta AI', 'metaai': 'Meta AI', 'meta.ai': 'Meta AI',
+      'deepseek': 'DeepSeek',
+      'email': 'Email', 'newsletter': 'Email',
+      'repeat order': 'Repeat Order', 'repeat': 'Repeat Order',
+      'referral': 'Referral',
+      'other': 'Other',
+      'direct': 'Direct',
+    };
+    if (LEGACY_MAP[lower]) return LEGACY_MAP[lower];
   }
 
   // No signal at all → user typed URL or paid click ID was stripped

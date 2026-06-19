@@ -749,6 +749,29 @@ const LeadSourceTooltip = ({ active, payload, totalRevenue }: any) => {
   return null;
 };
 
+// Group individual lead sources into clickable super-categories for the "Performance by Source" report.
+const SOURCE_CATEGORY: Record<string, string> = {
+  ChatGPT: 'AI / LLMs', Perplexity: 'AI / LLMs', Claude: 'AI / LLMs', Gemini: 'AI / LLMs',
+  Copilot: 'AI / LLMs', 'Meta AI': 'AI / LLMs', DeepSeek: 'AI / LLMs',
+  Facebook: 'Social', Instagram: 'Social', TikTok: 'Social', YouTube: 'Social',
+  LinkedIn: 'Social', Twitter: 'Social', Reddit: 'Social', Snapchat: 'Social',
+  Google: 'Search', Bing: 'Search',
+  'Facebook Ad': 'Paid Ads', 'Google Ad': 'Paid Ads', 'Bing Ad': 'Paid Ads', 'TikTok Ad': 'Paid Ads',
+  WhatsApp: 'Messaging / Calls', 'Tawk.to': 'Messaging / Calls', RingCentral: 'Messaging / Calls',
+  'Repeat Order': 'Repeat / Referral', Referral: 'Repeat / Referral',
+  Direct: 'Direct / Other', Other: 'Direct / Other', Checkout: 'Direct / Other', Unknown: 'Direct / Other',
+};
+const categoryOf = (name: string): string => SOURCE_CATEGORY[name] || 'Direct / Other';
+const CATEGORY_COLORS: Record<string, string> = {
+  'AI / LLMs': '#10B981',
+  'Social': '#0866FF',
+  'Search': '#EF4444',
+  'Paid Ads': '#F59E0B',
+  'Messaging / Calls': '#22C55E',
+  'Repeat / Referral': '#FB6E1D',
+  'Direct / Other': '#8B5CF6',
+};
+
 const LeadSourceReportComponent: React.FC<ReportComponentProps> = ({
   orders,
   dateRange,
@@ -786,10 +809,39 @@ const LeadSourceReportComponent: React.FC<ReportComponentProps> = ({
       .sort((a, b) => b.revenue - a.revenue);
   }, [orders]);
 
-  const pieChartData = useMemo(
-    () => leadSourceStats.filter((item) => item.revenue > 0),
-    [leadSourceStats]
-  );
+  // ── Source grouping: "Platforms" (each source) vs "Categories" (AI / Social / Search / …) ──
+  const [sourceView, setSourceView] = useState<'platform' | 'category'>('platform');
+  const [drillCategory, setDrillCategory] = useState<string | null>(null);
+
+  const categoryStats = useMemo(() => {
+    const m = new Map<string, { revenue: number; orders: number }>();
+    leadSourceStats.forEach((s) => {
+      const cat = categoryOf(s.name);
+      const cur = m.get(cat) ?? { revenue: 0, orders: 0 };
+      cur.revenue += s.revenue;
+      cur.orders += s.orders;
+      m.set(cat, cur);
+    });
+    return Array.from(m.entries())
+      .map(([name, d]) => ({ name, ...d }))
+      .sort((a, b) => b.revenue - a.revenue);
+  }, [leadSourceStats]);
+
+  const showingCategories = sourceView === 'category' && !drillCategory;
+  const sourceTableData = useMemo(() => {
+    if (showingCategories) return categoryStats;
+    if (drillCategory) return leadSourceStats.filter((s) => categoryOf(s.name) === drillCategory);
+    return leadSourceStats;
+  }, [showingCategories, drillCategory, categoryStats, leadSourceStats]);
+  const sourcePieData = useMemo(() => sourceTableData.filter((s) => s.revenue > 0), [sourceTableData]);
+  const colorForSource = (name: string) =>
+    showingCategories
+      ? (CATEGORY_COLORS[name] || CATEGORY_COLORS['Direct / Other'])
+      : (SOURCE_COLORS[name] || SOURCE_COLORS['Other']);
+  const handleSourceClick = (name: string) => {
+    if (showingCategories) setDrillCategory(name);
+    else navigate(`/orders?leadSource=${encodeURIComponent(name)}`);
+  };
 
   // Click-to-sort for the Top Repeat Customers table
   const [repeatSort, setRepeatSort] = useState<{ key: 'orders' | 'revenue' | 'name' | 'lastOrder'; dir: 'asc' | 'desc' }>({ key: 'orders', dir: 'desc' });
@@ -1016,25 +1068,51 @@ const LeadSourceReportComponent: React.FC<ReportComponentProps> = ({
       {/* Lead Source Performance Section */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
       <div className="bg-slate-900/40 backdrop-blur-xl border border-white/10 rounded-2xl p-6 shadow-xl">
-        <h4 className="text-lg font-semibold text-white mb-4">
-          Performance by Source
-        </h4>
+        <div className="flex items-center justify-between gap-3 flex-wrap mb-4">
+          <h4 className="text-lg font-semibold text-white">
+            {drillCategory ? (
+              <button
+                onClick={() => setDrillCategory(null)}
+                className="inline-flex items-center gap-2 hover:text-brand-orange transition-colors"
+              >
+                <span className="text-slate-400">←</span> {drillCategory}
+              </button>
+            ) : (
+              'Performance by Source'
+            )}
+          </h4>
+          <div className="inline-flex rounded-lg bg-slate-800/70 p-0.5 text-xs font-medium">
+            <button
+              onClick={() => { setSourceView('platform'); setDrillCategory(null); }}
+              className={`px-3 py-1.5 rounded-md transition-colors ${sourceView === 'platform' ? 'bg-brand-orange text-white' : 'text-slate-400 hover:text-white'}`}
+            >
+              Platforms
+            </button>
+            <button
+              onClick={() => { setSourceView('category'); setDrillCategory(null); }}
+              className={`px-3 py-1.5 rounded-md transition-colors ${sourceView === 'category' ? 'bg-brand-orange text-white' : 'text-slate-400 hover:text-white'}`}
+            >
+              Categories
+            </button>
+          </div>
+        </div>
         <div className="overflow-x-auto max-h-[400px] custom-scrollbar">
           <table className="w-full text-left text-slate-200">
             <thead className="text-xs font-bold text-slate-400 uppercase bg-slate-800/50 sticky top-0 tracking-wider">
               <tr>
-                <th className="px-4 py-4 rounded-tl-lg">Platform</th>
+                <th className="px-4 py-4 rounded-tl-lg">{showingCategories ? 'Category' : 'Platform'}</th>
                 <th className="px-4 py-4 text-center">Orders</th>
                 <th className="px-4 py-4 text-right rounded-tr-lg">Revenue</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-white/5">
-              {leadSourceStats.map((source, index) => (
-                <tr key={index} className="hover:bg-white/5 cursor-pointer transition-colors group" onClick={() => navigate(`/orders?leadSource=${encodeURIComponent(source.name)}`)}>
+              {sourceTableData.map((source, index) => (
+                <tr key={index} className="hover:bg-white/5 cursor-pointer transition-colors group" onClick={() => handleSourceClick(source.name)}>
                   <td className="px-4 py-3.5 text-sm font-semibold text-white">
                     <div className="flex items-center gap-3">
-                      <span className={`w-2.5 h-2.5 rounded-full shadow-sm flex-shrink-0 ${source.revenue > 0 ? "" : "bg-slate-600"}`} style={{ backgroundColor: source.revenue > 0 ? SOURCE_COLORS[source.name] || SOURCE_COLORS["Other"] : undefined }} />
+                      <span className={`w-2.5 h-2.5 rounded-full shadow-sm flex-shrink-0 ${source.revenue > 0 ? "" : "bg-slate-600"}`} style={{ backgroundColor: source.revenue > 0 ? colorForSource(source.name) : undefined }} />
                       <span className="group-hover:text-brand-orange transition-colors">{source.name}</span>
+                      {showingCategories && <span className="ml-1 text-slate-600 group-hover:text-brand-orange transition-colors" title="Click to drill in">›</span>}
                     </div>
                   </td>
                   <td className="px-4 py-3.5 text-sm text-center text-slate-300 font-medium">{source.orders}</td>
@@ -1060,7 +1138,7 @@ const LeadSourceReportComponent: React.FC<ReportComponentProps> = ({
           <ResponsiveContainer width="100%" height={400}>
             <PieChart>
               <Pie
-                data={pieChartData}
+                data={sourcePieData}
                 dataKey="revenue"
                 nameKey="name"
                 cx="50%"
@@ -1071,18 +1149,12 @@ const LeadSourceReportComponent: React.FC<ReportComponentProps> = ({
                 cornerRadius={6}
                 stroke="none"
               >
-                {pieChartData.map((entry, index) => (
+                {sourcePieData.map((entry, index) => (
                   <Cell
                     key={`cell-${index}`}
-                    fill={SOURCE_COLORS[entry.name] || SOURCE_COLORS["Other"]}
+                    fill={colorForSource(entry.name)}
                     className="outline-none hover:opacity-80 transition-opacity duration-300 cursor-pointer"
-                    onClick={() =>
-                      navigate(
-                        `/orders?leadSource=${encodeURIComponent(
-                          pieChartData[index].name
-                        )}`
-                      )
-                    }
+                    onClick={() => handleSourceClick(entry.name)}
                   />
                 ))}
               </Pie>
