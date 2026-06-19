@@ -41,6 +41,7 @@ export const LEAD_SOURCE_OPTIONS: string[] = [
   'Claude',
   'Meta AI',
   'DeepSeek',
+  'Copilot',
   'Tawk.to',
   'Checkout',
   'Referral',
