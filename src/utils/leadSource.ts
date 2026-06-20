@@ -87,7 +87,23 @@ export interface AttributionLike {
 export function detectLeadSource(input: AttributionLike): LeadSource {
   const attr = input.attribution ?? {};
 
-  // 1. Paid ad click IDs — strongest signal, came from a specific ad
+  // 0. Definitive paid-AD signals straight off a Meta ad click (strongest of all):
+  //    ad_id + ads_context come from the ad itself; referral_source='ADS' is the website's flag;
+  //    utm_medium=paid/cpc names the channel as paid.
+  const utmMedium = String(attr.utm_medium ?? '').toLowerCase().trim();
+  const utmSrc    = String(attr.utm_source ?? '').toLowerCase().trim();
+  const isPaidMedium = ['paid', 'cpc', 'ppc', 'paid_social', 'paidsocial'].includes(utmMedium);
+  if (attr.ad_id || attr.ads_context || /^ads?$/i.test(String(attr.referral_source ?? '').trim())) {
+    return 'Facebook Ad';
+  }
+  if (isPaidMedium) {
+    if (/^(fb|facebook|ig|instagram|meta)/.test(utmSrc)) return 'Facebook Ad';
+    if (/^(google|adwords|gads?)/.test(utmSrc))          return 'Google Ad';
+    if (/^(bing|microsoft|msn)/.test(utmSrc))            return 'Bing Ad';
+    if (/^(tiktok|tt)/.test(utmSrc))                     return 'TikTok Ad';
+  }
+
+  // 1. Paid ad click IDs — strong signal, came from a specific ad
   if (attr.fbclid)   return 'Facebook Ad';
   if (attr.gclid)    return 'Google Ad';
   if (attr.msclkid)  return 'Bing Ad';
@@ -97,9 +113,15 @@ export function detectLeadSource(input: AttributionLike): LeadSource {
   if (attr.source === 'meta_messenger')  return 'Facebook';
   if (attr.source === 'meta_instagram')  return 'Instagram';
 
-  // 2. UTM source (campaign-tagged but not necessarily paid)
-  const utm = String(attr.utm_source ?? '').toLowerCase().trim();
-  if (utm && UTM_MAP[utm]) return UTM_MAP[utm];
+  // 2. UTM source (campaign-tagged but not necessarily paid). utm_source may be a bare token
+  //    ('fb') or a full domain ('chatgpt.com') — try the exact map, then the referrer patterns.
+  const utm = utmSrc;
+  if (utm) {
+    if (UTM_MAP[utm]) return UTM_MAP[utm];
+    for (const [pattern, label] of REFERRER_MAP) {
+      if (pattern.test(utm)) return label;
+    }
+  }
 
   // 3. Referrer hostname → organic/social/AI search
   const referrer = String(attr.referrer ?? attr.http_referer ?? '').toLowerCase();

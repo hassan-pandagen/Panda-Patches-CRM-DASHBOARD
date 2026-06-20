@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "../contexts/AuthContext";
 import { logger } from "../services/logger";
 import { localMidnightISO, localNextDayISO } from "../utils/dateFilters";
+import { detectLeadSource } from "../utils/leadSource";
 import SpotlightCard from "../components/ui/SpotlightCard";
 import ToggleButtons from "../components/ui/ToggleButtons";
 import { Order, UserRole, OrderStatus } from "../types/index";
@@ -795,7 +796,15 @@ const LeadSourceReportComponent: React.FC<ReportComponentProps> = ({
     );
 
     orders.forEach((order) => {
-      const sourceName = order.leadSource || "Unknown";
+      // Prefer the REAL channel resolved from attribution — the website's "Traffic" value
+      // (ChatGPT, Google, a Facebook ad, etc.) lives in attribution.referrer/utm/ad_id, while the
+      // raw lead_source is often just the page the form was on ("Pvc Product Page"). Fall back to
+      // the raw label only when attribution carries no signal (RingCentral, Checkout, manual tags…).
+      const resolved = detectLeadSource({
+        attribution: (order.attribution as Record<string, any> | null) ?? null,
+        lead_source: order.leadSource,
+      });
+      const sourceName = resolved !== 'Direct' ? resolved : (order.leadSource || "Unknown");
       if (!sourceStats.has(sourceName)) {
         sourceStats.set(sourceName, { revenue: 0, orders: 0 });
       }
@@ -842,6 +851,32 @@ const LeadSourceReportComponent: React.FC<ReportComponentProps> = ({
     if (showingCategories) setDrillCategory(name);
     else navigate(`/orders?leadSource=${encodeURIComponent(name)}`);
   };
+
+  // Revenue per Meta ad — uses the ad name captured in attribution.ads_context (falls back to ad_id).
+  const adCampaignStats = useMemo(() => {
+    const m = new Map<string, { revenue: number; orders: number }>();
+    orders.forEach((order) => {
+      const attr = (order.attribution as Record<string, any> | null) ?? null;
+      if (!attr) return;
+      let adName: string | null = null;
+      const rawCtx = attr.ads_context;
+      if (rawCtx) {
+        try {
+          const ctx = typeof rawCtx === 'string' ? JSON.parse(rawCtx) : rawCtx;
+          adName = ctx?.ad_title || null;
+        } catch { /* ignore malformed ads_context */ }
+      }
+      if (!adName && attr.ad_id) adName = `Ad ${attr.ad_id}`;
+      if (!adName) return; // not an identifiable ad order
+      const cur = m.get(adName) ?? { revenue: 0, orders: 0 };
+      cur.revenue += order.orderAmount || 0;
+      cur.orders += 1;
+      m.set(adName, cur);
+    });
+    return Array.from(m.entries())
+      .map(([name, d]) => ({ name, ...d }))
+      .sort((a, b) => b.revenue - a.revenue);
+  }, [orders]);
 
   // Click-to-sort for the Top Repeat Customers table
   const [repeatSort, setRepeatSort] = useState<{ key: 'orders' | 'revenue' | 'name' | 'lastOrder'; dir: 'asc' | 'desc' }>({ key: 'orders', dir: 'desc' });
@@ -1179,6 +1214,46 @@ const LeadSourceReportComponent: React.FC<ReportComponentProps> = ({
         </div>
       </div>
       </div>
+
+      {/* Revenue by Ad Campaign — which specific Meta ads drive sales (from attribution.ads_context) */}
+      {adCampaignStats.length > 0 && (
+        <div className="mt-6 bg-slate-900/40 backdrop-blur-xl border border-white/10 rounded-2xl p-6 shadow-xl">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h4 className="text-lg font-semibold text-white">Revenue by Ad Campaign</h4>
+              <p className="text-xs text-slate-500 mt-0.5">Meta ads — by the ad name captured on each order</p>
+            </div>
+            <span className="text-xs font-medium text-slate-400 bg-slate-800 px-2 py-1 rounded-md">
+              {adCampaignStats.reduce((s, a) => s + a.orders, 0)} ad orders
+            </span>
+          </div>
+          <div className="overflow-x-auto max-h-[400px] custom-scrollbar">
+            <table className="w-full text-left text-slate-200">
+              <thead className="text-xs font-bold text-slate-400 uppercase bg-slate-800/50 sticky top-0 tracking-wider">
+                <tr>
+                  <th className="px-4 py-4 rounded-tl-lg">Ad / Campaign</th>
+                  <th className="px-4 py-4 text-center">Orders</th>
+                  <th className="px-4 py-4 text-right rounded-tr-lg">Revenue</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-white/5">
+                {adCampaignStats.map((ad, i) => (
+                  <tr key={i} className="hover:bg-white/5 transition-colors">
+                    <td className="px-4 py-3.5 text-sm font-semibold text-white">
+                      <div className="flex items-center gap-3">
+                        <span className="w-2.5 h-2.5 rounded-full shadow-sm flex-shrink-0" style={{ backgroundColor: '#F59E0B' }} />
+                        <span>{ad.name}</span>
+                      </div>
+                    </td>
+                    <td className="px-4 py-3.5 text-sm text-center text-slate-300 font-medium">{ad.orders}</td>
+                    <td className="px-4 py-3.5 text-sm text-right text-emerald-400 font-bold tracking-wide">${ad.revenue.toLocaleString()}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       {/* Lead Source Distribution — quote-side funnel (volume vs revenue) */}
       <div className="mt-6">
