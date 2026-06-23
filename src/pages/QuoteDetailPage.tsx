@@ -13,6 +13,7 @@ import { useToast } from '../hooks/useToast';
 import { ArrowLeft, CheckCircle, Trash2, Calendar, Mail, Phone, Paperclip, Image, Pencil, X, AlertTriangle, DollarSign, ExternalLink, MailCheck, Send, CreditCard } from 'lucide-react';
 import MetaChatPanel from '../components/quotes/MetaChatPanel';
 import GeneratePaymentLinkModal from '../components/orders/GeneratePaymentLinkModal';
+import FileUploadSection from '../components/orders/FileUpload';
 
 // ─── SELECT STYLE ────────────────────────────────────────────────────────────
 const selectStyle = {
@@ -45,6 +46,9 @@ const QuoteDetailPage: React.FC = () => {
 
   // Edit form state
   const [editForm, setEditForm] = useState<Record<string, string>>({});
+  // Mockup artwork is editable on the quote so updated client art carries into the order on convert.
+  const [editMockupUrls, setEditMockupUrls] = useState<string[]>([]);
+  const [isUploadingMockups, setIsUploadingMockups] = useState(false);
 
   // Convert modal price override
   const [convertPrice, setConvertPrice] = useState('');
@@ -74,12 +78,14 @@ const QuoteDetailPage: React.FC = () => {
       leadSource: quote.leadSource || '',
       notes: quote.notes || '',
     });
+    setEditMockupUrls(quote.mockupUrls || []);
     setShowEditModal(true);
   };
 
   // ─── SAVE EDIT ─────────────────────────────────────────────────────────────
   const handleSaveEdit = async () => {
     if (!quote) return;
+    if (isUploadingMockups) { showError('Please wait for the artwork to finish uploading.'); return; }
     setIsSaving(true);
     try {
       await updateQuote(quote.quoteNumber, {
@@ -97,6 +103,7 @@ const QuoteDetailPage: React.FC = () => {
         salesAgent: editForm.salesAgent,
         leadSource: editForm.leadSource,
         notes: editForm.notes,
+        mockupUrls: editMockupUrls,
       });
       queryClient.invalidateQueries({ queryKey: queryKeys.quotes.single(quote.quoteNumber) });
       showSuccess('Quote updated successfully');
@@ -287,6 +294,19 @@ const QuoteDetailPage: React.FC = () => {
                 <label className={labelClass}>Internal Notes</label>
                 <textarea className={inputClass} rows={3} value={editForm.notes} onChange={e => setEditForm(p => ({ ...p, notes: e.target.value }))} placeholder="Internal notes only..." />
               </div>
+
+              {/* Mockup Artwork — editable so updated client art carries into the order (and its emails) on convert */}
+              <div>
+                <p className="text-xs text-slate-500 mb-2">If the client sent new artwork, update the mockups here — the latest files carry into the order and its emails when you convert.</p>
+                <FileUploadSection
+                  title="Mockup Artwork"
+                  bucketName="order-attachments"
+                  folderPath={`quote-mockups/${quote?.quoteNumber || quote?.id || 'new'}`}
+                  urls={editMockupUrls}
+                  onUrlsChange={setEditMockupUrls}
+                  onUploadStateChange={setIsUploadingMockups}
+                />
+              </div>
             </div>
 
             {/* Modal Footer */}
@@ -294,8 +314,8 @@ const QuoteDetailPage: React.FC = () => {
               <Button variant="secondary" onClick={() => setShowEditModal(false)} className="flex-1 bg-slate-800 border border-slate-600 text-white hover:bg-slate-700">
                 Cancel
               </Button>
-              <Button variant="primary" onClick={handleSaveEdit} disabled={isSaving} className="flex-1 shadow-lg shadow-brand-orange/20">
-                {isSaving ? 'Saving...' : 'Save Changes'}
+              <Button variant="primary" onClick={handleSaveEdit} disabled={isSaving || isUploadingMockups} className="flex-1 shadow-lg shadow-brand-orange/20">
+                {isSaving ? 'Saving...' : isUploadingMockups ? 'Uploading...' : 'Save Changes'}
               </Button>
             </div>
           </div>
