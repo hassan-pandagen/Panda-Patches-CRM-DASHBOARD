@@ -756,7 +756,7 @@ const SOURCE_CATEGORY: Record<string, string> = {
   Copilot: 'AI / LLMs', 'Meta AI': 'AI / LLMs', DeepSeek: 'AI / LLMs',
   Facebook: 'Social', Instagram: 'Social', TikTok: 'Social', YouTube: 'Social',
   LinkedIn: 'Social', Twitter: 'Social', Reddit: 'Social', Snapchat: 'Social',
-  Google: 'Search', Bing: 'Search',
+  Google: 'Search', Bing: 'Search', DuckDuckGo: 'Search', Brave: 'Search',
   'Facebook Ad': 'Paid Ads', 'Google Ad': 'Paid Ads', 'Bing Ad': 'Paid Ads', 'TikTok Ad': 'Paid Ads',
   WhatsApp: 'Messaging / Calls', 'Tawk.to': 'Messaging / Calls', RingCentral: 'Messaging / Calls',
   'Repeat Order': 'Repeat / Referral', Referral: 'Repeat / Referral',

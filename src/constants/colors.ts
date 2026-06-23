@@ -39,6 +39,8 @@ export const SOURCE_COLORS: Record<string, string> = {
     'Referral': '#A855F7', // Purple (Distinct from Green)
     'WhatsApp': '#22C55E', // WhatsApp Green
     'Bing': '#14B8A6', // Teal
+    'DuckDuckGo': '#DE5833', // DuckDuckGo Orange-Red
+    'Brave': '#FB542B', // Brave Orange
     'YouTube': '#FF0000', // Youtube Red
     'LinkedIn': '#0A66C2', // LinkedIn Blue
     'Twitter': '#64748B', // Slate (X/Twitter)

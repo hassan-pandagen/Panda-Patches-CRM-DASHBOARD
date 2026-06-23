@@ -11,7 +11,7 @@
 
 export type LeadSource =
   | 'Facebook Ad' | 'Google Ad' | 'Bing Ad' | 'TikTok Ad'
-  | 'Facebook' | 'Instagram' | 'Google' | 'Bing' | 'TikTok' | 'YouTube'
+  | 'Facebook' | 'Instagram' | 'Google' | 'Bing' | 'DuckDuckGo' | 'Brave' | 'TikTok' | 'YouTube'
   | 'LinkedIn' | 'Twitter' | 'Reddit' | 'Snapchat' | 'WhatsApp'
   | 'ChatGPT' | 'Perplexity' | 'Claude' | 'Gemini' | 'Copilot' | 'Meta AI' | 'DeepSeek'
   | 'Email' | 'Tawk.to' | 'Direct' | 'Repeat Order' | 'Referral' | 'Other';
@@ -39,6 +39,8 @@ const REFERRER_MAP: Array<[RegExp, LeadSource]> = [
   // Search engines (organic)
   [/google\.[a-z.]+/i,                         'Google'],
   [/bing\.com/i,                               'Bing'],
+  [/duckduckgo\.com|duck\.com/i,               'DuckDuckGo'],
+  [/search\.brave\.com/i,                      'Brave'],
 
   // Messaging apps
   [/whatsapp\.com|wa\.me/i,                    'WhatsApp'],
@@ -55,6 +57,9 @@ const UTM_MAP: Record<string, LeadSource> = {
   ig:         'Instagram',
   google:     'Google',
   bing:       'Bing',
+  duckduckgo: 'DuckDuckGo',
+  ddg:        'DuckDuckGo',
+  brave:      'Brave',
   tiktok:     'TikTok',
   youtube:    'YouTube',
   linkedin:   'LinkedIn',
@@ -143,6 +148,7 @@ export function detectLeadSource(input: AttributionLike): LeadSource {
       'instagram': 'Instagram', 'ig': 'Instagram',
       'google': 'Google', 'google ad': 'Google Ad',
       'bing': 'Bing', 'bing ad': 'Bing Ad', 'microsoft': 'Bing',
+      'duckduckgo': 'DuckDuckGo', 'ddg': 'DuckDuckGo', 'brave': 'Brave',
       'tiktok': 'TikTok', 'tiktok ad': 'TikTok Ad',
       'youtube': 'YouTube', 'linkedin': 'LinkedIn',
       'twitter': 'Twitter', 'x': 'Twitter',
@@ -183,6 +189,8 @@ export function getSourceBadgeClasses(source: LeadSource): string {
     'Instagram':    'bg-pink-500/15 text-pink-300 border-pink-500/30',
     'Google':       'bg-red-500/15 text-red-300 border-red-500/30',
     'Bing':         'bg-teal-500/15 text-teal-300 border-teal-500/30',
+    'DuckDuckGo':   'bg-orange-500/15 text-orange-300 border-orange-500/30',
+    'Brave':        'bg-orange-600/15 text-orange-200 border-orange-600/30',
     'TikTok':       'bg-cyan-500/15 text-cyan-300 border-cyan-500/30',
     'YouTube':      'bg-red-600/15 text-red-300 border-red-600/30',
     'LinkedIn':     'bg-sky-500/15 text-sky-300 border-sky-500/30',

@@ -119,6 +119,7 @@ const NewOrderPage: React.FC = () => {
         customerEmail: String(formData.customerEmail || ''),
         customerPhone: String(formData.customerPhone || ''),
         customerProfileUrl: String(formData.customerProfileUrl || ''),
+        purchaseOrder: String(formData.purchaseOrder || ''),
         ccEmail: String(formData.ccEmail || ''),
 
         // Shipping
@@ -132,6 +133,7 @@ const NewOrderPage: React.FC = () => {
         patchesType: String(formData.patchesType || ''),
         designSize: String(formData.designSize || ''),
         designBacking: String(formData.designBacking || ''),
+        borderType: String(formData.borderType || ''),
         instructions: String(formData.instructions || ''),
         
         // Financials (with safe number conversion)
@@ -146,7 +148,9 @@ const NewOrderPage: React.FC = () => {
 
         // Lead & Urgency (use auto-detected lead source for repeat customers)
         leadSource: String(detectedLeadSource || ''),
+        country: String(formData.country || ''),
         isUrgent: Boolean(formData.isUrgent),
+        rushDate: formData.rushDate || null,
         
         // Arrays (ensure they are arrays)
         mockupUrls: Array.isArray(formData.mockupUrls) ? formData.mockupUrls : [],

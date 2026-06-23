@@ -27,6 +27,8 @@ export const COUNTRY_OPTIONS: string[] = [
 export const LEAD_SOURCE_OPTIONS: string[] = [
   'Google',
   'Bing',
+  'DuckDuckGo',
+  'Brave',
   'Facebook',
   'Instagram',
   'TikTok',
