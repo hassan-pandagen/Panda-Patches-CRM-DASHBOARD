@@ -1,6 +1,6 @@
 // src/pages/QuoteDetailPage.tsx - Quote Detail View with Edit + Convert Flow
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { getQuoteByNumber, updateQuote, convertQuoteToOrder, deleteQuote, sendQuoteEmail, markQuoteAsSent } from '../services/quoteService';
@@ -49,6 +49,9 @@ const QuoteDetailPage: React.FC = () => {
   // Mockup artwork is editable on the quote so updated client art carries into the order on convert.
   const [editMockupUrls, setEditMockupUrls] = useState<string[]>([]);
   const [isUploadingMockups, setIsUploadingMockups] = useState(false);
+  // Inline (on-page) artwork editing — auto-saves to the quote immediately.
+  const [pageMockupUrls, setPageMockupUrls] = useState<string[]>([]);
+  const [pageCustomerArt, setPageCustomerArt] = useState<string[]>([]);
 
   // Convert modal price override
   const [convertPrice, setConvertPrice] = useState('');
@@ -58,6 +61,25 @@ const QuoteDetailPage: React.FC = () => {
     queryFn: () => quoteNumber ? getQuoteByNumber(quoteNumber) : Promise.reject('No quote number'),
     enabled: !!quoteNumber,
   });
+
+  // Keep the on-page artwork editors in sync with the loaded quote.
+  useEffect(() => {
+    if (quote) {
+      setPageMockupUrls(quote.mockupUrls || []);
+      setPageCustomerArt(quote.customerAttachmentUrls || []);
+    }
+  }, [quote]);
+
+  // Persist an artwork change to the quote immediately (inline editing).
+  const persistArtwork = async (patch: { mockupUrls?: string[]; customerAttachmentUrls?: string[] }) => {
+    if (!quote) return;
+    try {
+      await updateQuote(quote.quoteNumber, patch);
+      queryClient.invalidateQueries({ queryKey: queryKeys.quotes.single(quote.quoteNumber) });
+    } catch (e) {
+      showError(`Failed to save artwork: ${e instanceof Error ? e.message : 'error'}`);
+    }
+  };
 
   // ─── OPEN EDIT MODAL ───────────────────────────────────────────────────────
   const openEditModal = () => {
@@ -555,74 +577,34 @@ const QuoteDetailPage: React.FC = () => {
             )}
           </SpotlightCard>
 
-          {/* Mockup Images */}
-          {quote.mockupUrls && quote.mockupUrls.length > 0 && (
-            <SpotlightCard className="p-6">
-              <h2 className="text-xl font-bold text-white mb-4">Mockup Images ({quote.mockupUrls.length})</h2>
-              <div className="grid grid-cols-2 gap-4">
-                {quote.mockupUrls.map((url, index) => (
-                  <button
-                    key={index}
-                    onClick={() => setPreviewUrl(url)}
-                    className="relative group overflow-hidden rounded-lg border border-slate-600 hover:border-brand-orange transition-all cursor-pointer text-left"
-                  >
-                    <img
-                      src={url}
-                      alt={`Mockup ${index + 1}`}
-                      className="w-full h-48 object-cover group-hover:scale-105 transition-transform duration-300"
-                    />
-                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors flex items-center justify-center">
-                      <span className="text-white text-sm font-semibold opacity-0 group-hover:opacity-100 transition-opacity">View</span>
-                    </div>
-                  </button>
-                ))}
-              </div>
-            </SpotlightCard>
-          )}
+          {/* Mockup Images — editable inline (auto-saves to the quote) */}
+          <SpotlightCard className="p-6">
+            <h2 className="text-xl font-bold text-white mb-1">Mockup Images</h2>
+            <p className="text-xs text-slate-500 mb-4">Upload or remove mockups — saved instantly. These carry into the order (and its emails) when you convert.</p>
+            <FileUploadSection
+              title="Mockup files"
+              bucketName="order-attachments"
+              folderPath={`quote-mockups/${quote.quoteNumber || quote.id}`}
+              urls={pageMockupUrls}
+              onUrlsChange={(urls) => { setPageMockupUrls(urls); persistArtwork({ mockupUrls: urls }); }}
+            />
+          </SpotlightCard>
 
-          {/* Customer Artwork / Attachments */}
-          {quote.customerAttachmentUrls && quote.customerAttachmentUrls.length > 0 && (
-            <SpotlightCard className="p-6">
-              <h2 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
-                <Paperclip className="w-5 h-5 text-brand-orange" />
-                Customer Artwork ({quote.customerAttachmentUrls.length})
-              </h2>
-              <div className="grid grid-cols-2 gap-4">
-                {quote.customerAttachmentUrls.map((url, index) => {
-                  const isImage = /\.(jpg|jpeg|png|gif|webp|svg)$/i.test(url.split('?')[0]);
-                  return isImage ? (
-                    <button
-                      key={index}
-                      onClick={() => setPreviewUrl(url)}
-                      className="relative group overflow-hidden rounded-lg border border-slate-600 hover:border-brand-orange transition-all cursor-pointer"
-                    >
-                      <img
-                        src={url}
-                        alt={`Artwork ${index + 1}`}
-                        className="w-full h-48 object-cover group-hover:scale-105 transition-transform duration-300"
-                      />
-                      <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors flex items-center justify-center">
-                        <span className="text-white text-sm font-semibold opacity-0 group-hover:opacity-100 transition-opacity">View</span>
-                      </div>
-                    </button>
-                  ) : (
-                    <a
-                      key={index}
-                      href={url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex items-center gap-3 p-4 rounded-lg border border-slate-600 hover:border-brand-orange bg-slate-800/50 transition-colors"
-                    >
-                      <Image className="w-8 h-8 text-brand-orange flex-shrink-0" />
-                      <span className="text-slate-300 text-sm truncate">
-                        {decodeURIComponent(url.split('/').pop()?.split('?')[0] || `Attachment ${index + 1}`).replace(/^(mockup_)?\d{10,}_/, '').replace(/^[a-f0-9-]{36}\./, '')}
-                      </span>
-                    </a>
-                  );
-                })}
-              </div>
-            </SpotlightCard>
-          )}
+          {/* Customer Artwork — editable inline (auto-saves to the quote) */}
+          <SpotlightCard className="p-6">
+            <h2 className="text-xl font-bold text-white mb-1 flex items-center gap-2">
+              <Paperclip className="w-5 h-5 text-brand-orange" />
+              Customer Artwork
+            </h2>
+            <p className="text-xs text-slate-500 mb-4">Delete or add the client's artwork — saved instantly. If there are no mockups, these are what carry into the order (and its emails) on convert.</p>
+            <FileUploadSection
+              title="Customer artwork files"
+              bucketName="order-attachments"
+              folderPath={`quote-artwork/${quote.quoteNumber || quote.id}`}
+              urls={pageCustomerArt}
+              onUrlsChange={(urls) => { setPageCustomerArt(urls); persistArtwork({ customerAttachmentUrls: urls }); }}
+            />
+          </SpotlightCard>
 
           {/* Notes */}
           {quote.notes && (
