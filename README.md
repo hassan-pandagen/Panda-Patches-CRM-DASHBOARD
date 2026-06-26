@@ -1,16 +1,17 @@
 <div align="center">
 
-# Custom Business CRM & Order Management System
+# Panda Patches — CRM & Order Management System
 
-**Production-grade · Full-Stack · White-Label Ready**
+**Production-grade · Full-Stack · Custom Manufacturing Operations Platform**
 
 [![React](https://img.shields.io/badge/React_18-61DAFB?style=flat&logo=react&logoColor=black)](https://react.dev)
-[![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?style=flat&logo=typescript&logoColor=white)](https://www.typescriptlang.org)
+[![TypeScript](https://img.shields.io/badge/TypeScript_5-3178C6?style=flat&logo=typescript&logoColor=white)](https://www.typescriptlang.org)
+[![Vite](https://img.shields.io/badge/Vite_5-646CFF?style=flat&logo=vite&logoColor=white)](https://vite.dev)
 [![Supabase](https://img.shields.io/badge/Supabase-3ECF8E?style=flat&logo=supabase&logoColor=white)](https://supabase.com)
 [![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-06B6D4?style=flat&logo=tailwindcss&logoColor=white)](https://tailwindcss.com)
 [![Vercel](https://img.shields.io/badge/Vercel-000000?style=flat&logo=vercel&logoColor=white)](https://vercel.com)
 
-**A fully custom, enterprise-ready CRM + Order Management + Customer Portal system — built to run your entire business.**
+**The internal operating system that runs the Panda Patches business — leads, quotes, orders, production, fulfillment, payments, financial reporting, and team management, all in one place.**
 
 </div>
 
@@ -18,296 +19,302 @@
 
 ## What Is This?
 
-This is a **production-deployed, full-stack business operating system** built for a custom manufacturing company (custom patches, apparel, merchandise). It handles the complete business lifecycle — from the moment a lead comes in, through quoting, ordering, production, shipping, and customer follow-up — all in one place.
+This is the **staff-facing CRM and order-management dashboard** for Panda Patches, a custom manufacturing business (patches, apparel, branded merchandise). It runs the full operational lifecycle: a lead comes in, becomes a quote, converts to an order, moves through production and QA, ships, gets paid, and feeds into financial reporting — all tracked in one application with real-time updates across the team.
 
-Unlike off-the-shelf tools like Shopify, HubSpot, or Trello, every feature here is **purpose-built** for real operational needs. Nothing is bloated. Nothing is missing. It's running in production today, handling real orders and real customers.
+It's a React + TypeScript single-page app backed by Supabase (PostgreSQL, Auth, Storage, Realtime, and Edge Functions), deployed on Vercel.
 
-**I can customize and deploy this system for your business.** Different industry, different metrics, different workflows — it adapts.
+> **Scope note:** The **customer-facing portal** (customer login, order tracking, file downloads) now lives on the marketing website. This repository is the **internal staff CRM** plus the shared serverless backend (Supabase Edge Functions) and the public **agent-generated payment links** (`/pay/:token`).
 
 ---
 
 ## Feature Overview
 
-### Internal CRM / Staff Dashboard
+### Orders & Quotes
+- **Full order lifecycle** across 13 statuses (`NEW_ORDER` → `IN_PRODUCTION` → `QUALITY_ASSURANCE` → `SHIPPED` → `DELIVERED`, plus `REMAKE`, `CANCELLED`, `REFUNDED`, `FEEDBACK`).
+- **Order detail** with status timeline, full change history (every field change logged with user + timestamp), communications log, internal notes, and file attachments (mockups, production files, customer attachments, shipping docs).
+- **Quotes** with one-click **convert-to-order** — customer details, design specs, pricing, and marketing attribution all carry over.
+- **Order assignment** — admins assign orders to sales agents (`assigned_by` / `assigned_at`), with an unassigned queue and per-agent workload view.
+- **Bulk actions**, server-side pagination/filtering, global search, and quick-view drawer.
 
-| Module | What It Does |
-|--------|-------------|
-| **Live Dashboard** | Real-time KPIs — revenue today/week/month, orders by status, production pipeline at a glance |
-| **Order Management** | Full order lifecycle with status pipeline, history timeline, file attachments, internal notes |
-| **Quotes System** | Create quotes, send to customers, convert to orders with one click — full quote history |
-| **Customer Intelligence** | Automatic duplicate detection, lifetime value (LTV) calculation, full order + communication history per customer |
-| **Reports & Analytics** | Revenue trends, profit margin analysis, lead source breakdown, country-level reporting, date range filtering |
-| **Attendance & Timesheets** | Clock in/out system with shift tracking, daily/weekly/monthly reports, CSV export (timezone-aware) |
-| **Cost Management** | Monthly overhead entry (production, shipping, marketing costs), automatic profit margin calculation |
-| **User Management** | Create staff accounts, assign roles, set granular permissions per user |
-| **Settings** | Business logo, company config, email preferences, notification controls |
-| **Search** | Global search across orders, customers, quotes — instant results |
+### Customers & Companies
+- **Customer history** — lifetime value, order/quote history, communications, and automatic duplicate detection per customer.
+- **Companies** — parent-account profiles for B2B customers with multiple contacts (CC email support).
+- **Portal customer management** — invite, manage, and re-invite customer-portal accounts.
 
-### Customer Portal (Separate Login, Separate Interface)
+### 📊 Reporting & Analytics (core strength)
+A dedicated **Reports** page with date-range filtering across **8+ analytical modules**:
 
-| Feature | Description |
-|---------|-------------|
-| **Secure Login** | Email + password login with forgot password flow — no OTP friction |
-| **Invite-Link Onboarding** | New customers get a secure invite email with one-click account setup — no password creation confusion |
-| **Order Tracking** | Customers see all their orders, current status, and history in real time |
-| **File Downloads** | Customers can download their production files and mockups from the portal |
-| **Help Center** | Self-service FAQ and support information |
-| **Mobile-First** | Fully responsive — works perfectly on mobile where most customers will access it |
+| Module | What it answers |
+|--------|-----------------|
+| **Sales Report** | Gross vs. net revenue, refunds/cancellations, amount collected vs. pending, AOV, daily revenue trend, **per-agent performance & commission** (with payment-recovery breakdown), and **repeat-customer** metrics (repeat rate, repeat revenue, top customers) |
+| **Profit & Loss** | Revenue vs. total cost vs. net profit, cost-breakdown donut (production/shipping/marketing), production cost by patch type, and a **paginated Loss Alerts table** flagging orders sold below cost |
+| **Income Statement** | Industry-standard P&L: Gross Revenue → less cancellations/refunds → Net Revenue → COGS → Gross Profit → operating expenses (from monthly costs) → **Net Profit**, with gross & net margins |
+| **Cancellation & Refund** | Lost revenue and reason-category breakdown for cancelled and refunded orders |
+| **Product Mix** | Revenue, cost, and profit margin by patch type and by quantity band (1–50, 51–100, 101–200, 200+) |
+| **Lead Source Distribution** | Lead volume by channel (from quotes), grouped into categories (Search, Social, Paid Ads, AI/LLM, Referral, …) |
+| **Funnel & Attribution** | Quote→order conversion rate, agents bypassing the quote flow, and **Meta CAPI data-quality** breakdown (tracked / partial / untracked revenue) |
+| **Customer & Form Feedback** | Satisfaction ratings (1–5★) from order notes, and ease-of-use ratings from website quote forms |
+
+Charts are built with **Recharts**; every report supports **CSV export**.
+
+### Financials & Cost Tracking
+- **Bulk Cost Entry** — enter production, shipping, and marketing cost per order for any month, with live per-order **profit** and **margin** calculation.
+- **Per-order P&L** — `profit = order amount − (production + shipping + marketing cost)`, surfaced throughout reports.
+- **Monthly operating expenses** — rent, salaries/commission, utilities, etc., feeding the Income Statement.
+
+### Attendance & Timesheets
+- **Clock in/out** with live shift tracking, daily/weekly/monthly hours, overtime/undertime classification, and **CSV export** (timezone-aware).
+- Admin tools to review records and force-close stale sessions; a Postgres `pg_cron` job (`auto_close_stale_sessions`) auto-closes sessions left open beyond the max shift, with a client-side fallback.
+
+### Messaging, Activity & Payments
+- **Inbox** — internal and customer conversations with real-time updates.
+- **Activity log** — system-wide audit feed of user actions.
+- **Payment forms** — agent-generated public payment links (`/pay/:token`) backed by **Square checkout**, plus **Stripe** balance/payout webhooks.
+
+### Marketing & Attribution
+- **Lead source** on every order/quote, plus 5-country tracking (USA, Australia, Canada, New Zealand, UK).
+- **Meta Conversions API (CAPI)** — server-side purchase & lead events, reversal on refund, and a webhook receiver, with attribution quality scoring (`tracked` / `partial` / `untracked`).
+- **Meta Messenger / Instagram** chat metadata captured on quotes (PSID, IG ID, ad/creative IDs, click-to-WhatsApp).
+- **UTM / Click-ID capture** (fbclid/fbp, gclid) flowing from website checkout into orders.
 
 ### Email Automation
+Transactional email via **ZeptoMail (Zoho)** through the `send-email` Edge Function — templates for every milestone (new order, mockup ready, production started, shipped, delivered, feedback request, refund, customer invite/welcome, returning-login, password reset, plus internal production/QA/quote notifications).
 
-All emails sent via **ZeptoMail** (Zoho) — no email deliverability problems, no spam folder.
+### Users, Roles & Permissions (RBAC)
+**3 roles**, refined by **11 granular permission toggles** per user.
 
-| Trigger | Email Sent |
-|---------|-----------|
-| New order created | Internal notification to staff + customer order confirmation |
-| Order status change | Customer notified at every milestone |
-| Quote sent | Customer receives quote with pricing details |
-| New customer invite | Welcome email with secure account setup link |
-| Returning customer login | Magic login link for quick access |
-| Order delivered | Delivery confirmation + review request |
-| Shipping update | Tracking number notification |
+| Role | Typical access |
+|------|----------------|
+| **ADMIN** | Everything — financials, reports, user management, settings, cost entry |
+| **SALES_AGENT** | Orders, quotes, customers (own or all, by permission) |
+| **PRODUCTION** | Production details, status changes, files — no financials |
 
-### Role-Based Access Control (RBAC)
+Granular permissions: `users_manage`, `orders_create`, `orders_view_all`, `orders_view_own_only`, `orders_change_status`, `orders_edit_financials`, `orders_edit_production`, `orders_delete`, `reports_view_financials`, `shipping_view`, `attendance_clock_only` (kiosk mode).
 
-Four roles. Granular permission toggles per user. No one sees or touches what they shouldn't.
-
-| Role | Access |
-|------|--------|
-| **Admin** | Everything — reports, financials, user management, settings |
-| **Sales Agent** | Orders, quotes, customers — only their own unless granted view-all |
-| **Production** | Production details, file attachments, status updates — no financials |
-| **Agent** | Limited scope — clocked-in access only if configured |
-
-Individual permission toggles (can be mixed per user):
-- View all orders vs. own orders only
-- Edit financial data (costs, pricing, profit)
-- Change order status
-- Delete orders
-- View reports & financials
-- Manage users
-- Attendance clock only (kiosk mode)
+### Settings & Search
+- **Settings** — business logo, company config, password change, Meta connection panel, and orphaned-file storage cleanup.
+- **Global search** across orders, customers, and quotes.
 
 ---
 
-## Technical Architecture
+## Application Routes
+
+```
+PUBLIC
+  /login                          Staff login + password recovery
+  /pay/:token                     Public payment form (agent-generated link)
+  /pay/:token/thank-you           Payment confirmation
+
+STAFF (authenticated)
+  /                               Dashboard — KPIs, pipeline, recent orders, activity
+  /orders                         All orders (filter, search, paginate, bulk actions)
+  /new-order                      Create order
+  /order/:orderNumber             Order detail (timeline, history, comms, files)
+  /order/:orderNumber/edit        Edit order
+  /quotes                         Quotes list
+  /new-quote                      Create quote
+  /quote/:quoteNumber             Quote detail (send, convert to order)
+  /reports                        Reporting & analytics (8+ modules)
+  /customers/:identifier          Customer history & lifetime value
+  /search                         Global search results
+  /activity                       System activity log
+  /inbox  ·  /inbox/:id           Messaging
+  /payment-forms                  Manage public payment links
+  /clock-in-out                   Attendance / timesheets
+  /settings                       Business settings
+
+ADMIN ONLY
+  /bulk-cost-entry                Monthly cost entry & operating expenses
+  /user-management                Staff accounts, roles, permissions
+  /performance-metrics            App performance monitoring (APM)
+  /portal-customers               Customer portal account management
+  /companies                      Company / parent-account profiles
+```
+
+---
+
+## Architecture
 
 ### Frontend
-- **React 18** + **TypeScript** — 100% type-safe codebase
-- **Vite** — sub-second HMR in development, optimized production builds
-- **Tailwind CSS** — utility-first styling with a custom brand design system
-- **Framer Motion** — smooth page transitions and micro-animations
-- **TanStack Query (React Query)** — intelligent server-state caching, background sync, pagination
-- **React Hook Form** — performant forms with field-level validation
-- **Supabase JS Client** — real-time subscriptions, auth, storage
+- **React 18** + **TypeScript 5** (strict) — fully typed codebase
+- **Vite 5** — fast HMR, code-split production builds (pages lazy-loaded)
+- **Tailwind CSS 3** — custom brand design system + dark mode
+- **TanStack Query 5** — server-state caching, background sync, pagination
+- **React Router 6** — nested + protected routes (`ProtectedRoute`, `AdminRoute`, `HostnameRouter`)
+- **React Hook Form 7** + **Zod** — performant, validated forms
+- **Recharts** (analytics), **Framer Motion** (animation), **Lucide** (icons)
+- **@react-pdf/renderer** (invoices/PDFs), **react-csv** (exports), **react-window** (virtualized lists)
 
-### Backend (Serverless)
-- **Supabase PostgreSQL** — production database with migrations, indexes, and constraints
-- **Row Level Security (RLS)** — database-enforced access control, not just app-level
-- **Supabase Auth** — email+password, magic links, invite flows — all handled
-- **Supabase Edge Functions (Deno)** — serverless business logic deployed at the edge:
-  - `send-email` — ZeptoMail integration with 10+ email templates
-  - `invite-customer` — secure customer onboarding flow
-  - `create-user` — admin-initiated staff account creation
-  - `notify-new-checkout-order` — webhook receiver for website checkout
-- **Supabase Storage** — production files, mockups, shipping attachments, customer uploads
-- **Supabase Realtime** — live order updates pushed to all connected staff — no polling
+### Backend — Supabase
+- **PostgreSQL** with migrations, indexes, and constraints
+- **Row-Level Security (RLS)** on every table — staff see all, customers see only their own data (enforced at the database, not just the app)
+- **Supabase Auth** — email + password, invite links, password recovery
+- **Supabase Storage** — private buckets with signed URLs for mockups, production files, attachments
+- **Supabase Realtime** — live order/attendance/messaging updates pushed to all connected staff
+- **20 Edge Functions (Deno)** — see below
+
+### Supabase Edge Functions (20)
+```
+User admin       create-user · update-user · delete-user · get-users
+Email            send-email (ZeptoMail, all templates)
+Customer portal  invite-customer · mark-password-set
+Orders/webhooks  notify-new-checkout-order · notify-order-message
+Meta CAPI        send-meta-purchase · reverse-meta-purchase · send-meta-lead-event
+                 send-meta-message · meta-webhook · meta-admin
+Attribution      store-attribution · store-attribution-token
+Payments         create-square-checkout · square-payment-webhook · stripe-balance-webhook
+```
+
+### Vercel Serverless (`/api`)
+- **`sentry-proxy.ts`** — tunnels Sentry events through first-party domain (bypasses ad blockers), validating project ID/host before relaying.
 
 ### Infrastructure
-- **Vercel** — frontend hosting with automatic deployments from Git
-- **Supabase Cloud** — managed Postgres, Auth, Storage, Edge Functions
-- **ZeptoMail (Zoho)** — transactional email delivery
-- **Sentry** — error tracking with proxy tunnel for production monitoring
-
----
-
-## Screens & Pages (18 total)
-
-### Staff Portal
-
 ```
-/                       → Dashboard (KPIs, live pipeline, recent orders)
-/orders                 → All Orders (filter, search, paginate, sort)
-/orders/:id             → Order Detail (full lifecycle, history, files, notes)
-/orders/new             → Create Order
-/orders/:id/edit        → Edit Order
-/quotes                 → Quotes List
-/quotes/new             → New Quote
-/quotes/:id             → Quote Detail (send, convert to order, archive)
-/reports                → Analytics & Reports
-/clock                  → Clock In/Out (attendance kiosk)
-/bulk-costs             → Monthly Cost Entry
-/customers/:email       → Customer Profile (LTV, history, comms)
-/users                  → User Management (admin only)
-/settings               → Business Settings (admin only)
-/performance            → APM Metrics (admin only)
-/search                 → Global Search Results
-```
-
-### Customer Portal
-
-```
-/customer/login          → Email + Password Login / Forgot Password
-/customer/set-password   → Invite token → account setup
-/customer/dashboard      → Order list with status
-/customer/orders/:id     → Order detail + file downloads
-/customer/profile        → Account info
-/customer/help           → FAQ & support
+Frontend (Vercel)  ──►  Supabase Auth (JWT)
+                         │
+                         ▼
+                   PostgreSQL (RLS) ──► Edge Functions (Deno)
+                                          │
+            ┌─────────────────────────────┼───────────────────────────┐
+            ▼            ▼                 ▼              ▼             ▼
+        ZeptoMail    Meta CAPI         Square         Stripe        Sentry
+        (email)      (ads)             (checkout)     (payouts)     (errors)
 ```
 
 ---
 
-## Key Business Workflows
+## Data Model (key tables)
 
-### Order Lifecycle
-```
-Lead Comes In
-    ↓
-Quote Created → Sent to Customer → Customer Approves
-    ↓
-Order Created (auto-converted from quote or manual entry)
-    ↓
-NEW_ORDER → REVISION_REQUESTED → AWAITING_CUSTOMER_APPROVAL → APPROVED
-    ↓
-IN_PRODUCTION → QUALITY_ASSURANCE → (REMAKE if needed)
-    ↓
-COMPLETED → SHIPPED → DELIVERED
-    ↓
-FEEDBACK collected → Customer Portal Review
-```
+| Table | Purpose |
+|-------|---------|
+| `orders` | Master order records — customer, design, status, financials, costs, attribution, file URLs |
+| `quotes` | Quotes with pricing estimate, attribution, and Meta chat metadata |
+| `order_history` | Audit log of every field/status change (user + timestamp) |
+| `order_communications` | Per-order email/communication log (internal vs. customer) |
+| `order_notes` | Quality feedback, customer calls, complaints, ratings (1–5★) |
+| `user_profiles` | Staff accounts — role + granular permissions (JSONB) |
+| `customer_profiles` | Customer portal accounts (auto-created on signup, distinct from staff) |
+| `customer_notifications` | Status/shipping/delivery alerts for the customer portal |
+| `attendance_sessions` | Clock in/out timesheets with auto-clockout flag |
+| `monthly_costs` | Monthly operating expenses by category |
+| `stripe_webhook_events` | Idempotency dedup for Stripe webhook retries |
 
-Every status change is logged with timestamp + user email in the order history. Customers are emailed at key milestones. Staff see everything in real time.
-
-### Quote → Order Conversion
-One click converts a quote to an order. All customer details, design specs, pricing, and marketing attribution carry over automatically — no re-entry.
-
-### Customer Portal Onboarding
-When a new order is created:
-1. System checks if customer has a portal account
-2. If not → sends invite email with secure 24-hour link
-3. Customer clicks → sets their password → immediately sees their orders
-4. Future logins → email + password (or forgot-password flow)
+Schema lives in [`supabase/migrations/`](supabase/migrations/) (10 migrations).
 
 ---
 
-## Marketing & Attribution Tracking
+## Getting Started (Local Development)
 
-Built-in infrastructure for tracking where customers come from:
+### Prerequisites
+- **Node.js 20.x** (pinned in `package.json` → `engines`)
+- A Supabase project (URL + anon key)
 
-- **Lead Source** field on every order (Google, Facebook, Instagram, TikTok, Referral, etc.)
-- **Country tracking** — 5-country dropdown (USA, Australia, Canada, New Zealand, UK) with database-enforced validation
-- **UTM / Click ID carry-over** — Attribution data from website checkout flows into orders automatically (Meta fbclid/fbp, Google gclid, UTM parameters)
-- **Lead Source Reports** — Visual breakdown by source on the reports page
-- **Country Reports** — Regional performance at a glance
-- **Meta CAPI ready** — Attribution JSONB column structured for server-side event reporting
+### Setup
+```bash
+# 1. Install dependencies
+npm install
+
+# 2. Create a local .env (this file is gitignored — never commit it)
+#    Values are public, frontend-safe VITE_ vars (anon key is protected by RLS).
+cat > .env <<'EOF'
+VITE_SUPABASE_URL=https://<your-project>.supabase.co
+VITE_SUPABASE_ANON_KEY=<your-anon-key>
+VITE_CRM_BASE_URL=http://localhost:5173/
+EOF
+
+# 3. Start the dev server (http://localhost:5173)
+npm run dev
+```
+
+### Scripts
+| Command | Description |
+|---------|-------------|
+| `npm run dev` | Start Vite dev server with HMR |
+| `npm run build` | Production build |
+| `npm run preview` | Preview the production build locally |
 
 ---
 
-## Performance & Reliability
+## Environment Variables
 
-| Metric | Value |
-|--------|-------|
-| TypeScript Coverage | 100% |
-| Build Size (gzipped) | ~280KB |
-| Lighthouse Score | 92+ |
-| WCAG Accessibility | Level AA |
-| Real-time latency | <500ms (debounced) |
-| Query caching | TanStack Query with intelligent stale times |
-| Error tracking | Sentry with source maps |
-| Auth token | Auto-refresh, session persistence |
-| File uploads | Multi-file, drag-and-drop, progress tracking |
+> The `.env` file is **gitignored**. Frontend `VITE_` values are public by design (the Supabase **anon** key is safe to expose — data is protected by RLS). Server-side secrets live only in the **Vercel** and **Supabase** dashboards, never in the repo.
+
+| Variable | Where | Purpose |
+|----------|-------|---------|
+| `VITE_SUPABASE_URL` | Frontend / Vercel | Supabase project URL |
+| `VITE_SUPABASE_ANON_KEY` | Frontend / Vercel | Public client auth key (RLS-protected) |
+| `VITE_CRM_BASE_URL` | Frontend / Vercel | App base URL (links, redirects) |
+| `SENTRY_PROJECT_ID`, `SENTRY_HOST` | Vercel | Validate/relay events in `api/sentry-proxy.ts` |
+| `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` | Supabase secrets | Admin operations inside Edge Functions |
+| `ZEPTOMAIL_API_KEY` | Supabase secret | Transactional email delivery |
+| Meta / Square / Stripe keys | Supabase secrets | CAPI, checkout, and payout integrations |
+
+---
+
+## Deployment
+
+- **Frontend** auto-deploys to **Vercel** on every push to `main`. SPA routing, asset caching, and the Sentry proxy rewrite are configured in [`vercel.json`](vercel.json). Set the Vercel project's **Node.js version to 20.x** to match `engines`.
+- **Backend** runs on **Supabase Cloud** — apply migrations and deploy Edge Functions with the Supabase CLI:
+  ```bash
+  supabase db push                 # apply migrations
+  supabase functions deploy        # deploy edge functions
+  ```
 
 ---
 
 ## Security
 
-- **Row Level Security (RLS)** on every Supabase table — users only access data they're allowed to
-- **SECURITY INVOKER views** — no privilege escalation through database views
-- **Input sanitization** — empty strings normalized to NULL before DB writes (prevents date/constraint errors)
-- **Granular permissions** — staff can only see/edit what their role allows, enforced at both app and DB layer
-- **Secure file storage** — all uploads go to private Supabase Storage buckets with signed URLs
-- **Invite-link auth** — no plaintext passwords in emails, no magic-link interception risk on return visits
-- **XSS protection** — React's built-in escaping, no dangerouslySetInnerHTML usage
-- **CSRF protection** — Supabase JWT-based auth with httpOnly cookies
+- **Row-Level Security** on every table — access enforced at the database layer
+- **Granular per-user permissions** enforced in both the app and the database
+- **Private storage buckets** with signed URLs for all file downloads
+- **Invite-link / recovery-link auth** — no plaintext passwords in email
+- **Idempotent webhooks** (Stripe event dedup) and **CAPI reversal** on refunds
+- **Sentry proxy tunnel** keeps error reporting first-party and resilient to blockers
+- **React** auto-escaping (no `dangerouslySetInnerHTML`); inputs normalized (empty → `NULL`) before writes
 
 ---
 
-## What Industries This Works For
+## By the Numbers
 
-This system is built for **custom manufacturing, print-on-demand, and service businesses** where:
-
-- Orders go through a production pipeline before delivery
-- Customers need visibility into their order status
-- Sales agents manage quotes and client relationships
-- Costs need tracking for real profit visibility
-- Different staff see different parts of the business
-
-**Industries this fits without major changes:**
-- Custom apparel & embroidery
-- Print shops & signage
-- Awards & engraving
-- Custom merchandise & branded goods
-- Photography studios (booking → delivery)
-- Any service business with quote → order → production → delivery flow
-
-**What changes per industry:**
-- Status pipeline labels
-- Order form fields (design specs, materials, etc.)
-- Email templates
-- Report metrics and charts
-- Color scheme and branding
-
----
-
-## What You Get (As a Client)
-
-- Full source code — you own it entirely
-- Deployed and running on your own Supabase + Vercel accounts
-- Custom branding (your logo, your colors, your business name)
-- Configured email templates with your domain
-- Training on how to manage users and settings
-- 2 weeks of post-delivery support
+| | |
+|---|---|
+| Staff pages / routes | 23 |
+| Reporting modules | 8+ |
+| Supabase Edge Functions | 20 |
+| Order statuses | 13 |
+| User roles · permissions | 3 · 11 |
+| Database migrations | 10 |
+| Integrations | Supabase · ZeptoMail · Meta CAPI · Square · Stripe · Sentry · Vercel |
 
 ---
 
 ## Tech Stack Summary
 
 ```
-Frontend          React 18 + TypeScript + Vite
-Styling           Tailwind CSS + Framer Motion
-State             TanStack Query + React Context
-Forms             React Hook Form
-Database          PostgreSQL (Supabase) with RLS + Migrations
-Auth              Supabase Auth (email+password, invite links)
-Storage           Supabase Storage (private buckets)
-Real-time         Supabase Realtime (WebSocket subscriptions)
-Serverless        Supabase Edge Functions (Deno)
-Email             ZeptoMail REST API (10+ templates)
-Error Tracking    Sentry with proxy tunnel
-Hosting           Vercel (frontend) + Supabase Cloud (backend)
+Frontend       React 18 · TypeScript 5 · Vite 5
+Styling        Tailwind CSS 3 · Framer Motion
+State / Data   TanStack Query 5 · React Context
+Routing        React Router 6
+Forms          React Hook Form 7 · Zod
+Charts         Recharts          PDFs   @react-pdf/renderer
+Database       PostgreSQL (Supabase) · RLS · migrations
+Auth           Supabase Auth (email+password, invite links)
+Storage        Supabase Storage (private buckets, signed URLs)
+Realtime       Supabase Realtime (WebSocket subscriptions)
+Serverless     Supabase Edge Functions (Deno) · Vercel Functions (Node)
+Email          ZeptoMail (Zoho)
+Payments       Square · Stripe
+Marketing      Meta CAPI · UTM / Click-ID attribution
+Monitoring     Sentry · Vercel Analytics · Speed Insights
+Hosting        Vercel (frontend) · Supabase Cloud (backend)
 ```
-
----
-
-## Project Metrics
-
-| Metric | Value |
-|--------|-------|
-| Total Pages / Routes | 22 |
-| React Components | 60+ |
-| Supabase Edge Functions | 5 |
-| Email Templates | 10+ |
-| Database Tables | 12+ |
-| Lines of Code | ~18,000 |
-| Build Time | <30s |
-| Cold Start (Edge Functions) | <300ms |
 
 ---
 
 <div align="center">
 
-**Built with care. Running in production. Ready to be yours.**
+**Built for Panda Patches · Running in production.**
 
-*React · TypeScript · Supabase · Tailwind CSS · Vercel · ZeptoMail*
+*React · TypeScript · Supabase · Tailwind CSS · Vercel*
 
 </div>
