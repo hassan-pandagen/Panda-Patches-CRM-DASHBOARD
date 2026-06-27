@@ -36,33 +36,72 @@ function isUUID(s: string): boolean {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s);
 }
 
+// Resolve the real "where did this lead come from?" label from the attribution blob.
+// MUST stay in sync with src/utils/leadSource.ts -> detectLeadSource (same precedence,
+// same maps). NOTE: 'Checkout' is NOT a lead source — it's the channel (sales_agent =
+// 'WEB_CHECKOUT'). When no source can be detected we fall back to 'Direct', never 'Checkout'.
 function resolveLeadSource(attribution: any): string {
-  const utm = (attribution?.utm_source || '').toString().toLowerCase();
-  const utmMap: Record<string, string> = {
-    facebook: 'Facebook', fb: 'Facebook', instagram: 'Instagram', ig: 'Instagram',
-    google: 'Google', bing: 'Bing', tiktok: 'TikTok', youtube: 'YouTube',
-    linkedin: 'LinkedIn', twitter: 'Twitter', reddit: 'Reddit', snapchat: 'Snapchat',
-    email: 'Email', newsletter: 'Email', 'chatgpt.com': 'ChatGPT', chatgpt: 'ChatGPT',
-    perplexity: 'Perplexity', claude: 'Claude', gemini: 'Gemini', copilot: 'Copilot', deepseek: 'DeepSeek',
-  };
-  if (utm && utmMap[utm]) return utmMap[utm];
+  const attr = attribution ?? {};
 
-  const ref = (attribution?.referrer || attribution?.page_url || '').toString();
-  const refRules: Array<[RegExp, string]> = [
+  const utmMedium = String(attr.utm_medium ?? '').toLowerCase().trim();
+  const utmSrc    = String(attr.utm_source ?? '').toLowerCase().trim();
+  const isPaidMedium = ['paid', 'cpc', 'ppc', 'paid_social', 'paidsocial'].includes(utmMedium);
+
+  // 0. Definitive paid-ad signals (ad click straight off Meta, or website's paid flag)
+  if (attr.ad_id || attr.ads_context || /^ads?$/i.test(String(attr.referral_source ?? '').trim())) return 'Facebook Ad';
+  if (isPaidMedium) {
+    if (/^(fb|facebook|ig|instagram|meta)/.test(utmSrc)) return 'Facebook Ad';
+    if (/^(google|adwords|gads?)/.test(utmSrc))          return 'Google Ad';
+    if (/^(bing|microsoft|msn)/.test(utmSrc))            return 'Bing Ad';
+    if (/^(tiktok|tt)/.test(utmSrc))                     return 'TikTok Ad';
+  }
+
+  // 1. Paid ad click IDs — came from a specific ad
+  if (attr.fbclid)  return 'Facebook Ad';
+  if (attr.gclid)   return 'Google Ad';
+  if (attr.msclkid) return 'Bing Ad';
+  if (attr.ttclid)  return 'TikTok Ad';
+
+  // Meta-chat sources (conversations merge)
+  if (attr.source === 'meta_messenger') return 'Facebook';
+  if (attr.source === 'meta_instagram') return 'Instagram';
+
+  const UTM_MAP: Record<string, string> = {
+    facebook: 'Facebook', fb: 'Facebook', instagram: 'Instagram', ig: 'Instagram',
+    google: 'Google', bing: 'Bing', duckduckgo: 'DuckDuckGo', ddg: 'DuckDuckGo', brave: 'Brave',
+    tiktok: 'TikTok', youtube: 'YouTube', linkedin: 'LinkedIn', twitter: 'Twitter',
+    reddit: 'Reddit', snapchat: 'Snapchat', email: 'Email', newsletter: 'Email', whatsapp: 'WhatsApp',
+    chatgpt: 'ChatGPT', 'chatgpt.com': 'ChatGPT', perplexity: 'Perplexity', claude: 'Claude',
+    gemini: 'Gemini', copilot: 'Copilot', metaai: 'Meta AI', 'meta.ai': 'Meta AI', deepseek: 'DeepSeek',
+  };
+  const REFERRER_MAP: Array<[RegExp, string]> = [
     [/chat\.?openai\.com|chatgpt\.com/i, 'ChatGPT'], [/perplexity\.ai/i, 'Perplexity'],
-    [/claude\.ai|anthropic\.com/i, 'Claude'], [/gemini\.google\.com|bard\.google/i, 'Gemini'],
-    [/copilot\.microsoft|bing\.com\/chat/i, 'Copilot'], [/deepseek\.com/i, 'DeepSeek'],
+    [/claude\.ai|anthropic\.com/i, 'Claude'], [/gemini\.google\.com|bard\.google\.com/i, 'Gemini'],
+    [/copilot\.microsoft\.com|bing\.com\/chat/i, 'Copilot'], [/meta\.ai/i, 'Meta AI'], [/deepseek\.com/i, 'DeepSeek'],
     [/facebook\.com|fb\.com|m\.facebook/i, 'Facebook'], [/instagram\.com/i, 'Instagram'],
     [/tiktok\.com/i, 'TikTok'], [/youtube\.com|youtu\.be/i, 'YouTube'],
     [/linkedin\.com|lnkd\.in/i, 'LinkedIn'], [/twitter\.com|x\.com|t\.co/i, 'Twitter'],
     [/reddit\.com/i, 'Reddit'], [/snapchat\.com/i, 'Snapchat'],
     [/google\.[a-z.]+/i, 'Google'], [/bing\.com/i, 'Bing'],
-    [/whatsapp\.com|wa\.me/i, 'WhatsApp'],
+    [/duckduckgo\.com|duck\.com/i, 'DuckDuckGo'], [/search\.brave\.com/i, 'Brave'],
+    [/whatsapp\.com|wa\.me/i, 'WhatsApp'], [/tawk\.to/i, 'Tawk.to'],
+    [/mail\.google\.com|outlook\.live|outlook\.office/i, 'Email'],
   ];
-  for (const [re, label] of refRules) if (re.test(ref)) return label;
 
-  if (utm) return utm.charAt(0).toUpperCase() + utm.slice(1);
-  return 'Checkout';
+  // 2. utm_source (bare token or full domain)
+  if (utmSrc) {
+    if (UTM_MAP[utmSrc]) return UTM_MAP[utmSrc];
+    for (const [re, label] of REFERRER_MAP) if (re.test(utmSrc)) return label;
+  }
+
+  // 3. Referrer hostname → organic/social/AI search
+  const referrer = String(attr.referrer ?? attr.http_referer ?? '').toLowerCase();
+  if (referrer) {
+    for (const [re, label] of REFERRER_MAP) if (re.test(referrer)) return label;
+  }
+
+  // 4. No detectable source — it's "Direct", NOT "Checkout" (channel lives in sales_agent)
+  return 'Direct';
 }
 
 Deno.serve(async (req: Request) => {

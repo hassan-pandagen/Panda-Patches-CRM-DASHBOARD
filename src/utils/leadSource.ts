@@ -175,6 +175,28 @@ export function detectLeadSource(input: AttributionLike): LeadSource {
   return 'Direct';
 }
 
+/** Sentinel sales_agent value for self-serve web-checkout orders (no human agent handled it). */
+export const WEB_CHECKOUT_AGENT = 'WEB_CHECKOUT';
+
+/** True when an order/quote came through the self-serve web checkout rather than a human agent. */
+export function isWebCheckoutAgent(salesAgent?: string | null): boolean {
+  return String(salesAgent ?? '').trim().toUpperCase() === WEB_CHECKOUT_AGENT;
+}
+
+/**
+ * Lead-source label for display. For self-serve checkout orders we append
+ * "/ Checkout" so the channel (web checkout, not an agent) shows next to the
+ * real source — e.g. "ChatGPT / Checkout", "Brave / Checkout", "Direct / Checkout".
+ * Non-checkout input just gets the plain resolved source.
+ */
+export function leadSourceDisplay(
+  input: AttributionLike & { sales_agent?: string | null; salesAgent?: string | null }
+): string {
+  const source = detectLeadSource(input);
+  const agent = input.salesAgent ?? input.sales_agent;
+  return isWebCheckoutAgent(agent) ? `${source} / Checkout` : source;
+}
+
 /**
  * Tailwind classes for inline source badges (matches SOURCE_COLORS palette).
  * Returns the same color mapping logic the donut chart uses, kept in sync.

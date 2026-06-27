@@ -10,6 +10,7 @@ import { useToast } from '../hooks/useToast';
 import { queryKeys } from '../constants/queryKeys';
 import InvoiceModal from '../components/invoices/InvoiceModal';
 import { mapDbToOrder, triggerStatusEmail, sendPaymentConfirmationEmail } from '../services/orderService';
+import { isWebCheckoutAgent, leadSourceDisplay } from '../utils/leadSource';
 import FileUploadSection from '../components/orders/FileUpload';
 
 // UI Components
@@ -771,7 +772,7 @@ const OrderPage: React.FC = () => {
                                 <div className="flex justify-between items-center"><p className="text-slate-400 text-sm">Status</p><StatusBadge status={order.status as OrderStatus} /></div>
                                 <div className="flex justify-between items-center"><p className="text-slate-400 text-sm">Created Date</p><p className="font-medium text-white">{new Date(order.createdAt).toLocaleDateString()}</p></div>
                                 <div className="flex justify-between items-center"><p className="text-slate-400 text-sm">Sales Agent</p><p className="font-medium text-white">{order.salesAgent}</p></div>
-                                <div className="flex justify-between items-center"><p className="text-slate-400 text-sm">Lead Source</p><p className="font-medium text-white">{order.leadSource || 'N/A'}</p></div>
+                                <div className="flex justify-between items-center"><p className="text-slate-400 text-sm">Lead Source</p><p className="font-medium text-white">{isWebCheckoutAgent(order.salesAgent) ? leadSourceDisplay(order) : (order.leadSource || 'N/A')}</p></div>
                             </div>
                         </SpotlightCard>
 

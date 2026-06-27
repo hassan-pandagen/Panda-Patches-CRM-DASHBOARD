@@ -45,7 +45,6 @@ export const LEAD_SOURCE_OPTIONS: string[] = [
   'DeepSeek',
   'Copilot',
   'Tawk.to',
-  'Checkout',
   'Referral',
   'Repeat Order',
   'Direct',

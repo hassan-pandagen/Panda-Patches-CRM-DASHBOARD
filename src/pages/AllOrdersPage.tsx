@@ -13,6 +13,7 @@ import { Order, OrderStatus, UserRole } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 import { getStatusInfo } from '../constants';
 import { mapDbToOrder } from '../services/orderService';
+import { isWebCheckoutAgent, leadSourceDisplay } from '../utils/leadSource';
 import { queryKeys } from '../constants/queryKeys';
 
 // UI Components
@@ -185,7 +186,7 @@ async function fetchPaginatedOrders(params: {
     const from = (page - 1) * ITEMS_PER_PAGE;
     const to = from + ITEMS_PER_PAGE - 1;
 
-    const columns = 'id, order_number, customer_name, customer_email, design_name, status, created_at, sales_agent, order_amount, amount_paid, is_urgent, production_completed_at, production_completed_by, attribution, attribution_quality, purchase_order';
+    const columns = 'id, order_number, customer_name, customer_email, design_name, status, created_at, sales_agent, lead_source, order_amount, amount_paid, is_urgent, production_completed_at, production_completed_by, attribution, attribution_quality, purchase_order';
 
     // --- IDS drill-down (from dashboard click) ---
     if (ids) {
@@ -857,7 +858,11 @@ const AllOrdersPage: React.FC = () => {
                                                         {order.salesAgent && (
                                                             <>
                                                                 <span className="w-1 h-1 rounded-full bg-slate-500" />
-                                                                <span className="text-slate-400">{order.salesAgent}</span>
+                                                                <span className="text-slate-400">
+                                                                    {isWebCheckoutAgent(order.salesAgent)
+                                                                        ? leadSourceDisplay({ attribution: order.attribution, lead_source: order.leadSource, salesAgent: order.salesAgent })
+                                                                        : order.salesAgent}
+                                                                </span>
                                                             </>
                                                         )}
                                                     </div>
