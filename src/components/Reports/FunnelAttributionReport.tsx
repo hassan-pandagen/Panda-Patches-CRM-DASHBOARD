@@ -49,43 +49,46 @@ interface OrderRow {
   created_at: string;
 }
 
-interface QuoteRow {
-  id: number;
-  customer_email: string | null;
-  created_at: string;
-  sales_agent: string | null;
-}
-
 const FunnelAttributionReport: React.FC<Props> = ({ startDate, endDate }) => {
   const navigate = useNavigate();
 
+  // Fetch ALL matching orders — paginate past PostgREST's 1000-row default cap so periods
+  // with >1000 orders aren't silently truncated (which would undercount every metric below).
   const { data: orders = [], isLoading: ordersLoading } = useQuery({
     queryKey: ['funnel-orders', startDate?.toISOString(), endDate?.toISOString()],
     queryFn: async () => {
-      let q = supabase
-        .from('orders')
-        .select('id, order_number, customer_name, customer_email, sales_agent, lead_source, attribution_quality, attribution, capi_purchase_sent, capi_purchase_sent_at, capi_lead_events, converted_from_quote_id, had_prior_quote_request, order_amount, created_at')
-        .order('created_at', { ascending: false });
-      if (startDate) q = q.gte('created_at', startDate.toISOString());
-      if (endDate)   q = q.lte('created_at', endDate.toISOString());
-      const { data, error } = await q;
-      if (error) throw error;
-      return (data || []) as OrderRow[];
+      const cols = 'id, order_number, customer_name, customer_email, sales_agent, lead_source, attribution_quality, attribution, capi_purchase_sent, capi_purchase_sent_at, capi_lead_events, converted_from_quote_id, had_prior_quote_request, order_amount, created_at';
+      const PAGE = 1000;
+      const all: OrderRow[] = [];
+      for (let from = 0; ; from += PAGE) {
+        let q = supabase
+          .from('orders')
+          .select(cols)
+          .order('created_at', { ascending: false })
+          .range(from, from + PAGE - 1);
+        if (startDate) q = q.gte('created_at', startDate.toISOString());
+        if (endDate)   q = q.lte('created_at', endDate.toISOString());
+        const { data, error } = await q;
+        if (error) throw error;
+        all.push(...((data || []) as OrderRow[]));
+        if (!data || data.length < PAGE) break; // last page
+      }
+      return all;
     },
     staleTime: 60_000,
   });
 
-  const { data: quotes = [], isLoading: quotesLoading } = useQuery({
-    queryKey: ['funnel-quotes', startDate?.toISOString(), endDate?.toISOString()],
+  // Total quotes in the period — use an exact COUNT (head: true) instead of fetching rows.
+  // Fetching rows hits the same 1000-row cap, which is why the card used to read ".../ 1000".
+  const { data: totalQuotes = 0, isLoading: quotesLoading } = useQuery({
+    queryKey: ['funnel-quotes-count', startDate?.toISOString(), endDate?.toISOString()],
     queryFn: async () => {
-      let q = supabase
-        .from('quotes')
-        .select('id, customer_email, created_at, sales_agent');
+      let q = supabase.from('quotes').select('id', { count: 'exact', head: true });
       if (startDate) q = q.gte('created_at', startDate.toISOString());
       if (endDate)   q = q.lte('created_at', endDate.toISOString());
-      const { data, error } = await q;
+      const { count, error } = await q;
       if (error) throw error;
-      return (data || []) as QuoteRow[];
+      return count ?? 0;
     },
     staleTime: 60_000,
   });
@@ -113,14 +116,13 @@ const FunnelAttributionReport: React.FC<Props> = ({ startDate, endDate }) => {
 
   // ── Funnel metrics ─────────────────────────────────────────────
   const funnel = useMemo(() => {
-    const totalQuotes = quotes.length;
     const totalOrders = orders.length;
     const convertedViaButton = orders.filter(o => o.converted_from_quote_id != null).length;
     const bypassedQuote = orders.filter(o => o.had_prior_quote_request && o.converted_from_quote_id == null).length;
     const newOrdersNoQuote = orders.filter(o => !o.had_prior_quote_request).length;
     const conversionRate = totalQuotes > 0 ? ((convertedViaButton / totalQuotes) * 100) : 0;
     return { totalQuotes, totalOrders, convertedViaButton, bypassedQuote, newOrdersNoQuote, conversionRate };
-  }, [quotes, orders]);
+  }, [totalQuotes, orders]);
 
   // ── Bypass leaderboard (agents who bypassed quotes) ──────────
   const bypassLeaderboard = useMemo(() => {

@@ -38,6 +38,48 @@ async function hmacSha256Hex(key: string, data: string): Promise<string> {
   return [...new Uint8Array(sig)].map(b => b.toString(16).padStart(2, "0")).join("");
 }
 
+// ── Normalize storefront/quote vocabulary to canonical CRM dropdown values ─────────
+// Quotes carry messy patch-type/backing values ("3d-embroidered", "pvc", "Iron On",
+// "velcro"…) that don't match the CRM order form's <select> options, so they render
+// blank in the editor. Map them to canonical values when this quote becomes an order.
+// INLINE copy of src/utils/patchVocab.ts (edge functions can't import from src/) — keep in sync.
+const PATCH_TYPE_CANON = [
+  'Embroidered', 'PVC', 'Woven', 'Chenille', 'Leather', '3D Embroidery Puff', '3D Embroidery Transfer',
+  'Chenille Transfer', 'Sequin Patch', 'Sublimation Patch', 'Sublimation+Embroidery', 'DTF Transfer',
+  'Silicone Transfer', 'High Density Transfer', 'TPU+Chenille', 'TPU+Embroidery', 'TPU+Sublimation',
+  'Glitter+Embroidery', 'Glitter+Chenille', 'Glitter+Embroidery 3D', 'DTF+Chenille', 'DTF+Embroidery',
+  'Embroidery Transfer', 'DST Service', 'Challenge Coin', 'PVC Keychains', 'Embroidered Keychains',
+  'Leather Keychains', 'Sample Box', 'Customize Sample Box',
+];
+const PATCH_TYPE_ALIAS: Record<string, string> = {
+  customembroideredpatches: 'Embroidered', embroideredpatches: 'Embroidered',
+  '3dembroidered': '3D Embroidery Puff', custom3dembroideredtransfer: '3D Embroidery Transfer',
+  custompvcpatches: 'PVC', customwovenpatches: 'Woven', customchenillepatches: 'Chenille',
+  customleatherpatches: 'Leather', customsublimationpatches: 'Sublimation Patch',
+  silicone: 'Silicone Transfer', customsiliconelabels: 'Silicone Transfer',
+  sequin: 'Sequin Patch', customsequinpatches: 'Sequin Patch',
+  chenilletpu: 'TPU+Chenille', customchenilletpupatches: 'TPU+Chenille',
+  chenilleglitter: 'Glitter+Chenille', customchenilleglitterpatches: 'Glitter+Chenille',
+  pvckeychain: 'PVC Keychains', embroideredkeychain: 'Embroidered Keychains',
+};
+const BACKING_CANON = ['Iron on', 'Sew on', 'Sticker', 'Velcro'];
+const BACKING_ALIAS: Record<string, string> = {
+  iron: 'Iron on', justheatpress: 'Iron on', heatpress: 'Iron on',
+  sew: 'Sew on', stickerbacking: 'Sticker', adhesive: 'Sticker',
+};
+const normKey = (s: unknown) => String(s ?? '').toLowerCase().replace(/[^a-z0-9]+/g, '');
+function canonicalize(value: unknown, canon: string[], alias: Record<string, string>): string | null {
+  const raw = String(value ?? '').trim();
+  if (!raw) return null;
+  const key = normKey(raw);
+  const exact = canon.find((c) => normKey(c) === key);
+  if (exact) return exact;
+  if (alias[key]) return alias[key];
+  return raw; // unknown/ambiguous -> keep original
+}
+const normalizePatchType = (v: unknown) => canonicalize(v, PATCH_TYPE_CANON, PATCH_TYPE_ALIAS);
+const normalizeBacking = (v: unknown) => canonicalize(v, BACKING_CANON, BACKING_ALIAS);
+
 function constantTimeEqual(a: string, b: string): boolean {
   if (a.length !== b.length) return false;
   let diff = 0;
@@ -163,9 +205,9 @@ Deno.serve(async (req: Request) => {
             customer_profile_url:     quote.customer_profile_url || null,
             design_name:              quote.design_name || null,
             patches_quantity:         quote.patches_quantity || 0,
-            patches_type:             quote.patches_type || null,
+            patches_type:             normalizePatchType(quote.patches_type),
             design_size:              quote.design_size || null,
-            design_backing:           quote.design_backing || null,
+            design_backing:           normalizeBacking(quote.design_backing),
             instructions:             quote.instructions || null,
             order_amount:             quote.estimated_amount || 0,
             amount_paid:              paidAmount,

@@ -7,6 +7,7 @@ import { Order, OrderStatus } from '../types/index';
 import { logger } from './logger';
 import { performanceMonitor } from './performanceMonitor';
 import { validateData, orderSchema } from './validation';
+import { normalizePatchType, normalizeBacking } from '../utils/patchVocab';
 
 /**
  * Safely converts an object key from camelCase to snake_case.
@@ -505,6 +506,12 @@ export const createOrder = async (orderData: any, userEmail: string) => {
       // Marketing attribution (Meta CAPI etc.). Explicit null for manually-created
       // orders so the DB column is NULL rather than absent from the payload.
       attribution: orderData.attribution ?? null,
+      // Normalize the two dropdown-constrained fields to canonical CRM values so the
+      // order editor's <select>s display them. Covers BOTH the agent New Order form and
+      // the quote->order conversion (convertQuoteToOrder funnels through here), where
+      // quotes carry messy vocabulary ("3d-embroidered", "pvc", "Iron On", "velcro"…).
+      patchesType: normalizePatchType(orderData.patchesType),
+      designBacking: normalizeBacking(orderData.designBacking),
     };
 
     // Step 4: Convert to database format

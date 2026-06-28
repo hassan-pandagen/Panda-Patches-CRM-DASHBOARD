@@ -104,6 +104,53 @@ function resolveLeadSource(attribution: any): string {
   return 'Direct';
 }
 
+// --- Normalize storefront vocabulary to canonical CRM dropdown values ---------------
+// The website posts its own product/backing names ("Custom PVC Patches", "velcro",
+// "iron-on") that don't match the CRM order form's <select> options, so they render
+// blank in the editor. Map them to canonical values at insert so NEW orders match.
+// Mirrors PATCHES_TYPE_OPTIONS (constants/options.ts) and the form's backingOptions.
+// Unknown values pass through unchanged so we never drop data.
+const PATCH_TYPE_CANON = [
+  'Embroidered', 'PVC', 'Woven', 'Chenille', 'Leather', '3D Embroidery Puff', '3D Embroidery Transfer',
+  'Chenille Transfer', 'Sequin Patch', 'Sublimation Patch', 'Sublimation+Embroidery', 'DTF Transfer',
+  'Silicone Transfer', 'High Density Transfer', 'TPU+Chenille', 'TPU+Embroidery', 'TPU+Sublimation',
+  'Glitter+Embroidery', 'Glitter+Chenille', 'Glitter+Embroidery 3D', 'DTF+Chenille', 'DTF+Embroidery',
+  'Embroidery Transfer', 'DST Service', 'Challenge Coin', 'PVC Keychains', 'Embroidered Keychains',
+  'Leather Keychains', 'Sample Box', 'Customize Sample Box',
+];
+const PATCH_TYPE_ALIAS: Record<string, string> = {
+  customembroideredpatches: 'Embroidered', embroideredpatches: 'Embroidered',
+  '3dembroidered': '3D Embroidery Puff', custom3dembroideredtransfer: '3D Embroidery Transfer',
+  custompvcpatches: 'PVC', customwovenpatches: 'Woven', customchenillepatches: 'Chenille',
+  customleatherpatches: 'Leather', customsublimationpatches: 'Sublimation Patch',
+  silicone: 'Silicone Transfer', customsiliconelabels: 'Silicone Transfer',
+  sequin: 'Sequin Patch', customsequinpatches: 'Sequin Patch',
+  chenilletpu: 'TPU+Chenille', customchenilletpupatches: 'TPU+Chenille',
+  chenilleglitter: 'Glitter+Chenille', customchenilleglitterpatches: 'Glitter+Chenille',
+  pvckeychain: 'PVC Keychains', embroideredkeychain: 'Embroidered Keychains',
+};
+const BACKING_CANON = ['Iron on', 'Sew on', 'Sticker', 'Velcro'];
+const BACKING_ALIAS: Record<string, string> = {
+  iron: 'Iron on', justheatpress: 'Iron on', heatpress: 'Iron on',
+  sew: 'Sew on',
+  stickerbacking: 'Sticker', adhesive: 'Sticker',
+};
+
+const normKey = (s: unknown) => String(s ?? '').toLowerCase().replace(/[^a-z0-9]+/g, '');
+
+function canonicalize(value: unknown, canon: string[], alias: Record<string, string>): string | null {
+  const raw = String(value ?? '').trim();
+  if (!raw) return null;
+  const key = normKey(raw);
+  const exact = canon.find((c) => normKey(c) === key); // case/spacing-insensitive match
+  if (exact) return exact;
+  if (alias[key]) return alias[key];
+  return raw; // unknown -> keep original rather than dropping the value
+}
+
+const normalizePatchType = (v: unknown) => canonicalize(v, PATCH_TYPE_CANON, PATCH_TYPE_ALIAS);
+const normalizeBacking = (v: unknown) => canonicalize(v, BACKING_CANON, BACKING_ALIAS);
+
 Deno.serve(async (req: Request) => {
   if (req.method !== 'POST') return new Response('Method not allowed', { status: 405 });
 
@@ -244,10 +291,10 @@ Deno.serve(async (req: Request) => {
           customer_email:   tokenRow.customer_email,
           customer_phone:   tokenRow.customer_phone   || null,
           design_name:      tokenRow.design_name      || null,
-          patches_type:     tokenRow.patches_type     || null,
+          patches_type:     normalizePatchType(tokenRow.patches_type),
           patches_quantity: tokenRow.patches_quantity || 0,
           design_size:      tokenRow.design_size      || null,
-          design_backing:   tokenRow.design_backing   || null,
+          design_backing:   normalizeBacking(tokenRow.design_backing),
           instructions:     orderInstructions,
           mockup_urls:      Array.isArray(tokenRow.mockup_urls) ? tokenRow.mockup_urls : [],
           order_amount:     orderAmount,
