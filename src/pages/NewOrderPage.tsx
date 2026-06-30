@@ -150,6 +150,7 @@ const NewOrderPage: React.FC = () => {
         leadSource: String(detectedLeadSource || ''),
         country: String(formData.country || ''),
         isUrgent: Boolean(formData.isUrgent),
+        sampleBox: Boolean(formData.sampleBox),
         rushDate: formData.rushDate || null,
         
         // Arrays (ensure they are arrays)

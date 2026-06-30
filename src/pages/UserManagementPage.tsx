@@ -61,6 +61,12 @@ const PERMISSION_PRESETS = {
     orders_view_all: true,
     orders_edit_production: true,
   },
+  shipping: {
+    ...EMPTY_PERMISSIONS,
+    orders_view_all: true,        // sees all orders
+    orders_change_status: true,   // can change any status (no financials/production)
+    shipping_view: true,
+  },
   clock_only: {
     ...EMPTY_PERMISSIONS,
     attendance_clock_only: true,
@@ -429,7 +435,7 @@ const UserManagementPage: React.FC = () => {
                           user.role === 'ADMIN' ? 'bg-brand-orange/20 text-brand-orange' :
                           user.role === 'PRODUCTION' ? 'bg-blue-500/20 text-blue-400' :
                           'bg-brand-green/20 text-brand-green'
-                        }`}>{user.role === 'SALES_AGENT' ? 'Sales Agent' : user.role === 'PRODUCTION' ? 'Production' : user.role}</span>
+                        }`}>{user.role === 'SALES_AGENT' ? 'Sales Agent' : user.role === 'PRODUCTION' ? 'Production' : user.role === 'SHIPPING' ? 'Shipping' : user.role}</span>
                       </td>
                       <td className="px-6 py-4 text-sm">
                         <div className="flex flex-wrap gap-2">
@@ -478,7 +484,7 @@ const UserManagementPage: React.FC = () => {
                     user.role === 'ADMIN' ? 'bg-brand-orange/20 text-brand-orange' :
                     user.role === 'PRODUCTION' ? 'bg-blue-500/20 text-blue-400' :
                     'bg-brand-green/20 text-brand-green'
-                  }`}>{user.role === 'SALES_AGENT' ? 'Sales Agent' : user.role === 'PRODUCTION' ? 'Production' : user.role}</span>
+                  }`}>{user.role === 'SALES_AGENT' ? 'Sales Agent' : user.role === 'PRODUCTION' ? 'Production' : user.role === 'SHIPPING' ? 'Shipping' : user.role}</span>
                 </div>
                 <div className="flex flex-wrap gap-1.5">
                   {Object.entries(user.permissions || {}).filter(([_, v]) => v).slice(0, 3).map(([p]) => (
@@ -578,6 +584,7 @@ const UserManagementPage: React.FC = () => {
                 >
                   <option value={UserRole.SALES_AGENT}>Sales Agent</option>
                   <option value={UserRole.PRODUCTION}>Production</option>
+                  <option value={UserRole.SHIPPING}>Shipping</option>
                   <option value={UserRole.ADMIN}>Admin</option>
                 </select>
               </div>
@@ -694,6 +701,7 @@ const UserManagementPage: React.FC = () => {
                 >
                   <option value={UserRole.SALES_AGENT}>Sales Agent</option>
                   <option value={UserRole.PRODUCTION}>Production</option>
+                  <option value={UserRole.SHIPPING}>Shipping</option>
                   <option value={UserRole.ADMIN}>Admin</option>
                 </select>
               </div>

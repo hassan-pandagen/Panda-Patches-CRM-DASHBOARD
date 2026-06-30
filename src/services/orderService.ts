@@ -190,6 +190,7 @@ export const mapDbToOrder = (data: any): Order => {
     reasonDetails: data.reasonDetails ?? data.reason_details,
     isUrgent: data.isUrgent ?? data.is_urgent,
     isUrgentApproved: data.isUrgentApproved ?? data.is_urgent_approved,
+    sampleBox: data.sampleBox ?? data.sample_box ?? false,
     rushDate: data.rushDate ?? data.rush_date ?? undefined,
     productionCompletedAt: data.productionCompletedAt ?? data.production_completed_at ?? null,
     productionCompletedBy: data.productionCompletedBy ?? data.production_completed_by ?? null,
@@ -281,6 +282,9 @@ export const prepareEmailData = (order: Order, triggerStatus: string) => {
     carrier: order.shippingCarrier,
     tracking_number: order.shippingTrackingNumber,
     tracking_link: trackingUrl,
+    // Shipping proof photos for the "Shipped" email (add {{#each shipping_photos}} to the template)
+    shipping_photos: (order.shippingAttachmentUrls || []).map(url => ({ url, file_name: getFileName(url) })),
+    has_shipping_photos: (order.shippingAttachmentUrls || []).length > 0,
 
     order_link: `https://login.pandapatches.com/customer/order/${order.orderNumber}`,
     sales_agent_name: order.salesAgent || "Panda Team",
@@ -326,11 +330,12 @@ export const triggerStatusEmail = async (order: Order, statusToCheck: string) =>
       }
       break;
     case OrderStatus.AWAITING_APPROVAL:
+      // Mockup sent for approval → notify ONLY the customer ("Your Mockup is Ready! Please approve").
+      // No separate internal email here: the design/production team is the one that just sent it, and
+      // the old INTERNAL_REVISION_REQUESTED template wrongly told them "Customer has requested revisions".
+      // (That template correctly fires on the REVISION_REQUESTED case below.) The team is still CC'd on
+      // the customer email above.
       if (SENDGRID_TEMPLATES.CUSTOMER_MOCKUP_READY) requests.push({ to: order.customerEmail, template_id: SENDGRID_TEMPLATES.CUSTOMER_MOCKUP_READY, isInternal: false, cc: [customerCC, DESIGN_TEAM_CC, 'hello@pandapatches.com'].filter(Boolean).join(',') });
-      if (SENDGRID_TEMPLATES.INTERNAL_REVISION_REQUESTED && internalEmails.length > 0) {
-        const ccEmails = internalEmails.slice(1).join(',');
-        requests.push({ to: internalEmails[0], template_id: SENDGRID_TEMPLATES.INTERNAL_REVISION_REQUESTED, isInternal: true, cc: [DESIGN_TEAM_CC, ccEmails, 'hello@pandapatches.com'].filter(Boolean).join(',') });
-      }
       break;
     case OrderStatus.REVISION_REQUESTED:
       if (SENDGRID_TEMPLATES.CUSTOMER_REVISION_IN_PROGRESS) requests.push({ to: order.customerEmail, template_id: SENDGRID_TEMPLATES.CUSTOMER_REVISION_IN_PROGRESS, isInternal: false, cc: [customerCC, DESIGN_TEAM_CC, 'hello@pandapatches.com'].filter(Boolean).join(',') });

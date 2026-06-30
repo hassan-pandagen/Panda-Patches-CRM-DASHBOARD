@@ -206,7 +206,7 @@ async function fetchPaginatedOrders(params: {
 
     // Filter by sales agent for sales agents only (AGENT/USER see only their assigned orders)
     // ADMIN and PRODUCTION can see all orders
-    if (userRole !== UserRole.ADMIN && userRole !== UserRole.PRODUCTION && userEmail) {
+    if (userRole !== UserRole.ADMIN && userRole !== UserRole.PRODUCTION && userRole !== UserRole.SHIPPING && userEmail) {
         query = query.eq('sales_agent', userEmail);
     }
 
@@ -337,7 +337,7 @@ async function fetchTabCounts(params: {
         .select('status, is_urgent, created_at, order_amount, amount_paid, sales_agent, production_completed_at');
 
     // AGENT/USER see only their assigned orders; ADMIN/PRODUCTION see all
-    if (userRole !== UserRole.ADMIN && userRole !== UserRole.PRODUCTION && userEmail) {
+    if (userRole !== UserRole.ADMIN && userRole !== UserRole.PRODUCTION && userRole !== UserRole.SHIPPING && userEmail) {
         query = query.eq('sales_agent', userEmail);
     }
 
@@ -674,12 +674,14 @@ const AllOrdersPage: React.FC = () => {
                         }
                     </span>
                     <SavedFilters />
-                    <Link to="/new-order">
-                        <Button variant="primary" size="lg" className="shadow-lg shadow-brand-orange/20 text-white font-semibold">
-                            <Plus className="w-5 h-5 mr-2" />
-                            New Order
-                        </Button>
-                    </Link>
+                    {permissions?.orders_create && (
+                        <Link to="/new-order">
+                            <Button variant="primary" size="lg" className="shadow-lg shadow-brand-orange/20 text-white font-semibold">
+                                <Plus className="w-5 h-5 mr-2" />
+                                New Order
+                            </Button>
+                        </Link>
+                    )}
                 </div>
             </div>
 

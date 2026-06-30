@@ -75,6 +75,7 @@ export interface SaveData {
   status: string;
   isUrgent: boolean;
   rushDate?: string;
+  sampleBox?: boolean;
   shippingCarrier?: string;
   shippingTrackingNumber?: string;
   // Files as simple string arrays
@@ -155,7 +156,8 @@ const transformOrderToFormData = (order: Order | null | undefined): SaveData => 
       leadSource: '',
       country: '',
       isUrgent: false,
-      
+      sampleBox: false,
+
       // Files
       mockupUrls: [],
       productionFileUrls: [],
@@ -222,6 +224,7 @@ const OrderForm: React.FC<OrderFormProps> = ({
     shippingCost: initialData?.shippingCost || 0,
     marketingCost: initialData?.marketingCost || 0,
     isUrgent: initialData?.isUrgent || false,
+    sampleBox: initialData?.sampleBox || false,
     rushDate: initialData?.rushDate || '',
     mockupUrls: initialData?.mockupUrls || [],
     productionFileUrls: initialData?.productionFileUrls || [],
@@ -664,6 +667,13 @@ const OrderForm: React.FC<OrderFormProps> = ({
             maxLength={500} // Optional limit
             className="w-full mt-1"
           />
+        </div>
+        <div className="mt-8">
+          <label className="flex items-center gap-2 cursor-pointer w-fit">
+            <input type="checkbox" {...register('sampleBox')} className="h-5 w-5 rounded bg-slate-700 border-slate-600 text-brand-orange focus:ring-brand-orange" />
+            <span className="text-sm font-semibold text-slate-200">📦 Include a Sample Box with this order</span>
+          </label>
+          <p className="text-xs text-slate-500 mt-1 ml-7">Tick when the customer wants a sample box alongside their patches.</p>
         </div>
       </FormSectionWrapper>
 

@@ -277,12 +277,14 @@ Deno.serve(async (req: Request) => {
 
       const orderAmount = tokenRow.order_amount || paidAmount;
 
-      const depositNote = tokenRow.is_deposit
-        ? `[DEPOSIT - $${paidAmount.toFixed(2)} paid; remaining balance to collect separately]`
-        : '';
-      const orderInstructions = [depositNote, tokenRow.instructions]
-        .filter((s) => s && String(s).trim())
-        .join('\n') || null;
+      // Payment context (deposit paid / remaining balance) lives in the Financials section
+      // — amount_paid vs order_amount — which is visible to sales/admin ONLY. Do NOT inject
+      // it into `instructions`: that field is shown to the production team (internal order
+      // email, production views), who must never see payment info.
+      // (memory: production-team-no-sales-payment)
+      const orderInstructions = (tokenRow.instructions && String(tokenRow.instructions).trim())
+        ? String(tokenRow.instructions).trim()
+        : null;
 
       const { data: newOrder, error: orderErr } = await admin
         .from('orders')

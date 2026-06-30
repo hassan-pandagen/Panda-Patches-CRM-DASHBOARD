@@ -137,14 +137,15 @@ const Sidebar: React.FC<SidebarProps> = ({ onNavigate }) => {
         {navItems
           .filter((item) => {
             const isProduction = role === "PRODUCTION";
+            const isShipping = role === "SHIPPING";
             if (item.to === "/") return canViewFinancials;
             if (item.to === "/orders") return true;
             if (item.to === "/reports")
               return canViewFinancials || canViewProduction;
             if (item.to === "/clock-in-out") return true;
-            // Activity + Inbox are sales/admin tools — hide from PRODUCTION
-            if (item.to === "/activity") return !isProduction;
-            if (item.to === "/inbox") return !isProduction;
+            // Activity + Inbox are sales/admin tools — hide from PRODUCTION and SHIPPING
+            if (item.to === "/activity") return !isProduction && !isShipping;
+            if (item.to === "/inbox") return !isProduction && !isShipping;
             return true;
           })
           .map((item) => (

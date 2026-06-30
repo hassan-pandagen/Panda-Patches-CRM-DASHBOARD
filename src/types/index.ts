@@ -12,6 +12,7 @@ export enum UserRole {
   ADMIN = 'ADMIN',
   SALES_AGENT = 'SALES_AGENT',
   PRODUCTION = 'PRODUCTION',
+  SHIPPING = 'SHIPPING',
 }
 
 export enum OrderStatus {
@@ -74,6 +75,7 @@ export interface Order {
   isUrgent: boolean;
   isUrgentApproved?: boolean;
   rushDate?: string; // Required ship-by date when order is marked urgent
+  sampleBox?: boolean; // Customer also wants a sample box alongside their patches
 
   // --- Production completion (separate from status; production team flag) ---
   productionCompletedAt?: string | null;

@@ -27,8 +27,14 @@ const PVC_VENDOR_EMAIL = 'Arsalan.ali.khan.85@gmail.com';
 const DESIGN_TEAM_CC = 'design@pandapatches.com';
 const HELLO_EMAIL = 'hello@pandapatches.com';
 
-// ✅ Only trigger for orders created by the checkout / payment-form system
-const CHECKOUT_AGENTS = ['web_checkout', 'hello@pandapatches.com'];
+// ✅ Only trigger for orders created by the checkout / payment-form SYSTEM (the webhook).
+// NOTE: 'hello@pandapatches.com' is intentionally NOT listed. When a human logged in as
+// hello@ creates an order in the CRM (New Order / Convert to Order), createOrder already
+// sends the INTERNAL_NEW_ORDER email via triggerStatusEmail. Listing hello@ here made this
+// trigger ALSO fire a production email → DUPLICATE internal emails for every hello@ order.
+// Anonymous self-checkout uses 'web_checkout'; agent payment-link orders are still caught by
+// the attribution check below (source === 'square_payment_form').
+const CHECKOUT_AGENTS = ['web_checkout'];
 
 function getInternalEmails(patchType?: string): string[] {
   if (patchType?.toLowerCase() === 'pvc') {

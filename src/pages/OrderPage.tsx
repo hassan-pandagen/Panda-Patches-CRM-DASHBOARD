@@ -9,7 +9,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../hooks/useToast';
 import { queryKeys } from '../constants/queryKeys';
 import InvoiceModal from '../components/invoices/InvoiceModal';
-import { mapDbToOrder, triggerStatusEmail, sendPaymentConfirmationEmail } from '../services/orderService';
+import { mapDbToOrder, triggerStatusEmail, sendPaymentConfirmationEmail, updateOrderDetails } from '../services/orderService';
 import { isWebCheckoutAgent, leadSourceDisplay } from '../utils/leadSource';
 import FileUploadSection from '../components/orders/FileUpload';
 
@@ -80,6 +80,8 @@ const OrderPage: React.FC = () => {
     const [isSendingPaymentEmail, setIsSendingPaymentEmail] = React.useState(false);
     const [isMarkPaidModalOpen, setIsMarkPaidModalOpen] = React.useState(false);
     const [isGenerateLinkModalOpen, setIsGenerateLinkModalOpen] = React.useState(false);
+    // Production/digitizer mockup-upload → Send for Approval flow
+    const [mockupFiles, setMockupFiles] = React.useState<string[]>([]);
 
     // --- PERMISSION CHECKS ---
     const isAdmin = role === UserRole.ADMIN;
@@ -94,6 +96,7 @@ const OrderPage: React.FC = () => {
     const canViewShipping = isAdmin || permissions?.shipping_view === true;
     // Check for the correct 'orders_edit_production' key.
     const canViewProduction = isAdmin || permissions?.orders_edit_production === true;
+    const isShipping = role === UserRole.SHIPPING; // shipper: sees the order read-only + can change status
     // Check for the correct 'orders_delete' key.
     const canDelete = isAdmin || permissions?.orders_delete === true;
 
@@ -130,6 +133,11 @@ const OrderPage: React.FC = () => {
         if (order?.productionFileUrls) {
             setProductionFiles(order.productionFileUrls);
         }
+    }, [order?.id]);
+
+    // Seed the mockup uploader with any mockups already on the order
+    React.useEffect(() => {
+        setMockupFiles(order?.mockupUrls || []);
     }, [order?.id]);
 
     // Auto-save production files when they change
@@ -208,6 +216,41 @@ const OrderPage: React.FC = () => {
         },
         onError: (err: any) => {
             showError('Unmark Failed', err?.message || 'Could not unmark production.');
+        },
+    });
+
+    // --- DIGITIZER: UPLOAD MOCKUP → SEND FOR APPROVAL ---
+    // Persists the mockup(s) AND moves the order to Awaiting Approval in one action.
+    // updateOrderDetails fires the customer approval email automatically on this status change,
+    // so production can send proofs to the customer directly — no agent middle-step.
+    const sendForApprovalMutation = useMutation({
+        mutationFn: async () => {
+            if (!order?.id) throw new Error('No order loaded');
+            if (mockupFiles.length === 0) throw new Error('Upload at least one mockup before sending for approval.');
+            // Production users can't UPDATE orders directly — RLS (orders_update_policy) allows only
+            // admins or the owning sales agent. Use the SECURITY DEFINER RPC scoped to exactly this
+            // transition (mockup + NEW/REVISION → Awaiting Approval).
+            const { error: rpcError } = await supabase.rpc('send_mockup_for_approval', {
+                p_order_id: order.id,
+                p_mockup_urls: mockupFiles,
+            });
+            if (rpcError) throw rpcError;
+            // The RPC bypasses updateOrderDetails, so fire the customer approval email ourselves
+            // (CUSTOMER_MOCKUP_READY, sent on AWAITING_APPROVAL). Fire-and-forget — a mail hiccup
+            // must not undo the status change.
+            const updatedOrder = { ...order, mockupUrls: mockupFiles, status: OrderStatus.AWAITING_APPROVAL };
+            triggerStatusEmail(updatedOrder, OrderStatus.AWAITING_APPROVAL)
+                .catch(err => console.error('Approval email failed (background):', err));
+            return updatedOrder;
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: queryKeys.orders.single(orderNumber) });
+            queryClient.invalidateQueries({ queryKey: queryKeys.orders.all() });
+            queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.all() });
+            showSuccess('Sent for Approval', 'Mockup saved, order set to Awaiting Approval, and the customer approval email was sent.');
+        },
+        onError: (err: any) => {
+            showError('Could not send for approval', err?.message || 'Please try again.');
         },
     });
 
@@ -385,6 +428,23 @@ const OrderPage: React.FC = () => {
                             <h1 className="text-3xl font-bold text-white flex items-center gap-3 flex-wrap">
                                 Order {order.orderNumber}
                                 <AttributionQualityBadge quality={getAttributionQualityFromOrder(order)} />
+
+                                {/* Paid / Unpaid pill — for SHIPPING (and financial viewers); hidden from PRODUCTION (no payment info). */}
+                                {(canViewFinancials || role === UserRole.SHIPPING) && (() => {
+                                    const amt = order.orderAmount || 0;
+                                    const paid = order.amountPaid || 0;
+                                    const isPaid = amt > 0 && paid >= amt;
+                                    const isPartial = paid > 0 && paid < amt;
+                                    return (
+                                        <span className={`text-xs px-3 py-1 rounded-full border font-semibold ${
+                                            isPaid ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-300'
+                                            : isPartial ? 'bg-amber-500/15 border-amber-500/40 text-amber-300'
+                                            : 'bg-red-500/15 border-red-500/40 text-red-300'
+                                        }`}>
+                                            {isPaid ? '✓ Paid' : isPartial ? 'Partially Paid' : 'Unpaid'}
+                                        </span>
+                                    );
+                                })()}
 
                                 {/* Production Complete: action button (open) OR badge (already done) */}
                                 {order.productionCompletedAt ? (
@@ -604,7 +664,7 @@ const OrderPage: React.FC = () => {
                         )}
 
                         {/* DESIGN & PRODUCTION INFO */}
-                        {canViewProduction ? (
+                        {(canViewProduction || isShipping) ? (
                             <SpotlightCard className="p-6">
                                 <h3 className="text-lg font-semibold text-white mb-6">Design & Production</h3>
                                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
@@ -634,6 +694,15 @@ const OrderPage: React.FC = () => {
                                         <p className="font-medium text-white">{order.designBacking || 'N/A'}</p>
                                     </div>
                                 </div>
+
+                                {/* Sample Box add-on — production must include a sample box with this order */}
+                                {order.sampleBox && (
+                                    <div className="mt-6 pt-6 border-t border-slate-700/50">
+                                        <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-bold bg-amber-500/15 text-amber-300 border border-amber-500/30">
+                                            📦 Include a Sample Box with this order
+                                        </span>
+                                    </div>
+                                )}
 
                                 {/* Special Instructions for Production */}
                                 {order.instructions && (
@@ -665,6 +734,38 @@ const OrderPage: React.FC = () => {
                                                     <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors" />
                                                 </button>
                                             ))}
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* DIGITIZER: Upload Mockup → Send for Approval (only while the order is awaiting a proof) */}
+                                {canViewProduction && (order.status === OrderStatus.NEW_ORDER || order.status === OrderStatus.REVISION_REQUESTED) && (
+                                    <div className="mt-6 pt-6 border-t border-slate-700/50">
+                                        <div className="flex items-center justify-between mb-2">
+                                            <p className="text-xs font-medium text-brand-orange uppercase">Upload Mockup → Send for Approval</p>
+                                            <span className="text-[11px] text-slate-500">{order.status.replace(/_/g, ' ')}</span>
+                                        </div>
+                                        <p className="text-xs text-slate-500 mb-4 leading-relaxed">
+                                            Upload the mockup/proof here, then <strong className="text-slate-300">Send for Approval</strong> — this moves the order to
+                                            Awaiting Approval and emails the customer the approval request automatically. No need to route it through an agent.
+                                        </p>
+                                        <FileUploadSection
+                                            title=""
+                                            bucketName="order-attachments"
+                                            folderPath={`mockups/${order.orderNumber}`}
+                                            urls={mockupFiles}
+                                            onUrlsChange={setMockupFiles}
+                                        />
+                                        <div className="mt-4 flex justify-end">
+                                            <Button
+                                                onClick={() => sendForApprovalMutation.mutate()}
+                                                disabled={sendForApprovalMutation.isPending || mockupFiles.length === 0}
+                                                title={mockupFiles.length === 0 ? 'Upload at least one mockup first' : 'Send the mockup to the customer for approval'}
+                                            >
+                                                {sendForApprovalMutation.isPending
+                                                    ? <Spinner small />
+                                                    : <span className="flex items-center gap-2"><Mail className="w-4 h-4" /> Send for Approval</span>}
+                                            </Button>
                                         </div>
                                     </div>
                                 )}
