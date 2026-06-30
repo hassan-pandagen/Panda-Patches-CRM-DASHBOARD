@@ -341,6 +341,23 @@ const UserManagementPage: React.FC = () => {
     }));
   };
 
+  // Selecting a role auto-applies that role's default permission preset, so changing someone
+  // to "Shipping" instantly gives them the right access (admins can still fine-tune the boxes after).
+  const ROLE_PRESET: Partial<Record<UserRole, keyof typeof PERMISSION_PRESETS>> = {
+    [UserRole.ADMIN]: 'admin',
+    [UserRole.SALES_AGENT]: 'sales',
+    [UserRole.PRODUCTION]: 'production',
+    [UserRole.SHIPPING]: 'shipping',
+  };
+  const handleRoleChange = (newRole: UserRole) => {
+    const preset = ROLE_PRESET[newRole];
+    setFormData(prev => ({
+      ...prev,
+      role: newRole,
+      permissions: preset ? PERMISSION_PRESETS[preset] : prev.permissions,
+    }));
+  };
+
   const handleCopyPassword = () => {
     navigator.clipboard.writeText(formData.password);
     setPasswordCopied(true);
@@ -572,6 +589,10 @@ const UserManagementPage: React.FC = () => {
                   placeholder="••••••"
                 />
                 {validationErrors.password && <p className="text-red-400 text-xs mt-1">{validationErrors.password}</p>}
+                <p className="text-xs text-slate-500 mt-1.5">
+                  Use a strong, unique password — 8+ characters with a mix of letters, numbers &amp; symbols.
+                  Common or previously-leaked passwords are rejected by the system.
+                </p>
               </div>
 
               {/* Role */}
@@ -579,7 +600,7 @@ const UserManagementPage: React.FC = () => {
                 <label className="block text-sm font-medium text-slate-300 mb-2">Role</label>
                 <select
                   value={formData.role}
-                  onChange={(e) => setFormData({...formData, role: e.target.value as UserRole})}
+                  onChange={(e) => handleRoleChange(e.target.value as UserRole)}
                   className="w-full px-4 py-2 bg-slate-800 border border-white/10 rounded-lg text-white focus:outline-none focus:border-brand-orange transition-colors"
                 >
                   <option value={UserRole.SALES_AGENT}>Sales Agent</option>
@@ -606,6 +627,13 @@ const UserManagementPage: React.FC = () => {
                     className="px-3 py-2 bg-slate-800 border border-white/10 hover:border-brand-orange rounded-lg text-sm text-slate-300 hover:text-white transition-colors"
                   >
                     Production
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => applyPreset('shipping')}
+                    className="px-3 py-2 bg-slate-800 border border-white/10 hover:border-brand-orange rounded-lg text-sm text-slate-300 hover:text-white transition-colors"
+                  >
+                    Shipping
                   </button>
                   <button
                     type="button"
@@ -696,7 +724,7 @@ const UserManagementPage: React.FC = () => {
                 <label className="block text-sm font-medium text-slate-300 mb-2">Role</label>
                 <select
                   value={formData.role}
-                  onChange={(e) => setFormData({...formData, role: e.target.value as UserRole})}
+                  onChange={(e) => handleRoleChange(e.target.value as UserRole)}
                   className="w-full px-4 py-2 bg-slate-800 border border-white/10 rounded-lg text-white focus:outline-none focus:border-brand-orange transition-colors"
                 >
                   <option value={UserRole.SALES_AGENT}>Sales Agent</option>
@@ -773,6 +801,10 @@ const UserManagementPage: React.FC = () => {
                   placeholder="••••••"
                 />
                 {validationErrors.password && <p className="text-red-400 text-xs mt-1">{validationErrors.password}</p>}
+                <p className="text-xs text-slate-500 mt-1.5">
+                  Use a strong, unique password — 8+ characters with a mix of letters, numbers &amp; symbols.
+                  Common or previously-leaked passwords are rejected by the system.
+                </p>
               </div>
 
               {/* Copy Button */}

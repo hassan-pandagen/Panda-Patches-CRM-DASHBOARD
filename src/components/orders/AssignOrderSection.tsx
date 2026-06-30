@@ -127,20 +127,21 @@ const AssignOrderSection: React.FC<AssignOrderSectionProps> = ({
         .eq('id', orderId);
 
       if (error) throw error;
-
-      toast.success(`Order ${orderNumber} assigned to ${agents.find(a => a.email === selectedAgent)?.name || selectedAgent}`);
-
-      // Trigger callback to refresh parent component
-      if (onAssignmentChange) {
-        onAssignmentChange();
-      }
     } catch (err) {
       console.error('Error assigning order:', err);
       toast.error('Failed to assign order');
-    } finally {
       inFlightRef.current = false;
       setIsLoading(false);
+      return;
     }
+
+    inFlightRef.current = false;
+    setIsLoading(false);
+
+    // Success path — kept OUTSIDE the try so a failing refresh callback can't trigger the
+    // "Failed to assign" toast on an assignment that actually succeeded.
+    toast.success(`Order ${orderNumber} assigned to ${agents.find(a => a.email === selectedAgent)?.name || selectedAgent}`);
+    try { onAssignmentChange?.(); } catch (e) { console.error('Post-assign refresh failed (non-fatal):', e); }
   };
 
   if (!canAssign) {

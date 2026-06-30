@@ -119,8 +119,20 @@ export const updateUserProfile = async (userId: string, updates: any) => {
     const { data, error } = await supabase.functions.invoke('update-user', {
       body: { user_id: userId, ...updates }
     });
-    
-    if (error) throw new Error(error.message);
+
+    if (error) {
+      // supabase.functions.invoke surfaces a non-2xx as a generic "Edge Function returned a
+      // non-2xx status code". Read the response body so the REAL reason reaches the admin —
+      // e.g. GoTrue's "Password is known to be weak and easy to guess…" / "Password should be
+      // at least N characters", instead of a cryptic failure.
+      let message = error.message;
+      try {
+        const body = await (error as any)?.context?.json?.();
+        if (body?.error) message = body.error;
+        else if (Array.isArray(body?.details) && body.details[0]?.message) message = body.details[0].message;
+      } catch { /* fall back to the generic message */ }
+      throw new Error(message);
+    }
     if (data?.error) throw new Error(data.error);
     
     logger.info(`[Auth Service] User profile updated: ${userId}`);

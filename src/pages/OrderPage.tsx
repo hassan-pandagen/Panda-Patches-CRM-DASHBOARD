@@ -108,7 +108,7 @@ const OrderPage: React.FC = () => {
         permissions?.orders_change_status;
 
     // --- DATA FETCHING ---
-    const { data: order, isLoading, error } = useQuery<Order | null, Error>({
+    const { data: order, isLoading, error, refetch } = useQuery<Order | null, Error>({
         queryKey: queryKeys.orders.single(orderNumber),
         queryFn: async () => {
             if (!orderNumber) throw new Error("No order number provided.");

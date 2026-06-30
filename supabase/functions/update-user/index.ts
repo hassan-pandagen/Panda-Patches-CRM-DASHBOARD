@@ -39,8 +39,8 @@ const updateUserSchema = z.object({
     .max(100, "Full name too long")
     .optional(),
 
-  role: z.enum(['USER', 'ADMIN', 'PRODUCTION', 'AGENT'], {
-    errorMap: () => ({ message: "Role must be USER, ADMIN, PRODUCTION, or AGENT" })
+  role: z.enum(['USER', 'ADMIN', 'PRODUCTION', 'SALES_AGENT', 'SHIPPING', 'AGENT'], {
+    errorMap: () => ({ message: "Role must be USER, ADMIN, PRODUCTION, SALES_AGENT, or SHIPPING" })
   }).optional(),
 
   permissions: z.record(
