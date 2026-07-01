@@ -1,7 +1,7 @@
 // supabase/functions/store-attribution/index.ts
 // Called by the customer portal order page on load.
 // Captures fbp/fbc/UA from the browser and IP from the request headers,
-// then merges them into orders.attribution so the stripe-balance-webhook
+// then merges them into orders.attribution so the payment webhook
 // has browser signals available when firing the CAPI Purchase event.
 //
 // Idempotent: only writes fields that aren't already set — never overwrites

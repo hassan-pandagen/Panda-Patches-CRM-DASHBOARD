@@ -69,7 +69,7 @@ Charts are built with **Recharts**; every report supports **CSV export**.
 ### Messaging, Activity & Payments
 - **Inbox** — internal and customer conversations with real-time updates.
 - **Activity log** — system-wide audit feed of user actions.
-- **Payment forms** — agent-generated public payment links (`/pay/:token`) backed by **Square checkout**, plus **Stripe** balance/payout webhooks.
+- **Payment forms** — agent-generated public payment links (`/pay/:token`) and order/quote payment links backed by **Square checkout**.
 
 ### Marketing & Attribution
 - **Lead source** on every order/quote, plus 5-country tracking (USA, Australia, Canada, New Zealand, UK).
@@ -162,7 +162,7 @@ Orders/webhooks  notify-new-checkout-order · notify-order-message
 Meta CAPI        send-meta-purchase · reverse-meta-purchase · send-meta-lead-event
                  send-meta-message · meta-webhook · meta-admin
 Attribution      store-attribution · store-attribution-token
-Payments         create-square-checkout · square-payment-webhook · stripe-balance-webhook
+Payments         create-square-checkout · create-square-payment-link · square-payment-webhook
 ```
 
 ### Vercel Serverless (`/api`)
@@ -175,10 +175,10 @@ Frontend (Vercel)  ──►  Supabase Auth (JWT)
                          ▼
                    PostgreSQL (RLS) ──► Edge Functions (Deno)
                                           │
-            ┌─────────────────────────────┼───────────────────────────┐
-            ▼            ▼                 ▼              ▼             ▼
-        ZeptoMail    Meta CAPI         Square         Stripe        Sentry
-        (email)      (ads)             (checkout)     (payouts)     (errors)
+            ┌─────────────────────────────┼──────────────┐
+            ▼            ▼                 ▼              ▼
+        ZeptoMail    Meta CAPI         Square         Sentry
+        (email)      (ads)             (payments)     (errors)
 ```
 
 ---
@@ -197,7 +197,7 @@ Frontend (Vercel)  ──►  Supabase Auth (JWT)
 | `customer_notifications` | Status/shipping/delivery alerts for the customer portal |
 | `attendance_sessions` | Clock in/out timesheets with auto-clockout flag |
 | `monthly_costs` | Monthly operating expenses by category |
-| `stripe_webhook_events` | Idempotency dedup for Stripe webhook retries |
+| `square_webhook_events` · `square_processed_payments` | Idempotency dedup for Square webhook retries (per event + per payment) |
 
 Schema lives in [`supabase/migrations/`](supabase/migrations/) (10 migrations).
 
@@ -247,7 +247,7 @@ npm run dev
 | `SENTRY_PROJECT_ID`, `SENTRY_HOST` | Vercel | Validate/relay events in `api/sentry-proxy.ts` |
 | `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` | Supabase secrets | Admin operations inside Edge Functions |
 | `ZEPTOMAIL_API_KEY` | Supabase secret | Transactional email delivery |
-| Meta / Square / Stripe keys | Supabase secrets | CAPI, checkout, and payout integrations |
+| Meta / Square keys | Supabase secrets | CAPI and payment integrations |
 
 ---
 
@@ -268,7 +268,7 @@ npm run dev
 - **Granular per-user permissions** enforced in both the app and the database
 - **Private storage buckets** with signed URLs for all file downloads
 - **Invite-link / recovery-link auth** — no plaintext passwords in email
-- **Idempotent webhooks** (Stripe event dedup) and **CAPI reversal** on refunds
+- **Idempotent webhooks** (Square event + payment dedup) and **CAPI reversal** on refunds
 - **Sentry proxy tunnel** keeps error reporting first-party and resilient to blockers
 - **React** auto-escaping (no `dangerouslySetInnerHTML`); inputs normalized (empty → `NULL`) before writes
 
@@ -284,7 +284,7 @@ npm run dev
 | Order statuses | 13 |
 | User roles · permissions | 3 · 11 |
 | Database migrations | 10 |
-| Integrations | Supabase · ZeptoMail · Meta CAPI · Square · Stripe · Sentry · Vercel |
+| Integrations | Supabase · ZeptoMail · Meta CAPI · Square · Sentry · Vercel |
 
 ---
 
@@ -303,7 +303,7 @@ Storage        Supabase Storage (private buckets, signed URLs)
 Realtime       Supabase Realtime (WebSocket subscriptions)
 Serverless     Supabase Edge Functions (Deno) · Vercel Functions (Node)
 Email          ZeptoMail (Zoho)
-Payments       Square · Stripe
+Payments       Square
 Marketing      Meta CAPI · UTM / Click-ID attribution
 Monitoring     Sentry · Vercel Analytics · Speed Insights
 Hosting        Vercel (frontend) · Supabase Cloud (backend)

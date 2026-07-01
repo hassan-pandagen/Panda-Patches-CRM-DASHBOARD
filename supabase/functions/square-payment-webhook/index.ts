@@ -250,6 +250,143 @@ Deno.serve(async (req: Request) => {
       return new Response(JSON.stringify({ received: true, skipped: 'no reference_id' }), { status: 200 });
     }
 
+    // FLOW C: Quote-based ("QUOTE-<id>") -> create new order from the quote, then delete the quote.
+    // Mirrors the old Stripe quote→order path: the paid link was generated from a Quote, so on
+    // payment we materialize the order (CAPI Purchase fires on INSERT when amount_paid > 0),
+    // record conversion lineage, and remove the quote which has served its purpose.
+    if (referenceId.startsWith('QUOTE-')) {
+      const quoteId = parseInt(referenceId.slice('QUOTE-'.length), 10);
+      if (!quoteId) {
+        console.error(`[square-payment-webhook] malformed quote reference ${referenceId}`);
+        await releasePayment();
+        return new Response(JSON.stringify({ received: true, error: 'bad quote reference' }), { status: 200 });
+      }
+
+      const { data: quote, error: quoteErr } = await admin
+        .from('quotes')
+        .select('*')
+        .eq('id', quoteId)
+        .single();
+
+      if (quoteErr || !quote) {
+        // Quote may already be gone (a prior payment event converted + deleted it). The payment.id
+        // claim is the real idempotency guard, so this is a safe no-op.
+        console.log(`[square-payment-webhook] quote ${quoteId} not found (already converted?), skipping`);
+        return new Response(JSON.stringify({ received: true, skipped: 'quote not found' }), { status: 200 });
+      }
+
+      const attribution = {
+        ...(quote.attribution || {}),
+        source: quote.attribution?.source || 'square_quote_payment',
+      };
+
+      const { data: newOrder, error: orderErr } = await admin
+        .from('orders')
+        .insert({
+          customer_name:            quote.customer_name,
+          customer_email:           quote.customer_email,
+          customer_phone:           quote.customer_phone || null,
+          customer_profile_url:     quote.customer_profile_url || null,
+          design_name:              quote.design_name || null,
+          patches_quantity:         quote.patches_quantity || 0,
+          patches_type:             normalizePatchType(quote.patches_type),
+          design_size:              quote.design_size || null,
+          design_backing:           normalizeBacking(quote.design_backing),
+          instructions:             quote.instructions || null,
+          order_amount:             quote.estimated_amount || 0,
+          amount_paid:              paidAmount,
+          production_cost:          0,
+          shipping_cost:            0,
+          marketing_cost:           0,
+          sales_agent:              quote.sales_agent,
+          lead_source:              quote.lead_source || resolveLeadSource(attribution),
+          attribution,
+          mockup_urls:              Array.isArray(quote.mockup_urls) ? quote.mockup_urls : [],
+          customer_attachment_urls: Array.isArray(quote.customer_attachment_urls) ? quote.customer_attachment_urls : [],
+          is_urgent:                false,
+          status:                   'NEW_ORDER',
+          converted_from_quote_id:     quote.id,
+          converted_from_quote_number: quote.quote_number,
+          had_prior_quote_request:     true,
+        })
+        .select('id, order_number')
+        .single();
+
+      if (orderErr || !newOrder) {
+        console.error(`[square-payment-webhook] failed to create order from quote ${quoteId}:`, orderErr);
+        await releasePayment();
+        return new Response(JSON.stringify({ received: true, error: 'order creation failed' }), { status: 200 });
+      }
+
+      await admin.from('square_processed_payments')
+        .update({ order_number: newOrder.order_number }).eq('payment_id', payment.id);
+
+      await admin.from('order_history').insert({
+        order_id:      newOrder.id,
+        user_email:    'square_webhook',
+        field_changed: 'ORDER_CREATED',
+        old_value:     null,
+        new_value:     `Auto-created from Quote ${quote.quote_number} via Square payment $${paidAmount}`,
+      }).then(() => {}, () => {});
+
+      // Delete the quote — order is safely created.
+      await admin.from('quotes').delete().eq('id', quoteId);
+
+      // CUSTOMER "Payment Received" email — guarded so it fires exactly once.
+      if (quote.customer_email) {
+        try {
+          const { data: custStamped } = await admin
+            .from('orders')
+            .update({ customer_confirmation_sent_at: new Date().toISOString() })
+            .eq('id', newOrder.id)
+            .is('customer_confirmation_sent_at', null)
+            .select('id');
+          if (custStamped && custStamped.length > 0) {
+            await fetch(`${SUPABASE_URL}/functions/v1/send-email`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${SERVICE_KEY}` },
+              body: JSON.stringify({
+                to: quote.customer_email,
+                template_id: 'CUSTOMER_PAYMENT_CONFIRMATION',
+                dynamic_data: {
+                  customer_name: quote.customer_name || 'there',
+                  order_number: newOrder.order_number,
+                  amount_paid: `$${paidAmount.toFixed(2)}`,
+                  total_amount: `$${(quote.estimated_amount || paidAmount).toFixed(2)}`,
+                  portal_action_url: 'https://pandapatches.com/login',
+                },
+              }),
+            });
+          }
+        } catch (custErr) {
+          console.error(`[square-payment-webhook] customer email failed for ${newOrder.order_number}:`, custErr);
+        }
+      }
+
+      // Notify admins in-app.
+      try {
+        const { data: admins } = await admin.from('user_profiles').select('id').eq('role', 'ADMIN');
+        const notifRows = (admins || []).map((a: { id: string }) => ({
+          recipient_id:     a.id,
+          type:             'order_paid',
+          title:            `New order ${newOrder.order_number} from Quote ${quote.quote_number}`,
+          body:             `$${paidAmount} paid by ${quote.customer_name || quote.customer_email}`,
+          link:             `/order/${newOrder.order_number}`,
+          related_order_id: newOrder.id,
+        }));
+        if (notifRows.length > 0) await admin.from('activity_notifications').insert(notifRows);
+      } catch (notifErr) {
+        console.error(`[square-payment-webhook] activity_notifications insert failed for ${newOrder.order_number}:`, notifErr);
+      }
+
+      console.log(`[square-payment-webhook] quote ${quote.quote_number} -> order ${newOrder.order_number}: $${paidAmount} paid, CAPI queued`);
+
+      return new Response(
+        JSON.stringify({ received: true, quote_id: quoteId, order_number: newOrder.order_number, paid: paidAmount }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } }
+      );
+    }
+
     // FLOW A: Token-based (UUID) -> create new order
     if (isUUID(referenceId)) {
       const { data: tokenRow, error: tokenErr } = await admin
@@ -336,7 +473,7 @@ Deno.serve(async (req: Request) => {
         field_changed: 'ORDER_CREATED',
         old_value:     null,
         new_value:     `Created from Payment Form (token: ${referenceId}) via Square payment $${paidAmount}`,
-      }).catch(() => {});
+      }).then(() => {}, () => {});
 
       // CUSTOMER "Payment Received" email — guarded by customer_confirmation_sent_at (exactly once)
       if (tokenRow.customer_email) {
@@ -434,7 +571,7 @@ Deno.serve(async (req: Request) => {
       order_id: order.id, user_email: 'square_webhook',
       field_changed: 'amount_paid',
       old_value: String(order.amount_paid || 0), new_value: String(newAmountPaid),
-    }).catch(() => {});
+    }).then(() => {}, () => {});
 
     console.log(`[square-payment-webhook] order ${order.order_number}: +$${paidAmount} -> $${newAmountPaid}/${order.order_amount}`);
 

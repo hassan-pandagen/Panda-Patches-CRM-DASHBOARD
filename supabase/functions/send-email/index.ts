@@ -119,7 +119,7 @@ const getEmailSubject = (templateId: string, data: any): string => {
     'AGENT_NEW_CUSTOMER_MESSAGE': `[Customer Message] ${data.customer_name || 'A customer'} replied on order ${orderNumber}`,
     'CUSTOMER_NEW_AGENT_MESSAGE': `New message on your order ${orderNumber}`,
 
-    // Stripe payment link sent by agent
+    // Square payment link sent by agent
     'CUSTOMER_PAYMENT_LINK': `Payment link for your Panda Patches order ${orderNumber}`,
   };
 
@@ -192,8 +192,8 @@ const getTemplateMessage = (templateId: string, data?: any): string => {
     'AGENT_NEW_CUSTOMER_MESSAGE': `${data?.customer_name || 'A customer'} just sent a message on order ${data?.order_number || ''}.\n\nMessage: "${(data?.message_content || '').substring(0, 1000)}"\n\nReply through the order in the CRM to keep the conversation in one place.`,
     'CUSTOMER_NEW_AGENT_MESSAGE': `Your account manager just replied on order ${data?.order_number || ''}.\n\n"${(data?.message_content || '').substring(0, 1000)}"\n\nView the full conversation and reply in your portal.`,
 
-    // Stripe payment link
-    'CUSTOMER_PAYMENT_LINK': `Hi ${data?.customer_name || 'there'}, here's your secure payment link for order ${data?.order_number || ''} (${data?.payment_kind || 'payment'} — ${data?.amount || ''}). Tap the button below to pay securely with Stripe. The link is valid for 7 days. Once paid, your order moves to the next stage automatically. Thank you!`,
+    // Square payment link
+    'CUSTOMER_PAYMENT_LINK': `Hi ${data?.customer_name || 'there'}, here's your secure payment link for order ${data?.order_number || ''} (${data?.payment_kind || 'payment'} — ${data?.amount || ''}). Tap the button below to pay securely with Square. Once paid, your order moves to the next stage automatically. Thank you!`,
   };
 
   return messages[templateId] || 'Thank you for your order! Our team is working on your custom patches.';
@@ -619,6 +619,39 @@ const buildEmailHTML = (templateId: string, data: any): string => {
   </table>
 
   <!-- SPACER AFTER SHIPPING ADDRESS -->
+  <table class="module" role="module" data-type="spacer" border="0" cellpadding="0" cellspacing="0" width="100%" style="table-layout: fixed;">
+    <tbody>
+      <tr>
+        <td style="padding:0px 0px 20px 0px;" role="module-content" bgcolor=""></td>
+      </tr>
+    </tbody>
+  </table>
+  ` : ''}
+
+  ${templateId === 'CUSTOMER_SHIPPED' && data.has_shipping_photos && Array.isArray(data.shipping_photos) && data.shipping_photos.length ? `
+  <!-- SHIPPING CONFIRMATION PHOTOS / LABELS (Shipped Emails Only) -->
+  <table class="module" role="module" data-type="text" border="0" cellpadding="0" cellspacing="0" width="100%" style="table-layout: fixed;">
+    <tbody>
+      <tr>
+        <td style="padding:25px 20px 25px 20px; line-height:26px; text-align:center; background-color:#f3f4f6; border-left: 5px solid #fb6e1d; border-radius: 8px;" height="100%" valign="top" bgcolor="#f3f4f6" role="module-content">
+          <div>
+            <div style="font-family: inherit; text-align: center; margin-bottom: 15px;">
+              <span style="font-size: 22px; font-family: 'lucida sans unicode', 'lucida grande', sans-serif; color: #000; font-weight: bold;">📸 Shipping Confirmation</span>
+            </div>
+            ${data.shipping_photos.map((p: any) => {
+              const u = String(p?.url || '');
+              const isImg = /\.(jpg|jpeg|png|gif|webp)(\?|$)/i.test(u);
+              return isImg
+                ? `<div style="margin:10px 0;"><img src="${escapeHtml(u)}" alt="Shipping photo" width="100%" style="max-width:520px; width:100%; height:auto; border-radius:8px; border:1px solid #e0e0e0;" /></div>`
+                : `<div style="margin:10px 0;"><a href="${escapeHtml(u)}" target="_blank" style="display:inline-block; background:#ffffff; border:1px solid #fb6e1d; color:#fb6e1d; padding:10px 22px; border-radius:6px; text-decoration:none; font-size:15px; font-weight:bold; font-family: 'lucida sans unicode', 'lucida grande', sans-serif;">📄 ${escapeHtml(p?.file_name || 'Shipping Label')}</a></div>`;
+            }).join('')}
+          </div>
+        </td>
+      </tr>
+    </tbody>
+  </table>
+
+  <!-- SPACER AFTER SHIPPING PHOTOS -->
   <table class="module" role="module" data-type="spacer" border="0" cellpadding="0" cellspacing="0" width="100%" style="table-layout: fixed;">
     <tbody>
       <tr>
@@ -1127,6 +1160,26 @@ serve(async (req) => {
         console.log(`📎 Gallery: ${attachments.length} files, ~${totalAttachmentSize.toFixed(1)}MB | Total payload: ~${usedBudgetMB.toFixed(1)}MB`);
         processedData.gallery_files = [];
         processedData.has_gallery = false;
+    }
+
+    // --- D. PROCESS SHIPPING PHOTOS / LABELS (Shipped email) ---
+    // Uploaded by the shipping team. Image files live in a PUBLIC bucket and are referenced
+    // by URL directly in the HTML above (reliable, no size budget). PDF shipping labels can't
+    // be inlined as <img>, so download + attach them as real downloadable files.
+    if (Array.isArray(processedData.shipping_photos)) {
+        for (const item of processedData.shipping_photos) {
+            const cleanUrl = String(item?.url || '').split('?')[0].toLowerCase();
+            if (!cleanUrl.endsWith('.pdf')) continue;
+            const file = await fetchFile(item.url);
+            if (file) {
+                attachments.push({
+                    "Content-type": file.type,
+                    "Filename": file.filename,
+                    "Base64Content": file.content,
+                });
+                console.log(`📎 Attached shipping label: ${file.filename}`);
+            }
+        }
     }
 
     // --- C. SEND VIA ZEPTOMAIL REST API ---

@@ -15,6 +15,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../../services/supabaseClient';
 import Spinner from '../ui/Spinner';
+import { detectLeadSource } from '../../utils/leadSource';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, Legend, ComposedChart, Line } from 'recharts';
 import { Shield, ShieldAlert, ShieldOff, TrendingUp, AlertCircle, Send, Calendar, BarChart2 } from 'lucide-react';
 
@@ -93,6 +94,32 @@ const FunnelAttributionReport: React.FC<Props> = ({ startDate, endDate }) => {
     staleTime: 60_000,
   });
 
+  // Leads per source — resolve each quote's source with the SAME resolver used on orders
+  // (detectLeadSource) so the labels line up and conversion = orders ÷ leads is apples-to-apples.
+  // Paginate past the 1000-row cap so busy months aren't undercounted.
+  const { data: quoteRows = [], isLoading: quoteRowsLoading } = useQuery({
+    queryKey: ['funnel-quotes-by-source', startDate?.toISOString(), endDate?.toISOString()],
+    queryFn: async () => {
+      const PAGE = 1000;
+      const all: { attribution: Record<string, any> | null; lead_source: string | null }[] = [];
+      for (let from = 0; ; from += PAGE) {
+        let q = supabase
+          .from('quotes')
+          .select('attribution, lead_source')
+          .order('created_at', { ascending: false })
+          .range(from, from + PAGE - 1);
+        if (startDate) q = q.gte('created_at', startDate.toISOString());
+        if (endDate)   q = q.lte('created_at', endDate.toISOString());
+        const { data, error } = await q;
+        if (error) throw error;
+        all.push(...((data || []) as any[]));
+        if (!data || data.length < PAGE) break;
+      }
+      return all;
+    },
+    staleTime: 60_000,
+  });
+
   // ── ALL-TIME monthly trend (separate from period filter) ─────
   // Shows whether agents are adopting the Convert flow over time.
   // Uses an RPC because the raw-row approach hits PostgREST's 1000-row default
@@ -147,29 +174,51 @@ const FunnelAttributionReport: React.FC<Props> = ({ startDate, endDate }) => {
     return { sent: sent.length, tracked, partial, untracked, totalValue };
   }, [orders]);
 
+  // ── Leads per source (quotes) ───────────────────────────────
+  const leadsBySource = useMemo(() => {
+    const map = new Map<string, number>();
+    quoteRows.forEach(qr => {
+      const src = detectLeadSource({ attribution: qr.attribution, lead_source: qr.lead_source });
+      map.set(src, (map.get(src) ?? 0) + 1);
+    });
+    return map;
+  }, [quoteRows]);
+
   // ── Lead source conversion table ────────────────────────────
   const leadSourceStats = useMemo(() => {
-    const map = new Map<string, { orders: number; paid: number; revenue: number; amounts: number[] }>();
+    const map = new Map<string, { orders: number; revenue: number; amounts: number[] }>();
     orders.forEach(o => {
-      const src = o.lead_source || 'Unknown';
-      const cur = map.get(src) ?? { orders: 0, paid: 0, revenue: 0, amounts: [] };
+      // Resolve the SAME way quotes are resolved so leads↔orders join on identical labels.
+      const src = detectLeadSource({ attribution: o.attribution, lead_source: o.lead_source });
+      const cur = map.get(src) ?? { orders: 0, revenue: 0, amounts: [] };
       cur.orders++;
       const amt = Number(o.order_amount ?? 0);
       if (amt > 0) cur.amounts.push(amt);
       cur.revenue += amt;
       map.set(src, cur);
     });
+    // Fold in sources that generated leads but no orders — 0% conversion is itself a signal.
+    leadsBySource.forEach((_leads, src) => {
+      if (!map.has(src)) map.set(src, { orders: 0, revenue: 0, amounts: [] });
+    });
     return Array.from(map.entries())
-      .map(([source, s]) => ({
-        source,
-        orders: s.orders,
-        revenue: s.revenue,
-        avg: s.amounts.length > 0 ? s.revenue / s.amounts.length : 0,
-      }))
+      .map(([source, s]) => {
+        const leads = leadsBySource.get(source) ?? 0;
+        return {
+          source,
+          orders: s.orders,
+          revenue: s.revenue,
+          avg: s.amounts.length > 0 ? s.revenue / s.amounts.length : 0,
+          leads,
+          // Conversion = orders ÷ leads. Undefined (−1 sentinel) when a source has orders
+          // but no quotes (e.g. direct checkout that never created a lead) — shown as "—".
+          conv: leads > 0 ? (s.orders / leads) * 100 : -1,
+        };
+      })
       .sort((a, b) => b.revenue - a.revenue);
-  }, [orders]);
+  }, [orders, leadsBySource]);
 
-  const [lsSortKey, setLsSortKey] = useState<'revenue' | 'orders' | 'avg'>('revenue');
+  const [lsSortKey, setLsSortKey] = useState<'revenue' | 'orders' | 'avg' | 'leads' | 'conv'>('revenue');
   const sortedLeadSources = useMemo(() =>
     [...leadSourceStats].sort((a, b) => b[lsSortKey] - a[lsSortKey]),
     [leadSourceStats, lsSortKey]
@@ -191,7 +240,7 @@ const FunnelAttributionReport: React.FC<Props> = ({ startDate, endDate }) => {
     return Array.from(map.values()).sort((a, b) => a.date.localeCompare(b.date));
   }, [orders]);
 
-  if (ordersLoading || quotesLoading) {
+  if (ordersLoading || quotesLoading || quoteRowsLoading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
         <Spinner />
@@ -455,19 +504,19 @@ const FunnelAttributionReport: React.FC<Props> = ({ startDate, endDate }) => {
           <div>
             <h4 className="text-lg font-semibold text-white flex items-center gap-2">
               <BarChart2 className="w-4 h-4 text-brand-orange" />
-              Lead Source Performance
+              Lead Source Performance &amp; Conversion
             </h4>
-            <p className="text-xs text-slate-500 mt-0.5">Which channels bring the most revenue and highest average order value.</p>
+            <p className="text-xs text-slate-500 mt-0.5">How many leads each channel brings, what share converts to orders, and the revenue they drive.</p>
           </div>
           <div className="flex items-center gap-1 text-xs">
             <span className="text-slate-500 mr-1">Sort by:</span>
-            {(['revenue', 'orders', 'avg'] as const).map(k => (
+            {(['revenue', 'leads', 'orders', 'conv', 'avg'] as const).map(k => (
               <button
                 key={k}
                 onClick={() => setLsSortKey(k)}
                 className={`px-3 py-1.5 rounded-lg font-semibold transition-colors ${lsSortKey === k ? 'bg-brand-orange text-white' : 'bg-slate-800 text-slate-400 hover:text-white'}`}
               >
-                {k === 'revenue' ? 'Revenue' : k === 'orders' ? 'Orders' : 'Avg Order'}
+                {k === 'revenue' ? 'Revenue' : k === 'leads' ? 'Leads' : k === 'orders' ? 'Orders' : k === 'conv' ? 'Conv %' : 'Avg Order'}
               </button>
             ))}
           </div>
@@ -476,13 +525,18 @@ const FunnelAttributionReport: React.FC<Props> = ({ startDate, endDate }) => {
         {/* Bar chart for top sources */}
         {sortedLeadSources.length > 0 && (
           <ResponsiveContainer width="100%" height={220}>
-            <BarChart data={sortedLeadSources.slice(0, 8)} margin={{ top: 0, right: 0, left: 0, bottom: 0 }}>
+            <BarChart data={sortedLeadSources.filter(r => lsSortKey !== 'conv' || r.conv >= 0).slice(0, 8)} margin={{ top: 0, right: 0, left: 0, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
               <XAxis dataKey="source" stroke="#94a3b8" tick={{ fontSize: 10 }} />
-              <YAxis stroke="#94a3b8" tick={{ fontSize: 10 }} tickFormatter={v => lsSortKey === 'orders' ? String(v) : `$${(v/1000).toFixed(0)}k`} />
+              <YAxis stroke="#94a3b8" tick={{ fontSize: 10 }} tickFormatter={v => (lsSortKey === 'orders' || lsSortKey === 'leads') ? String(v) : lsSortKey === 'conv' ? `${v}%` : `$${(v/1000).toFixed(0)}k`} />
               <Tooltip
                 contentStyle={{ backgroundColor: '#0f172a', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', fontSize: '12px' }}
-                formatter={(val: any) => lsSortKey === 'orders' ? [val, 'Orders'] : [`$${Number(val).toLocaleString()}`, lsSortKey === 'revenue' ? 'Revenue' : 'Avg Order']}
+                formatter={(val: any) => {
+                  if (lsSortKey === 'orders') return [val, 'Orders'];
+                  if (lsSortKey === 'leads')  return [val, 'Leads'];
+                  if (lsSortKey === 'conv')   return [`${Number(val).toFixed(1)}%`, 'Conversion'];
+                  return [`$${Number(val).toLocaleString()}`, lsSortKey === 'revenue' ? 'Revenue' : 'Avg Order'];
+                }}
               />
               <Bar dataKey={lsSortKey} fill="#fb6e1d" radius={[4, 4, 0, 0]} />
             </BarChart>
@@ -494,7 +548,9 @@ const FunnelAttributionReport: React.FC<Props> = ({ startDate, endDate }) => {
             <thead className="text-[10px] font-bold text-slate-400 uppercase tracking-wider border-b border-white/10">
               <tr>
                 <th className="px-3 py-2">Source</th>
+                <th className="px-3 py-2 text-right cursor-pointer hover:text-white" onClick={() => setLsSortKey('leads')}>Leads {lsSortKey === 'leads' && '↓'}</th>
                 <th className="px-3 py-2 text-right cursor-pointer hover:text-white" onClick={() => setLsSortKey('orders')}>Orders {lsSortKey === 'orders' && '↓'}</th>
+                <th className="px-3 py-2 text-right cursor-pointer hover:text-white" onClick={() => setLsSortKey('conv')}>Conv % {lsSortKey === 'conv' && '↓'}</th>
                 <th className="px-3 py-2 text-right cursor-pointer hover:text-white" onClick={() => setLsSortKey('revenue')}>Total Revenue {lsSortKey === 'revenue' && '↓'}</th>
                 <th className="px-3 py-2 text-right cursor-pointer hover:text-white" onClick={() => setLsSortKey('avg')}>Avg Order {lsSortKey === 'avg' && '↓'}</th>
                 <th className="px-3 py-2 text-right">Revenue Share</th>
@@ -512,7 +568,11 @@ const FunnelAttributionReport: React.FC<Props> = ({ startDate, endDate }) => {
                         <span className="text-slate-200 font-medium">{row.source}</span>
                       </div>
                     </td>
+                    <td className="px-3 py-2.5 text-right text-slate-300 font-mono">{row.leads}</td>
                     <td className="px-3 py-2.5 text-right text-slate-300 font-mono">{row.orders}</td>
+                    <td className={`px-3 py-2.5 text-right font-bold ${row.conv < 0 ? 'text-slate-600' : row.conv >= 20 ? 'text-emerald-400' : row.conv >= 10 ? 'text-amber-400' : 'text-slate-400'}`}>
+                      {row.conv < 0 ? '—' : `${row.conv.toFixed(1)}%`}
+                    </td>
                     <td className="px-3 py-2.5 text-right text-white font-semibold">${row.revenue.toLocaleString()}</td>
                     <td className={`px-3 py-2.5 text-right font-semibold ${row.avg >= 300 ? 'text-emerald-400' : row.avg >= 200 ? 'text-amber-400' : 'text-slate-400'}`}>
                       ${row.avg.toFixed(0)}
@@ -536,6 +596,11 @@ const FunnelAttributionReport: React.FC<Props> = ({ startDate, endDate }) => {
             </tbody>
           </table>
         </div>
+        <p className="mt-3 px-1 text-[10px] text-slate-500 leading-relaxed">
+          <strong className="text-slate-400">Conv %</strong> = orders ÷ leads for that source (leads = quote requests, resolved by the same attribution logic).
+          A <span className="text-slate-400">—</span> means the source produced orders but no matching quote leads in this period
+          (e.g. direct checkout that skipped the quote step), so a rate can't be computed. Adjust the date range to change the window.
+        </p>
       </div>
 
       {/* ── Per-order CAPI breakdown ──────────────────── */}

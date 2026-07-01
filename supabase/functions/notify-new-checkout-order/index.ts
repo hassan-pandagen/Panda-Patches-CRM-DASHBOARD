@@ -92,8 +92,8 @@ serve(async (req) => {
     }
 
     // NOTE: The CUSTOMER "Payment Received" email is intentionally NOT sent here.
-    // It must fire ONLY on a real gateway payment, so it lives inside the payment webhooks
-    // (square-payment-webhook / stripe-balance-webhook) — never on agent-created orders.
+    // It must fire ONLY on a real gateway payment, so it lives inside the payment webhook
+    // (square-payment-webhook) — never on agent-created orders.
 
     // Internal production email fires for checkout orders: web_checkout / hello@, OR any
     // payment-form order created by the Square webhook from a payment LINK. Those have
@@ -127,7 +127,7 @@ serve(async (req) => {
     const admin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
     // ✅ ATOMIC CLAIM **before** sending — prevents the duplicate-email race.
-    // The website Stripe webhook fires this trigger several times in quick succession
+    // The payment webhook fires this trigger several times in quick succession
     // (INSERT + UPDATEs). The old code stamped production_notified_at AFTER sending, so
     // every concurrent fire read it as null and each sent an email. Claiming the row
     // FIRST (atomic conditional UPDATE) means exactly ONE fire wins and sends; the rest

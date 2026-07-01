@@ -13,8 +13,8 @@
 // Unknown / ambiguous values (e.g. "Custom Patch", "printed", "Unknown") pass through
 // unchanged — we never invent a type or drop data.
 //
-// NOTE: the Deno edge functions (square-payment-webhook, stripe-balance-webhook) carry
-// an INLINE copy of this exact logic because they can't import from src/. Keep in sync.
+// NOTE: the Deno edge functions (square-payment-webhook) carry an INLINE copy of this
+// exact logic because they can't import from src/. Keep in sync.
 
 export const PATCH_TYPE_CANON = [
   'Embroidered', 'PVC', 'Woven', 'Chenille', 'Leather', '3D Embroidery Puff', '3D Embroidery Transfer',

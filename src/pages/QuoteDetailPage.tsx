@@ -768,7 +768,7 @@ const QuoteDetailPage: React.FC = () => {
               onClick={() => setShowPaymentLinkModal(true)}
               disabled={!quote.estimatedAmount}
               className="w-full bg-blue-600/20 border border-blue-600/50 text-blue-400 hover:bg-blue-600/30 disabled:opacity-40 disabled:cursor-not-allowed"
-              title={!quote.estimatedAmount ? 'Set an estimated amount on the quote first' : 'Generate Stripe payment link'}
+              title={!quote.estimatedAmount ? 'Set an estimated amount on the quote first' : 'Generate Square payment link'}
             >
               <CreditCard className="w-4 h-4 mr-2" />
               Generate Payment Link

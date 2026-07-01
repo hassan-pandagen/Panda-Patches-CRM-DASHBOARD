@@ -940,7 +940,7 @@ const OrderPage: React.FC = () => {
                             </div>
                         )}
 
-                        {/* GENERATE STRIPE PAYMENT LINK — agent sends to customer */}
+                        {/* GENERATE SQUARE PAYMENT LINK — agent sends to customer */}
                         {canViewFinancials && order && (order.amountRemaining || 0) > 0 && (
                             <div className="pt-2">
                                 <Button
@@ -950,7 +950,7 @@ const OrderPage: React.FC = () => {
                                     className="w-full bg-blue-500/10 text-blue-400 hover:bg-blue-500/20 hover:text-blue-300 border border-blue-500/30"
                                 >
                                     <Copy size={14} />
-                                    <span>Generate Stripe Payment Link</span>
+                                    <span>Generate Square Payment Link</span>
                                 </Button>
                             </div>
                         )}

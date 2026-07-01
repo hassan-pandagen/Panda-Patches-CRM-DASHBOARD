@@ -1,7 +1,7 @@
-// MarkAsPaidModal — record a payment received outside Stripe
+// MarkAsPaidModal — record a payment received outside the Square payment-link flow
 // (Square invoice, bank transfer, cash, etc.) on a CRM order.
 // Updates orders.amount_paid + status. Does NOT fire CAPI Purchase
-// (manual payments are organic / repeat-customer flow — only Stripe-attributed
+// (manual payments are organic / repeat-customer flow — only payment-link
 // purchases should hit Meta as ad-attributed conversions).
 
 import React, { useState, useEffect } from 'react';

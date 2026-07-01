@@ -1,7 +1,8 @@
-// GeneratePaymentLinkModal — agent creates a Stripe Checkout link for an order
+// GeneratePaymentLinkModal — agent creates a Square payment link for an order or quote
 // then sends it to the customer via WhatsApp / Email / Copy.
 //
-// On payment, our stripe-balance-webhook updates orders.amount_paid → trigger fires CAPI Purchase.
+// On payment, square-payment-webhook updates orders.amount_paid (order mode) or creates the
+// order from the quote and deletes it (quote mode). Either way the CAPI Purchase trigger fires.
 
 import React, { useState, useEffect } from 'react';
 import { useMutation } from '@tanstack/react-query';
@@ -70,10 +71,7 @@ const GeneratePaymentLinkModal: React.FC<Props> = (props) => {
     }
   }, [isOpen, remainingDefault, alreadyPaid]);
 
-  // Async pattern: kick off the Stripe call (returns instantly with request_id),
-  // then poll get_stripe_payment_link_response every second until it returns
-  // status=ready or status=error. This avoids holding a Postgres connection open
-  // for the 10s Stripe takes — see migrations/stripe_payment_link_async_pattern.sql.
+  // Square responds synchronously — one edge-function call returns the checkout URL.
   const generate = useMutation({
     mutationFn: async () => {
       const amountNum = parseFloat(amount);
@@ -82,49 +80,24 @@ const GeneratePaymentLinkModal: React.FC<Props> = (props) => {
         throw new Error(`Amount exceeds remaining balance ($${remainingDefault.toFixed(2)})`);
       }
 
-      // 1. Kick off the request — returns instantly
-      const rpcName = isQuoteMode
-        ? 'create_stripe_quote_payment_link_request'
-        : 'create_stripe_payment_link_request';
-      const rpcParams = isQuoteMode
-        ? { p_quote_id: (props as QuoteModeProps).quoteId, p_amount: amountNum, p_label: label }
-        : { p_order_id: (props as OrderModeProps).orderId, p_amount: amountNum, p_label: label };
+      const id = isQuoteMode ? (props as QuoteModeProps).quoteId : (props as OrderModeProps).orderId;
+      const { data, error } = await supabase.functions.invoke('create-square-payment-link', {
+        body: { mode: isQuoteMode ? 'quote' : 'order', id, amount: amountNum, label },
+      });
 
-      const { data: requestData, error: requestErr } = await supabase.rpc(rpcName, rpcParams);
-      if (requestErr) {
-        throw new Error(requestErr.message || 'Failed to create payment link');
+      // supabase.functions.invoke surfaces non-2xx as a generic error — read the response
+      // body so the real reason (e.g. "already fully paid") reaches the agent.
+      if (error) {
+        let message = error.message;
+        try {
+          const b = await (error as any)?.context?.json?.();
+          if (b?.error) message = b.error;
+        } catch { /* keep generic message */ }
+        throw new Error(message || 'Failed to create payment link');
       }
-      const requestId = requestData?.request_id;
-      const ctx = {
-        order_number: requestData?.order_number ?? requestData?.quote_number,
-        customer_email: requestData?.customer_email,
-        customer_name: requestData?.customer_name,
-        amount: requestData?.amount,
-      };
-      if (!requestId) throw new Error('No request_id returned');
-
-      // 2. Poll for result — up to 30s (Stripe usually responds in 8-12s)
-      const maxAttempts = 30;
-      const intervalMs = 1000;
-      for (let i = 0; i < maxAttempts; i++) {
-        await new Promise(r => setTimeout(r, intervalMs));
-        const { data: respData, error: respErr } = await supabase.rpc(
-          'get_stripe_payment_link_response',
-          { p_request_id: requestId }
-        );
-        if (respErr) throw new Error(respErr.message);
-        if (respData?.status === 'ready') {
-          return { ...respData, ...ctx };
-        }
-        if (respData?.status === 'error') {
-          throw new Error(respData.message || 'Stripe rejected the request');
-        }
-        if (respData?.status === 'timeout') {
-          throw new Error('Stripe did not respond in time. Please try again.');
-        }
-        // status === 'pending' — keep polling
-      }
-      throw new Error('Stripe did not respond within 30 seconds');
+      if (data?.error) throw new Error(data.error);
+      if (!data?.url) throw new Error('Square did not return a checkout URL');
+      return data;
     },
     onSuccess: (data: any) => {
       setGenerated({
@@ -200,7 +173,7 @@ const GeneratePaymentLinkModal: React.FC<Props> = (props) => {
               <CreditCard className="w-5 h-5 text-blue-400" />
             </div>
             <div>
-              <h2 className="text-lg font-semibold text-white">Generate Stripe Payment Link</h2>
+              <h2 className="text-lg font-semibold text-white">Generate Square Payment Link</h2>
               <p className="text-xs text-slate-400">{isQuoteMode ? 'Quote' : 'Order'} {refNumber}</p>
             </div>
           </div>
@@ -316,14 +289,13 @@ const GeneratePaymentLinkModal: React.FC<Props> = (props) => {
               <div className="bg-blue-500/10 border border-blue-500/20 rounded-lg p-3 text-xs text-blue-200">
                 {isQuoteMode ? (
                   <p>
-                    📌 The link expires in 7 days. Once the customer pays, a new order is
-                    created automatically and Meta CAPI Purchase fires. The quote is deleted.
+                    📌 Once the customer pays via Square, a new order is created
+                    automatically and Meta CAPI Purchase fires. The quote is then deleted.
                   </p>
                 ) : (
                   <p>
-                    📌 The link expires in 7 days. Once paid, the order auto-updates to
-                    partially_paid (deposit) or paid (full/balance), and Meta CAPI Purchase
-                    fires automatically.
+                    📌 Once paid via Square, the order's amount paid updates automatically
+                    (deposit or balance) and Meta CAPI Purchase fires.
                   </p>
                 )}
               </div>
