@@ -21,6 +21,7 @@ export const COUNTRY_OPTIONS: string[] = [
   'NEW ZEALAND',
   'UK',
   'FRANCE',
+  'GERMANY',
   'ICELAND',
 ];
 

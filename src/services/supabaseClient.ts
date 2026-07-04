@@ -22,7 +22,8 @@ export const initializeSupabaseClient = (queryClient: QueryClient) => {
   supabase.auth.onAuthStateChange((event) => {
     // When the user signs out, clear the entire query cache to prevent
     // showing stale data for the next user who signs in.
-    if (event === 'SIGNED_OUT' || event === 'USER_DELETED') {
+    // USER_DELETED isn't in the current AuthChangeEvent union but can still arrive; treat it like sign-out.
+    if (event === 'SIGNED_OUT' || (event as string) === 'USER_DELETED') {
       queryClient.clear();
     }
   });

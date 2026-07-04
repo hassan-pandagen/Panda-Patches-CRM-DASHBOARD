@@ -120,7 +120,9 @@ export interface Order {
 }
 
 export type UserPermissions = {
-  [key: string]: boolean;
+  // Optional named perms are `boolean | undefined`, so the index signature must allow
+  // undefined too — otherwise every optional key below is a TS2411 conflict (11 errors).
+  [key: string]: boolean | undefined;
   users_manage?: boolean;
   orders_create?: boolean;
   orders_view_all?: boolean;
@@ -142,27 +144,30 @@ export interface UserProfile {
   permissions: UserPermissions;
 }
 
+// NOTE: these two mirror their DB tables (order_communications / order_history) and are
+// read straight from `select('*')` with no camelCase mapping — so the fields are snake_case
+// to match the actual runtime shape (previously camelCase, which lied and caused 21 TS errors).
 export interface OrderCommunication {
   id: number;
-  orderId: number;
-  userId: string;
-  userEmail: string;
-  recipientEmail: string;
+  order_id?: number;
+  user_id?: string;
+  user_email: string | null;
+  recipient_email: string;
   subject: string;
-  body: string;
-  templateId?: string;
-  visibility: 'internal' | 'customer';
-  sentAt: string;
+  body?: string;
+  template_id?: string;
+  visibility?: 'internal' | 'customer';
+  sent_at: string;
 }
 
 export interface OrderHistoryEntry {
   id: number;
-  orderId: number;
-  userEmail: string;
-  fieldChanged: string;
-  oldValue: string | null;
-  newValue: string | null;
-  changedAt: string; // ISO string
+  order_id: number;
+  user_email: string;
+  field_changed: string;
+  old_value: string | null;
+  new_value: string | null;
+  changed_at: string; // ISO string
 }
 
 export interface AttendanceSession {
@@ -174,6 +179,7 @@ export interface AttendanceSession {
   clock_out_time: string | null; // ISO 8601 timestamp or null
   duration_hours: number;
   work_date: string; // YYYY-MM-DD
+  auto_clocked_out?: boolean;
 }
 
 export interface OrderSummary {

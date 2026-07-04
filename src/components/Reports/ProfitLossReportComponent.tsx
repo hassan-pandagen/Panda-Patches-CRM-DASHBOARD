@@ -392,10 +392,10 @@ const ProfitLossReportComponent: React.FC<ReportComponentProps> = ({ orders }) =
                                                     <div className="text-slate-500 text-xs mt-0.5">{order.customerName}</div>
                                                 </td>
                                                 <td className="p-3 text-slate-300">{order.salesAgent}</td>
-                                                <td className="p-3 text-right text-slate-300">${order.orderAmount.toLocaleString()}</td>
+                                                <td className="p-3 text-right text-slate-300">${(order.orderAmount ?? 0).toLocaleString()}</td>
                                                 <td className="p-3 text-right text-slate-300">${totalCost.toLocaleString()}</td>
                                                 <td className="p-3 text-right font-bold text-red-500">
-                                                    -${Math.abs(order.profit).toLocaleString()}
+                                                    -${Math.abs(order.profit ?? 0).toLocaleString()}
                                                 </td>
                                                 <td className="p-3 text-right">
                                                     <Link to={`/order/${order.orderNumber}`} className="inline-flex items-center gap-1 text-xs font-medium text-brand-orange hover:text-white transition-colors border border-brand-orange/30 px-3 py-1.5 rounded-lg hover:bg-brand-orange/10">

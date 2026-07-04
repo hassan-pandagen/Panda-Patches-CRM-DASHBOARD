@@ -49,7 +49,7 @@ export const updateMyPassword = async (newPassword: string) => {
 export const createUserWithRole = async (
   email: string,
   role: UserRole,
-  access: Record<string, boolean>,
+  access: Record<string, boolean | undefined>,
   fullName: string,
   password: string
 ): Promise<{ user?: User; temporaryPassword?: string; error?: string }> => {

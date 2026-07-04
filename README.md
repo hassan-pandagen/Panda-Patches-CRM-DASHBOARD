@@ -232,6 +232,22 @@ npm run dev
 | `npm run dev` | Start Vite dev server with HMR |
 | `npm run build` | Production build |
 | `npm run preview` | Preview the production build locally |
+| `npm test` | Run the Vitest unit suite once |
+| `npm run test:watch` | Run Vitest in watch mode |
+| `npm run typecheck` | `tsc --noEmit` — must be clean (0 errors) |
+
+---
+
+## Testing & Quality Gates
+
+- **Runner:** [Vitest](https://vitest.dev) (jsdom). Current suite: **96 tests / 7 files, green.**
+- **High-value unit suites** cover the business-critical pure logic:
+  - `src/utils/leadSource.test.ts` — attribution precedence (ad → click-id → UTM → referrer → Direct), the "Checkout is a channel, not a source" invariant, `/ Checkout` display.
+  - `src/utils/patchVocab.test.ts` — order-form dropdown normalization (PVC / iron-on / aliases / passthrough).
+  - `src/utils/fetchAllPaged.test.ts` — pagination never silently truncates past PostgREST's 1000-row cap.
+- **Type safety:** `tsc --noEmit` is clean (**0 errors**) and enforced as a gate.
+- **CI:** [`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs `npm test` (blocking) + `npm run typecheck` (informational) on every push / PR to `main`.
+- **Remediation tracker:** see [`AUDIT_REMEDIATION.md`](AUDIT_REMEDIATION.md) for the full audit-fix status (done / pending / deploy checklist).
 
 ---
 
@@ -266,11 +282,13 @@ npm run dev
 
 - **Row-Level Security** on every table — access enforced at the database layer
 - **Granular per-user permissions** enforced in both the app and the database
-- **Private storage buckets** with signed URLs for all file downloads
+- **Admin-gated user management** — `create-user` / `update-user` / `get-users` / `delete-user` verify the caller is an admin server-side (JWT → role check) before any privileged action
+- **Server-side payment integrity** — manual payments go through the `record_manual_payment` RPC (row lock + atomic increment + over-payment guard); clients never write `amount_paid` directly
 - **Invite-link / recovery-link auth** — no plaintext passwords in email
-- **Idempotent webhooks** (Square event + payment dedup) and **CAPI reversal** on refunds
+- **Idempotent webhooks** (Square event + payment dedup, HMAC-verified) and **CAPI reversal** on refunds
 - **Sentry proxy tunnel** keeps error reporting first-party and resilient to blockers
-- **React** auto-escaping (no `dangerouslySetInnerHTML`); inputs normalized (empty → `NULL`) before writes
+- **React** auto-escaping; thorough HTML-escaping in transactional email; inputs normalized (empty → `NULL`) before writes
+- **Storage note:** order-attachment images live in a **public** bucket (so they render inside transactional emails); non-public artifacts should continue to use signed URLs. See [`AUDIT_REMEDIATION.md`](AUDIT_REMEDIATION.md) for the open financial-column-masking item.
 
 ---
 

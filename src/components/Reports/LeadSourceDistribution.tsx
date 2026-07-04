@@ -9,6 +9,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../../services/supabaseClient';
 import { detectLeadSource, LeadSource } from '../../utils/leadSource';
+import { fetchAllPaged } from '../../utils/fetchAllPaged';
 import { SOURCE_COLORS } from '../../constants/colors';
 import {
   PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend,
@@ -69,17 +70,15 @@ const LeadSourceDistribution: React.FC<Props> = ({ startDate, endDate }) => {
   const { data: quotes = [], isLoading } = useQuery({
     queryKey: ['quotes-for-lead-source', startDate?.toISOString(), endDate?.toISOString()],
     queryFn: async () => {
-      let q = supabase
-        .from('quotes')
-        .select('id, attribution, lead_source, estimated_amount, created_at')
-        .order('created_at', { ascending: false });
-
-      if (startDate) q = q.gte('created_at', startDate.toISOString());
-      if (endDate)   q = q.lte('created_at', endDate.toISOString());
-
-      const { data, error } = await q;
-      if (error) throw error;
-      return (data || []) as QuoteRow[];
+      // Paged past the 1000-row cap so lead-source shares aren't skewed on busy periods.
+      return await fetchAllPaged<QuoteRow>((from, to) => {
+        let q = supabase
+          .from('quotes')
+          .select('id, attribution, lead_source, estimated_amount, created_at');
+        if (startDate) q = q.gte('created_at', startDate.toISOString());
+        if (endDate)   q = q.lte('created_at', endDate.toISOString());
+        return q.order('created_at', { ascending: false }).range(from, to);
+      });
     },
     staleTime: 60_000,
   });

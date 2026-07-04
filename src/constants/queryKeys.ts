@@ -17,8 +17,11 @@ export const queryKeys = {
     counts: (params?: { salesAgent?: string; leadSource?: string; dateRangeStart?: string; dateRangeEnd?: string }) =>
       [...queryKeys.orders.all(), 'counts', params || {}] as const,
     details: () => [...queryKeys.orders.all(), 'single'] as const, // Renamed from 'detail'
-    single: (id: number) => [...queryKeys.orders.details(), id] as const, // Renamed from 'detail'
-    history: (id: number) => [...queryKeys.orders.all(), 'history', id] as const,
+    // Order detail is keyed by order NUMBER (e.g. "PP-11048") from the URL param, which is
+    // string | undefined; accept both that and a numeric id. undefined is fine — the query
+    // is gated by `enabled` when there's no order number.
+    single: (id: string | number | undefined) => [...queryKeys.orders.details(), id] as const,
+    history: (id: string | number | undefined) => [...queryKeys.orders.all(), 'history', id] as const,
     urgent: () => [...queryKeys.orders.all(), 'urgent'] as const,
     // Keys for reports
     reports: () => [...queryKeys.orders.all(), 'reports'] as const,

@@ -5,6 +5,7 @@ import React from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../../services/supabaseClient';
 import { resendFailedEmail, triggerStatusEmail } from '../../services/orderService';
+import { useOrderHistory } from '../../hooks/useOrderHistory';
 import { queryKeys } from '../../constants/queryKeys';
 import { Order } from '../../types';
 import { useToast } from '../../hooks/useToast';
@@ -22,6 +23,19 @@ const MANUAL_SEND_OPTIONS = [
   { label: 'Delivered',                status: 'DELIVERED' },
   { label: 'Remake',                   status: 'REMAKE' },
 ];
+
+// Backstop map: progress statuses that owe the customer an email, → the template_id that
+// gets logged to order_communications when it sends. If the order reached one of these
+// statuses but no matching row exists (sent OR failed), the email was silently missed —
+// e.g. the agent's tab closed before the client-side send fired, so not even a FAILED row
+// was written. We surface those so they become visible + one-click sendable.
+// (NEW_ORDER is intentionally excluded — checkout orders get a payment-confirmation instead.)
+const BACKSTOP_STATUS_EMAILS: Record<string, { template: string; label: string }> = {
+  AWAITING_APPROVAL: { template: 'CUSTOMER_MOCKUP_READY',       label: 'Mockup Ready' },
+  IN_PRODUCTION:     { template: 'CUSTOMER_PRODUCTION_STARTED', label: 'Production Started' },
+  SHIPPED:           { template: 'CUSTOMER_SHIPPED',            label: 'Shipped' },
+  DELIVERED:         { template: 'CUSTOMER_DELIVERED',          label: 'Delivered' },
+};
 
 // ─── HELPERS ──────────────────────────────────────────────────────────────────
 
@@ -68,6 +82,7 @@ const EmailLogsSection: React.FC<EmailLogsSectionProps> = ({ order }) => {
   const [resendingId, setResendingId] = React.useState<number | null>(null);
   const [manualStatus, setManualStatus] = React.useState('');
   const [sendingManual, setSendingManual] = React.useState(false);
+  const [sendingStatus, setSendingStatus] = React.useState<string | null>(null);
 
   const handleManualSend = async () => {
     if (!manualStatus) return;
@@ -101,6 +116,40 @@ const EmailLogsSection: React.FC<EmailLogsSectionProps> = ({ order }) => {
   const failed = communications.filter((c: any) => c.subject?.startsWith('FAILED:'));
   const sent = communications.filter((c: any) => !c.subject?.startsWith('FAILED:'));
 
+  // ── Backstop: detect customer emails that were expected but never logged ──────
+  const { data: history = [] } = useOrderHistory(order.id);
+  const reachedStatuses = React.useMemo(() => {
+    const s = new Set<string>([order.status]);
+    for (const h of history as any[]) {
+      if (h.field_changed === 'status' && h.new_value) s.add(h.new_value);
+    }
+    return s;
+  }, [history, order.status]);
+  const loggedTemplates = React.useMemo(
+    () => new Set(communications.map((c: any) => c.template_id)),
+    [communications],
+  );
+  const missingEmails = React.useMemo(
+    () =>
+      Object.entries(BACKSTOP_STATUS_EMAILS)
+        .filter(([status, info]) => reachedStatuses.has(status) && !loggedTemplates.has(info.template))
+        .map(([status, info]) => ({ status, ...info })),
+    [reachedStatuses, loggedTemplates],
+  );
+
+  const handleSendStatus = async (status: string, label: string) => {
+    setSendingStatus(status);
+    try {
+      await triggerStatusEmail(order, status);
+      showSuccess('Email sent!', `${label} email sent to the customer.`);
+      queryClient.invalidateQueries({ queryKey: queryKeys.communications.byOrderId(order.id) });
+    } catch (err: any) {
+      showError('Send failed', err?.message || 'Unknown error');
+    } finally {
+      setSendingStatus(null);
+    }
+  };
+
   const handleResend = async (comm: any) => {
     // Extract trigger status from subject: "FAILED: NEW_ORDER" → "NEW_ORDER"
     const triggerStatus = comm.subject?.replace('FAILED: ', '') || '';
@@ -132,8 +181,9 @@ const EmailLogsSection: React.FC<EmailLogsSectionProps> = ({ order }) => {
 
   if (isLoading) return null;
 
-  // No logs yet — show manual send panel
-  if (communications.length === 0) {
+  // No logs AND nothing missing — show the manual send panel. If something IS missing,
+  // fall through to the main view so the backstop warning renders.
+  if (communications.length === 0 && missingEmails.length === 0) {
     return (
       <SpotlightCard className="p-6">
         <div className="flex items-center gap-2 mb-4">
@@ -196,6 +246,38 @@ const EmailLogsSection: React.FC<EmailLogsSectionProps> = ({ order }) => {
           </div>
         )}
       </div>
+
+      {/* ── MISSED EMAILS (backstop) ────────────────────────────────── */}
+      {/* Order reached a stage that owes the customer an email, but none was ever logged
+          (not even a FAILED row) — i.e. the client-side send never fired. Make it visible + sendable. */}
+      {missingEmails.length > 0 && (
+        <div className="mb-5 space-y-2">
+          <p className="text-xs font-bold uppercase text-amber-400 tracking-wider flex items-center gap-1.5">
+            <AlertTriangle className="w-3.5 h-3.5" /> Not Sent — customer wasn't emailed ({missingEmails.length})
+          </p>
+          {missingEmails.map((m) => (
+            <div
+              key={m.status}
+              className="flex items-center justify-between gap-3 bg-amber-950/30 border border-amber-500/25 rounded-xl p-3"
+            >
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-amber-200 truncate">→ Customer: {m.label}</p>
+                <p className="text-xs text-slate-400 mt-0.5">Order reached this stage but no email was logged.</p>
+              </div>
+              {isAdmin && (
+                <button
+                  onClick={() => handleSendStatus(m.status, m.label)}
+                  disabled={sendingStatus === m.status}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-brand-orange hover:bg-orange-500 disabled:bg-slate-700 disabled:text-slate-400 text-white rounded-lg transition-colors flex-shrink-0"
+                >
+                  <Send className={`w-3.5 h-3.5 ${sendingStatus === m.status ? 'animate-pulse' : ''}`} />
+                  {sendingStatus === m.status ? 'Sending…' : 'Send now'}
+                </button>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* ── FAILED EMAILS ───────────────────────────────────────────── */}
       {failed.length > 0 && (

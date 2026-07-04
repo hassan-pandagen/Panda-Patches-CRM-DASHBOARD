@@ -165,7 +165,7 @@ export const upsertMonthlyCost = async (
       }
 
       // Invalidate queries
-      queryClient.invalidateQueries(queryKeys.monthlyCosts.all());
+      queryClient.invalidateQueries({ queryKey: queryKeys.monthlyCosts.all() });
 
       return mapDbToMonthlyCost(data);
     } else {
@@ -182,7 +182,7 @@ export const upsertMonthlyCost = async (
       }
 
       // Invalidate queries
-      queryClient.invalidateQueries(queryKeys.monthlyCosts.all());
+      queryClient.invalidateQueries({ queryKey: queryKeys.monthlyCosts.all() });
 
       return mapDbToMonthlyCost(data);
     }
@@ -224,7 +224,7 @@ export const deleteMonthlyCost = async (id: number): Promise<void> => {
     }
 
     // Invalidate queries
-    queryClient.invalidateQueries(queryKeys.monthlyCosts.all());
+    queryClient.invalidateQueries({ queryKey: queryKeys.monthlyCosts.all() });
   } catch (error) {
     logger.error('Failed to delete monthly cost:', error);
     throw error;

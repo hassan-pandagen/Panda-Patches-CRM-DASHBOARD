@@ -266,6 +266,7 @@ export const getAllQuotes = async (): Promise<Quote[]> => {
       .select('*')
       .is('meta_psid', null)
       .is('meta_ig_id', null)
+      .is('converted_at', null)   // hide quotes already converted to orders from the pipeline
       .order('created_at', { ascending: false });
 
     if (error) throw error;
@@ -357,8 +358,7 @@ export const convertQuoteToOrder = async (quote: Quote): Promise<Order> => {
       // data when this order is paid. Keep NULL as NULL (do not coerce to {}).
       attribution: quote.attribution ?? null,
 
-      // Track conversion lineage — preserved even after this quote is deleted below.
-      // Powers the Funnel & Attribution report.
+      // Track conversion lineage — powers the Funnel & Attribution report.
       convertedFromQuoteId:     quote.id,
       convertedFromQuoteNumber: quote.quoteNumber,
       hadPriorQuoteRequest:     true,
@@ -376,9 +376,12 @@ export const convertQuoteToOrder = async (quote: Quote): Promise<Order> => {
 
     const order = await createOrder(orderData, userEmail);
 
-    // Delete the quote record after successful conversion — skip file cleanup
-    // because the files are now referenced by the order's customerAttachmentUrls/mockupUrls
-    await deleteQuote(quote.quoteNumber, true);
+    // Mark the quote CONVERTED instead of deleting it — preserves notes, Meta-chat linkage
+    // (psid/ad_id), and time-to-convert, and keeps it in the funnel denominator. It's filtered
+    // out of the active pipeline by getAllQuotes.
+    await supabase.from('quotes')
+      .update({ converted_at: new Date().toISOString(), converted_order_id: order.id })
+      .eq('quote_number', quote.quoteNumber);
     
     // Invalidate quotes list cache to refresh UI
     queryClient.invalidateQueries({ queryKey: queryKeys.quotes?.all?.() });

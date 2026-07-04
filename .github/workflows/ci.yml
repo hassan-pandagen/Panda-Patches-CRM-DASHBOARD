@@ -1,0 +1,37 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    name: Unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20.x
+          cache: npm
+      # npm install (not ci) so the lockfile picks up vitest without a manual regen.
+      - run: npm install
+      - run: npm test
+
+  typecheck:
+    name: Type check (informational)
+    runs-on: ubuntu-latest
+    # NOTE: kept non-blocking for now — the codebase still has pre-existing TS
+    # errors being burned down. Once `npm run typecheck` is clean, remove
+    # continue-on-error so type regressions fail the build.
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20.x
+          cache: npm
+      - run: npm install
+      - run: npm run typecheck

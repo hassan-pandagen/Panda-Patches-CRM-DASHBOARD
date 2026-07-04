@@ -32,8 +32,8 @@ const createUserSchema = z.object({
     .regex(/[A-Z]/, "Password must contain at least one uppercase letter")
     .regex(/[0-9]/, "Password must contain at least one number"),
 
-  role: z.enum(['USER', 'ADMIN', 'PRODUCTION', 'AGENT'], {
-    errorMap: () => ({ message: "Role must be USER, ADMIN, PRODUCTION, or AGENT" })
+  role: z.enum(['USER', 'ADMIN', 'PRODUCTION', 'SALES_AGENT', 'SHIPPING', 'AGENT'], {
+    errorMap: () => ({ message: "Role must be USER, ADMIN, PRODUCTION, SALES_AGENT, SHIPPING, or AGENT" })
   }),
 
   fullName: z.string()
@@ -64,10 +64,35 @@ Deno.serve(async (req: Request) => {
   }
 
   try {
-    const supabaseAdmin = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
-    );
+    const SUPABASE_URL = Deno.env.get('SUPABASE_URL') ?? '';
+    const SERVICE_KEY  = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
+    const ANON_KEY     = Deno.env.get('SUPABASE_ANON_KEY') ?? '';
+    const supabaseAdmin = createClient(SUPABASE_URL, SERVICE_KEY);
+
+    // ── AUTHORIZATION: only an admin / user-manager may create users ──
+    // The UI hides User Management, but the endpoint itself must enforce this —
+    // otherwise any logged-in user could call it directly with their own token.
+    const authHeader = req.headers.get('Authorization');
+    if (!authHeader) {
+      return new Response(JSON.stringify({ error: 'Missing authorization header' }),
+        { headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' }, status: 401 });
+    }
+    const callerClient = createClient(SUPABASE_URL, ANON_KEY, {
+      global: { headers: { Authorization: authHeader } },
+      auth: { persistSession: false },
+    });
+    const { data: { user: caller }, error: callerErr } = await callerClient.auth.getUser();
+    if (callerErr || !caller) {
+      return new Response(JSON.stringify({ error: 'Authentication failed' }),
+        { headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' }, status: 401 });
+    }
+    const { data: callerProfile } = await supabaseAdmin
+      .from('user_profiles').select('role, permissions').eq('id', caller.id).single();
+    const canManageUsers = callerProfile?.role === 'ADMIN' || callerProfile?.permissions?.users_manage === true;
+    if (!canManageUsers) {
+      return new Response(JSON.stringify({ error: 'Insufficient permissions' }),
+        { headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' }, status: 403 });
+    }
 
     // 1. Parse and validate request body
     const body = await req.json();

@@ -564,7 +564,7 @@ const OrderForm: React.FC<OrderFormProps> = ({
                     Copy Info
                   </button>
                   <a
-                    href={`/customers/${encodeURIComponent(watchEmail || watchPhone)}`}
+                    href={`/customers/${encodeURIComponent(watchEmail || watchPhone || '')}`}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="flex items-center gap-1.5 px-4 py-2.5 bg-slate-900/50 hover:bg-blue-600 border border-blue-500/30 rounded-lg text-xs font-bold text-blue-400 hover:text-white transition-all"

@@ -4,11 +4,11 @@
 // (manual payments are organic / repeat-customer flow — only payment-link
 // purchases should hit Meta as ad-attributed conversions).
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useId } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../../services/supabaseClient';
 import { useToast } from '../../hooks/useToast';
-import { useAuth } from '../../contexts/AuthContext';
+import Modal from '../ui/Modal';
 import { X, DollarSign, CreditCard, Building2, Wallet, Hash } from 'lucide-react';
 
 interface Props {
@@ -43,9 +43,9 @@ const MarkAsPaidModal: React.FC<Props> = ({
   amountAlreadyPaid,
 }) => {
   const queryClient = useQueryClient();
-  const { user } = useAuth();
   const { success: showSuccess, error: showError } = useToast();
 
+  const titleId = useId();
   const remainingDefault = Math.max(orderAmount - amountAlreadyPaid, 0);
 
   const [method, setMethod] = useState<PaymentMethod>('square');
@@ -73,34 +73,27 @@ const MarkAsPaidModal: React.FC<Props> = ({
         throw new Error(`Amount exceeds remaining balance ($${remainingDefault.toFixed(2)})`);
       }
 
-      const newAmountPaid = amountAlreadyPaid + amountNum;
-
-      // Update orders table — the trigger handles status + CAPI logic
-      // For manual payments (Square/bank/cash), CAPI fires too — Meta still wants
-      // organic purchases, just without ad attribution (no fbp/fbc on the order).
-      const { error: orderErr } = await supabase
-        .from('orders')
-        .update({
-          amount_paid: newAmountPaid,
-        })
-        .eq('id', orderId);
-      if (orderErr) throw orderErr;
-
-      // Log to order_history for audit trail
-      await supabase.from('order_history').insert({
-        order_id: orderId,
-        user_email: user?.email || 'system',
-        field_changed: 'manual_payment',
-        old_value: `$${amountAlreadyPaid.toFixed(2)}`,
-        new_value: `$${newAmountPaid.toFixed(2)} (via ${method}${reference ? ` ref: ${reference}` : ''})`,
+      // Record via a server-side RPC that locks the row and INCREMENTS amount_paid
+      // atomically — so a concurrent payment (another agent, or the Square webhook)
+      // can't silently overwrite this one. The RPC also enforces the over-payment
+      // guard + permissions server-side and writes the audit row (with date + method).
+      // The orders UPDATE inside it still fires the status/CAPI triggers.
+      const { error: rpcErr } = await supabase.rpc('record_manual_payment', {
+        p_order_id:  orderId,
+        p_amount:    amountNum,
+        p_method:    method,
+        p_reference: reference.trim() || null,
+        p_paid_at:   paymentDate || null,
       });
+      if (rpcErr) throw rpcErr;
     },
     onSuccess: () => {
       showSuccess(
         'Payment recorded',
         `$${parseFloat(amount).toFixed(2)} via ${METHOD_OPTIONS.find(m => m.id === method)?.label}`
       );
-      queryClient.invalidateQueries({ queryKey: ['order'] });
+      // ['orders'] is a prefix match — it also refreshes the single-order query
+      // (['orders','single',id]). The old ['order'] key matched nothing.
       queryClient.invalidateQueries({ queryKey: ['orders'] });
       onClose();
     },
@@ -109,24 +102,20 @@ const MarkAsPaidModal: React.FC<Props> = ({
     },
   });
 
-  if (!isOpen) return null;
-
   const amountNum = parseFloat(amount) || 0;
   const newTotal = amountAlreadyPaid + amountNum;
   const willComplete = newTotal >= orderAmount;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} />
-
-      <div className="relative bg-slate-900 border border-white/10 rounded-2xl w-full max-w-md shadow-2xl">
+    <Modal isOpen={isOpen} onClose={onClose} labelledBy={titleId} size="sm">
+      <div>
         <div className="px-6 py-5 border-b border-white/10 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="p-2 bg-emerald-500/10 rounded-lg">
               <DollarSign className="w-5 h-5 text-emerald-400" />
             </div>
             <div>
-              <h2 className="text-lg font-semibold text-white">Record Manual Payment</h2>
+              <h2 id={titleId} className="text-lg font-semibold text-white">Record Manual Payment</h2>
               <p className="text-xs text-slate-400">Order {orderNumber}</p>
             </div>
           </div>
@@ -289,7 +278,7 @@ const MarkAsPaidModal: React.FC<Props> = ({
           </button>
         </div>
       </div>
-    </div>
+    </Modal>
   );
 };
 

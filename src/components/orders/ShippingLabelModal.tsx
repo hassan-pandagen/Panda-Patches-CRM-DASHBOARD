@@ -242,7 +242,13 @@ ${formatCustomsText(customs, order.orderNumber)}
                                 )}
                             </button>
 
-                            <p className="text-sm font-bold uppercase tracking-wide mb-3">Commercial Invoice / Customs</p>
+                            {/* pr-12 reserves space for the absolute copy button; short label on
+                                phones (uppercase + tracking-wide makes the full label overflow into
+                                the icon on narrow screens). */}
+                            <p className="text-sm font-bold uppercase tracking-wide mb-3 pr-12">
+                                <span className="sm:hidden">Customs / Invoice</span>
+                                <span className="hidden sm:inline">Commercial Invoice / Customs</span>
+                            </p>
 
                             {/* Confirmation / country warnings */}
                             {(customs.needsConfirmation || customs.countryMissing) && (

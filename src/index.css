@@ -44,6 +44,20 @@
   }
 }
 
+/* 3b. Safari performance fixes.
+   Safari's `backdrop-filter` and `background-attachment: fixed` are extremely
+   expensive — together (124 blurred panels over a fixed gradient) they saturate
+   Safari's main thread, causing sluggish scrolling and dropped/late clicks.
+   Chrome/Edge optimize both, so this is scoped to Safari only (class set in index.html).
+   Panels are dark-on-dark and stay readable without the blur. */
+html.safari [class*="backdrop-blur"] {
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+}
+html.safari body {
+  background-attachment: scroll;
+}
+
 /* 4. Custom Animations */
 @keyframes blob {
   0%, 100% {

@@ -129,11 +129,11 @@ const PerformanceMetricsPage: React.FC = () => {
           <p className="text-slate-400 mt-1">Real-time monitoring of application performance</p>
         </div>
         <div className="flex gap-2">
-          <Button onClick={() => refetch()} variant="secondary" size="sm" disabled={isLoading}>
+          <Button onClick={() => { refetch(); }} variant="secondary" size="sm" disabled={isLoading}>
             <Activity className="w-4 h-4 mr-2" />
             {isLoading ? 'Refreshing...' : 'Refresh'}
           </Button>
-          <Button onClick={handleClearMetrics} variant="destructive" size="sm" disabled={clearMetricsMutation.isPending}>
+          <Button onClick={handleClearMetrics} variant="danger" size="sm" disabled={clearMetricsMutation.isPending}>
             <RotateCcw className="w-4 h-4 mr-2" />
             Clear
           </Button>

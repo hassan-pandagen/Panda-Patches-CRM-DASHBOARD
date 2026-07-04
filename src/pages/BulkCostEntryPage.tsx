@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../services/supabaseClient';
 import { Order, OrderStatus } from '../types';
 import { mapDbToOrder } from '../services/orderService';
+import { fetchAllPaged } from '../utils/fetchAllPaged';
 import { queryKeys } from '../constants/queryKeys';
 import { getMonthlyCosts, upsertMonthlyCost } from '../services/monthlyCostsService';
 import Spinner from '../components/ui/Spinner';
@@ -35,13 +36,15 @@ const BulkCostEntryPage: React.FC = () => {
   const { data: orders = [], isLoading } = useQuery({
     queryKey: queryKeys.orders.all(),
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('orders')
-        .select('*')
-        .order('created_at', { ascending: false });
-
-      if (error) throw error;
-      return (data || []).map(mapDbToOrder);
+      // Paged past the 1000-row cap so orders beyond the first 1000 stay editable.
+      const data = await fetchAllPaged<any>((from, to) =>
+        supabase
+          .from('orders')
+          .select('*')
+          .order('created_at', { ascending: false })
+          .range(from, to)
+      );
+      return data.map(mapDbToOrder);
     },
   });
 

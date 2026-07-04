@@ -112,6 +112,7 @@ const NewQuotePage: React.FC = () => {
       }
 
       const quotePayload: Omit<Quote, 'id' | 'quoteNumber' | 'createdAt' | 'updatedAt'> = {
+        attribution: {},
         customerName: formData.customerName,
         customerEmail: formData.customerEmail,
         customerPhone: formData.customerPhone,
@@ -158,6 +159,7 @@ const NewQuotePage: React.FC = () => {
       {/* Unsaved Changes Warning */}
       {showModal && (
         <UnsavedChangesModal
+          show={showModal}
           onConfirm={confirmLeave}
           onCancel={cancelLeave}
         />

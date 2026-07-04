@@ -3,7 +3,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { AlertCircle } from 'lucide-react';
 
 interface TextareaProps extends React.TextareaHTMLAttributes<HTMLTextAreaElement> {
-  label: string;
+  // Optional: some forms supply their own external <label> and just want the field.
+  label?: string;
   error?: string;
   success?: boolean;
   maxLength?: number;
@@ -12,7 +13,7 @@ interface TextareaProps extends React.TextareaHTMLAttributes<HTMLTextAreaElement
 const Textarea = React.forwardRef<HTMLTextAreaElement, TextareaProps>(
    (
      {
-       label,
+       label = '',
        error,
        success,
        maxLength,

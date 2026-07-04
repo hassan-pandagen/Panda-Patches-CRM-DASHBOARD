@@ -130,7 +130,7 @@ const SearchResultsPage: React.FC = () => {
                     <div className="flex flex-col items-end min-w-[90px]">
                       <span className="text-[10px] text-slate-400 uppercase tracking-wider font-bold mb-1">Amount</span>
                       {canViewFinancials ? (
-                        <span className="text-white font-bold text-base tracking-tight">${order.orderAmount.toLocaleString()}</span>
+                        <span className="text-white font-bold text-base tracking-tight">${(order.orderAmount ?? 0).toLocaleString()}</span>
                       ) : (
                         <div className="flex items-center gap-1 text-slate-500">
                           <Lock className="w-3 h-3" />

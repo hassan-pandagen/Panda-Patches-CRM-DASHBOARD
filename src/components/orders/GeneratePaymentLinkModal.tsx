@@ -4,10 +4,11 @@
 // On payment, square-payment-webhook updates orders.amount_paid (order mode) or creates the
 // order from the quote and deletes it (quote mode). Either way the CAPI Purchase trigger fires.
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useId } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import { supabase } from '../../services/supabaseClient';
 import { useToast } from '../../hooks/useToast';
+import Modal from '../ui/Modal';
 import {
   X, CreditCard, Copy, MessageCircle, Mail, ExternalLink, Check, Send,
 } from 'lucide-react';
@@ -47,6 +48,7 @@ const GeneratePaymentLinkModal: React.FC<Props> = (props) => {
   const alreadyPaid = isQuoteMode ? 0                 : (props as OrderModeProps).amountAlreadyPaid;
 
   const { success: showSuccess, error: showError } = useToast();
+  const titleId = useId();
   const remainingDefault = Math.max(totalAmount - alreadyPaid, 0);
 
   const [label, setLabel] = useState<PaymentLabel>(alreadyPaid === 0 ? 'deposit' : 'balance');
@@ -158,22 +160,18 @@ const GeneratePaymentLinkModal: React.FC<Props> = (props) => {
     onError: (err: any) => showError('Email failed', err?.message || 'Try again'),
   });
 
-  if (!isOpen) return null;
-
   const amountNum = parseFloat(amount) || 0;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} />
-
-      <div className="relative bg-slate-900 border border-white/10 rounded-2xl w-full max-w-lg shadow-2xl">
+    <Modal isOpen={isOpen} onClose={onClose} labelledBy={titleId} size="md">
+      <div>
         <div className="px-6 py-5 border-b border-white/10 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="p-2 bg-blue-500/10 rounded-lg">
               <CreditCard className="w-5 h-5 text-blue-400" />
             </div>
             <div>
-              <h2 className="text-lg font-semibold text-white">Generate Square Payment Link</h2>
+              <h2 id={titleId} className="text-lg font-semibold text-white">Generate Square Payment Link</h2>
               <p className="text-xs text-slate-400">{isQuoteMode ? 'Quote' : 'Order'} {refNumber}</p>
             </div>
           </div>
@@ -410,7 +408,7 @@ const GeneratePaymentLinkModal: React.FC<Props> = (props) => {
           )}
         </div>
       </div>
-    </div>
+    </Modal>
   );
 };
 

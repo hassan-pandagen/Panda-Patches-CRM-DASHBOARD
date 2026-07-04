@@ -23,7 +23,7 @@ import {
   MessageSquare, Instagram, Megaphone, Send, AlertTriangle,
   User, Image as ImageIcon, ChevronDown, Check, RefreshCw, X,
   Lock, FileText, ExternalLink, Pencil, Phone, Mail, Search,
-  Package, DollarSign, ImagePlus, Loader2,
+  Package, DollarSign, ImagePlus, Loader2, ArrowLeft,
 } from 'lucide-react';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -1043,7 +1043,8 @@ const InboxPage: React.FC = () => {
     <div className="flex h-[calc(100vh-4rem)] bg-[#0B1120] overflow-hidden">
 
       {/* ── Left panel: conversation list ───────────────────────── */}
-      <div className="w-80 shrink-0 flex flex-col border-r border-white/5">
+      {/* Mobile: full-width list, hidden once a thread is open (master/detail). Desktop: fixed 320px rail. */}
+      <div className={`${selectedId ? 'hidden md:flex' : 'flex'} w-full md:w-80 shrink-0 flex-col border-r border-white/5`}>
         <div className="px-4 py-3 border-b border-white/5 flex items-center justify-between">
           <h2 className="text-sm font-semibold text-white">Inbox</h2>
           <button
@@ -1124,8 +1125,9 @@ const InboxPage: React.FC = () => {
       </div>
 
       {/* ── Right panel: thread ──────────────────────────────────── */}
+      {/* Desktop-only placeholder; on mobile the full-width list occupies the screen instead. */}
       {!selectedConv ? (
-        <div className="flex-1 flex flex-col items-center justify-center text-slate-600">
+        <div className="hidden md:flex flex-1 flex-col items-center justify-center text-slate-600">
           <MessageSquare className="w-12 h-12 mb-3 opacity-30" />
           <p className="text-sm">Select a conversation</p>
         </div>
@@ -1135,6 +1137,15 @@ const InboxPage: React.FC = () => {
           {/* Thread header */}
           <div className="px-5 py-3 border-b border-white/5 flex items-center justify-between gap-3 shrink-0">
             <div className="flex items-center gap-3 min-w-0">
+              {/* Mobile back-to-list button (master/detail navigation) */}
+              <button
+                onClick={() => setSelectedId(null)}
+                className="md:hidden p-1.5 -ml-1.5 rounded-lg hover:bg-white/10 text-slate-400 hover:text-white transition-all shrink-0"
+                title="Back to inbox"
+                aria-label="Back to inbox"
+              >
+                <ArrowLeft className="w-4 h-4" />
+              </button>
               <div className={`p-1.5 rounded-lg shrink-0 ${
                 selectedConv.channel === 'instagram'
                   ? 'bg-gradient-to-br from-pink-500/20 to-purple-500/20'

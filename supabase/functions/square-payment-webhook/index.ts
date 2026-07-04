@@ -329,8 +329,11 @@ Deno.serve(async (req: Request) => {
         new_value:     `Auto-created from Quote ${quote.quote_number} via Square payment $${paidAmount}`,
       }).then(() => {}, () => {});
 
-      // Delete the quote — order is safely created.
-      await admin.from('quotes').delete().eq('id', quoteId);
+      // Mark the quote CONVERTED (don't delete) — order is safely created; preserves the
+      // quote's notes / Meta-chat linkage and keeps it in the funnel denominator.
+      await admin.from('quotes')
+        .update({ converted_at: new Date().toISOString(), converted_order_id: newOrder.id })
+        .eq('id', quoteId);
 
       // CUSTOMER "Payment Received" email — guarded so it fires exactly once.
       if (quote.customer_email) {

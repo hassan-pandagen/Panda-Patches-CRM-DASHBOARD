@@ -1,4 +1,5 @@
 import React from "react";
+import Modal from "./Modal";
 
 interface UnsavedChangesModalProps {
   show: boolean;
@@ -11,12 +12,12 @@ const UnsavedChangesModal: React.FC<UnsavedChangesModalProps> = ({
   onConfirm,
   onCancel,
 }) => {
-  if (!show) return null;
+  const titleId = React.useId();
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/70 backdrop-blur-sm">
-      <div className="bg-slate-800 text-white rounded-xl shadow-xl w-[90%] max-w-md p-6 border border-slate-700">
-        <h2 className="text-lg font-semibold mb-2">Unsaved Changes</h2>
+    <Modal isOpen={show} onClose={onCancel} labelledBy={titleId} size="sm">
+      <div className="p-6 text-white">
+        <h2 id={titleId} className="text-lg font-semibold mb-2">Unsaved Changes</h2>
         <p className="text-slate-400 mb-6">
           You have unsaved changes. Are you sure you want to leave this page?
         </p>
@@ -31,11 +32,11 @@ const UnsavedChangesModal: React.FC<UnsavedChangesModalProps> = ({
             onClick={onConfirm}
             className="px-4 py-2 rounded-md bg-red-600 hover:bg-red-500 transition"
           >
-            Discard & Leave
+            Discard &amp; Leave
           </button>
         </div>
       </div>
-    </div>
+    </Modal>
   );
 };
 

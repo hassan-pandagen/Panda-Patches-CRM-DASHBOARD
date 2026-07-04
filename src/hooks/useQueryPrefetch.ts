@@ -97,7 +97,7 @@ export const useQueryPrefetch = () => {
       const endDateStr = `${year}-${pad(month + 1)}-${pad(new Date(year, month + 1, 0).getDate())}`;
 
       await queryClient.prefetchQuery({
-        queryKey: queryKeys.orders.report(startDateStr, endDateStr),
+        queryKey: queryKeys.orders.report({ startDate: startDateStr, endDate: endDateStr }),
         queryFn: async () => {
           const { data, error } = await supabase
             .from('orders')

@@ -311,7 +311,7 @@ const DateRangeFilter: React.FC<DateRangeFilterProps> = ({ value, onChange }) =>
                   key={idx}
                   day={day}
                   isCurrentMonth={isCurrentMonth}
-                  isSelected={isSelectedDay}
+                  isSelected={!!isSelectedDay}
                   inRange={inRange}
                   disabled={disabled}
                   todayDate={todayDate}

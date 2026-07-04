@@ -300,14 +300,18 @@ const OrderPage: React.FC = () => {
                 field_changed: 'ORDER_DELETED',
                 new_value: `Deleted by ${user?.email}`,
             });
-            const { error } = await supabase.from('orders').delete().eq('id', orderToDelete.id);
+            // Soft-delete: set deleted_at instead of hard-deleting. RLS hides it from every
+            // read path, but the row + its full order_history survive (no more untraceable loss).
+            const { error } = await supabase.from('orders')
+                .update({ deleted_at: new Date().toISOString() })
+                .eq('id', orderToDelete.id);
             if (error) throw error;
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: queryKeys.orders.all() });
             queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.all() });
             navigate('/orders');
-            showSuccess('Order Deleted', `Order ${order?.orderNumber} has been permanently removed.`);
+            showSuccess('Order Deleted', `Order ${order?.orderNumber} has been removed.`);
         },
         onError: (err: any) => {
             showError('Delete Failed', err.message);
@@ -371,7 +375,7 @@ const OrderPage: React.FC = () => {
                 amountAlreadyPaid={order.amountPaid || 0}
                 customerName={order.customerName}
                 customerEmail={order.customerEmail}
-                customerPhone={order.customerPhone}
+                customerPhone={order.customerPhone ?? null}
             />
 
             {/* Image Preview Modal */}
@@ -894,30 +898,30 @@ const OrderPage: React.FC = () => {
                                 <div className="space-y-3">
                                     <div className="flex justify-between items-center py-1">
                                         <p className="text-slate-300">Total Amount</p>
-                                        <p className="font-bold text-white text-lg">${order.orderAmount.toLocaleString()}</p>
+                                        <p className="font-bold text-white text-lg">${(order.orderAmount ?? 0).toLocaleString()}</p>
                                     </div>
                                     <div className="w-full bg-slate-700 h-px my-1"></div>
 
                                     <div className="flex justify-between items-center">
                                         <p className="text-slate-400 text-sm">Amount Paid</p>
-                                        <p className="font-medium text-green-400">${order.amountPaid.toLocaleString()}</p>
+                                        <p className="font-medium text-green-400">${(order.amountPaid ?? 0).toLocaleString()}</p>
                                     </div>
                                     <div className="flex justify-between items-center">
                                         <p className="text-slate-400 text-sm">Remaining</p>
-                                        <p className="font-medium text-yellow-400">${order.amountRemaining.toLocaleString()}</p>
+                                        <p className="font-medium text-yellow-400">${(order.amountRemaining ?? 0).toLocaleString()}</p>
                                     </div>
 
                                     {/* Detailed Breakdown (Admin Only) */}
                                     {isAdmin && (
                                         <div className="bg-slate-900/50 rounded-lg p-3 mt-4 space-y-2 border border-white/5">
                                             <p className="text-xs font-bold text-slate-500 uppercase mb-2">Internal Costs</p>
-                                            <div className="flex justify-between items-center"><p className="text-xs text-slate-400">Production</p><p className="text-xs font-medium text-white">-${order.productionCost.toLocaleString()}</p></div>
-                                            <div className="flex justify-between items-center"><p className="text-xs text-slate-400">Shipping</p><p className="text-xs font-medium text-white">-${order.shippingCost.toLocaleString()}</p></div>
-                                            <div className="flex justify-between items-center"><p className="text-xs text-slate-400">Marketing</p><p className="text-xs font-medium text-white">-${order.marketingCost.toLocaleString()}</p></div>
+                                            <div className="flex justify-between items-center"><p className="text-xs text-slate-400">Production</p><p className="text-xs font-medium text-white">-${(order.productionCost ?? 0).toLocaleString()}</p></div>
+                                            <div className="flex justify-between items-center"><p className="text-xs text-slate-400">Shipping</p><p className="text-xs font-medium text-white">-${(order.shippingCost ?? 0).toLocaleString()}</p></div>
+                                            <div className="flex justify-between items-center"><p className="text-xs text-slate-400">Marketing</p><p className="text-xs font-medium text-white">-${(order.marketingCost ?? 0).toLocaleString()}</p></div>
                                             <div className="border-t border-white/10 pt-2 mt-1 flex justify-between items-center">
                                                 <p className="text-sm text-slate-300">Net Profit</p>
-                                                <p className={`text-sm font-bold ${order.profit >= 0 ? 'text-cyan-400' : 'text-red-400'}`}>
-                                                    ${order.profit.toLocaleString()}
+                                                <p className={`text-sm font-bold ${(order.profit ?? 0) >= 0 ? 'text-cyan-400' : 'text-red-400'}`}>
+                                                    ${(order.profit ?? 0).toLocaleString()}
                                                 </p>
                                             </div>
                                         </div>

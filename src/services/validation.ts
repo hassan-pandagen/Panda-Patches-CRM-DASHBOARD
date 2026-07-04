@@ -210,7 +210,9 @@ export const validatePartial = <T>(
   fieldName: string
 ): string | null => {
   try {
-    const result = schema.partial().parse(data);
+    // .partial() only exists on ZodObject; progressive validation is only ever called
+    // with object schemas, so narrow it here.
+    (schema as unknown as z.ZodObject<z.ZodRawShape>).partial().parse(data);
     return null;
   } catch (error) {
     if (error instanceof z.ZodError) {

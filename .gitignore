@@ -10,6 +10,7 @@
 
 # production
 /build
+/dist
 
 # misc
 .DS_Store
@@ -30,3 +31,9 @@ yarn-error.log*
 
 # Database schema backup (local reference only, actual DB is in Supabase)
 src/assets/db_schema.sql
+
+# Playwright (MCP output + test artifacts)
+.playwright-mcp/
+/test-results
+/playwright-report
+/playwright/.cache

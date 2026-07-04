@@ -4,6 +4,7 @@ import { useAuth } from "../contexts/AuthContext";
 import { logger } from "../services/logger";
 import { localMidnightISO, localNextDayISO } from "../utils/dateFilters";
 import { detectLeadSource } from "../utils/leadSource";
+import { fetchAllPaged } from "../utils/fetchAllPaged";
 import SpotlightCard from "../components/ui/SpotlightCard";
 import ToggleButtons from "../components/ui/ToggleButtons";
 import { Order, UserRole, OrderStatus } from "../types/index";
@@ -165,15 +166,17 @@ const SalesReportComponent: React.FC<ReportComponentProps> = ({ orders, dateRang
   const { data: paymentRecoveryData = [] } = useQuery({
     queryKey: ['payment-recovery', dateRange.startDate, dateRange.endDate],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('order_history')
-        .select('order_id, old_value, new_value, changed_at, user_email, orders!inner(order_number, created_at, sales_agent)')
-        .eq('field_changed', 'amount_paid')
-        .gte('changed_at', localMidnightISO(dateRange.startDate))
-        .lt('changed_at', localNextDayISO(dateRange.endDate))
-        .order('changed_at', { ascending: false });
-      if (error) throw error;
-      return (data || []).map((row: any) => ({
+      const data = await fetchAllPaged<any>((from, to) =>
+        supabase
+          .from('order_history')
+          .select('order_id, old_value, new_value, changed_at, user_email, orders!inner(order_number, created_at, sales_agent)')
+          .eq('field_changed', 'amount_paid')
+          .gte('changed_at', localMidnightISO(dateRange.startDate))
+          .lt('changed_at', localNextDayISO(dateRange.endDate))
+          .order('changed_at', { ascending: false })
+          .range(from, to)
+      );
+      return data.map((row: any) => ({
         orderNumber: row.orders?.order_number,
         orderCreatedAt: row.orders?.created_at,
         salesAgent: row.orders?.sales_agent || 'Unassigned',
@@ -1663,22 +1666,24 @@ const ReportsPage: React.FC = () => {
     queryFn: async () => {
       if (!user) return [];
 
-      // 1. Query the TABLE (snake_case source)
-      // Use .lt() with next day to include ALL orders on the end date
-      let query = supabase
-        .from("orders")
-        .select("*")
-        .gte("created_at", localMidnightISO(dateRange.startDate))
-        .lt("created_at", localNextDayISO(dateRange.endDate));
+      // 1. Query the TABLE (snake_case source), paged past the 1000-row cap so
+      // periods with >1000 orders don't silently understate every money report.
+      // Use .lt() with next day to include ALL orders on the end date.
+      const rows = await fetchAllPaged<any>((from, to) => {
+        let query = supabase
+          .from("orders")
+          .select("*")
+          .gte("created_at", localMidnightISO(dateRange.startDate))
+          .lt("created_at", localNextDayISO(dateRange.endDate));
 
-      // Filter by sales agent for sales agents only (PRODUCTION can see all orders)
-      if (role !== UserRole.ADMIN && role !== UserRole.PRODUCTION && user?.email) {
-        query = query.eq("sales_agent", user.email);
-      }
+        // Filter by sales agent for sales agents only (PRODUCTION can see all orders)
+        if (role !== UserRole.ADMIN && role !== UserRole.PRODUCTION && user?.email) {
+          query = query.eq("sales_agent", user.email);
+        }
 
-      const { data, error } = await query;
-      if (error) throw error;
-      return (data || []).map(mapDbToOrder);
+        return query.order("created_at", { ascending: false }).range(from, to);
+      });
+      return rows.map(mapDbToOrder);
     },
     enabled: !!user && !isAuthLoading && availableReports.length > 0,
   });

@@ -228,8 +228,8 @@ export const prepareEmailData = (order: Order, triggerStatus: string) => {
       allFiles = order.mockupUrls || [];
   } else {
       allFiles = order.mockupUrls || [];
-      if (allFiles.length === 0 && order.customerAttachmentUrls?.length > 0) {
-          allFiles = order.customerAttachmentUrls;
+      if (allFiles.length === 0 && (order.customerAttachmentUrls?.length ?? 0) > 0) {
+          allFiles = order.customerAttachmentUrls ?? [];
       }
   }
 
@@ -670,7 +670,7 @@ export const updateOrderDetails = async (
     }
   }
 
-  await queryClient.invalidateQueries({ queryKey: queryKeys.orders.report('', '') });
+  await queryClient.invalidateQueries({ queryKey: queryKeys.orders.reports() });
 
   endMeasure();
   

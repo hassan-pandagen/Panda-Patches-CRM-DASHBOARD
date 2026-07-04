@@ -18,6 +18,18 @@
     <meta name="X-Robots-Tag" content="noindex, nofollow" />
     
     <title>Panda Patches CRM</title>
+
+    <!-- Tag Safari so CSS can disable backdrop-filter + fixed background there.
+         Those two combined make Safari's main thread janky (slow scroll, dropped
+         clicks). Excludes Chrome/Edge/Firefox and their iOS variants. -->
+    <script>
+      (function () {
+        var ua = navigator.userAgent;
+        if (/^((?!chrome|android|crios|fxios|edg|edga|edgios|opr).)*safari/i.test(ua)) {
+          document.documentElement.classList.add('safari');
+        }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

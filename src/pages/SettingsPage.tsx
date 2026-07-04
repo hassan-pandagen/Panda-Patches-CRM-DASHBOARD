@@ -8,7 +8,6 @@ import { useToast } from "../hooks/useToast";
 import { queryKeys } from "../constants/queryKeys";
 import FileUploadSection from "../components/orders/FileUpload";
 import Button from "../components/ui/Button";
-import GlassCard from "../components/ui/GlassCard";
 import SpotlightCard from "../components/ui/SpotlightCard";
 import { ChangePasswordForm } from "../components/settings/ChangePasswordForm";
 import MetaConnectionPanel from "../components/settings/MetaConnectionPanel";
@@ -56,7 +55,7 @@ const SettingsPage: React.FC = () => {
     }
   }, [settings]);
 
-  const { mutate: saveSettings, isLoading: isSaving } = useMutation({
+  const { mutate: saveSettings, isPending: isSaving } = useMutation({
     mutationFn: updateSettings,
     onSuccess: (updatedData) => {
       toast.success("Settings Saved");

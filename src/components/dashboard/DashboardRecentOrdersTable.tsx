@@ -172,7 +172,7 @@ const DashboardRecentOrdersTable: React.FC<DashboardRecentOrdersTableProps> = ({
                     scope="col"
                     className={`px-6 py-4 ${header.width}`}
                   >
-                    <div className={`flex items-center gap-2 ${header.align === 'right' ? 'justify-end' : 'justify-start'}`}>
+                    <div className={`flex items-center gap-2 ${(header as { align?: string }).align === 'right' ? 'justify-end' : 'justify-start'}`}>
                       {header.label}
                     </div>
                   </th>

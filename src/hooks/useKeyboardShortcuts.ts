@@ -23,17 +23,13 @@ export function useKeyboardShortcuts() {
     const tagName = target.tagName.toLowerCase();
     const isInput = tagName === 'input' || tagName === 'textarea' || tagName === 'select' || target.isContentEditable;
 
-    // Esc always works — close modals, blur inputs, clear search
+    // Esc blurs the focused input. Modal-closing on Escape is now owned by the shared
+    // <Modal> primitive itself (role="dialog" + its own Escape handler + focus trap), so
+    // we no longer reach in and click a "first button" here — that heuristic could hit the
+    // wrong button and would double-fire alongside Modal's own handler.
     if (e.key === 'Escape') {
       if (isInput) {
         (target as HTMLInputElement).blur();
-        return;
-      }
-      // Close any open modal by clicking backdrop or pressing Esc
-      const modal = document.querySelector('[role="dialog"]') || document.querySelector('[data-modal]');
-      if (modal) {
-        const closeBtn = modal.querySelector('button[aria-label="Close"]') || modal.querySelector('button:first-child');
-        if (closeBtn) (closeBtn as HTMLButtonElement).click();
       }
       return;
     }

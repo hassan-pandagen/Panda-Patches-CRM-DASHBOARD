@@ -24,7 +24,7 @@ export async function initSentryAsync() {
 
   const Sentry = sentryInstance;
   const { reactRouterV6BrowserTracingIntegration } = await import('@sentry/react');
-  const { createRoutesFromChildren, matchRoutes, useLocation, useNavigation } = await import('react-router-dom');
+  const { createRoutesFromChildren, matchRoutes, useLocation, useNavigationType } = await import('react-router-dom');
   const React = await import('react');
 
   // Initialize Sentry
@@ -36,7 +36,7 @@ export async function initSentryAsync() {
         reactRouterV6BrowserTracingIntegration({
           useEffect: React.useEffect,
           useLocation,
-          useNavigation,
+          useNavigationType,
           createRoutesFromChildren,
           matchRoutes,
         }),

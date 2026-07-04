@@ -55,7 +55,7 @@ const MetaCapiPanel: React.FC<Props> = ({ orderId, orderNumber }) => {
     },
     onSuccess: (data) => {
       showSuccess('Meta event re-sent', `event_id: ${data.event_id}`);
-      queryClient.invalidateQueries({ queryKey: ['order'] });
+      queryClient.invalidateQueries({ queryKey: ['orders'] }); // prefix-matches ['orders','single',id]
       queryClient.invalidateQueries({ queryKey: ['order-capi', orderId] });
     },
     onError: (err: any) => showError('Send failed', err?.message || 'Try again'),
@@ -71,7 +71,7 @@ const MetaCapiPanel: React.FC<Props> = ({ orderId, orderNumber }) => {
     },
     onSuccess: () => {
       showSuccess('Meta event reversed', 'Negative-value Purchase sent for correction');
-      queryClient.invalidateQueries({ queryKey: ['order'] });
+      queryClient.invalidateQueries({ queryKey: ['orders'] }); // prefix-matches ['orders','single',id]
       queryClient.invalidateQueries({ queryKey: ['order-capi', orderId] });
     },
     onError: (err: any) => showError('Reversal failed', err?.message || 'Try again'),

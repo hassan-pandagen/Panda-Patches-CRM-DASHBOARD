@@ -806,14 +806,14 @@ const AllOrdersPage: React.FC = () => {
                                             <div className="flex items-center gap-3 md:gap-4">
                                                 {/* Bulk select checkbox */}
                                                 <button
-                                                    onClick={(e) => { e.preventDefault(); e.stopPropagation(); toggleSelect(order.id); }}
+                                                    onClick={(e) => { e.preventDefault(); e.stopPropagation(); toggleSelect(String(order.id)); }}
                                                     className={`w-6 h-6 rounded border-2 flex items-center justify-center flex-shrink-0 transition-all ${
-                                                        selectedOrderIds.has(order.id)
+                                                        selectedOrderIds.has(String(order.id))
                                                             ? 'bg-brand-orange border-brand-orange text-white'
                                                             : 'border-slate-600 hover:border-slate-400 opacity-0 group-hover:opacity-100'
                                                     }`}
                                                 >
-                                                    {selectedOrderIds.has(order.id) && <CheckCircle className="w-4 h-4" />}
+                                                    {selectedOrderIds.has(String(order.id)) && <CheckCircle className="w-4 h-4" />}
                                                 </button>
                                                 <div className={`w-12 h-12 rounded-lg flex items-center justify-center text-xl font-bold shadow-md ${isOverdue || order.isUrgent ? 'bg-red-600 text-white' : 'bg-blue-600 text-white'
                                                     }`}>
@@ -882,7 +882,7 @@ const AllOrdersPage: React.FC = () => {
                                                 <div className="flex flex-col items-center md:items-end md:min-w-[90px]">
                                                     <span className="text-[10px] text-slate-400 uppercase tracking-wider font-bold mb-1">Amount</span>
                                                     {canViewFinancials ? (
-                                                        <span className="text-white font-bold text-sm md:text-base tracking-tight">${order.orderAmount.toLocaleString()}</span>
+                                                        <span className="text-white font-bold text-sm md:text-base tracking-tight">${(order.orderAmount ?? 0).toLocaleString()}</span>
                                                     ) : (
                                                         <div className="flex items-center gap-1 text-slate-500">
                                                             <Lock className="w-3 h-3" />
@@ -968,7 +968,7 @@ const AllOrdersPage: React.FC = () => {
             {/* Bulk Action Bar */}
             <BulkActionBar
                 selectedIds={Array.from(selectedOrderIds)}
-                selectedOrders={orders.filter(o => selectedOrderIds.has(o.id)).map(o => ({ id: o.id, orderNumber: o.orderNumber }))}
+                selectedOrders={orders.filter(o => selectedOrderIds.has(String(o.id))).map(o => ({ id: String(o.id), orderNumber: o.orderNumber }))}
                 onClear={clearSelection}
                 salesAgents={[
                     { email: 'lance@pandapatches.com', name: 'Lance' },
