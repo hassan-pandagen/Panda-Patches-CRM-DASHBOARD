@@ -2,6 +2,7 @@ import React, { useState, useMemo, useCallback, type KeyboardEvent } from "react
 import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { localMidnightISO, localNextDayISO } from "../utils/dateFilters";
+import { fetchAllPaged } from "../utils/fetchAllPaged";
 import ActivityFeed from "../components/dashboard/ActivityFeed";
 import {
   Clock,
@@ -228,22 +229,23 @@ export default function Dashboard() {
         throw new Error("Not authenticated");
       }
 
-      let query = supabase
-         .from("orders")
-         .select("id, order_number, customer_name, customer_email, design_name, status, created_at, updated_at, sales_agent, order_amount, amount_paid, is_urgent, lead_source, patches_type")
-         .gte("created_at", localMidnightISO(activeDateRange.startDate))
-         .lt("created_at", localNextDayISO(activeDateRange.endDate));
+      // Paged past PostgREST's 1000-row cap so the dashboard's revenue/collected/order
+      // totals don't silently understate once a date range exceeds 1000 orders.
+      const rows = await fetchAllPaged<any>((from, to) => {
+        let query = supabase
+          .from("orders")
+          .select("id, order_number, customer_name, customer_email, design_name, status, created_at, updated_at, sales_agent, order_amount, amount_paid, is_urgent, lead_source, patches_type")
+          .gte("created_at", localMidnightISO(activeDateRange.startDate))
+          .lt("created_at", localNextDayISO(activeDateRange.endDate));
 
-      // ✅ FIX ADDED HERE: Force filter by email if not Admin
-      // This ensures sales agents ONLY see their own rows, regardless of RLS speed.
-      // While RLS is the primary security layer, this prevents UI flicker or showing incorrect data on a slow connection.
-      if (role !== UserRole.ADMIN && user?.email) {
-        query = query.eq("sales_agent", user.email);
-      }
-
-      const { data, error } = await query;
-      if (error) throw error;
-      return (data || []).map(mapDbToOrder);
+        // Force filter by email if not Admin — sales agents only see their own rows (RLS is the
+        // primary layer; this avoids UI flicker on a slow connection).
+        if (role !== UserRole.ADMIN && user?.email) {
+          query = query.eq("sales_agent", user.email);
+        }
+        return query.order("created_at", { ascending: false }).range(from, to);
+      });
+      return rows.map(mapDbToOrder);
     },
     enabled: !!user && !authLoading,
     staleTime: 1000 * 30,               // 30 seconds — balance between fresh data and API calls

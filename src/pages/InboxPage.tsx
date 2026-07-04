@@ -25,6 +25,7 @@ import {
   Lock, FileText, ExternalLink, Pencil, Phone, Mail, Search,
   Package, DollarSign, ImagePlus, Loader2, ArrowLeft,
 } from 'lucide-react';
+import Modal from '../components/ui/Modal';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -305,6 +306,7 @@ const CustomerInfoModal: React.FC<{
   onClose: () => void;
   onSaved: () => void;
 }> = ({ conv, onClose, onSaved }) => {
+  const titleId = React.useId();
   const [name, setName] = useState(conv.customer_name ?? '');
   const [email, setEmail] = useState(conv.customer_email ?? '');
   const [phone, setPhone] = useState(conv.customer_phone ?? '');
@@ -338,11 +340,10 @@ const CustomerInfoModal: React.FC<{
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative bg-slate-900 border border-white/10 rounded-2xl w-full max-w-md shadow-2xl">
+    <Modal isOpen onClose={onClose} labelledBy={titleId} size="sm">
+      <div>
         <div className="px-6 py-4 border-b border-white/10 flex items-center justify-between">
-          <h3 className="text-base font-semibold text-white">Edit Customer Info</h3>
+          <h3 id={titleId} className="text-base font-semibold text-white">Edit Customer Info</h3>
           <button
             onClick={onClose}
             className="p-1.5 text-slate-400 hover:text-white hover:bg-white/10 rounded-lg"
@@ -443,7 +444,7 @@ const CustomerInfoModal: React.FC<{
           </button>
         </div>
       </div>
-    </div>
+    </Modal>
   );
 };
 
@@ -459,6 +460,7 @@ const ConvertToOrderModal: React.FC<{
   onClose: () => void;
   onCreated: (orderNumber: string) => void;
 }> = ({ conv, agentEmail, agentUserId, onClose, onCreated }) => {
+  const titleId = React.useId();
   const [designName, setDesignName] = useState('');
   const [patchType, setPatchType] = useState('Embroidered');
   const [quantity, setQuantity] = useState('');
@@ -565,12 +567,11 @@ const ConvertToOrderModal: React.FC<{
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative bg-slate-900 border border-white/10 rounded-2xl w-full max-w-lg shadow-2xl max-h-[90vh] overflow-y-auto">
+    <Modal isOpen onClose={onClose} labelledBy={titleId} size="md">
+      <div>
         <div className="px-6 py-4 border-b border-white/10 flex items-center justify-between sticky top-0 bg-slate-900 z-10">
           <div>
-            <h3 className="text-base font-semibold text-white">Convert Chat to Order</h3>
+            <h3 id={titleId} className="text-base font-semibold text-white">Convert Chat to Order</h3>
             <p className="text-xs text-slate-500 mt-0.5">
               Skip the quote step — customer already agreed to a price
             </p>
@@ -730,7 +731,7 @@ const ConvertToOrderModal: React.FC<{
           </button>
         </div>
       </div>
-    </div>
+    </Modal>
   );
 };
 

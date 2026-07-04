@@ -78,7 +78,8 @@ const EmailLogsSection: React.FC<EmailLogsSectionProps> = ({ order }) => {
   const queryClient = useQueryClient();
   const { success: showSuccess, error: showError } = useToast();
   const { role } = useAuth();
-  const isAdmin = role === 'ADMIN';
+  // Admins + sales agents may send customer emails; production/shipping may not.
+  const canSendEmail = role !== 'PRODUCTION' && role !== 'SHIPPING';
   const [resendingId, setResendingId] = React.useState<number | null>(null);
   const [manualStatus, setManualStatus] = React.useState('');
   const [sendingManual, setSendingManual] = React.useState(false);
@@ -125,16 +126,25 @@ const EmailLogsSection: React.FC<EmailLogsSectionProps> = ({ order }) => {
     }
     return s;
   }, [history, order.status]);
-  const loggedTemplates = React.useMemo(
-    () => new Set(communications.map((c: any) => c.template_id)),
-    [communications],
-  );
+  // A status is "handled" if ANY communication references it — matched by the status parsed
+  // from the subject ("Auto-Trigger: SHIPPED" / "FAILED: SHIPPED") AND by template_id. Matching
+  // on both (not template_id alone) means a renamed/legacy template can't make a genuinely-sent
+  // email look missing and trigger a duplicate send.
+  const handledKeys = React.useMemo(() => {
+    const s = new Set<string>();
+    for (const c of communications as any[]) {
+      const fromSubject = String(c.subject || '').replace(/^(FAILED:|Auto-Trigger:)\s*/i, '').trim();
+      if (fromSubject) s.add(fromSubject);
+      if (c.template_id) s.add(c.template_id);
+    }
+    return s;
+  }, [communications]);
   const missingEmails = React.useMemo(
     () =>
       Object.entries(BACKSTOP_STATUS_EMAILS)
-        .filter(([status, info]) => reachedStatuses.has(status) && !loggedTemplates.has(info.template))
+        .filter(([status, info]) => reachedStatuses.has(status) && !handledKeys.has(status) && !handledKeys.has(info.template))
         .map(([status, info]) => ({ status, ...info })),
-    [reachedStatuses, loggedTemplates],
+    [reachedStatuses, handledKeys],
   );
 
   const handleSendStatus = async (status: string, label: string) => {
@@ -191,7 +201,7 @@ const EmailLogsSection: React.FC<EmailLogsSectionProps> = ({ order }) => {
           <h3 className="text-lg font-semibold text-white">Email Communications</h3>
         </div>
         <p className="text-sm text-slate-400 mb-4">No emails sent yet for this order.</p>
-        {isAdmin && (
+        {canSendEmail && (
           <div className="flex items-center gap-2">
             <select
               value={manualStatus}
@@ -223,7 +233,7 @@ const EmailLogsSection: React.FC<EmailLogsSectionProps> = ({ order }) => {
         <Mail className="w-5 h-5 text-brand-orange" />
         <h3 className="text-lg font-semibold text-white">Email Communications</h3>
         <span className="text-xs text-slate-500">{sent.length} sent · {failed.length} failed</span>
-        {isAdmin && (
+        {canSendEmail && (
           <div className="ml-auto flex items-center gap-2">
             <select
               value={manualStatus}
@@ -264,7 +274,7 @@ const EmailLogsSection: React.FC<EmailLogsSectionProps> = ({ order }) => {
                 <p className="text-sm font-semibold text-amber-200 truncate">→ Customer: {m.label}</p>
                 <p className="text-xs text-slate-400 mt-0.5">Order reached this stage but no email was logged.</p>
               </div>
-              {isAdmin && (
+              {canSendEmail && (
                 <button
                   onClick={() => handleSendStatus(m.status, m.label)}
                   disabled={sendingStatus === m.status}

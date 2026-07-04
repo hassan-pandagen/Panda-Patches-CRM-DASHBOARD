@@ -409,9 +409,32 @@ const OrderPage: React.FC = () => {
                                     target.style.display = 'none';
                                     const parent = target.parentElement;
                                     if (parent && !parent.querySelector('.img-error-msg')) {
+                                        // Built with DOM APIs (not innerHTML) so a hostile attachment
+                                        // URL/filename can't inject markup — link.href uses the property
+                                        // setter, which never parses HTML.
                                         const msg = document.createElement('div');
                                         msg.className = 'img-error-msg text-center text-slate-400 py-8 px-6';
-                                        msg.innerHTML = '<div class="text-4xl mb-3">🖼️</div><div class="text-sm font-medium text-slate-300 mb-1">Image not available</div><div class="text-xs text-slate-500">The file may have failed to upload. Ask the customer to re-send the artwork.</div><a href="' + previewUrl + '" target="_blank" rel="noopener noreferrer" class="mt-3 inline-block text-xs text-brand-orange underline">Try opening directly →</a>';
+
+                                        const icon = document.createElement('div');
+                                        icon.className = 'text-4xl mb-3';
+                                        icon.textContent = '🖼️';
+
+                                        const title = document.createElement('div');
+                                        title.className = 'text-sm font-medium text-slate-300 mb-1';
+                                        title.textContent = 'Image not available';
+
+                                        const hint = document.createElement('div');
+                                        hint.className = 'text-xs text-slate-500';
+                                        hint.textContent = 'The file may have failed to upload. Ask the customer to re-send the artwork.';
+
+                                        const link = document.createElement('a');
+                                        link.href = previewUrl;
+                                        link.target = '_blank';
+                                        link.rel = 'noopener noreferrer';
+                                        link.className = 'mt-3 inline-block text-xs text-brand-orange underline';
+                                        link.textContent = 'Try opening directly →';
+
+                                        msg.append(icon, title, hint, link);
                                         parent.appendChild(msg);
                                     }
                                 }}

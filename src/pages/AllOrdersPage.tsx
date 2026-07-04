@@ -5,6 +5,7 @@ import { createPortal } from 'react-dom';
 import { useQuery, keepPreviousData } from '@tanstack/react-query';
 import { useSearchParams, Link, useNavigate } from 'react-router-dom';
 import { localMidnightISO, localNextDayISO } from '../utils/dateFilters';
+import { fetchAllPaged } from '../utils/fetchAllPaged';
 import BulkActionBar from '../components/orders/BulkActionBar';
 import QuickViewDrawer from '../components/orders/QuickViewDrawer';
 import SavedFilters from '../components/ui/SavedFilters';
@@ -332,37 +333,34 @@ async function fetchTabCounts(params: {
 
     // Single query: fetch only status, is_urgent, created_at, order_amount, amount_paid, sales_agent
     // This is lightweight — no large text fields
-    let query = supabase
-        .from('orders')
-        .select('status, is_urgent, created_at, order_amount, amount_paid, sales_agent, production_completed_at');
+    // Paged past PostgREST's 1000-row cap so the tab counts / stat rollups don't silently
+    // undercount once a filter window exceeds 1000 orders.
+    const rows = await fetchAllPaged<any>((from, to) => {
+        let query = supabase
+            .from('orders')
+            .select('status, is_urgent, created_at, order_amount, amount_paid, sales_agent, production_completed_at');
 
-    // AGENT/USER see only their assigned orders; ADMIN/PRODUCTION see all
-    if (userRole !== UserRole.ADMIN && userRole !== UserRole.PRODUCTION && userRole !== UserRole.SHIPPING && userEmail) {
-        query = query.eq('sales_agent', userEmail);
-    }
-
-    // Production tab counts also exclude completed
-    if (userRole === UserRole.PRODUCTION) {
-        query = query.is('production_completed_at', null);
-    }
-
-    if (salesAgent) query = query.eq('sales_agent', salesAgent);
-    if (leadSource) {
-        if (leadSource === 'Unknown') {
-            query = query.or('lead_source.is.null,lead_source.eq.');
-        } else {
-            query = query.eq('lead_source', leadSource);
+        // AGENT/USER see only their assigned orders; ADMIN/PRODUCTION see all
+        if (userRole !== UserRole.ADMIN && userRole !== UserRole.PRODUCTION && userRole !== UserRole.SHIPPING && userEmail) {
+            query = query.eq('sales_agent', userEmail);
         }
-    }
-    if (dateRangeStart && dateRangeEnd) {
-        query = query.gte('created_at', localMidnightISO(dateRangeStart)).lt('created_at', localNextDayISO(dateRangeEnd));
-    }
-
-    const { data, error } = await query;
-
-    if (error) throw new Error(error.message);
-
-    const rows = data || [];
+        // Production tab counts also exclude completed
+        if (userRole === UserRole.PRODUCTION) {
+            query = query.is('production_completed_at', null);
+        }
+        if (salesAgent) query = query.eq('sales_agent', salesAgent);
+        if (leadSource) {
+            if (leadSource === 'Unknown') {
+                query = query.or('lead_source.is.null,lead_source.eq.');
+            } else {
+                query = query.eq('lead_source', leadSource);
+            }
+        }
+        if (dateRangeStart && dateRangeEnd) {
+            query = query.gte('created_at', localMidnightISO(dateRangeStart)).lt('created_at', localNextDayISO(dateRangeEnd));
+        }
+        return query.order('created_at', { ascending: false }).range(from, to);
+    });
     const tenDaysAgo = new Date();
     tenDaysAgo.setDate(tenDaysAgo.getDate() - 10);
 
