@@ -122,13 +122,13 @@ const MetaCapiPanel: React.FC<Props> = ({ orderId, orderNumber }) => {
 
       <div className="grid grid-cols-2 gap-2 text-xs">
         <div>
-          <p className="text-slate-500">Event ID</p>
+          <p className="text-slate-400">Event ID</p>
           <p className="text-slate-300 font-mono truncate" title={order.capi_purchase_event_id || ''}>
             {order.capi_purchase_event_id || '—'}
           </p>
         </div>
         <div>
-          <p className="text-slate-500">Sent at</p>
+          <p className="text-slate-400">Sent at</p>
           <p className="text-slate-300">
             {order.capi_purchase_sent_at
               ? new Date(order.capi_purchase_sent_at).toLocaleString()
@@ -139,7 +139,7 @@ const MetaCapiPanel: React.FC<Props> = ({ orderId, orderNumber }) => {
 
       {fbtraceId && (
         <div className="text-xs">
-          <p className="text-slate-500">fbtrace_id (give this to Meta support)</p>
+          <p className="text-slate-400">fbtrace_id (give this to Meta support)</p>
           <p className="text-slate-300 font-mono break-all">{fbtraceId}</p>
         </div>
       )}
@@ -191,7 +191,7 @@ const MetaCapiPanel: React.FC<Props> = ({ orderId, orderNumber }) => {
           href="https://business.facebook.com/events_manager2/list/dataset"
           target="_blank"
           rel="noreferrer"
-          className="flex items-center gap-1.5 px-3 py-1.5 text-slate-500 hover:text-white text-xs transition-colors ml-auto"
+          className="flex items-center gap-1.5 px-3 py-1.5 text-slate-400 hover:text-white text-xs transition-colors ml-auto"
         >
           <ExternalLink className="w-3 h-3" />
           Events Manager

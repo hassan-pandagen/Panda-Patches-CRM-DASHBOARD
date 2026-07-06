@@ -78,6 +78,8 @@ const Textarea = React.forwardRef<HTMLTextAreaElement, TextareaProps>(
             id={id}
             value={value}
             maxLength={maxLength}
+            aria-invalid={isError}
+            aria-describedby={isError ? `${id}-error` : undefined}
             onFocus={() => setIsFocused(true)}
             onBlur={() => setIsFocused(false)}
             className="w-full bg-transparent text-white outline-none placeholder-transparent resize-none"
@@ -98,11 +100,11 @@ const Textarea = React.forwardRef<HTMLTextAreaElement, TextareaProps>(
 
         <div className="mt-1.5 flex justify-between items-center">
           {isError ? (
-            <motion.p className="flex items-center gap-1 text-sm text-red-500">
+            <motion.p id={`${id}-error`} role="alert" className="flex items-center gap-1 text-sm text-red-500">
               <AlertCircle size={14} /> {error}
             </motion.p>
           ) : <div />}
-          {maxLength && <span className="text-xs text-slate-500">{String(value).length}/{maxLength}</span>}
+          {maxLength && <span className="text-xs text-slate-400">{String(value).length}/{maxLength}</span>}
         </div>
       </motion.div>
     );

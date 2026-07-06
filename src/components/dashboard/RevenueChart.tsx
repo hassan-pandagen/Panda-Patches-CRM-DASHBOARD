@@ -19,7 +19,7 @@ const CustomTooltip = ({ active, payload, label }: any) => {
         <p className="text-brand-orange font-bold text-lg">
           ${firstItem.value.toLocaleString()}
         </p>
-        <p className="text-xs text-slate-500 mt-1">Click to view orders</p>
+        <p className="text-xs text-slate-400 mt-1">Click to view orders</p>
       </div>
     );
   }

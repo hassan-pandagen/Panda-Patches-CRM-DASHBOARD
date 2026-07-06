@@ -33,7 +33,7 @@ function ErrorFallback({ error, resetErrorBoundary }: FallbackProps) {
             {error.message || 'Unknown Error'}
           </p>
           {process.env.NODE_ENV === 'development' && (
-            <details className="text-[10px] text-slate-500 cursor-pointer">
+            <details className="text-[10px] text-slate-400 cursor-pointer">
               <summary className="hover:text-slate-300 transition-colors">View Stack Trace</summary>
               <pre className="mt-2 whitespace-pre-wrap overflow-auto max-h-32 custom-scrollbar">
                 {error.stack}

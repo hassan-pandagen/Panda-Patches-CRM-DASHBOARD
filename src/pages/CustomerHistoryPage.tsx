@@ -134,7 +134,7 @@ const CustomerHistoryPage: React.FC = () => {
       <div className="p-10 text-center flex flex-col items-center justify-center h-[60vh] text-slate-400">
         <h2 className="text-xl font-bold text-white mb-2">No History Found</h2>
         <p>No orders found for: <span className="text-brand-orange font-mono">{customerId}</span></p>
-        <p className="text-xs text-slate-500 mt-2">
+        <p className="text-xs text-slate-400 mt-2">
           This customer may not exist, or the identifier is incorrect.
         </p>
         <button 
@@ -233,7 +233,7 @@ const CustomerHistoryPage: React.FC = () => {
                 </div>
 
                 <div className="text-right">
-                  <div className="text-xs text-slate-500 mb-2 uppercase tracking-wider font-bold">
+                  <div className="text-xs text-slate-400 mb-2 uppercase tracking-wider font-bold">
                     Customer Status
                   </div>
                   <div className={`inline-flex items-center gap-2 px-5 py-2.5 rounded-xl font-semibold border ${
@@ -323,7 +323,7 @@ const CustomerHistoryPage: React.FC = () => {
             </div>
             <div className="overflow-x-auto">
               <table className="w-full text-left text-sm">
-                <thead className="bg-slate-900/50 text-xs uppercase font-semibold tracking-wider text-slate-500">
+                <thead className="bg-slate-900/50 text-xs uppercase font-semibold tracking-wider text-slate-400">
                   <tr>
                     <th className="px-6 py-4">Order ID</th>
                     <th className="px-6 py-4">Date</th>
@@ -356,7 +356,7 @@ const CustomerHistoryPage: React.FC = () => {
                           <div className="text-sky-300 mb-1">{order.customerEmail}</div>
                         )}
                         {order.customerPhone && (
-                          <div className="text-slate-500">{order.customerPhone}</div>
+                          <div className="text-slate-400">{order.customerPhone}</div>
                         )}
                       </td>
                       <td className="px-6 py-4">

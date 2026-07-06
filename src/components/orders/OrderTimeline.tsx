@@ -71,7 +71,7 @@ const OrderTimeline: React.FC<{ orderId: number }> = ({ orderId }) => {
       <div className="relative border-l border-white/10 ml-3 space-y-8 py-2">
         
         {items.length === 0 && (
-            <div className="ml-6 text-slate-500 text-sm">No activity recorded yet.</div>
+            <div className="ml-6 text-slate-400 text-sm">No activity recorded yet.</div>
         )}
 
         {items.map((item) => (
@@ -94,12 +94,12 @@ const OrderTimeline: React.FC<{ orderId: number }> = ({ orderId }) => {
                     <div className="w-5 h-5 rounded-full bg-white/10 flex items-center justify-center">
                         <User className="w-3 h-3 text-slate-400" />
                     </div>
-                    <span className="text-xs text-slate-500">{item.user}</span>
+                    <span className="text-xs text-slate-400">{item.user}</span>
                 </div>
               </div>
 
               {/* Date */}
-              <div className="flex items-center gap-1.5 text-xs text-slate-500 bg-white/5 px-2 py-1 rounded-md whitespace-nowrap">
+              <div className="flex items-center gap-1.5 text-xs text-slate-400 bg-white/5 px-2 py-1 rounded-md whitespace-nowrap">
                 <Clock className="w-3 h-3" />
                 {item.date ? format(new Date(item.date), 'MMM d, h:mm a') : 'No date'}
               </div>

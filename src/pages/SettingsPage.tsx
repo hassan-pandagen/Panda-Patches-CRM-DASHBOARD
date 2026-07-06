@@ -288,7 +288,7 @@ function StorageCleanupSection() {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
             {Object.entries(report.bucketBreakdown).map(([bucket, stats]) => (
               <div key={bucket} className="bg-slate-800/30 rounded-lg p-3 border border-slate-700/30">
-                <p className="text-xs text-slate-500 font-mono">{bucket}</p>
+                <p className="text-xs text-slate-400 font-mono">{bucket}</p>
                 <p className="text-sm text-slate-300 mt-1">
                   {stats.total} files · <span className="text-amber-400">{stats.orphaned} orphaned</span>
                   {stats.orphanedSizeMB > 0 && <span className="text-red-400"> ({stats.orphanedSizeMB.toFixed(1)} MB)</span>}
@@ -304,7 +304,7 @@ function StorageCleanupSection() {
                 <button onClick={toggleAll} className="text-xs text-brand-orange hover:underline">
                   {selected.size === report.orphanedFiles.length ? 'Deselect All' : 'Select All'}
                 </button>
-                <span className="text-xs text-slate-500">{selected.size} selected</span>
+                <span className="text-xs text-slate-400">{selected.size} selected</span>
               </div>
 
               <div className="max-h-64 overflow-y-auto space-y-1 bg-slate-900/50 rounded-lg p-2 border border-slate-700/30">
@@ -319,7 +319,7 @@ function StorageCleanupSection() {
                         className="rounded border-slate-600 text-brand-orange focus:ring-brand-orange"
                       />
                       <span className="text-xs font-mono text-slate-400 truncate flex-1">{file.bucket}/{file.path}</span>
-                      {file.size ? <span className="text-xs text-slate-500 shrink-0">{(file.size / 1024).toFixed(0)} KB</span> : null}
+                      {file.size ? <span className="text-xs text-slate-400 shrink-0">{(file.size / 1024).toFixed(0)} KB</span> : null}
                     </label>
                   );
                 })}

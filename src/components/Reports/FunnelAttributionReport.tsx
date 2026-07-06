@@ -291,14 +291,14 @@ const FunnelAttributionReport: React.FC<Props> = ({ startDate, endDate }) => {
               <Calendar className="w-4 h-4 text-brand-orange" />
               Quote → Order Adoption (Last 6 Months)
             </h4>
-            <p className="text-xs text-slate-500 mt-0.5">
+            <p className="text-xs text-slate-400 mt-0.5">
               Watch agents adopt the Convert to Order flow over time.
               Green bars = good behavior, amber bars = bypass behavior.
             </p>
           </div>
         </div>
         {trendData.length === 0 ? (
-          <div className="py-10 text-center text-sm text-slate-500">No data yet</div>
+          <div className="py-10 text-center text-sm text-slate-400">No data yet</div>
         ) : (
           <ResponsiveContainer width="100%" height={300}>
             <ComposedChart data={trendData}>
@@ -361,7 +361,7 @@ const FunnelAttributionReport: React.FC<Props> = ({ startDate, endDate }) => {
                 })}
               </tbody>
             </table>
-            <div className="mt-3 px-3 space-y-1 text-[10px] text-slate-500">
+            <div className="mt-3 px-3 space-y-1 text-[10px] text-slate-400">
               <p>
                 <strong className="text-emerald-400">Quote → Order</strong> = customers who quoted and eventually ordered.
                 This is your real business conversion rate.
@@ -383,7 +383,7 @@ const FunnelAttributionReport: React.FC<Props> = ({ startDate, endDate }) => {
               <Send className="w-4 h-4 text-brand-orange" />
               CAPI Events Sent to Meta (Last Period)
             </h4>
-            <p className="text-xs text-slate-500 mt-0.5">
+            <p className="text-xs text-slate-400 mt-0.5">
               Each Purchase event firing daily, broken down by attribution quality.
             </p>
           </div>
@@ -392,7 +392,7 @@ const FunnelAttributionReport: React.FC<Props> = ({ startDate, endDate }) => {
           </span>
         </div>
         {capiByDay.length === 0 ? (
-          <div className="py-10 text-center text-sm text-slate-500">No CAPI events in this date range</div>
+          <div className="py-10 text-center text-sm text-slate-400">No CAPI events in this date range</div>
         ) : (
           <ResponsiveContainer width="100%" height={280}>
             <BarChart data={capiByDay}>
@@ -424,7 +424,7 @@ const FunnelAttributionReport: React.FC<Props> = ({ startDate, endDate }) => {
               <AlertCircle className="w-4 h-4 text-amber-400" />
               Agents Bypassing the Quote Flow
             </h4>
-            <p className="text-xs text-slate-500 mt-0.5">
+            <p className="text-xs text-slate-400 mt-0.5">
               Customer had a quote in the system, but the agent created a fresh order instead
               of using "Convert to Order" — this loses attribution and clutters data.
             </p>
@@ -506,10 +506,10 @@ const FunnelAttributionReport: React.FC<Props> = ({ startDate, endDate }) => {
               <BarChart2 className="w-4 h-4 text-brand-orange" />
               Lead Source Performance &amp; Conversion
             </h4>
-            <p className="text-xs text-slate-500 mt-0.5">How many leads each channel brings, what share converts to orders, and the revenue they drive.</p>
+            <p className="text-xs text-slate-400 mt-0.5">How many leads each channel brings, what share converts to orders, and the revenue they drive.</p>
           </div>
           <div className="flex items-center gap-1 text-xs">
-            <span className="text-slate-500 mr-1">Sort by:</span>
+            <span className="text-slate-400 mr-1">Sort by:</span>
             {(['revenue', 'leads', 'orders', 'conv', 'avg'] as const).map(k => (
               <button
                 key={k}
@@ -564,7 +564,7 @@ const FunnelAttributionReport: React.FC<Props> = ({ startDate, endDate }) => {
                   <tr key={row.source} className="hover:bg-white/5 transition-colors">
                     <td className="px-3 py-2.5">
                       <div className="flex items-center gap-2">
-                        <span className="text-xs text-slate-500 w-4">{i + 1}</span>
+                        <span className="text-xs text-slate-400 w-4">{i + 1}</span>
                         <span className="text-slate-200 font-medium">{row.source}</span>
                       </div>
                     </td>
@@ -596,7 +596,7 @@ const FunnelAttributionReport: React.FC<Props> = ({ startDate, endDate }) => {
             </tbody>
           </table>
         </div>
-        <p className="mt-3 px-1 text-[10px] text-slate-500 leading-relaxed">
+        <p className="mt-3 px-1 text-[10px] text-slate-400 leading-relaxed">
           <strong className="text-slate-400">Conv %</strong> = orders ÷ leads for that source (leads = quote requests, resolved by the same attribution logic).
           A <span className="text-slate-400">—</span> means the source produced orders but no matching quote leads in this period
           (e.g. direct checkout that skipped the quote step), so a rate can't be computed. Adjust the date range to change the window.
@@ -609,7 +609,7 @@ const FunnelAttributionReport: React.FC<Props> = ({ startDate, endDate }) => {
           <Send className="w-4 h-4 text-brand-orange" />
           Order-level CAPI Breakdown
         </h4>
-        <p className="text-xs text-slate-500 mb-4">
+        <p className="text-xs text-slate-400 mb-4">
           Every order sent to Meta — click any row to open the order. EMQ is estimated based on signals available.
         </p>
         <div className="overflow-x-auto">
@@ -712,7 +712,7 @@ const FunnelAttributionReport: React.FC<Props> = ({ startDate, endDate }) => {
                 })}
               {orders.filter(o => o.capi_purchase_sent).length === 0 && (
                 <tr>
-                  <td colSpan={9} className="px-3 py-8 text-center text-slate-500 text-sm">No CAPI events in this period</td>
+                  <td colSpan={9} className="px-3 py-8 text-center text-slate-400 text-sm">No CAPI events in this period</td>
                 </tr>
               )}
             </tbody>
@@ -720,8 +720,8 @@ const FunnelAttributionReport: React.FC<Props> = ({ startDate, endDate }) => {
         </div>
         <p className="mt-3 text-[10px] text-slate-600">
           EMQ estimated based on: Email (+2.5), FBC/CTWA/ref (+2.0), FBP (+1.5), IP (+1.0), UA (+0.5), UTM only (+0.5). Max 10.
-          &nbsp;·&nbsp; <strong className="text-slate-500">Lead</strong> fires when mockup is sent (AWAITING_APPROVAL).
-          &nbsp;·&nbsp; <strong className="text-slate-500">Checkout</strong> fires when customer approves (IN_PRODUCTION). Hover checkmarks for date &amp; source.
+          &nbsp;·&nbsp; <strong className="text-slate-400">Lead</strong> fires when mockup is sent (AWAITING_APPROVAL).
+          &nbsp;·&nbsp; <strong className="text-slate-400">Checkout</strong> fires when customer approves (IN_PRODUCTION). Hover checkmarks for date &amp; source.
         </p>
       </div>
 
@@ -747,7 +747,7 @@ const StatCard: React.FC<{
       <div className={`inline-flex items-center justify-center w-10 h-10 rounded-lg border mb-3 ${colorMap[color]}`}>
         {icon}
       </div>
-      <p className="text-xs uppercase tracking-wider text-slate-500 font-semibold">{label}</p>
+      <p className="text-xs uppercase tracking-wider text-slate-400 font-semibold">{label}</p>
       <p className="text-2xl font-bold text-white mt-1">{value}</p>
       <p className="text-xs text-slate-400 mt-1">{sub}</p>
     </div>

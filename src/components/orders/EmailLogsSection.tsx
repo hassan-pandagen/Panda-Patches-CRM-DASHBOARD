@@ -216,7 +216,7 @@ const EmailLogsSection: React.FC<EmailLogsSectionProps> = ({ order }) => {
             <button
               onClick={handleManualSend}
               disabled={!manualStatus || sendingManual}
-              className="flex items-center gap-1.5 px-4 py-2 bg-brand-orange hover:bg-orange-500 disabled:bg-slate-700 disabled:text-slate-500 text-white text-sm font-semibold rounded-lg transition-colors"
+              className="flex items-center gap-1.5 px-4 py-2 bg-brand-orange hover:bg-orange-500 disabled:bg-slate-700 disabled:text-slate-400 text-white text-sm font-semibold rounded-lg transition-colors"
             >
               <Send className={`w-4 h-4 ${sendingManual ? 'animate-pulse' : ''}`} />
               {sendingManual ? 'Sending…' : 'Send'}
@@ -232,7 +232,7 @@ const EmailLogsSection: React.FC<EmailLogsSectionProps> = ({ order }) => {
       <div className="flex items-center gap-2 mb-5 flex-wrap">
         <Mail className="w-5 h-5 text-brand-orange" />
         <h3 className="text-lg font-semibold text-white">Email Communications</h3>
-        <span className="text-xs text-slate-500">{sent.length} sent · {failed.length} failed</span>
+        <span className="text-xs text-slate-400">{sent.length} sent · {failed.length} failed</span>
         {canSendEmail && (
           <div className="ml-auto flex items-center gap-2">
             <select
@@ -248,7 +248,7 @@ const EmailLogsSection: React.FC<EmailLogsSectionProps> = ({ order }) => {
             <button
               onClick={handleManualSend}
               disabled={!manualStatus || sendingManual}
-              className="flex items-center gap-1 px-3 py-1.5 bg-brand-orange hover:bg-orange-500 disabled:bg-slate-700 disabled:text-slate-500 text-white text-xs font-semibold rounded-lg transition-colors"
+              className="flex items-center gap-1 px-3 py-1.5 bg-brand-orange hover:bg-orange-500 disabled:bg-slate-700 disabled:text-slate-400 text-white text-xs font-semibold rounded-lg transition-colors"
             >
               <Send className={`w-3.5 h-3.5 ${sendingManual ? 'animate-pulse' : ''}`} />
               {sendingManual ? 'Sending…' : 'Send'}
@@ -333,7 +333,7 @@ const EmailLogsSection: React.FC<EmailLogsSectionProps> = ({ order }) => {
                   <div>
                     <p className="text-xs font-semibold text-red-300">{reason}</p>
                     {comm.body && (
-                      <p className="text-xs text-slate-500 mt-0.5 font-mono break-all leading-relaxed">
+                      <p className="text-xs text-slate-400 mt-0.5 font-mono break-all leading-relaxed">
                         {comm.body.length > 120 ? comm.body.slice(0, 120) + '…' : comm.body}
                       </p>
                     )}
@@ -373,10 +373,10 @@ const EmailLogsSection: React.FC<EmailLogsSectionProps> = ({ order }) => {
                       <p className="text-xs font-medium text-slate-300 truncate">
                         {formatTemplateName(comm.template_id || '')}
                       </p>
-                      <p className="text-xs text-slate-500 truncate">To: {comm.recipient_email}</p>
+                      <p className="text-xs text-slate-400 truncate">To: {comm.recipient_email}</p>
                     </div>
                   </div>
-                  <span className="text-xs text-slate-500 flex-shrink-0 ml-3">{time}</span>
+                  <span className="text-xs text-slate-400 flex-shrink-0 ml-3">{time}</span>
                 </div>
               );
             })}

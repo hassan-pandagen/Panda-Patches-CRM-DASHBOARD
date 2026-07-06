@@ -282,7 +282,7 @@ const PaymentForm: React.FC<{ tokenData: any }> = ({ tokenData: tokenDataRaw }) 
                 className={`pl-7 ${inputCls(!!tokenData.order_amount)}`} />
             </div>
             {tokenData.order_amount && (
-              <p className="text-xs text-slate-500 mt-1">Amount set by your sales agent.</p>
+              <p className="text-xs text-slate-400 mt-1">Amount set by your sales agent.</p>
             )}
           </Field>
 

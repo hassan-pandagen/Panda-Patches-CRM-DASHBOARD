@@ -228,10 +228,10 @@ export default function NotificationBell() {
 
                     <div className="max-h-[350px] overflow-y-auto custom-scrollbar">
                         {activeNotifications.length === 0 ? (
-                            <div className="py-10 px-4 text-center text-slate-500">
+                            <div className="py-10 px-4 text-center text-slate-400">
                                 <Bell className="w-8 h-8 mx-auto mb-3 opacity-20" />
                                 <p className="text-sm font-medium text-slate-400">All caught up!</p>
-                                <p className="text-xs text-slate-500 mt-1">No new alerts to attend to.</p>
+                                <p className="text-xs text-slate-400 mt-1">No new alerts to attend to.</p>
                             </div>
                         ) : (
                             <ul className="divide-y divide-white/5">
@@ -250,7 +250,7 @@ export default function NotificationBell() {
                                                         <p className="text-sm text-slate-200 leading-snug mb-1">
                                                             {n.message}
                                                         </p>
-                                                        <p className="text-xs text-slate-500">
+                                                        <p className="text-xs text-slate-400">
                                                             {new Date(n.timestamp).toLocaleDateString()} • {n.customerName}
                                                         </p>
                                                     </div>
@@ -263,7 +263,7 @@ export default function NotificationBell() {
                                                     e.stopPropagation();
                                                     markAsRead(n.id);
                                                 }}
-                                                className="absolute top-4 right-4 p-1.5 text-slate-500 hover:text-green-400 hover:bg-green-400/10 rounded-full transition-all opacity-0 group-hover:opacity-100 focus:opacity-100"
+                                                className="absolute top-4 right-4 p-1.5 text-slate-400 hover:text-green-400 hover:bg-green-400/10 rounded-full transition-all opacity-0 group-hover:opacity-100 focus:opacity-100"
                                                 title="Mark as read"
                                             >
                                                 <Check className="w-4 h-4" />

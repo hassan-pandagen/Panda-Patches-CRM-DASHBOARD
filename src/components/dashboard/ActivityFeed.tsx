@@ -98,7 +98,7 @@ const ActivityFeed: React.FC = () => {
 
   if (activities.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center py-12 text-slate-500">
+      <div className="flex flex-col items-center justify-center py-12 text-slate-400">
         <Clock className="w-8 h-8 mb-2 opacity-50" />
         <p className="text-sm">No recent activity</p>
       </div>
@@ -123,7 +123,7 @@ const ActivityFeed: React.FC = () => {
               <span className="font-mono text-brand-orange text-xs mr-1.5">{item.order_number}</span>
               {getActivityDescription(item)}
             </p>
-            <p className="text-xs text-slate-500 mt-0.5">{formatTimeAgo(item.changed_at)}</p>
+            <p className="text-xs text-slate-400 mt-0.5">{formatTimeAgo(item.changed_at)}</p>
           </div>
         </button>
       ))}

@@ -274,7 +274,7 @@ const QuotesPage: React.FC = () => {
                           <Trash2 className="w-5 h-5 text-red-400" />
                         </button>
 
-                        <ArrowRight className="w-5 h-5 text-slate-500" />
+                        <ArrowRight className="w-5 h-5 text-slate-400" />
                       </div>
                     </div>
                   </div>

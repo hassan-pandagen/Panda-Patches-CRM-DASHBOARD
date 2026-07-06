@@ -128,7 +128,7 @@ const OrdersTable: React.FC<OrdersTableProps> = ({ orders, isLoading = false }) 
                         <span className="text-white font-bold group-hover:text-brand-orange transition-colors">
                             {order.orderNumber}
                         </span>
-                        <div className="flex items-center gap-1.5 text-slate-500 text-xs mt-1">
+                        <div className="flex items-center gap-1.5 text-slate-400 text-xs mt-1">
                             <Calendar className="w-3 h-3" />
                             <span>{new Date(order.createdAt).toLocaleDateString()}</span>
                         </div>
@@ -151,7 +151,7 @@ const OrdersTable: React.FC<OrdersTableProps> = ({ orders, isLoading = false }) 
                             className="flex items-center gap-2 px-2 py-1 rounded bg-slate-900/50 border border-slate-700/50 hover:border-cyan-500/50 hover:bg-slate-800 transition-all group/btn"
                             title="View Customer History"
                           >
-                            <Mail className="w-3.5 h-3.5 text-slate-500 group-hover/btn:text-cyan-400" />
+                            <Mail className="w-3.5 h-3.5 text-slate-400 group-hover/btn:text-cyan-400" />
                             <span className="text-xs text-slate-300 group-hover/btn:text-cyan-400 font-medium truncate max-w-[140px]">
                               {order.customerEmail}
                             </span>
@@ -169,7 +169,7 @@ const OrdersTable: React.FC<OrdersTableProps> = ({ orders, isLoading = false }) 
                             className="flex items-center gap-2 px-2 py-1 rounded bg-slate-900/50 border border-slate-700/50 hover:border-emerald-500/50 hover:bg-slate-800 transition-all group/btn"
                             title="View Customer History"
                           >
-                            <Phone className="w-3.5 h-3.5 text-slate-500 group-hover/btn:text-emerald-400" />
+                            <Phone className="w-3.5 h-3.5 text-slate-400 group-hover/btn:text-emerald-400" />
                             <span className="text-xs text-slate-300 group-hover/btn:text-emerald-400 font-medium">
                               {order.customerPhone}
                             </span>

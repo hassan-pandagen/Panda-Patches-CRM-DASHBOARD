@@ -84,7 +84,7 @@ const Input = forwardRef<HTMLInputElement, InputProps>(
         ></div>
 
         <div className="relative flex items-center bg-slate-900/40 backdrop-blur-sm rounded-lg">
-          {icon && <span className="pl-4 text-slate-500">{icon}</span>}
+          {icon && <span className="pl-4 text-slate-400">{icon}</span>}
 
           <div className="relative grow">
             <input
@@ -93,6 +93,8 @@ const Input = forwardRef<HTMLInputElement, InputProps>(
               type={type}
               value={value}
               maxLength={maxLength}
+              aria-invalid={isError}
+              aria-describedby={isError ? `${id}-error` : undefined}
               onFocus={() => setIsFocused(true)}
               onBlur={() => setIsFocused(false)}
               className={`
@@ -116,7 +118,7 @@ const Input = forwardRef<HTMLInputElement, InputProps>(
 
           <div className="flex items-center gap-2 pr-4">
             {maxLength && (
-              <span className="text-xs text-slate-500">
+              <span className="text-xs text-slate-400">
                 {String(value).length}/{maxLength}
               </span>
             )}
@@ -129,7 +131,7 @@ const Input = forwardRef<HTMLInputElement, InputProps>(
                   initial={{ opacity: 0, scale: 0.5 }}
                   animate={{ opacity: 1, scale: 1 }}
                   exit={{ opacity: 0, scale: 0.5 }}
-                  className="text-slate-500 hover:text-white"
+                  className="text-slate-400 hover:text-white"
                 >
                   <X size={18} />
                 </motion.button>
@@ -143,6 +145,8 @@ const Input = forwardRef<HTMLInputElement, InputProps>(
         <AnimatePresence>
           {isError && (
             <motion.p
+              id={`${id}-error`}
+              role="alert"
               initial={{ opacity: 0, y: -5 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -5 }}

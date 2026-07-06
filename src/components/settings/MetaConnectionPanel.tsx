@@ -231,7 +231,7 @@ const MetaConnectionPanel: React.FC = () => {
         </details>
 
         {/* ── Help link ──────────────────────────────── */}
-        <div className="text-[11px] text-slate-500 flex items-center gap-1.5">
+        <div className="text-[11px] text-slate-400 flex items-center gap-1.5">
           <span>If something looks wrong, check Meta App Dashboard:</span>
           <a
             href="https://developers.facebook.com/apps/4561266394199095/webhooks/"
@@ -256,7 +256,7 @@ const Section: React.FC<{ title: string; children: React.ReactNode }> = ({ title
 );
 
 const SkeletonRow: React.FC = () => (
-  <div className="flex items-center gap-2 text-sm text-slate-500">
+  <div className="flex items-center gap-2 text-sm text-slate-400">
     <Loader2 className="w-4 h-4 animate-spin" />
     Checking…
   </div>

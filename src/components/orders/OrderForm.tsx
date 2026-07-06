@@ -588,7 +588,7 @@ const OrderForm: React.FC<OrderFormProps> = ({
           </div>
           <div>
             <label className="block text-sm font-medium text-slate-300">
-              CC Email <span className="text-slate-500 font-normal">(optional — 2nd contact)</span>
+              CC Email <span className="text-slate-400 font-normal">(optional — 2nd contact)</span>
             </label>
             <input
               type="email"
@@ -596,7 +596,7 @@ const OrderForm: React.FC<OrderFormProps> = ({
                 validate: (val) => !val || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(val) || 'Invalid email address'
               })}
               placeholder="e.g. manager@company.com"
-              className="mt-1 block w-full bg-slate-800 border-slate-600 rounded-md text-white focus:ring-brand-orange focus:border-brand-orange placeholder:text-slate-500"
+              className="mt-1 block w-full bg-slate-800 border-slate-600 rounded-md text-white focus:ring-brand-orange focus:border-brand-orange placeholder:text-slate-400"
             />
             {errors.ccEmail && <p className="text-red-400 text-xs mt-1">{errors.ccEmail.message}</p>}
           </div>
@@ -673,7 +673,7 @@ const OrderForm: React.FC<OrderFormProps> = ({
             <input type="checkbox" {...register('sampleBox')} className="h-5 w-5 rounded bg-slate-700 border-slate-600 text-brand-orange focus:ring-brand-orange" />
             <span className="text-sm font-semibold text-slate-200">📦 Include a Sample Box with this order</span>
           </label>
-          <p className="text-xs text-slate-500 mt-1 ml-7">Tick when the customer wants a sample box alongside their patches.</p>
+          <p className="text-xs text-slate-400 mt-1 ml-7">Tick when the customer wants a sample box alongside their patches.</p>
         </div>
       </FormSectionWrapper>
 
@@ -786,8 +786,8 @@ const OrderForm: React.FC<OrderFormProps> = ({
             </div>
           </div>
           <div className="grid grid-cols-2 gap-5 md:gap-8 pt-6 mt-6 border-t border-slate-700">
-            <div><p className="text-xs text-slate-500">Remaining</p><p className="text-xl font-bold text-amber-400">${amountRemaining.toFixed(2)}</p></div>
-            <div><p className="text-xs text-slate-500">Profit</p><p className={`text-xl font-bold ${profit >= 0 ? 'text-green-400' : 'text-red-400'}`}>${profit.toFixed(2)}</p></div>
+            <div><p className="text-xs text-slate-400">Remaining</p><p className="text-xl font-bold text-amber-400">${amountRemaining.toFixed(2)}</p></div>
+            <div><p className="text-xs text-slate-400">Profit</p><p className={`text-xl font-bold ${profit >= 0 ? 'text-green-400' : 'text-red-400'}`}>${profit.toFixed(2)}</p></div>
           </div>
         </FormSectionWrapper>
       )}

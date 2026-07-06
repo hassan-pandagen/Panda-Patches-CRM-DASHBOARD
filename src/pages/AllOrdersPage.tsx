@@ -109,7 +109,7 @@ const AgentDropdown: React.FC<{ agents: string[]; value: string; onChange: (v: s
                                 className={`w-full text-left px-4 py-2.5 text-sm transition-colors ${value === agent ? 'text-brand-orange bg-brand-orange/10' : 'text-slate-300 hover:bg-white/5 hover:text-white'}`}
                             >
                                 {agent.split('@')[0]}
-                                <span className="block text-xs text-slate-500">{agent}</span>
+                                <span className="block text-xs text-slate-400">{agent}</span>
                             </button>
                         ))}
                     </div>
@@ -714,7 +714,7 @@ const AllOrdersPage: React.FC = () => {
                             className="w-full bg-slate-800/50 border border-brand-orange/40 text-white text-sm rounded-xl pl-10 pr-4 py-3 focus:ring-2 focus:ring-brand-orange/60 focus:border-brand-orange transition-all placeholder-slate-400"
                         />
                         {debouncedSearch && (
-                            <span className="absolute right-10 top-1/2 -translate-y-1/2 text-xs text-slate-500 hidden sm:inline">
+                            <span className="absolute right-10 top-1/2 -translate-y-1/2 text-xs text-slate-400 hidden sm:inline">
                                 searching all time
                             </span>
                         )}
@@ -882,7 +882,7 @@ const AllOrdersPage: React.FC = () => {
                                                     {canViewFinancials ? (
                                                         <span className="text-white font-bold text-sm md:text-base tracking-tight">${(order.orderAmount ?? 0).toLocaleString()}</span>
                                                     ) : (
-                                                        <div className="flex items-center gap-1 text-slate-500">
+                                                        <div className="flex items-center gap-1 text-slate-400">
                                                             <Lock className="w-3 h-3" />
                                                             <span className="text-xs">Hidden</span>
                                                         </div>
@@ -903,7 +903,7 @@ const AllOrdersPage: React.FC = () => {
                                                             </span>
                                                         )
                                                     ) : (
-                                                        <div className="flex items-center gap-1 text-slate-500">
+                                                        <div className="flex items-center gap-1 text-slate-400">
                                                             <Lock className="w-3 h-3" />
                                                             <span className="text-xs">Hidden</span>
                                                         </div>
@@ -913,7 +913,7 @@ const AllOrdersPage: React.FC = () => {
                                                 {/* Quick view button */}
                                                 <button
                                                     onClick={(e) => { e.preventDefault(); e.stopPropagation(); setQuickViewOrder(order); }}
-                                                    className="p-2 rounded-lg text-slate-500 hover:text-brand-orange hover:bg-white/10 transition-all opacity-0 group-hover:opacity-100 hidden md:flex items-center justify-center"
+                                                    className="p-2 rounded-lg text-slate-400 hover:text-brand-orange hover:bg-white/10 transition-all opacity-0 group-hover:opacity-100 hidden md:flex items-center justify-center"
                                                     title="Quick view"
                                                 >
                                                     <ArrowRight className="w-5 h-5" />
@@ -943,7 +943,7 @@ const AllOrdersPage: React.FC = () => {
 
                     <span className="text-slate-300 font-medium text-sm">
                         Page <span className="text-white font-bold">{currentPage}</span> of {totalPages}
-                        <span className="text-slate-500 ml-2">({totalCount} orders)</span>
+                        <span className="text-slate-400 ml-2">({totalCount} orders)</span>
                     </span>
 
                     <Button

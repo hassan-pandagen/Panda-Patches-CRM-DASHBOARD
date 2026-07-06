@@ -206,19 +206,19 @@ const IncomeStatementReport: React.FC<IncomeStatementReportProps> = ({ orders, m
           <div className="bg-slate-800/50 rounded-xl p-4 border border-emerald-500/30">
             <p className="text-xs text-slate-400 uppercase font-semibold mb-1">Net Revenue</p>
             <p className="text-2xl font-bold text-emerald-400">${incomeStatement.netRevenue.toLocaleString()}</p>
-            <p className="text-xs text-slate-500 mt-1">{incomeStatement.validOrdersCount} valid orders</p>
+            <p className="text-xs text-slate-400 mt-1">{incomeStatement.validOrdersCount} valid orders</p>
           </div>
           <div className="bg-slate-800/50 rounded-xl p-4 border border-blue-500/30">
             <p className="text-xs text-slate-400 uppercase font-semibold mb-1">Gross Profit</p>
             <p className="text-2xl font-bold text-blue-400">${incomeStatement.grossProfit.toLocaleString()}</p>
-            <p className="text-xs text-slate-500 mt-1">{incomeStatement.grossProfitMargin.toFixed(1)}% margin</p>
+            <p className="text-xs text-slate-400 mt-1">{incomeStatement.grossProfitMargin.toFixed(1)}% margin</p>
           </div>
           <div className={`bg-slate-800/50 rounded-xl p-4 border ${incomeStatement.netProfit >= 0 ? 'border-brand-orange/30' : 'border-red-500/30'}`}>
             <p className="text-xs text-slate-400 uppercase font-semibold mb-1">Net Profit</p>
             <p className={`text-2xl font-bold ${incomeStatement.netProfit >= 0 ? 'text-brand-orange' : 'text-red-400'}`}>
               ${incomeStatement.netProfit.toLocaleString()}
             </p>
-            <p className="text-xs text-slate-500 mt-1">{incomeStatement.netProfitMargin.toFixed(1)}% margin</p>
+            <p className="text-xs text-slate-400 mt-1">{incomeStatement.netProfitMargin.toFixed(1)}% margin</p>
           </div>
         </div>
       </motion.div>
@@ -389,7 +389,7 @@ const IncomeStatementReport: React.FC<IncomeStatementReportProps> = ({ orders, m
                 <p className="text-xl font-bold text-red-400">
                   {incomeStatement.cancelledCount + incomeStatement.refundedCount}
                 </p>
-                <p className="text-xs text-slate-500 mt-1">
+                <p className="text-xs text-slate-400 mt-1">
                   {incomeStatement.cancelledCount} cancelled, {incomeStatement.refundedCount} refunded
                 </p>
               </div>

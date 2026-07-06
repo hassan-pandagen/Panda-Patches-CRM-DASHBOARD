@@ -124,7 +124,7 @@ const CustomerNotificationBell: React.FC = () => {
 
           <div className="max-h-80 overflow-y-auto">
             {notifications.length === 0 ? (
-              <div className="px-4 py-8 text-center text-slate-500 text-sm">
+              <div className="px-4 py-8 text-center text-slate-400 text-sm">
                 No notifications yet
               </div>
             ) : (
@@ -147,7 +147,7 @@ const CustomerNotificationBell: React.FC = () => {
                       <p className={`text-sm ${!n.is_read ? 'font-semibold text-white' : 'text-slate-300'}`}>
                         {n.title}
                       </p>
-                      <p className="text-xs text-slate-500 mt-0.5 truncate">{n.body}</p>
+                      <p className="text-xs text-slate-400 mt-0.5 truncate">{n.body}</p>
                       <p className="text-xs text-slate-600 mt-1">
                         {new Date(n.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
                       </p>

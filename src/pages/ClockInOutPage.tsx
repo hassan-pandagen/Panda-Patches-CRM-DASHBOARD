@@ -91,7 +91,7 @@ const StatCard: React.FC<{
       <span className="text-xs font-semibold text-slate-400 uppercase tracking-wide">{label}</span>
     </div>
     <p className={`text-2xl font-bold ${color}`}>{value}</p>
-    {subtext && <p className="text-xs text-slate-500 mt-1">{subtext}</p>}
+    {subtext && <p className="text-xs text-slate-400 mt-1">{subtext}</p>}
   </div>
 );
 
@@ -221,10 +221,6 @@ const ClockInOutPage: React.FC = () => {
 
   // Permissions check
   const isAdmin = role === 'ADMIN' && !permissions?.attendance_clock_only;
-
-  if (!user) {
-    return <Navigate to="/login" replace />;
-  }
 
   // ============================================
   // COMPUTED VALUES
@@ -440,6 +436,13 @@ const ClockInOutPage: React.FC = () => {
   // RENDER
   // ============================================
 
+  // Auth guard placed AFTER all hooks so hook order stays stable across renders
+  // (react-hooks/rules-of-hooks). An early return above the hooks would crash on
+  // the render where `user` transitions to null (e.g. logout while on this page).
+  if (!user) {
+    return <Navigate to="/login" replace />;
+  }
+
   return (
     <div className="relative min-h-screen">
       {/* Background */}
@@ -564,10 +567,10 @@ const ClockInOutPage: React.FC = () => {
                   {todaySessions.map((session, idx) => (
                     <div key={session.id} className="flex justify-between items-center text-sm py-2 border-b border-slate-700/50 last:border-0">
                       <div className="flex items-center gap-2">
-                        <span className="text-slate-500 text-xs">#{idx + 1}</span>
+                        <span className="text-slate-400 text-xs">#{idx + 1}</span>
                         <span className="text-slate-300">
                           {format(parseISO(session.clock_in_time), 'h:mm a')}
-                          <ChevronRight className="w-3 h-3 inline mx-1 text-slate-500" />
+                          <ChevronRight className="w-3 h-3 inline mx-1 text-slate-400" />
                           {session.clock_out_time ? format(parseISO(session.clock_out_time), 'h:mm a') : 
                             <span className="text-blue-400">Active</span>}
                         </span>
@@ -618,7 +621,7 @@ const ClockInOutPage: React.FC = () => {
                     style={{ width: `${Math.min((totalHoursToday / SHIFT_CONFIG.REQUIRED_HOURS) * 100, 125)}%` }}
                   />
                 </div>
-                <div className="flex justify-between text-xs text-slate-500 mt-1">
+                <div className="flex justify-between text-xs text-slate-400 mt-1">
                   <span>0h</span>
                   <span className="text-orange-400">{SHIFT_CONFIG.UNDERTIME_THRESHOLD}h</span>
                   <span className="text-emerald-400">{SHIFT_CONFIG.REQUIRED_HOURS}h</span>
@@ -691,7 +694,7 @@ const ClockInOutPage: React.FC = () => {
                   <span className="text-yellow-400 font-semibold">{SHIFT_CONFIG.MAX_SHIFT_HOURS}h</span>
                 </div>
                 <div className="pt-2 border-t border-slate-700">
-                  <p className="text-xs text-slate-500">
+                  <p className="text-xs text-slate-400">
                     Day cutoff: {SHIFT_CONFIG.SHIFT_CUTOFF_HOUR}:00 AM PKT
                   </p>
                 </div>
@@ -824,7 +827,7 @@ const ClockInOutPage: React.FC = () => {
                       <tbody>
                         {allAttendance.length === 0 ? (
                           <tr>
-                            <td colSpan={7} className="text-center py-12 text-slate-500">
+                            <td colSpan={7} className="text-center py-12 text-slate-400">
                               <Calendar className="w-12 h-12 mx-auto mb-3 text-slate-600" />
                               <p>No attendance records found</p>
                             </td>
@@ -840,11 +843,11 @@ const ClockInOutPage: React.FC = () => {
                               <tr key={record.id} className="border-b border-slate-800 hover:bg-slate-800/30 transition-colors">
                                 <td className="p-4">
                                   <p className="text-white font-medium">{record.user_name}</p>
-                                  <p className="text-xs text-slate-500">{record.user_email}</p>
+                                  <p className="text-xs text-slate-400">{record.user_email}</p>
                                 </td>
                                 <td className="p-4">
                                   <p className="text-white">{format(parseISO(record.work_date), 'MMM dd, yyyy')}</p>
-                                  <p className="text-xs text-slate-500">{format(parseISO(record.work_date), 'EEEE')}</p>
+                                  <p className="text-xs text-slate-400">{format(parseISO(record.work_date), 'EEEE')}</p>
                                 </td>
                                 <td className="p-4 text-white">{format(parseISO(record.clock_in_time), 'h:mm:ss a')}</td>
                                 <td className="p-4 text-white">
@@ -944,7 +947,7 @@ const ClockInOutPage: React.FC = () => {
                           if (reports.length === 0) {
                             return (
                               <tr>
-                                <td colSpan={7} className="text-center py-12 text-slate-500">
+                                <td colSpan={7} className="text-center py-12 text-slate-400">
                                   <CalendarDays className="w-12 h-12 mx-auto mb-3 text-slate-600" />
                                   <p>No data for this week</p>
                                 </td>
@@ -956,22 +959,22 @@ const ClockInOutPage: React.FC = () => {
                             <tr key={stat.email} className="border-b border-slate-800 hover:bg-slate-800/30 transition-colors">
                               <td className="p-4">
                                 <p className="text-white font-medium">{stat.employee}</p>
-                                <p className="text-xs text-slate-500">{stat.email}</p>
+                                <p className="text-xs text-slate-400">{stat.email}</p>
                               </td>
                               <td className="p-4 text-center text-white font-bold">{stat.totalDays}</td>
                               <td className="p-4 text-center text-white font-bold">{stat.totalHours.toFixed(1)}h</td>
                               <td className="p-4 text-center">
-                                <span className={stat.overtimeHours > 0 ? 'text-purple-400 font-bold' : 'text-slate-500'}>
+                                <span className={stat.overtimeHours > 0 ? 'text-purple-400 font-bold' : 'text-slate-400'}>
                                   {stat.overtimeHours.toFixed(1)}h
                                 </span>
                               </td>
                               <td className="p-4 text-center">
-                                <span className={stat.undertimeHours > 0 ? 'text-orange-400 font-bold' : 'text-slate-500'}>
+                                <span className={stat.undertimeHours > 0 ? 'text-orange-400 font-bold' : 'text-slate-400'}>
                                   {stat.undertimeHours.toFixed(1)}h
                                 </span>
                               </td>
                               <td className="p-4 text-center">
-                                <span className={stat.absentDays > 0 ? 'text-red-400 font-bold' : 'text-slate-500'}>
+                                <span className={stat.absentDays > 0 ? 'text-red-400 font-bold' : 'text-slate-400'}>
                                   {stat.absentDays}
                                 </span>
                               </td>
@@ -1044,7 +1047,7 @@ const ClockInOutPage: React.FC = () => {
                           if (reports.length === 0) {
                             return (
                               <tr>
-                                <td colSpan={8} className="text-center py-12 text-slate-500">
+                                <td colSpan={8} className="text-center py-12 text-slate-400">
                                   <FileSpreadsheet className="w-12 h-12 mx-auto mb-3 text-slate-600" />
                                   <p>No data for {format(parseISO(`${selectedMonth}-01`), 'MMMM yyyy')}</p>
                                 </td>
@@ -1056,7 +1059,7 @@ const ClockInOutPage: React.FC = () => {
                             <tr key={stat.email} className="border-b border-slate-800 hover:bg-slate-800/30 transition-colors">
                               <td className="p-4">
                                 <p className="text-white font-medium">{stat.employee}</p>
-                                <p className="text-xs text-slate-500">{stat.email}</p>
+                                <p className="text-xs text-slate-400">{stat.email}</p>
                               </td>
                               <td className="p-4 text-center text-white font-bold">{stat.totalDays}</td>
                               <td className="p-4 text-center">
@@ -1064,17 +1067,17 @@ const ClockInOutPage: React.FC = () => {
                               </td>
                               <td className="p-4 text-center text-white font-bold">{stat.totalHours.toFixed(1)}h</td>
                               <td className="p-4 text-center">
-                                <span className={stat.overtimeHours > 0 ? 'text-purple-400 font-bold' : 'text-slate-500'}>
+                                <span className={stat.overtimeHours > 0 ? 'text-purple-400 font-bold' : 'text-slate-400'}>
                                   {stat.overtimeHours.toFixed(1)}h
                                 </span>
                               </td>
                               <td className="p-4 text-center">
-                                <span className={stat.undertimeHours > 0 ? 'text-orange-400 font-bold' : 'text-slate-500'}>
+                                <span className={stat.undertimeHours > 0 ? 'text-orange-400 font-bold' : 'text-slate-400'}>
                                   {stat.undertimeHours.toFixed(1)}h
                                 </span>
                               </td>
                               <td className="p-4 text-center">
-                                <span className={stat.absentDays > 0 ? 'text-red-400 font-bold' : 'text-slate-500'}>
+                                <span className={stat.absentDays > 0 ? 'text-red-400 font-bold' : 'text-slate-400'}>
                                   {stat.absentDays}
                                 </span>
                               </td>

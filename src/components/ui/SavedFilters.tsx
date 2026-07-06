@@ -128,7 +128,7 @@ const SavedFilters: React.FC = () => {
           {/* Saved views list */}
           <div className="max-h-[300px] overflow-y-auto">
             {views.length === 0 ? (
-              <div className="py-8 text-center text-slate-500 text-sm">
+              <div className="py-8 text-center text-slate-400 text-sm">
                 <Bookmark className="w-6 h-6 mx-auto mb-2 opacity-50" />
                 <p>No saved views yet</p>
                 <p className="text-xs mt-1">Apply filters, then save the view</p>

@@ -110,7 +110,7 @@ const OrderNotesSection: React.FC<OrderNotesSectionProps> = ({ orderId }) => {
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-all ${
                 noteType === type
                   ? config.color + ' ring-1 ring-current'
-                  : 'text-slate-500 bg-slate-800/50 border-slate-700 hover:border-slate-600'
+                  : 'text-slate-400 bg-slate-800/50 border-slate-700 hover:border-slate-600'
               }`}
             >
               {config.icon}
@@ -123,7 +123,7 @@ const OrderNotesSection: React.FC<OrderNotesSectionProps> = ({ orderId }) => {
           <div className="flex items-center gap-3">
             <span className="text-sm text-slate-400">Quality Rating:</span>
             <StarRating rating={rating} onChange={setRating} />
-            {rating > 0 && <span className="text-xs text-slate-500">{rating}/5</span>}
+            {rating > 0 && <span className="text-xs text-slate-400">{rating}/5</span>}
           </div>
         )}
 
@@ -147,7 +147,7 @@ const OrderNotesSection: React.FC<OrderNotesSectionProps> = ({ orderId }) => {
 
       {/* Notes List */}
       {isLoading ? (
-        <div className="text-center py-6 text-slate-500 text-sm">Loading notes...</div>
+        <div className="text-center py-6 text-slate-400 text-sm">Loading notes...</div>
       ) : notes.length === 0 ? (
         <div className="text-center py-6 text-slate-600 text-sm">
           No notes yet. Be the first to add feedback from the customer.
@@ -168,14 +168,14 @@ const OrderNotesSection: React.FC<OrderNotesSectionProps> = ({ orderId }) => {
                         {config.label}
                       </span>
                       {note.rating && <StarDisplay rating={note.rating} />}
-                      <span className="text-xs text-slate-500">
+                      <span className="text-xs text-slate-400">
                         {new Date(note.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                         {' '}
                         {new Date(note.createdAt).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
                       </span>
                     </div>
                     <p className="text-sm text-slate-300 whitespace-pre-wrap">{note.content}</p>
-                    <p className="text-xs text-slate-500 mt-2">
+                    <p className="text-xs text-slate-400 mt-2">
                       — {note.userName || note.userEmail.split('@')[0]}
                     </p>
                   </div>

@@ -235,7 +235,7 @@ const EditOrderPage: React.FC = () => {
         <h3 className="text-lg font-semibold text-white mb-6">Activity Log</h3>
         
         {/* ✅ Debug Info */}
-        <div className="text-xs text-slate-500 mb-4">
+        <div className="text-xs text-slate-400 mb-4">
           Last Updated: {new Date().toLocaleTimeString()}
           {' | '}
           Total Changes: {activityLog?.length || 0}
@@ -256,7 +256,7 @@ const EditOrderPage: React.FC = () => {
                   {' to '}
                   <span className="text-green-400">"{entry.new_value}"</span>
                 </p>
-                <p className="text-xs text-slate-500 mt-2">
+                <p className="text-xs text-slate-400 mt-2">
                   By {entry.user_email} • {new Date(entry.changed_at).toLocaleString()}
                 </p>
               </div>

@@ -86,7 +86,7 @@ const CancellationChart: React.FC<CancellationChartProps> = ({ orders }) => {
               <p className="text-sm text-slate-400">Track cancellations and refunds</p>
             </div>
           </div>
-          <div className="h-64 flex flex-col items-center justify-center text-slate-500 bg-slate-800/30 rounded-xl border border-slate-700">
+          <div className="h-64 flex flex-col items-center justify-center text-slate-400 bg-slate-800/30 rounded-xl border border-slate-700">
             <CheckCircle className="w-12 h-12 text-emerald-500 mb-3" />
             <p className="text-lg font-semibold text-white">Perfect! No Issues Found</p>
             <p className="text-sm text-slate-400 mt-1">You have 0 cancelled or refunded orders in this period.</p>
@@ -192,7 +192,7 @@ const CancellationChart: React.FC<CancellationChartProps> = ({ orders }) => {
               </ResponsiveContainer>
             </div>
           ) : (
-            <div className="h-72 flex items-center justify-center text-slate-500 text-sm">No Cancellations</div>
+            <div className="h-72 flex items-center justify-center text-slate-400 text-sm">No Cancellations</div>
           )}
         </SpotlightCard>
 
@@ -224,7 +224,7 @@ const CancellationChart: React.FC<CancellationChartProps> = ({ orders }) => {
               </ResponsiveContainer>
             </div>
           ) : (
-             <div className="h-72 flex items-center justify-center text-slate-500 text-sm">No Refunds (Good Job!)</div>
+             <div className="h-72 flex items-center justify-center text-slate-400 text-sm">No Refunds (Good Job!)</div>
           )}
         </SpotlightCard>
 

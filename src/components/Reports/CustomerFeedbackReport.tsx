@@ -185,7 +185,7 @@ const CustomerFeedbackReport: React.FC<CustomerFeedbackReportProps> = ({ orders,
               <div>
                 <p className="text-sm font-medium text-slate-400 mb-1">Total Feedback</p>
                 <p className="text-3xl font-bold text-white">{stats.totalNotes}</p>
-                <p className="text-xs text-slate-500 mt-1">
+                <p className="text-xs text-slate-400 mt-1">
                   {feedbackCoverage.percentage}% of orders covered
                 </p>
               </div>
@@ -204,7 +204,7 @@ const CustomerFeedbackReport: React.FC<CustomerFeedbackReportProps> = ({ orders,
                 <p className="text-3xl font-bold text-white">
                   {stats.avgRating > 0 ? stats.avgRating.toFixed(1) : '—'}
                 </p>
-                <p className="text-xs text-slate-500 mt-1">{stats.totalRated} rated reviews</p>
+                <p className="text-xs text-slate-400 mt-1">{stats.totalRated} rated reviews</p>
               </div>
               <div className="p-3 bg-gradient-to-br from-white/10 to-white/5 rounded-xl">
                 <Star className="w-6 h-6 text-yellow-400" />
@@ -219,7 +219,7 @@ const CustomerFeedbackReport: React.FC<CustomerFeedbackReportProps> = ({ orders,
               <div>
                 <p className="text-sm font-medium text-slate-400 mb-1">Good Reviews</p>
                 <p className="text-3xl font-bold text-emerald-400">{stats.goodReviews}</p>
-                <p className="text-xs text-slate-500 mt-1">4-5 stars ({stats.totalRated > 0 ? Math.round((stats.goodReviews / stats.totalRated) * 100) : 0}%)</p>
+                <p className="text-xs text-slate-400 mt-1">4-5 stars ({stats.totalRated > 0 ? Math.round((stats.goodReviews / stats.totalRated) * 100) : 0}%)</p>
               </div>
               <div className="p-3 bg-gradient-to-br from-white/10 to-white/5 rounded-xl">
                 <ThumbsUp className="w-6 h-6 text-emerald-400" />
@@ -234,7 +234,7 @@ const CustomerFeedbackReport: React.FC<CustomerFeedbackReportProps> = ({ orders,
               <div>
                 <p className="text-sm font-medium text-slate-400 mb-1">Bad Reviews</p>
                 <p className="text-3xl font-bold text-red-400">{stats.badReviews}</p>
-                <p className="text-xs text-slate-500 mt-1">1-2 stars ({stats.totalRated > 0 ? Math.round((stats.badReviews / stats.totalRated) * 100) : 0}%)</p>
+                <p className="text-xs text-slate-400 mt-1">1-2 stars ({stats.totalRated > 0 ? Math.round((stats.badReviews / stats.totalRated) * 100) : 0}%)</p>
               </div>
               <div className="p-3 bg-gradient-to-br from-white/10 to-white/5 rounded-xl">
                 <ThumbsDown className="w-6 h-6 text-red-400" />
@@ -333,7 +333,7 @@ const CustomerFeedbackReport: React.FC<CustomerFeedbackReportProps> = ({ orders,
                         </button>
                       )}
                       {(note as any).customerName && (
-                        <span className="text-xs text-slate-500">{(note as any).customerName}</span>
+                        <span className="text-xs text-slate-400">{(note as any).customerName}</span>
                       )}
                       <span className="text-xs text-slate-600">
                         {new Date(note.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
@@ -425,7 +425,7 @@ const CustomerFeedbackReport: React.FC<CustomerFeedbackReportProps> = ({ orders,
                         <td className="py-2.5 px-3 text-slate-300 text-xs max-w-[250px] truncate">
                           {note.content}
                         </td>
-                        <td className="py-2.5 px-3 text-slate-500 text-xs whitespace-nowrap">
+                        <td className="py-2.5 px-3 text-slate-400 text-xs whitespace-nowrap">
                           {note.userName || note.userEmail.split('@')[0]}
                         </td>
                       </tr>
@@ -461,7 +461,7 @@ const CustomerFeedbackReport: React.FC<CustomerFeedbackReportProps> = ({ orders,
                       )}
                     </div>
                     <p className="text-sm text-slate-300 mb-2">{note.content}</p>
-                    <div className="flex items-center justify-between text-xs text-slate-500">
+                    <div className="flex items-center justify-between text-xs text-slate-400">
                       <span>
                         {(note as any).orderNumber && (
                           <button

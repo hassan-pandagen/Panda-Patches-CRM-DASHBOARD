@@ -424,7 +424,7 @@ const OrderPage: React.FC = () => {
                                         title.textContent = 'Image not available';
 
                                         const hint = document.createElement('div');
-                                        hint.className = 'text-xs text-slate-500';
+                                        hint.className = 'text-xs text-slate-400';
                                         hint.textContent = 'The file may have failed to upload. Ask the customer to re-send the artwork.';
 
                                         const link = document.createElement('a');
@@ -656,7 +656,7 @@ const OrderPage: React.FC = () => {
                                     <h3 className="text-lg font-semibold text-white flex items-center gap-2">
                                         Customer Information
                                     </h3>
-                                    {!canViewShipping && <Lock className="w-4 h-4 text-slate-500" />}
+                                    {!canViewShipping && <Lock className="w-4 h-4 text-slate-400" />}
                                 </div>
 
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
@@ -770,9 +770,9 @@ const OrderPage: React.FC = () => {
                                     <div className="mt-6 pt-6 border-t border-slate-700/50">
                                         <div className="flex items-center justify-between mb-2">
                                             <p className="text-xs font-medium text-brand-orange uppercase">Upload Mockup → Send for Approval</p>
-                                            <span className="text-[11px] text-slate-500">{order.status.replace(/_/g, ' ')}</span>
+                                            <span className="text-[11px] text-slate-400">{order.status.replace(/_/g, ' ')}</span>
                                         </div>
-                                        <p className="text-xs text-slate-500 mb-4 leading-relaxed">
+                                        <p className="text-xs text-slate-400 mb-4 leading-relaxed">
                                             Upload the mockup/proof here, then <strong className="text-slate-300">Send for Approval</strong> — this moves the order to
                                             Awaiting Approval and emails the customer the approval request automatically. No need to route it through an agent.
                                         </p>
@@ -885,7 +885,7 @@ const OrderPage: React.FC = () => {
 
                             </SpotlightCard>
                         ) : (
-                            <div className="p-8 rounded-xl border border-slate-700/50 bg-slate-800/20 flex flex-col items-center justify-center gap-3 text-slate-500 text-center">
+                            <div className="p-8 rounded-xl border border-slate-700/50 bg-slate-800/20 flex flex-col items-center justify-center gap-3 text-slate-400 text-center">
                                 <Lock className="w-8 h-8 opacity-50" />
                                 <span className="font-medium">Production details are restricted for your role.</span>
                             </div>
@@ -937,7 +937,7 @@ const OrderPage: React.FC = () => {
                                     {/* Detailed Breakdown (Admin Only) */}
                                     {isAdmin && (
                                         <div className="bg-slate-900/50 rounded-lg p-3 mt-4 space-y-2 border border-white/5">
-                                            <p className="text-xs font-bold text-slate-500 uppercase mb-2">Internal Costs</p>
+                                            <p className="text-xs font-bold text-slate-400 uppercase mb-2">Internal Costs</p>
                                             <div className="flex justify-between items-center"><p className="text-xs text-slate-400">Production</p><p className="text-xs font-medium text-white">-${(order.productionCost ?? 0).toLocaleString()}</p></div>
                                             <div className="flex justify-between items-center"><p className="text-xs text-slate-400">Shipping</p><p className="text-xs font-medium text-white">-${(order.shippingCost ?? 0).toLocaleString()}</p></div>
                                             <div className="flex justify-between items-center"><p className="text-xs text-slate-400">Marketing</p><p className="text-xs font-medium text-white">-${(order.marketingCost ?? 0).toLocaleString()}</p></div>
@@ -954,7 +954,7 @@ const OrderPage: React.FC = () => {
                         ) : (
                             // Empty state for non-financial users is handled by simply NOT rendering the card.
                             // Or you can render a locked state if you prefer:
-                            <div className="p-6 rounded-xl border border-slate-700/50 bg-slate-800/20 flex items-center justify-center gap-3 text-slate-500">
+                            <div className="p-6 rounded-xl border border-slate-700/50 bg-slate-800/20 flex items-center justify-center gap-3 text-slate-400">
                                 <Lock className="w-5 h-5" />
                                 <span>Financials restricted</span>
                             </div>

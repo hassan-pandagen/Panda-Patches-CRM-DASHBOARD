@@ -77,24 +77,24 @@ const QuickViewDrawer: React.FC<QuickViewDrawerProps> = ({ order, isOpen, onClos
                 <h3 className="text-xs text-slate-400 uppercase tracking-wider font-semibold">Customer</h3>
                 <div className="space-y-2">
                   <div className="flex items-center gap-2">
-                    <User className="w-4 h-4 text-slate-500" />
+                    <User className="w-4 h-4 text-slate-400" />
                     <span className="text-sm font-medium text-white">{order.customerName}</span>
                   </div>
                   {order.customerEmail && (
                     <div className="flex items-center gap-2">
-                      <Mail className="w-4 h-4 text-slate-500" />
+                      <Mail className="w-4 h-4 text-slate-400" />
                       <span className="text-sm text-slate-300">{order.customerEmail}</span>
                     </div>
                   )}
                   {order.customerPhone && (
                     <div className="flex items-center gap-2">
-                      <Phone className="w-4 h-4 text-slate-500" />
+                      <Phone className="w-4 h-4 text-slate-400" />
                       <span className="text-sm text-slate-300">{order.customerPhone}</span>
                     </div>
                   )}
                   {order.shippingAddress && (
                     <div className="flex items-start gap-2">
-                      <MapPin className="w-4 h-4 text-slate-500 mt-0.5" />
+                      <MapPin className="w-4 h-4 text-slate-400 mt-0.5" />
                       <span className="text-sm text-slate-300">{order.shippingAddress}</span>
                     </div>
                   )}
@@ -106,14 +106,14 @@ const QuickViewDrawer: React.FC<QuickViewDrawerProps> = ({ order, isOpen, onClos
                 <h3 className="text-xs text-slate-400 uppercase tracking-wider font-semibold">Order Details</h3>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <p className="text-xs text-slate-500">Date</p>
+                    <p className="text-xs text-slate-400">Date</p>
                     <p className="text-sm text-white font-medium flex items-center gap-1">
                       <Calendar className="w-3.5 h-3.5 text-slate-400" />
                       {new Date(order.createdAt).toLocaleDateString()}
                     </p>
                   </div>
                   <div>
-                    <p className="text-xs text-slate-500">Patch Type</p>
+                    <p className="text-xs text-slate-400">Patch Type</p>
                     <p className="text-sm text-white font-medium flex items-center gap-1">
                       <Package className="w-3.5 h-3.5 text-slate-400" />
                       {order.patchesType || 'N/A'}
@@ -121,19 +121,19 @@ const QuickViewDrawer: React.FC<QuickViewDrawerProps> = ({ order, isOpen, onClos
                   </div>
                   {order.designName && (
                     <div className="col-span-2">
-                      <p className="text-xs text-slate-500">Design</p>
+                      <p className="text-xs text-slate-400">Design</p>
                       <p className="text-sm text-white font-medium">{order.designName}</p>
                     </div>
                   )}
                   {order.patchesQuantity && (
                     <div>
-                      <p className="text-xs text-slate-500">Quantity</p>
+                      <p className="text-xs text-slate-400">Quantity</p>
                       <p className="text-sm text-white font-medium">{order.patchesQuantity} pcs</p>
                     </div>
                   )}
                   {order.salesAgent && (
                     <div>
-                      <p className="text-xs text-slate-500">Sales Agent</p>
+                      <p className="text-xs text-slate-400">Sales Agent</p>
                       <p className="text-sm text-white font-medium">{order.salesAgent.split('@')[0]}</p>
                     </div>
                   )}
@@ -145,15 +145,15 @@ const QuickViewDrawer: React.FC<QuickViewDrawerProps> = ({ order, isOpen, onClos
                 <h3 className="text-xs text-slate-400 uppercase tracking-wider font-semibold">Financials</h3>
                 <div className="grid grid-cols-3 gap-3 text-center">
                   <div>
-                    <p className="text-xs text-slate-500">Amount</p>
+                    <p className="text-xs text-slate-400">Amount</p>
                     <p className="text-base font-bold text-white">${(order.orderAmount || 0).toLocaleString()}</p>
                   </div>
                   <div>
-                    <p className="text-xs text-slate-500">Paid</p>
+                    <p className="text-xs text-slate-400">Paid</p>
                     <p className="text-base font-bold text-emerald-400">${(order.amountPaid || 0).toLocaleString()}</p>
                   </div>
                   <div>
-                    <p className="text-xs text-slate-500">Pending</p>
+                    <p className="text-xs text-slate-400">Pending</p>
                     <p className={`text-base font-bold ${(order.amountRemaining ?? 0) > 0 ? 'text-amber-400' : 'text-green-400'}`}>
                       {(order.amountRemaining ?? 0) <= 0.01 ? 'Paid' : `$${(order.amountRemaining ?? 0).toLocaleString()}`}
                     </p>

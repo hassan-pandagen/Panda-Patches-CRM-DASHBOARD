@@ -298,7 +298,7 @@ const CustomersPage: React.FC = () => {
               {search ? 'No customers match your search' : 'No customers yet'}
             </p>
             {!search && (
-              <p className="text-xs mt-1 text-slate-500">
+              <p className="text-xs mt-1 text-slate-400">
                 Customers appear here once they set up their portal account
               </p>
             )}

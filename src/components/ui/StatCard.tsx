@@ -63,7 +63,7 @@ const StatCard: React.FC<StatCardProps> = ({
         <div className="flex items-center justify-between text-slate-400">
           <h3 className="font-medium">{title}</h3>
           <motion.div
-            className="text-slate-500 transition-colors duration-300 group-hover:text-brand-orange"
+            className="text-slate-400 transition-colors duration-300 group-hover:text-brand-orange"
             initial={{ rotate: 0 }}
             whileHover={{ rotate: 15, scale: 1.2 }}
           >
@@ -83,7 +83,7 @@ const StatCard: React.FC<StatCardProps> = ({
               <TrendIcon className="mr-1 h-4 w-4" />
               {trend.value.toFixed(1)}%
             </span>
-            <span className="text-slate-500">vs last month</span>
+            <span className="text-slate-400">vs last month</span>
           </div>
         )}
       </motion.div>

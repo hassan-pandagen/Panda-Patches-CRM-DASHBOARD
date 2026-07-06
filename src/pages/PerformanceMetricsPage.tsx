@@ -160,7 +160,7 @@ const PerformanceMetricsPage: React.FC = () => {
               <div>
                 <p className="text-slate-400 text-sm">API Calls</p>
                 <p className="text-2xl font-bold text-white mt-1">{summary.api.count}</p>
-                <p className="text-xs text-slate-500 mt-2">
+                <p className="text-xs text-slate-400 mt-2">
                   Avg: {summary.api.avgDuration.toFixed(2)}ms
                 </p>
               </div>
@@ -174,7 +174,7 @@ const PerformanceMetricsPage: React.FC = () => {
               <div>
                 <p className="text-slate-400 text-sm">Operations</p>
                 <p className="text-2xl font-bold text-white mt-1">{summary.operations.count}</p>
-                <p className="text-xs text-slate-500 mt-2">
+                <p className="text-xs text-slate-400 mt-2">
                   Avg: {summary.operations.avgDuration.toFixed(2)}ms
                 </p>
               </div>
@@ -188,7 +188,7 @@ const PerformanceMetricsPage: React.FC = () => {
               <div>
                 <p className="text-slate-400 text-sm">Renders</p>
                 <p className="text-2xl font-bold text-white mt-1">{summary.renders.count}</p>
-                <p className="text-xs text-slate-500 mt-2">
+                <p className="text-xs text-slate-400 mt-2">
                   Avg: {summary.renders.avgDuration.toFixed(2)}ms
                 </p>
               </div>
@@ -257,7 +257,7 @@ const PerformanceMetricsPage: React.FC = () => {
                   <div className="text-slate-300">{getTypeIcon(metric.metric_type)}</div>
                   <div className="flex-1">
                     <p className="text-sm font-medium text-white">{metric.metric_name}</p>
-                    <p className="text-xs text-slate-500">
+                    <p className="text-xs text-slate-400">
                       {new Date(metric.created_at).toLocaleTimeString()}
                     </p>
                   </div>

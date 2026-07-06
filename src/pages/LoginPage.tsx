@@ -168,7 +168,7 @@ const LoginPage: React.FC = () => {
                 </label>
                 <div className="relative group">
                   <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                    <Mail className="h-5 w-5 text-slate-500 group-focus-within:text-brand-orange transition-colors" />
+                    <Mail className="h-5 w-5 text-slate-400 group-focus-within:text-brand-orange transition-colors" />
                   </div>
                   <input
                     type="email"
@@ -189,7 +189,7 @@ const LoginPage: React.FC = () => {
                 </label>
                 <div className="relative group">
                   <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                    <Lock className="h-5 w-5 text-slate-500 group-focus-within:text-brand-orange transition-colors" />
+                    <Lock className="h-5 w-5 text-slate-400 group-focus-within:text-brand-orange transition-colors" />
                   </div>
                   <input
                     type={showPassword ? "text" : "password"}
@@ -204,7 +204,7 @@ const LoginPage: React.FC = () => {
                    <button
                      type="button"
                      onClick={() => setShowPassword(!showPassword)}
-                     className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-500 hover:text-white transition-colors focus:outline-none focus-ring rounded"
+                     className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-white transition-colors focus:outline-none focus-ring rounded"
                      aria-label={showPassword ? "Hide password" : "Show password"}
                    >
                     {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
@@ -237,7 +237,7 @@ const LoginPage: React.FC = () => {
               <div>
                 <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2 ml-1">New Password</label>
                 <div className="relative group">
-                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none"><Lock className="h-5 w-5 text-slate-500 group-focus-within:text-brand-orange transition-colors" /></div>
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none"><Lock className="h-5 w-5 text-slate-400 group-focus-within:text-brand-orange transition-colors" /></div>
                   <input
                     type={showPassword ? "text" : "password"}
                     value={newPassword}
@@ -246,7 +246,7 @@ const LoginPage: React.FC = () => {
                     placeholder="Enter new password"
                     className="block w-full pl-10 pr-10 py-3 bg-slate-800/50 border border-slate-700 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-brand-orange/50 focus:border-brand-orange transition-all duration-200"
                   />
-                  <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-500 hover:text-white transition-colors focus:outline-none">
+                  <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-white transition-colors focus:outline-none">
                     {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
                   </button>
                 </div>
@@ -256,7 +256,7 @@ const LoginPage: React.FC = () => {
               <div>
                 <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2 ml-1">Confirm New Password</label>
                 <div className="relative group">
-                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none"><Lock className="h-5 w-5 text-slate-500 group-focus-within:text-brand-orange transition-colors" /></div>
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none"><Lock className="h-5 w-5 text-slate-400 group-focus-within:text-brand-orange transition-colors" /></div>
                   <input
                     type="password"
                     value={confirmPassword}
@@ -286,7 +286,7 @@ const LoginPage: React.FC = () => {
           </SpotlightCard>
 
           {/* Footer Text */}
-        <p className="text-center text-xs text-slate-500 mt-8">
+        <p className="text-center text-xs text-slate-400 mt-8">
           &copy; {new Date().getFullYear()} Panda Patches. All rights reserved.
         </p>
       </div>

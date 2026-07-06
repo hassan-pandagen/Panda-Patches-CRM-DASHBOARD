@@ -171,7 +171,7 @@ const FileUploadSection: React.FC<FileUploadSectionProps> = ({
           <p className="text-sm text-slate-400">
             {isDragActive ? "Drop files here..." : "Drag & drop or click to upload"}
           </p>
-          <p className="text-xs text-slate-500 mt-1">Images, PDF, Excel, AI, EPS, PSD, SVG, DST, EMB, ZIP</p>
+          <p className="text-xs text-slate-400 mt-1">Images, PDF, Excel, AI, EPS, PSD, SVG, DST, EMB, ZIP</p>
         </label>
       </div>
 

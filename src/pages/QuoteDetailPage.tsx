@@ -319,7 +319,7 @@ const QuoteDetailPage: React.FC = () => {
 
               {/* Mockup Artwork — editable so updated client art carries into the order (and its emails) on convert */}
               <div>
-                <p className="text-xs text-slate-500 mb-2">If the client sent new artwork, update the mockups here — the latest files carry into the order and its emails when you convert.</p>
+                <p className="text-xs text-slate-400 mb-2">If the client sent new artwork, update the mockups here — the latest files carry into the order and its emails when you convert.</p>
                 <FileUploadSection
                   title="Mockup Artwork"
                   bucketName="order-attachments"
@@ -580,7 +580,7 @@ const QuoteDetailPage: React.FC = () => {
           {/* Mockup Images — editable inline (auto-saves to the quote) */}
           <SpotlightCard className="p-6">
             <h2 className="text-xl font-bold text-white mb-1">Mockup Images</h2>
-            <p className="text-xs text-slate-500 mb-4">Upload or remove mockups — saved instantly. These carry into the order (and its emails) when you convert.</p>
+            <p className="text-xs text-slate-400 mb-4">Upload or remove mockups — saved instantly. These carry into the order (and its emails) when you convert.</p>
             <FileUploadSection
               title="Mockup files"
               bucketName="order-attachments"
@@ -596,7 +596,7 @@ const QuoteDetailPage: React.FC = () => {
               <Paperclip className="w-5 h-5 text-brand-orange" />
               Customer Artwork
             </h2>
-            <p className="text-xs text-slate-500 mb-4">Delete or add the client's artwork — saved instantly. If there are no mockups, these are what carry into the order (and its emails) on convert.</p>
+            <p className="text-xs text-slate-400 mb-4">Delete or add the client's artwork — saved instantly. If there are no mockups, these are what carry into the order (and its emails) on convert.</p>
             <FileUploadSection
               title="Customer artwork files"
               bucketName="order-attachments"

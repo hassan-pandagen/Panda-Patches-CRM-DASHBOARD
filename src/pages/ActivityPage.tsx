@@ -169,7 +169,7 @@ const ActivityPage: React.FC = () => {
           >
             {tab.label}
             {tab.count > 0 && (
-              <span className="ml-2 text-xs text-slate-500">{tab.count}</span>
+              <span className="ml-2 text-xs text-slate-400">{tab.count}</span>
             )}
           </button>
         ))}
@@ -178,7 +178,7 @@ const ActivityPage: React.FC = () => {
       {/* List */}
       <div className="bg-slate-900/40 border border-white/5 rounded-2xl overflow-hidden">
         {isLoading ? (
-          <div className="text-center py-16 text-sm text-slate-500">Loading…</div>
+          <div className="text-center py-16 text-sm text-slate-400">Loading…</div>
         ) : filtered.length === 0 ? (
           <div className="text-center py-16">
             <Bell className="w-12 h-12 text-slate-700 mx-auto mb-3 opacity-50" />
@@ -231,7 +231,7 @@ const NotificationRow: React.FC<{
         {n.body && (
           <p className="text-xs text-slate-400 mt-1 line-clamp-2">{n.body}</p>
         )}
-        <p className="text-[11px] text-slate-500 mt-1.5">{formatTime(n.created_at)}</p>
+        <p className="text-[11px] text-slate-400 mt-1.5">{formatTime(n.created_at)}</p>
       </div>
     </button>
   );

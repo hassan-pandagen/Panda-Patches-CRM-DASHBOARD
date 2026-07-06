@@ -399,7 +399,7 @@ const DateRangeFilter: React.FC<DateRangeFilterProps> = ({ value, onChange }) =>
                   className={`flex-1 px-5 py-3 text-sm font-bold rounded-xl transition-all ${
                     startDate && endDate
                       ? 'bg-gradient-to-r from-orange-600 to-orange-500 text-white hover:shadow-lg hover:shadow-orange-600/30'
-                      : 'bg-slate-700/50 text-slate-500 cursor-not-allowed'
+                      : 'bg-slate-700/50 text-slate-400 cursor-not-allowed'
                   }`}
                 >
                   Apply Range

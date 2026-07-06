@@ -312,7 +312,7 @@ ${formatCustomsText(customs, order.orderNumber)}
 // Single label/value row for the customs block
 const CustomsRow: React.FC<{ label: string; value: string }> = ({ label, value }) => (
     <div>
-        <p className="text-[10px] font-bold uppercase text-slate-500">{label}</p>
+        <p className="text-[10px] font-bold uppercase text-slate-400">{label}</p>
         <p className="text-sm font-medium leading-snug break-words">{value}</p>
     </div>
 );

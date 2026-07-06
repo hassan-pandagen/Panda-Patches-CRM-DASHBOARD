@@ -134,7 +134,7 @@ const FormFeedbackReport: React.FC<FormFeedbackReportProps> = ({ dateRange }) =>
               <div>
                 <p className="text-sm font-medium text-slate-400 mb-1">Total Responses</p>
                 <p className="text-3xl font-bold text-white">{stats.total}</p>
-                <p className="text-xs text-slate-500 mt-1">{stats.withComments} with comments</p>
+                <p className="text-xs text-slate-400 mt-1">{stats.withComments} with comments</p>
               </div>
               <div className="p-3 bg-gradient-to-br from-white/10 to-white/5 rounded-xl">
                 <MessageCircle className="w-6 h-6 text-blue-400" />
@@ -154,7 +154,7 @@ const FormFeedbackReport: React.FC<FormFeedbackReportProps> = ({ dateRange }) =>
                   <div>
                     <p className="text-sm font-medium text-slate-400 mb-1">{config.label}</p>
                     <p className="text-3xl font-bold" style={{ color: config.color }}>{count}</p>
-                    <p className="text-xs text-slate-500 mt-1">{pct}% of total</p>
+                    <p className="text-xs text-slate-400 mt-1">{pct}% of total</p>
                   </div>
                   <div className="p-3 bg-gradient-to-br from-white/10 to-white/5 rounded-xl" style={{ color: config.color }}>
                     {config.icon}
@@ -357,7 +357,7 @@ const FormFeedbackReport: React.FC<FormFeedbackReportProps> = ({ dateRange }) =>
                         </span>
                       </div>
                       {f.comment && <p className="text-sm text-slate-300 mb-2">{f.comment}</p>}
-                      <div className="flex items-center justify-between text-xs text-slate-500">
+                      <div className="flex items-center justify-between text-xs text-slate-400">
                         <span>{new Date(f.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
                         {f.pageUrl && (
                           <a href={f.pageUrl} target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:underline inline-flex items-center gap-1">

@@ -151,7 +151,7 @@ const OrderMessageThread: React.FC<Props> = ({ orderId, orderNumber, viewer, cur
           </p>
         </div>
         {messages.length > 0 && (
-          <span className="text-xs text-slate-500">
+          <span className="text-xs text-slate-400">
             {messages.length} {messages.length === 1 ? 'message' : 'messages'}
           </span>
         )}
@@ -163,7 +163,7 @@ const OrderMessageThread: React.FC<Props> = ({ orderId, orderNumber, viewer, cur
         className="px-5 py-4 max-h-[400px] overflow-y-auto space-y-3"
       >
         {isLoading ? (
-          <div className="text-center py-8 text-sm text-slate-500">Loading conversation…</div>
+          <div className="text-center py-8 text-sm text-slate-400">Loading conversation…</div>
         ) : messages.length === 0 ? (
           <div className="text-center py-8">
             <MessageSquare className="w-10 h-10 text-slate-700 mx-auto mb-3" />
@@ -229,7 +229,7 @@ const MessageBubble: React.FC<{ message: OrderMessage; viewer: 'customer' | 'age
   if (isSystem) {
     return (
       <div className="text-center py-2">
-        <span className="inline-block text-[11px] text-slate-500 italic px-3 py-1 bg-slate-800/40 rounded-full">
+        <span className="inline-block text-[11px] text-slate-400 italic px-3 py-1 bg-slate-800/40 rounded-full">
           {message.content}
         </span>
       </div>
@@ -257,7 +257,7 @@ const MessageBubble: React.FC<{ message: OrderMessage; viewer: 'customer' | 'age
         )}
       </div>
       <div className={`max-w-[80%] ${isOwn ? 'text-right' : ''}`}>
-        <div className="flex items-center gap-2 text-[11px] text-slate-500 mb-1">
+        <div className="flex items-center gap-2 text-[11px] text-slate-400 mb-1">
           <span className="font-medium">{senderLabel}</span>
           <span>·</span>
           <span>{formatTime(message.created_at)}</span>

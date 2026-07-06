@@ -29,11 +29,8 @@ interface Props {
 }
 
 const MetaChatPanel: React.FC<Props> = ({ quoteId, quote }) => {
-  // Don't render if not a Meta-sourced lead
-  if (!quote?.meta_psid && !quote?.meta_ig_id) return null;
-
-  const channel: 'messenger' | 'instagram' = quote.meta_channel || 'messenger';
-  const isFromAd = !!quote.meta_ad_id;
+  const channel: 'messenger' | 'instagram' = quote?.meta_channel || 'messenger';
+  const isFromAd = !!quote?.meta_ad_id;
 
   const queryClient = useQueryClient();
   const { success: showSuccess, error: showError } = useToast();
@@ -100,6 +97,11 @@ const MetaChatPanel: React.FC<Props> = ({ quoteId, quote }) => {
     },
     onError: (err: any) => showError('Send failed', err?.message || 'Try again'),
   });
+
+  // Only render for Meta-sourced leads. Placed AFTER all hooks so hook order stays
+  // stable across renders (react-hooks/rules-of-hooks) — an early return above the
+  // hooks would crash if a quote ever gained/lost its Meta fields between renders.
+  if (!quote?.meta_psid && !quote?.meta_ig_id) return null;
 
   return (
     <div className="bg-slate-900/60 backdrop-blur-xl border border-white/10 rounded-2xl overflow-hidden">
@@ -172,7 +174,7 @@ const MetaChatPanel: React.FC<Props> = ({ quoteId, quote }) => {
       {/* Messages */}
       <div className="px-5 py-4 max-h-[500px] overflow-y-auto space-y-3">
         {isLoading ? (
-          <div className="text-center py-6 text-sm text-slate-500">Loading conversation…</div>
+          <div className="text-center py-6 text-sm text-slate-400">Loading conversation…</div>
         ) : messages.length === 0 ? (
           <div className="text-center py-6">
             <MessageSquare className="w-8 h-8 text-slate-700 mx-auto mb-2 opacity-50" />
@@ -231,7 +233,7 @@ const MetaChatPanel: React.FC<Props> = ({ quoteId, quote }) => {
             className="w-full px-3 py-2 bg-slate-800 border border-white/10 rounded-lg text-sm text-white placeholder-slate-500 focus:outline-none focus:border-brand-orange/50 resize-none"
           />
           <div className="flex items-center justify-between mt-2">
-            <p className="text-[10px] text-slate-500">
+            <p className="text-[10px] text-slate-400">
               {replyText.length}/2000 · sent via Meta {channel === 'instagram' ? 'Instagram' : 'Messenger'}
             </p>
             <button
@@ -246,14 +248,14 @@ const MetaChatPanel: React.FC<Props> = ({ quoteId, quote }) => {
         </div>
 
         <div className="px-5 py-2 border-t border-white/5 flex items-center justify-between">
-          <p className="text-[10px] text-slate-500">
+          <p className="text-[10px] text-slate-400">
             💡 Replies sync to {channel === 'instagram' ? 'Instagram' : 'Messenger'}.
           </p>
           <a
             href={businessSuiteUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="text-[10px] text-slate-500 hover:text-slate-300 inline-flex items-center gap-1"
+            className="text-[10px] text-slate-400 hover:text-slate-300 inline-flex items-center gap-1"
           >
             Or open in Business Suite
             <ExternalLink className="w-2.5 h-2.5" />
@@ -278,7 +280,7 @@ const MessageBubble: React.FC<{ message: any; customerName: string }> = ({ messa
         <User className={`w-3.5 h-3.5 ${isInbound ? 'text-blue-400' : 'text-brand-orange'}`} />
       </div>
       <div className={`max-w-[80%] ${isInbound ? '' : 'text-right'}`}>
-        <div className="flex items-center gap-2 text-[11px] text-slate-500 mb-1">
+        <div className="flex items-center gap-2 text-[11px] text-slate-400 mb-1">
           <span className="font-medium">
             {isInbound ? customerName || 'Customer' : 'Panda Patches Team'}
           </span>

@@ -33,7 +33,7 @@ const SimpleStatCard: React.FC<{ title: string; value: number | string; subValue
     <div className="flex-1">
       <p className="text-sm font-medium text-slate-400 mb-1">{title}</p>
       <p className="text-3xl font-bold text-white">{prefix}{typeof value === 'number' ? value.toLocaleString() : value}{suffix}</p>
-      {subValue && <p className="text-xs text-slate-500 mt-1 font-medium">{subValue}</p>}
+      {subValue && <p className="text-xs text-slate-400 mt-1 font-medium">{subValue}</p>}
     </div>
     <div className="p-3 bg-gradient-to-br from-white/10 to-white/5 rounded-xl shadow-inner">{icon}</div>
   </div>
@@ -52,7 +52,7 @@ const FinancialTooltip = ({ active, payload, label }: any) => {
               <span className="text-white font-bold">${typeof entry.value === 'number' ? entry.value.toLocaleString() : entry.value}</span>
             </div>
             {entry.payload.count && (
-                <p className="text-[10px] text-slate-500 text-right">across {entry.payload.count} orders</p>
+                <p className="text-[10px] text-slate-400 text-right">across {entry.payload.count} orders</p>
             )}
           </div>
         ))}
@@ -372,7 +372,7 @@ const ProfitLossReportComponent: React.FC<ReportComponentProps> = ({ orders }) =
                             <tbody className="divide-y divide-white/5 text-sm">
                                 {paginatedLossOrders.length === 0 ? (
                                     <tr>
-                                        <td colSpan={6} className="p-8 text-center text-slate-500 flex flex-col items-center justify-center">
+                                        <td colSpan={6} className="p-8 text-center text-slate-400 flex flex-col items-center justify-center">
                                             <CheckCircle className="w-8 h-8 text-green-500 mb-2" />
                                             <span>Great job! No loss-making orders found.</span>
                                         </td>
@@ -389,7 +389,7 @@ const ProfitLossReportComponent: React.FC<ReportComponentProps> = ({ orders }) =
                                                     >
                                                         {order.orderNumber}
                                                     </Link>
-                                                    <div className="text-slate-500 text-xs mt-0.5">{order.customerName}</div>
+                                                    <div className="text-slate-400 text-xs mt-0.5">{order.customerName}</div>
                                                 </td>
                                                 <td className="p-3 text-slate-300">{order.salesAgent}</td>
                                                 <td className="p-3 text-right text-slate-300">${(order.orderAmount ?? 0).toLocaleString()}</td>

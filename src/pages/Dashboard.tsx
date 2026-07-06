@@ -462,7 +462,7 @@ export default function Dashboard() {
               <Clock className="w-5 h-5 text-brand-orange" />
               Recent Activity
             </h3>
-            <span className="text-xs text-slate-500">Live updates</span>
+            <span className="text-xs text-slate-400">Live updates</span>
           </div>
           <ActivityFeed />
         </SpotlightCard>

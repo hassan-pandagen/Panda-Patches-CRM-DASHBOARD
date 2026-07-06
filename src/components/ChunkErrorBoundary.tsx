@@ -129,7 +129,7 @@ class ChunkErrorBoundary extends React.Component<
               <p className="text-orange-300 font-mono text-xs wrap-break-word">
                 {this.state.error?.message || 'Unknown Error'}
               </p>
-              <p className="text-slate-500 text-xs mt-2">
+              <p className="text-slate-400 text-xs mt-2">
                 Retry count: {this.state.retryCount}
               </p>
             </div>

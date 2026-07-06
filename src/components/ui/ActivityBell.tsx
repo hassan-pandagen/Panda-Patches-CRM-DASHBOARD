@@ -114,7 +114,7 @@ const ActivityBell: React.FC = () => {
             {unread.length === 0 ? (
               <div className="px-4 py-8 text-center">
                 <Bell className="w-8 h-8 text-slate-700 mx-auto mb-2 opacity-50" />
-                <p className="text-xs text-slate-500">You're all caught up!</p>
+                <p className="text-xs text-slate-400">You're all caught up!</p>
               </div>
             ) : (
               unread.map(n => {
@@ -134,7 +134,7 @@ const ActivityBell: React.FC = () => {
                       {n.body && (
                         <p className="text-xs text-slate-400 mt-0.5 line-clamp-2">{n.body}</p>
                       )}
-                      <p className="text-[10px] text-slate-500 mt-1">{relativeTime(n.created_at)}</p>
+                      <p className="text-[10px] text-slate-400 mt-1">{relativeTime(n.created_at)}</p>
                     </div>
                   </button>
                 );

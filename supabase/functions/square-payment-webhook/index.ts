@@ -32,8 +32,13 @@ async function verifySquareSignature(rawBody: string, sigHeader: string, sigKey:
   } catch { return false; }
 }
 
-function isUUID(s: string): boolean {
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s);
+// Extracts a UUID from anywhere in the string, not just an exact full-string match — the
+// website's own checkout flow prefixes its token (e.g. "WEB-<uuid>") rather than sending a
+// bare UUID, and that prefix convention isn't something this repo controls or can rely on
+// staying fixed. Matching the embedded UUID works regardless of what prefix (if any) is used.
+function extractUUID(s: string): string | null {
+  const m = String(s || '').match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i);
+  return m ? m[0] : null;
 }
 
 // Resolve the real "where did this lead come from?" label from the attribution blob.
@@ -390,15 +395,140 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    // FLOW A: Token-based (UUID) -> create new order
-    if (isUUID(referenceId)) {
+    // FLOW A: Token-based (UUID, possibly prefixed e.g. "WEB-<uuid>") -> create new order
+    const uuidToken = extractUUID(referenceId);
+    if (uuidToken) {
       const { data: tokenRow, error: tokenErr } = await admin
         .from('payment_form_tokens')
         .select('*')
-        .eq('token', referenceId)
+        .eq('token', uuidToken)
         .single();
 
       if (tokenErr || !tokenRow) {
+        // FLOW A2: Website "Buy Now" checkout (product page) -> square_pending_orders.
+        // This is a SEPARATE self-checkout path (not payment_form_tokens, not a Quote). Some
+        // other system outside this repo also watches this table and creates orders for it
+        // (rows do get consumed_at set without any code here doing it) — so the UPDATE below
+        // doubles as an atomic claim: `.is('consumed_at', null)` means only one of us can win
+        // the race for a given token, exactly like the square_processed_payments claim above.
+        // Rolled back on order-creation failure so a retry (ours or theirs) can still succeed.
+        const { data: claimedRows } = await admin
+          .from('square_pending_orders')
+          .update({ consumed_at: new Date().toISOString() })
+          .eq('token', uuidToken)
+          .is('consumed_at', null)
+          .select('*');
+        const pendingRow = claimedRows?.[0];
+
+        if (pendingRow) {
+          const od = pendingRow.order_data || {};
+          const attribution = {
+            ...(od.attribution || {}),
+            source: od.attribution?.source || 'square_checkout',
+          };
+
+          const { data: newOrder, error: pendingOrderErr } = await admin
+            .from('orders')
+            .insert({
+              customer_name:    String(od.customer_name || '').trim(),
+              customer_email:   od.customer_email,
+              customer_phone:   od.customer_phone || null,
+              patches_type:     normalizePatchType(od.product_name),
+              patches_quantity: od.quantity || 0,
+              design_size:      od.design_size || null,
+              design_backing:   normalizeBacking(od.backing),
+              instructions:     od.instructions || null,
+              shipping_address: od.shipping_address || null,
+              artwork_url:      od.artwork_url || null,
+              delivery_option:  od.delivery_option || null,
+              rush_date:        od.rush_date || null,
+              website_addons:   Array.isArray(od.website_addons) ? od.website_addons : [],
+              order_amount:     od.order_amount || paidAmount,
+              amount_paid:      paidAmount,
+              production_cost:  0,
+              shipping_cost:    0,
+              marketing_cost:   0,
+              sales_agent:      'WEB_CHECKOUT',
+              lead_source:      resolveLeadSource(attribution),
+              attribution,
+              is_urgent:        false,
+              status:           'NEW_ORDER',
+            })
+            .select('id, order_number')
+            .single();
+
+          if (pendingOrderErr || !newOrder) {
+            console.error(`[square-payment-webhook] failed to create order from pending checkout ${referenceId}:`, pendingOrderErr);
+            // Roll back the claim so a retry (Square resends failed webhooks) can still succeed.
+            await admin.from('square_pending_orders').update({ consumed_at: null }).eq('token', uuidToken);
+            await releasePayment();
+            return new Response(JSON.stringify({ received: true, error: 'order creation failed' }), { status: 200 });
+          }
+
+          await admin.from('square_processed_payments')
+            .update({ order_number: newOrder.order_number }).eq('payment_id', payment.id);
+
+          await admin.from('order_history').insert({
+            order_id:      newOrder.id,
+            user_email:    'square_webhook',
+            field_changed: 'ORDER_CREATED',
+            old_value:     null,
+            new_value:     `Created from website checkout (token: ${referenceId}) via Square payment $${paidAmount}`,
+          }).then(() => {}, () => {});
+
+          if (od.customer_email) {
+            try {
+              const { data: custStamped } = await admin
+                .from('orders')
+                .update({ customer_confirmation_sent_at: new Date().toISOString() })
+                .eq('id', newOrder.id)
+                .is('customer_confirmation_sent_at', null)
+                .select('id');
+              if (custStamped && custStamped.length > 0) {
+                await fetch(`${SUPABASE_URL}/functions/v1/send-email`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${SERVICE_KEY}` },
+                  body: JSON.stringify({
+                    to: od.customer_email,
+                    template_id: 'CUSTOMER_PAYMENT_CONFIRMATION',
+                    dynamic_data: {
+                      customer_name: od.customer_name || 'there',
+                      order_number: newOrder.order_number,
+                      amount_paid: `$${paidAmount.toFixed(2)}`,
+                      total_amount: `$${(od.order_amount || paidAmount).toFixed(2)}`,
+                      portal_action_url: 'https://pandapatches.com/login',
+                    },
+                  }),
+                });
+              }
+            } catch (custErr) {
+              console.error(`[square-payment-webhook] customer email failed for ${newOrder.order_number}:`, custErr);
+            }
+          }
+
+          try {
+            const { data: admins } = await admin.from('user_profiles').select('id').eq('role', 'ADMIN');
+            const notifRows = (admins || []).map((a: { id: string }) => ({
+              recipient_id:     a.id,
+              type:             'order_paid',
+              title:            `New order ${newOrder.order_number} via website checkout`,
+              body:             `$${paidAmount} paid by ${od.customer_name || od.customer_email}`,
+              link:             `/order/${newOrder.order_number}`,
+              related_order_id: newOrder.id,
+            }));
+            if (notifRows.length > 0) await admin.from('activity_notifications').insert(notifRows);
+          } catch (notifErr) {
+            console.error(`[square-payment-webhook] activity_notifications insert failed for ${newOrder.order_number}:`, notifErr);
+          }
+
+          console.log(`[square-payment-webhook] pending checkout ${referenceId} -> order ${newOrder.order_number}: $${paidAmount} paid`);
+
+          return new Response(
+            JSON.stringify({ received: true, order_number: newOrder.order_number, paid: paidAmount }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } }
+          );
+        }
+
         console.error(`[square-payment-webhook] token ${referenceId} not found`);
         await releasePayment();
         return new Response(JSON.stringify({ received: true, error: 'token not found' }), { status: 200 });
@@ -465,7 +595,7 @@ Deno.serve(async (req: Request) => {
         used_at:      new Date().toISOString(),
         order_id:     newOrder.id,
         order_number: newOrder.order_number,
-      }).eq('token', referenceId);
+      }).eq('token', uuidToken);
 
       await admin.from('square_processed_payments')
         .update({ order_number: newOrder.order_number }).eq('payment_id', payment.id);

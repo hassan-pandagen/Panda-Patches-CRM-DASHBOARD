@@ -128,7 +128,7 @@ const LeadSourceDistribution: React.FC<Props> = ({ startDate, endDate }) => {
         <div className="flex items-center justify-between mb-4">
           <div>
             <h4 className="text-lg font-semibold text-white">Lead Source Distribution</h4>
-            <p className="text-xs text-slate-500 mt-0.5">From all quote requests (form fills + chats)</p>
+            <p className="text-xs text-slate-400 mt-0.5">From all quote requests (form fills + chats)</p>
           </div>
           <span className="text-xs font-medium text-slate-400 bg-slate-800 px-2 py-1 rounded-md">
             {totalLeads} leads

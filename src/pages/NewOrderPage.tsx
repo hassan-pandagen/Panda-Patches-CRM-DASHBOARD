@@ -201,7 +201,7 @@ const NewOrderPage: React.FC = () => {
           {sourceOrder ? (
             <>
               <Copy className="w-8 h-8 text-blue-400" />
-              <span>Repeat Order <span className="text-slate-500 text-lg font-normal">(Copying {sourceOrder.orderNumber})</span></span>
+              <span>Repeat Order <span className="text-slate-400 text-lg font-normal">(Copying {sourceOrder.orderNumber})</span></span>
             </>
           ) : (
             "Create New Order"

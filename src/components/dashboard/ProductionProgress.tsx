@@ -108,7 +108,7 @@ export const ProductionProgress: React.FC<ProductionProgressProps> = ({ orders, 
               </div>
               <div className="flex items-center gap-3">
                 <span className="font-semibold text-white text-lg">{item.count}</span>
-                <ChevronRight className="w-5 h-5 text-slate-500 group-hover:text-white transition-colors" />
+                <ChevronRight className="w-5 h-5 text-slate-400 group-hover:text-white transition-colors" />
               </div>
             </div>
           </motion.button>

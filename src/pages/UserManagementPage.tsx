@@ -420,9 +420,9 @@ const UserManagementPage: React.FC = () => {
       {/* Users Table */}
       {!isLoading && !queryError && (!users || users.length === 0) ? (
         <div className="text-center py-12 rounded-xl border border-white/10 bg-slate-900/40">
-          <Plus className="w-12 h-12 text-slate-500 mx-auto mb-4" />
+          <Plus className="w-12 h-12 text-slate-400 mx-auto mb-4" />
           <h3 className="text-lg font-semibold text-slate-300 mb-2">No users found</h3>
-          <p className="text-slate-500 mb-6">Get started by creating your first team member</p>
+          <p className="text-slate-400 mb-6">Get started by creating your first team member</p>
           <Button onClick={openCreateModal} variant="secondary">
             Create User
           </Button>
@@ -589,7 +589,7 @@ const UserManagementPage: React.FC = () => {
                   placeholder="••••••"
                 />
                 {validationErrors.password && <p className="text-red-400 text-xs mt-1">{validationErrors.password}</p>}
-                <p className="text-xs text-slate-500 mt-1.5">
+                <p className="text-xs text-slate-400 mt-1.5">
                   Use a strong, unique password — 8+ characters with a mix of letters, numbers &amp; symbols.
                   Common or previously-leaked passwords are rejected by the system.
                 </p>
@@ -801,7 +801,7 @@ const UserManagementPage: React.FC = () => {
                   placeholder="••••••"
                 />
                 {validationErrors.password && <p className="text-red-400 text-xs mt-1">{validationErrors.password}</p>}
-                <p className="text-xs text-slate-500 mt-1.5">
+                <p className="text-xs text-slate-400 mt-1.5">
                   Use a strong, unique password — 8+ characters with a mix of letters, numbers &amp; symbols.
                   Common or previously-leaked passwords are rejected by the system.
                 </p>

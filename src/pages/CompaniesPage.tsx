@@ -167,7 +167,7 @@ const CompaniesPage: React.FC = () => {
           </h1>
           <p className="text-slate-400 text-sm mt-1">
             Customers grouped by company (email domain) — find your repeat resellers and agency accounts.
-            <span className="text-slate-500"> Business = custom domain · Personal = gmail/yahoo/etc.</span>
+            <span className="text-slate-400"> Business = custom domain · Personal = gmail/yahoo/etc.</span>
           </p>
         </div>
         <div className="flex flex-col sm:flex-row items-center gap-3 shrink-0">
@@ -197,7 +197,7 @@ const CompaniesPage: React.FC = () => {
       {/* Monthly Agency vs Personal report */}
       <div className="bg-slate-900/40 backdrop-blur-xl border border-white/10 rounded-2xl p-6">
         <h3 className="text-lg font-semibold text-white mb-1">Monthly — Agency vs Personal</h3>
-        <p className="text-xs text-slate-400 mb-4">Revenue split by customer type. <span className="text-slate-500">Click a series in the legend to focus it — the list below switches between companies and individual customers.</span></p>
+        <p className="text-xs text-slate-400 mb-4">Revenue split by customer type. <span className="text-slate-400">Click a series in the legend to focus it — the list below switches between companies and individual customers.</span></p>
         {isLoading ? (
           <div className="flex justify-center py-16"><Spinner /></div>
         ) : (
@@ -314,7 +314,7 @@ const CompaniesPage: React.FC = () => {
                     <td className="px-4 py-3 text-right text-slate-300">{fmtMoney(a.avgOrder)}</td>
                     <td className="px-4 py-3 text-right">
                       <div className="text-slate-300 text-sm">{fmtDate(a.lastOrder)}</div>
-                      <div className={`text-[11px] ${a.daysSinceLast > 60 ? 'text-amber-400' : 'text-slate-500'}`}>
+                      <div className={`text-[11px] ${a.daysSinceLast > 60 ? 'text-amber-400' : 'text-slate-400'}`}>
                         {a.daysSinceLast === 0 ? 'today' : `${a.daysSinceLast}d ago`}
                       </div>
                     </td>
@@ -338,7 +338,7 @@ const CompaniesPage: React.FC = () => {
           </button>
           <span className="text-slate-300 font-medium text-sm">
             Page <span className="text-white font-bold">{safePage}</span> of {totalPages}
-            <span className="text-slate-500 ml-2">({visible.length} {isPersonalView ? 'customers' : 'companies'})</span>
+            <span className="text-slate-400 ml-2">({visible.length} {isPersonalView ? 'customers' : 'companies'})</span>
           </span>
           <button
             disabled={safePage === totalPages}
@@ -364,7 +364,7 @@ const StatCard: React.FC<{ icon: React.ReactNode; label: string; value: string; 
       {icon}{label}
     </div>
     <div className="text-2xl font-bold text-white truncate">{value}</div>
-    {sub && <div className="text-xs text-slate-500 mt-0.5 truncate">{sub}</div>}
+    {sub && <div className="text-xs text-slate-400 mt-0.5 truncate">{sub}</div>}
   </div>
 );
 

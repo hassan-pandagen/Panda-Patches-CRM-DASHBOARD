@@ -32,7 +32,7 @@ const TableRow: React.FC<TableRowProps> = React.memo(({ order }) => {
       <td className="whitespace-nowrap px-6 py-4 font-medium text-white max-w-[180px] truncate" title={order.customerName}>
         {order.customerName}
       </td>
-      <td className="whitespace-nowrap px-6 py-4 max-w-[200px] truncate text-slate-500" title={order.salesAgent}>
+      <td className="whitespace-nowrap px-6 py-4 max-w-[200px] truncate text-slate-400" title={order.salesAgent}>
         {order.salesAgent}
       </td>
       <td className="whitespace-nowrap px-6 py-4 w-36">
@@ -84,7 +84,7 @@ const MobileCard: React.FC<TableRowProps> = React.memo(({ order }) => {
             <span>{new Date(order.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
           </div>
           {order.salesAgent && (
-            <p className="text-xs text-slate-500 mt-1 truncate">{order.salesAgent}</p>
+            <p className="text-xs text-slate-400 mt-1 truncate">{order.salesAgent}</p>
           )}
         </div>
         <div className="flex flex-col items-end gap-1 flex-shrink-0">
@@ -187,7 +187,7 @@ const DashboardRecentOrdersTable: React.FC<DashboardRecentOrdersTableProps> = ({
                 {displayOrders.length === 0 ? (
                   <tr>
                       <td colSpan={7} className="text-center py-16">
-                          <div className="flex flex-col items-center justify-center text-slate-500">
+                          <div className="flex flex-col items-center justify-center text-slate-400">
                               <p className="text-lg font-medium">No recent orders</p>
                               <p className="text-sm">New orders will appear here</p>
                           </div>
@@ -208,7 +208,7 @@ const DashboardRecentOrdersTable: React.FC<DashboardRecentOrdersTableProps> = ({
           {isLoading ? (
             <MobileSkeleton />
           ) : displayOrders.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-16 text-slate-500">
+            <div className="flex flex-col items-center justify-center py-16 text-slate-400">
               <p className="text-lg font-medium">No recent orders</p>
               <p className="text-sm">New orders will appear here</p>
             </div>

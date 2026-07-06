@@ -229,7 +229,7 @@ const PaymentFormPage: React.FC = () => {
                     autoFocus
                   />
                 </div>
-                <p className="text-xs text-slate-500 mt-1.5">
+                <p className="text-xs text-slate-400 mt-1.5">
                   This is exactly what the customer will pay — deposit, full, or any amount you agree on.
                 </p>
 
@@ -243,7 +243,7 @@ const PaymentFormPage: React.FC = () => {
                   />
                   <span className="text-xs text-slate-300">
                     This is a <span className="font-semibold text-brand-orange">deposit</span> (partial payment)
-                    <span className="block text-slate-500 mt-0.5">
+                    <span className="block text-slate-400 mt-0.5">
                       The customer's page will clearly show it's a deposit, not full payment. Collect the balance separately later.
                     </span>
                   </span>
@@ -253,13 +253,13 @@ const PaymentFormPage: React.FC = () => {
               {/* Customer + Order details in a compact grid */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-3">
                 <div className="space-y-3">
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Customer (optional)</p>
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Customer (optional)</p>
                   <FI label="Name" value={form.customer_name} onChange={v => setForm(f => ({ ...f, customer_name: v }))} placeholder="Aaron Leupp" />
                   <FI label="Email" value={form.customer_email} onChange={v => setForm(f => ({ ...f, customer_email: v }))} placeholder="aaron@example.com" type="email" />
                   <FI label="Phone" value={form.customer_phone} onChange={v => setForm(f => ({ ...f, customer_phone: v }))} placeholder="+1 623 238 6390" type="tel" />
                 </div>
                 <div className="space-y-3">
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Order (optional)</p>
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Order (optional)</p>
                   <div>
                     <label className="block text-xs text-slate-400 mb-1">Patch Type</label>
                     <select value={form.patches_type} onChange={e => setForm(f => ({ ...f, patches_type: e.target.value }))}
@@ -314,7 +314,7 @@ const PaymentFormPage: React.FC = () => {
                     <input type="file" accept="image/*" multiple onChange={handleImageUpload} className="hidden" disabled={uploading} />
                   </label>
                 </div>
-                <p className="text-[10px] text-slate-500 mt-1.5">
+                <p className="text-[10px] text-slate-400 mt-1.5">
                   Attach the customer's design so production has the reference image when the order is created.
                 </p>
               </div>
@@ -347,7 +347,7 @@ const PaymentFormPage: React.FC = () => {
               </div>
 
               <div className="bg-slate-800/60 rounded-xl p-3 border border-white/10">
-                <p className="text-xs text-slate-500 mb-1">Payment link</p>
+                <p className="text-xs text-slate-400 mb-1">Payment link</p>
                 <p className="text-sm text-brand-orange font-mono break-all">{portalUrl(generatedToken)}</p>
               </div>
 
@@ -463,11 +463,11 @@ const TokenRow: React.FC<{
       {/* Info */}
       <div className="flex-1 min-w-0">
         <p className="text-sm font-medium text-white truncate">
-          {t.customer_name || <span className="text-slate-500 italic text-xs">Name not set</span>}
+          {t.customer_name || <span className="text-slate-400 italic text-xs">Name not set</span>}
           {t.patches_type && <span className="text-slate-400 text-xs ml-2">· {t.patches_type}</span>}
           {t.patches_quantity && <span className="text-slate-400 text-xs"> × {t.patches_quantity}</span>}
         </p>
-        <p className="text-xs text-slate-500 truncate mt-0.5">
+        <p className="text-xs text-slate-400 truncate mt-0.5">
           {t.customer_email || 'No email'}
           {' · '}
           {used

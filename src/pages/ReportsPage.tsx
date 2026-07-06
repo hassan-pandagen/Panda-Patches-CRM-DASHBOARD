@@ -122,7 +122,7 @@ const SimpleStatCard: React.FC<{
         {typeof value === "number" ? value.toLocaleString() : value}
         {suffix}
       </p>
-      {subtitle && <p className="text-xs text-slate-500 mt-1">{subtitle}</p>}
+      {subtitle && <p className="text-xs text-slate-400 mt-1">{subtitle}</p>}
     </div>
     <div className="p-3 bg-gradient-to-br from-white/10 to-white/5 rounded-xl">
       {icon}
@@ -471,7 +471,7 @@ const SalesReportComponent: React.FC<ReportComponentProps> = ({ orders, dateRang
                             <span className="text-[10px] text-amber-400/60 mt-0.5">{agent.recoveryDetails.map(d => d.month).join(', ')}</span>
                           </div>
                         ) : (
-                          <span className="text-slate-500 text-sm">—</span>
+                          <span className="text-slate-400 text-sm">—</span>
                         )}
                       </td>
                       <td className="py-4 px-4 text-center border-l border-white/10">
@@ -611,7 +611,7 @@ const SalesReportComponent: React.FC<ReportComponentProps> = ({ orders, dateRang
                     </div>
                     <div>
                       <p className="text-white font-semibold">{userNames[agent] || agent.split('@')[0]}</p>
-                      <p className="text-xs text-slate-500">{agent}</p>
+                      <p className="text-xs text-slate-400">{agent}</p>
                     </div>
                   </div>
                   <div className="text-right">
@@ -658,7 +658,7 @@ const SalesReportComponent: React.FC<ReportComponentProps> = ({ orders, dateRang
 
                   {currentMonthCollected === 0 && data.previousMonths.length === 0 && (
                     <div className="bg-slate-800/50 rounded-lg p-4">
-                      <p className="text-xs text-slate-500">No collections recorded</p>
+                      <p className="text-xs text-slate-400">No collections recorded</p>
                     </div>
                   )}
                 </div>
@@ -999,7 +999,7 @@ const LeadSourceReportComponent: React.FC<ReportComponentProps> = ({
             <h5 className="text-sm font-medium text-slate-400">Repeat Customers</h5>
           </div>
           <p className="text-3xl font-bold text-white">{repeatCustomerMetrics.totalRepeatCustomers}</p>
-          <p className="text-xs text-slate-500 mt-1">out of {repeatCustomerMetrics.totalUniqueCustomers} total</p>
+          <p className="text-xs text-slate-400 mt-1">out of {repeatCustomerMetrics.totalUniqueCustomers} total</p>
         </div>
 
         <div className="bg-slate-900/40 backdrop-blur-xl border border-white/10 rounded-2xl p-6 shadow-xl">
@@ -1010,7 +1010,7 @@ const LeadSourceReportComponent: React.FC<ReportComponentProps> = ({
             <h5 className="text-sm font-medium text-slate-400">Repeat Orders</h5>
           </div>
           <p className="text-3xl font-bold text-white">{repeatCustomerMetrics.totalRepeatOrders}</p>
-          <p className="text-xs text-slate-500 mt-1">additional orders</p>
+          <p className="text-xs text-slate-400 mt-1">additional orders</p>
         </div>
 
         <div className="bg-slate-900/40 backdrop-blur-xl border border-white/10 rounded-2xl p-6 shadow-xl">
@@ -1021,7 +1021,7 @@ const LeadSourceReportComponent: React.FC<ReportComponentProps> = ({
             <h5 className="text-sm font-medium text-slate-400">Repeat Rate</h5>
           </div>
           <p className="text-3xl font-bold text-white">{repeatCustomerMetrics.repeatCustomerRate.toFixed(1)}%</p>
-          <p className="text-xs text-slate-500 mt-1">customer retention</p>
+          <p className="text-xs text-slate-400 mt-1">customer retention</p>
         </div>
 
         <div className="bg-slate-900/40 backdrop-blur-xl border border-white/10 rounded-2xl p-6 shadow-xl">
@@ -1032,7 +1032,7 @@ const LeadSourceReportComponent: React.FC<ReportComponentProps> = ({
             <h5 className="text-sm font-medium text-slate-400">Repeat Revenue</h5>
           </div>
           <p className="text-3xl font-bold text-white">${repeatCustomerMetrics.repeatRevenue.toLocaleString()}</p>
-          <p className="text-xs text-slate-500 mt-1">from returning customers</p>
+          <p className="text-xs text-slate-400 mt-1">from returning customers</p>
         </div>
       </div>
 
@@ -1224,7 +1224,7 @@ const LeadSourceReportComponent: React.FC<ReportComponentProps> = ({
           <div className="flex items-center justify-between mb-4">
             <div>
               <h4 className="text-lg font-semibold text-white">Revenue by Ad Campaign</h4>
-              <p className="text-xs text-slate-500 mt-0.5">Meta ads — by the ad name captured on each order</p>
+              <p className="text-xs text-slate-400 mt-0.5">Meta ads — by the ad name captured on each order</p>
             </div>
             <span className="text-xs font-medium text-slate-400 bg-slate-800 px-2 py-1 rounded-md">
               {adCampaignStats.reduce((s, a) => s + a.orders, 0)} ad orders
@@ -1786,7 +1786,7 @@ const ReportsPage: React.FC = () => {
     return <Spinner fullScreen message="Preparing your reports..." />;
   if (availableReports.length === 0)
     return (
-      <div className="flex h-screen items-center justify-center text-slate-500">
+      <div className="flex h-screen items-center justify-center text-slate-400">
         Access Restricted
       </div>
     );

@@ -244,7 +244,7 @@ const GeneratePaymentLinkModal: React.FC<Props> = (props) => {
                   Amount to Charge <span className="text-red-400">*</span>
                 </label>
                 <div className="relative">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500">$</span>
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">$</span>
                   <input
                     type="number"
                     step="0.01"
@@ -370,7 +370,7 @@ const GeneratePaymentLinkModal: React.FC<Props> = (props) => {
                   </button>
                 </div>
                 {!customerPhone && (
-                  <p className="text-[10px] text-slate-500 mt-2">
+                  <p className="text-[10px] text-slate-400 mt-2">
                     💡 Add a phone number to the customer record to enable WhatsApp share.
                   </p>
                 )}

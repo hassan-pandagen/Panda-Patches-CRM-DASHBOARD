@@ -132,14 +132,14 @@ const SearchResultsPage: React.FC = () => {
                       {canViewFinancials ? (
                         <span className="text-white font-bold text-base tracking-tight">${(order.orderAmount ?? 0).toLocaleString()}</span>
                       ) : (
-                        <div className="flex items-center gap-1 text-slate-500">
+                        <div className="flex items-center gap-1 text-slate-400">
                           <Lock className="w-3 h-3" />
                           <span className="text-xs">Hidden</span>
                         </div>
                       )}
                     </div>
 
-                    <ArrowRight className="w-5 h-5 text-slate-500 group-hover:text-brand-orange group-hover:translate-x-1 transition-all" />
+                    <ArrowRight className="w-5 h-5 text-slate-400 group-hover:text-brand-orange group-hover:translate-x-1 transition-all" />
                   </div>
                 </div>
               </div>
