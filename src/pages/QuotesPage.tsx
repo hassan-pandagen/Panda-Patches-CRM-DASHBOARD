@@ -1,9 +1,9 @@
 // src/pages/QuotesPage.tsx - View all quotes with Convert to Order option
 
-import React, { useState, useMemo } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import React, { useState } from 'react';
+import { useQuery, keepPreviousData } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
-import { getAllQuotes, convertQuoteToOrder, deleteQuote } from '../services/quoteService';
+import { getQuotesPaginated, QUOTES_PAGE_SIZE, convertQuoteToOrder, deleteQuote } from '../services/quoteService';
 import { Quote } from '../types';
 import { queryKeys } from '../constants/queryKeys';
 import Button from '../components/ui/Button';
@@ -13,9 +13,8 @@ import SpotlightCard from '../components/ui/SpotlightCard';
 import { Search, Plus, Calendar, ArrowRight, Trash2, CheckCircle, MailCheck, Clock } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useToast } from '../hooks/useToast';
+import { useDebounce } from '../hooks/useDebounce';
 import { detectLeadSource, getSourceBadgeClasses } from '../utils/leadSource';
-
-const ITEMS_PER_PAGE = 15;
 
 const QuotesPage: React.FC = () => {
   const navigate = useNavigate();
@@ -25,32 +24,20 @@ const QuotesPage: React.FC = () => {
   const [convertingId, setConvertingId] = useState<number | null>(null);
   const [deletingId, setDeletingId] = useState<number | null>(null);
 
-  // Fetch quotes
-  const { data: quotes = [], isLoading, error } = useQuery({
-    queryKey: queryKeys.quotes.all(),
-    queryFn: getAllQuotes,
+  const debouncedSearch = useDebounce(searchQuery, 300);
+
+  // Fetch quotes — search and pagination both run server-side (see getQuotesPaginated).
+  const { data, isLoading, error } = useQuery({
+    queryKey: queryKeys.quotes.paginated({ page: currentPage, search: debouncedSearch }),
+    queryFn: () => getQuotesPaginated({ page: currentPage, search: debouncedSearch }),
+    staleTime: 1000 * 30, // 30s — revisiting the same page/search serves from cache instantly
+    gcTime: 1000 * 60 * 5,
+    placeholderData: keepPreviousData, // keep showing the old page while the new one loads
   });
 
-  // Filter quotes by search
-  const filteredQuotes = useMemo(() => {
-    if (!searchQuery.trim()) return quotes;
-
-    const query = searchQuery.toLowerCase();
-    return quotes.filter(q =>
-      q.customerName?.toLowerCase().includes(query) ||
-      q.quoteNumber?.toLowerCase().includes(query) ||
-      q.customerEmail?.toLowerCase().includes(query) ||
-      q.customerPhone?.toLowerCase().includes(query) ||
-      q.designName?.toLowerCase().includes(query)
-    );
-  }, [quotes, searchQuery]);
-
-  // Pagination
-  const totalPages = Math.ceil(filteredQuotes.length / ITEMS_PER_PAGE);
-  const paginatedQuotes = filteredQuotes.slice(
-    (currentPage - 1) * ITEMS_PER_PAGE,
-    currentPage * ITEMS_PER_PAGE
-  );
+  const quotes = data?.quotes || [];
+  const totalCount = data?.totalCount || 0;
+  const totalPages = Math.ceil(totalCount / QUOTES_PAGE_SIZE);
 
   // Convert quote to order
   const handleConvertToOrder = async (quote: Quote) => {
@@ -142,16 +129,16 @@ const QuotesPage: React.FC = () => {
       {/* Quotes List */}
       <div className="space-y-3">
         <AnimatePresence>
-          {paginatedQuotes.length === 0 ? (
+          {quotes.length === 0 ? (
             <EmptyState
               title="No Quotes Found"
               description={
-                searchQuery
-                  ? `We couldn't find any quotes matching "${searchQuery}".`
+                debouncedSearch
+                  ? `We couldn't find any quotes matching "${debouncedSearch}".`
                   : "No quotes yet. Create one to get started."
               }
               action={
-                !searchQuery ? (
+                !debouncedSearch ? (
                   <Button
                     variant="primary"
                     onClick={() => navigate('/new-quote')}
@@ -164,7 +151,7 @@ const QuotesPage: React.FC = () => {
               }
             />
           ) : (
-            paginatedQuotes.map((quote, index) => (
+            quotes.map((quote, index) => (
               <motion.div
                 key={quote.id}
                 initial={{ opacity: 0, y: 10 }}
@@ -299,6 +286,7 @@ const QuotesPage: React.FC = () => {
 
           <span className="text-slate-300 font-medium text-sm">
             Page <span className="text-white font-bold">{currentPage}</span> of {totalPages}
+            <span className="text-slate-400 ml-2">({totalCount} quotes)</span>
           </span>
 
           <Button

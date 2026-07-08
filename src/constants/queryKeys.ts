@@ -90,6 +90,9 @@ export const queryKeys = {
   quotes: {
     all: () => ['quotes'] as const,
     lists: () => [...queryKeys.quotes.all(), 'list'] as const,
+    // Server-side paginated + searched list (QuotesPage)
+    paginated: (params: { page: number; search: string }) =>
+      [...queryKeys.quotes.all(), 'paginated', params] as const,
     details: () => [...queryKeys.quotes.all(), 'single'] as const,
     single: (quoteNumber: string) => [...queryKeys.quotes.details(), quoteNumber] as const,
   },

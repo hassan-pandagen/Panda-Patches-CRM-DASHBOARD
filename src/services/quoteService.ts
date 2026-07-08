@@ -5,6 +5,7 @@ import { queryClient } from './queryClient';
 import { queryKeys } from '../constants/queryKeys';
 import { Quote, Order, OrderStatus } from '../types/index';
 import { logger } from './logger';
+import { sanitizeIlikePattern } from '../utils/supabaseFilters';
 
 const SENDGRID_TEMPLATES = {
   CUSTOMER_QUOTE: 'd-fcd19c2e3d2d42a4b0e1bf3087179c7d',
@@ -258,20 +259,49 @@ export const createQuote = async (quoteData: Omit<Quote, 'id' | 'quoteNumber' | 
   }
 };
 
-// Get all quotes — excludes Meta-chat auto-created rows (those live in /inbox)
-export const getAllQuotes = async (): Promise<Quote[]> => {
+// Server-side page size for getQuotesPaginated — kept here (not duplicated in QuotesPage)
+// so the fetch logic and the totalPages calculation can never drift out of sync.
+export const QUOTES_PAGE_SIZE = 15;
+
+// Get a page of quotes — excludes Meta-chat auto-created rows (those live in /inbox) and
+// already-converted quotes. Search and pagination both run server-side: with thousands of
+// open quotes, fetching everything into the browser and filtering there doesn't scale (it
+// also silently truncates at PostgREST's 1000-row cap, which is what caused older-but-open
+// quotes to become unfindable — see getAllQuotes' old implementation for that bug).
+export const getQuotesPaginated = async (params: {
+  page: number;
+  search: string;
+}): Promise<{ quotes: Quote[]; totalCount: number }> => {
+  const { page, search } = params;
+  const from = (page - 1) * QUOTES_PAGE_SIZE;
+  const to = from + QUOTES_PAGE_SIZE - 1;
+
   try {
-    const { data, error } = await supabase
+    let query = supabase
       .from('quotes')
-      .select('*')
+      .select('*', { count: 'exact' })
       .is('meta_psid', null)
       .is('meta_ig_id', null)
-      .is('converted_at', null)   // hide quotes already converted to orders from the pipeline
-      .order('created_at', { ascending: false });
+      .is('converted_at', null);
+
+    const trimmedSearch = search.trim();
+    if (trimmedSearch) {
+      const term = `%${sanitizeIlikePattern(trimmedSearch)}%`;
+      query = query.or(
+        `customer_name.ilike.${term},quote_number.ilike.${term},customer_email.ilike.${term},customer_phone.ilike.${term},design_name.ilike.${term}`
+      );
+    }
+
+    const { data, error, count } = await query
+      .order('created_at', { ascending: false })
+      .range(from, to);
 
     if (error) throw error;
 
-    return (data || []).map(mapDbToQuote);
+    return {
+      quotes: (data || []).map(mapDbToQuote),
+      totalCount: count || 0,
+    };
   } catch (error) {
     logger.error('Failed to fetch quotes', error);
     throw error;

@@ -34,6 +34,7 @@ import {
     X,
     CheckCircle,
     ChevronDown,
+    Repeat,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import ToggleButtons from '../components/ui/ToggleButtons';
@@ -182,7 +183,7 @@ async function fetchPaginatedOrders(params: {
     userEmail?: string | null;
     dateRangeStart?: string;
     dateRangeEnd?: string;
-}): Promise<{ orders: Order[]; totalCount: number }> {
+}): Promise<{ orders: Order[]; totalCount: number; repeatCustomerCounts: Record<string, number> }> {
     const { page, filter, search, salesAgent, leadSource, date, ids, userRole, userEmail, dateRangeStart, dateRangeEnd } = params;
     const from = (page - 1) * ITEMS_PER_PAGE;
     const to = from + ITEMS_PER_PAGE - 1;
@@ -199,7 +200,7 @@ async function fetchPaginatedOrders(params: {
             .order('created_at', { ascending: false });
 
         if (error) throw new Error(error.message);
-        return { orders: (data || []).map(mapDbToOrder), totalCount: data?.length || 0 };
+        return { orders: (data || []).map(mapDbToOrder), totalCount: data?.length || 0, repeatCustomerCounts: {} };
     }
 
     // --- Build the base query ---
@@ -245,11 +246,12 @@ async function fetchPaginatedOrders(params: {
         // Sort oldest first for overdue
         query = query.order('created_at', { ascending: true });
     } else if (filter === 'PAYMENT_PENDING') {
-        // Payment pending: order_amount > amount_paid, exclude cancelled/refunded
-        // Supabase doesn't support computed column filters, so we fetch more and filter
+        // Payment pending: balance_due > 0, exclude cancelled/refunded. balance_due is a
+        // generated column (greatest(order_amount - amount_paid, 0)) so this filters and
+        // paginates server-side like every other tab — no unbounded fetch-then-filter.
         query = query
             .not('status', 'in', '(CANCELLED,REFUNDED)')
-            .gt('order_amount', 0)
+            .gt('balance_due', 0.01)
             .order('created_at', { ascending: false });
     } else if (filter === 'URGENT') {
         // Urgent = is_urgent AND not closed AND not overdue (>10 days)
@@ -280,32 +282,38 @@ async function fetchPaginatedOrders(params: {
         );
     }
 
-    // PAYMENT_PENDING needs client-side filtering for the amount comparison
-    // Fetch all matching rows, filter, then manually paginate
-    if (filter === 'PAYMENT_PENDING') {
-        const { data, error, count } = await query;
-        if (error) throw new Error(error.message);
-
-        const allOrders = (data || []).map(mapDbToOrder);
-        const pendingOrders = allOrders.filter(o => {
-            const orderAmount = Number(o.orderAmount) || 0;
-            const amountPaid = Number(o.amountPaid) || 0;
-            return Math.max(0, orderAmount - amountPaid) > 0.01;
-        });
-
-        const paginated = pendingOrders.slice(from, to + 1);
-        return { orders: paginated, totalCount: pendingOrders.length };
-    }
-
-    // Apply pagination for all other filters
+    // Apply pagination
     query = query.range(from, to);
 
     const { data, error, count } = await query;
     if (error) throw new Error(error.message);
 
+    const orders = (data || []).map(mapDbToOrder);
+
+    // Payment Pending shows delivered/shipped orders with a balance owed — often expected
+    // (repeat/reseller customers who receive product before paying in full, then settle up
+    // later). A "repeat customer" badge lets staff tell that apart from a first-time customer
+    // who didn't pay, at a glance. One batched aggregate query for the page (max ITEMS_PER_PAGE
+    // emails), not a per-row lookup.
+    let repeatCustomerCounts: Record<string, number> = {};
+    if (filter === 'PAYMENT_PENDING' && orders.length > 0) {
+        const emails = Array.from(new Set(orders.map(o => o.customerEmail).filter(Boolean)));
+        const { data: emailRows, error: countErr } = await supabase
+            .from('orders')
+            .select('customer_email')
+            .in('customer_email', emails);
+        if (!countErr && emailRows) {
+            repeatCustomerCounts = emailRows.reduce((acc: Record<string, number>, row: { customer_email: string }) => {
+                acc[row.customer_email] = (acc[row.customer_email] || 0) + 1;
+                return acc;
+            }, {});
+        }
+    }
+
     return {
-        orders: (data || []).map(mapDbToOrder),
+        orders,
         totalCount: count || 0,
+        repeatCustomerCounts,
     };
 }
 
@@ -338,7 +346,7 @@ async function fetchTabCounts(params: {
     const rows = await fetchAllPaged<any>((from, to) => {
         let query = supabase
             .from('orders')
-            .select('status, is_urgent, created_at, order_amount, amount_paid, sales_agent, production_completed_at');
+            .select('status, is_urgent, created_at, balance_due, sales_agent, production_completed_at');
 
         // AGENT/USER see only their assigned orders; ADMIN/PRODUCTION see all
         if (userRole !== UserRole.ADMIN && userRole !== UserRole.PRODUCTION && userRole !== UserRole.SHIPPING && userEmail) {
@@ -384,11 +392,9 @@ async function fetchTabCounts(params: {
         // Count unassigned orders
         if (!row.sales_agent) unassigned++;
 
-        // Payment pending
-        if (!isClosed && row.status !== 'CANCELLED' && row.status !== 'REFUNDED') {
-            const orderAmount = Number(row.order_amount) || 0;
-            const amountPaid = Number(row.amount_paid) || 0;
-            if (Math.max(0, orderAmount - amountPaid) > 0.01) paymentPending++;
+        // Payment pending — balance_due is the same generated column the tab's list query filters on
+        if (row.status !== 'CANCELLED' && row.status !== 'REFUNDED' && Number(row.balance_due) > 0.01) {
+            paymentPending++;
         }
     }
 
@@ -602,6 +608,7 @@ const AllOrdersPage: React.FC = () => {
     const orders = pageData?.orders || [];
     const totalCount = pageData?.totalCount || 0;
     const totalPages = Math.ceil(totalCount / ITEMS_PER_PAGE);
+    const repeatCustomerCounts = pageData?.repeatCustomerCounts || {};
 
     // --- OVERDUE HELPER (for rendering badges) ---
     const isOrderOverdue = (order: Order) => {
@@ -898,9 +905,24 @@ const AllOrdersPage: React.FC = () => {
                                                                 <span className="text-xs font-bold">Paid</span>
                                                             </span>
                                                         ) : (
-                                                            <span className="text-amber-400 font-bold text-sm md:text-base tracking-tight">
-                                                                ${(order.amountRemaining ?? 0).toLocaleString()}
-                                                            </span>
+                                                            <div className="flex flex-col items-end gap-1">
+                                                                <span className="text-amber-400 font-bold text-sm md:text-base tracking-tight">
+                                                                    ${(order.amountRemaining ?? 0).toLocaleString()}
+                                                                </span>
+                                                                {/* Delivered/shipped orders with a balance are often expected — repeat/reseller
+                                                                    customers who receive product before paying in full and settle up later.
+                                                                    This flags that context instead of leaving every unpaid delivery looking
+                                                                    equally alarming. */}
+                                                                {activeFilter === 'PAYMENT_PENDING' && CLOSED_STATUSES.includes(order.status) && (repeatCustomerCounts[order.customerEmail] || 0) > 1 && (
+                                                                    <span
+                                                                        className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-bold bg-blue-600/20 text-blue-300 border border-blue-600/30"
+                                                                        title="This customer has other orders — balance owed after delivery may be expected reseller/net-terms credit rather than a missed payment"
+                                                                    >
+                                                                        <Repeat className="w-2.5 h-2.5" />
+                                                                        Repeat · {repeatCustomerCounts[order.customerEmail]} orders
+                                                                    </span>
+                                                                )}
+                                                            </div>
                                                         )
                                                     ) : (
                                                         <div className="flex items-center gap-1 text-slate-400">
