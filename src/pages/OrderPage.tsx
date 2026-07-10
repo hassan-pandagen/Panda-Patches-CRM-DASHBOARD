@@ -9,7 +9,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../hooks/useToast';
 import { queryKeys } from '../constants/queryKeys';
 import InvoiceModal from '../components/invoices/InvoiceModal';
-import { mapDbToOrder, triggerStatusEmail, sendPaymentConfirmationEmail, updateOrderDetails } from '../services/orderService';
+import { mapDbToOrder, triggerStatusEmail, sendPaymentConfirmationEmail, updateOrderDetails, triggerProductionCompleteEmail } from '../services/orderService';
 import { isWebCheckoutAgent, leadSourceDisplay } from '../utils/leadSource';
 import FileUploadSection from '../components/orders/FileUpload';
 
@@ -82,6 +82,10 @@ const OrderPage: React.FC = () => {
     const [isGenerateLinkModalOpen, setIsGenerateLinkModalOpen] = React.useState(false);
     // Production/digitizer mockup-upload → Send for Approval flow
     const [mockupFiles, setMockupFiles] = React.useState<string[]>([]);
+    // Production-completion "packet" photos + modal
+    const [isCompleteModalOpen, setIsCompleteModalOpen] = React.useState(false);
+    const [completionPhotos, setCompletionPhotos] = React.useState<string[]>([]);
+    const MAX_COMPLETION_PHOTOS = 5;
 
     // --- PERMISSION CHECKS ---
     const isAdmin = role === UserRole.ADMIN;
@@ -186,16 +190,25 @@ const OrderPage: React.FC = () => {
 
     // --- PRODUCTION COMPLETION MUTATIONS ---
     const markProductionDoneMutation = useMutation({
-        mutationFn: async () => {
+        mutationFn: async (photos: string[]) => {
             if (!order?.id) throw new Error('No order loaded');
-            const { error } = await supabase.rpc('mark_production_done', { p_order_id: order.id });
+            const { error } = await supabase.rpc('mark_production_done', {
+                p_order_id: order.id,
+                p_completion_photos: photos,
+            });
             if (error) throw error;
+            // Fire the internal completion email to the production office (fire-and-forget:
+            // a mail hiccup must not undo the completion). Money-free by design.
+            triggerProductionCompleteEmail({ ...order, productionCompletedBy: user?.email ?? order.productionCompletedBy }, photos)
+                .catch(err => console.error('Production-complete email failed (background):', err));
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: queryKeys.orders.single(orderNumber) });
             queryClient.invalidateQueries({ queryKey: queryKeys.orders.all() });
             queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.all() });
-            showSuccess('Marked Production Complete', 'Removed from the production queue.');
+            setIsCompleteModalOpen(false);
+            setCompletionPhotos([]);
+            showSuccess('Marked Production Complete', 'Packet emailed to the production office.');
         },
         onError: (err: any) => {
             showError('Mark Failed', err?.message || 'Could not mark production done.');
@@ -344,6 +357,61 @@ const OrderPage: React.FC = () => {
                 onConfirm={() => deleteMutation.mutate(order)}
                 orderNumber={order.orderNumber}
             />
+
+            {/* --- PRODUCTION COMPLETE: add packet photos + mark done --- */}
+            {isCompleteModalOpen && (
+                <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+                    <div className="bg-slate-800 border border-slate-700 rounded-2xl p-6 max-w-lg w-full shadow-2xl max-h-[90vh] overflow-y-auto">
+                        <div className="flex items-center gap-4 mb-2">
+                            <div className="p-3 bg-emerald-500/10 rounded-full">
+                                <Check className="w-6 h-6 text-emerald-400" />
+                            </div>
+                            <h2 className="text-xl font-bold text-white">Mark Production Complete</h2>
+                        </div>
+                        <p className="text-slate-300 text-sm mb-5">
+                            Order <strong>{order.orderNumber}</strong> will be removed from the production queue.
+                            Add up to {MAX_COMPLETION_PHOTOS} photos of the finished
+                            product (optional) — they'll be emailed to the production office as the completion packet.
+                        </p>
+
+                        <FileUploadSection
+                            title=""
+                            bucketName="production-files"
+                            folderPath={`orders/${order.id}/completion`}
+                            urls={completionPhotos}
+                            onUrlsChange={(urls) => setCompletionPhotos(urls.slice(0, MAX_COMPLETION_PHOTOS))}
+                        />
+                        {completionPhotos.length >= MAX_COMPLETION_PHOTOS && (
+                            <p className="text-xs text-amber-400 mt-2">
+                                Maximum {MAX_COMPLETION_PHOTOS} photos reached.
+                            </p>
+                        )}
+
+                        <div className="flex justify-end gap-3 mt-6">
+                            <Button
+                                variant="secondary"
+                                onClick={() => { setIsCompleteModalOpen(false); setCompletionPhotos([]); }}
+                                disabled={markProductionDoneMutation.isPending}
+                            >
+                                Cancel
+                            </Button>
+                            <Button
+                                variant="primary"
+                                onClick={() => markProductionDoneMutation.mutate(completionPhotos)}
+                                disabled={markProductionDoneMutation.isPending}
+                                className="bg-emerald-500/90 hover:bg-emerald-500 border-emerald-500"
+                            >
+                                <Check size={16} />
+                                {markProductionDoneMutation.isPending
+                                    ? 'Marking…'
+                                    : completionPhotos.length > 0
+                                        ? `Mark Complete & Send (${completionPhotos.length})`
+                                        : 'Mark Complete Without Photos'}
+                            </Button>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             <InvoiceModal
                 isOpen={isInvoiceModalOpen}
@@ -501,9 +569,8 @@ const OrderPage: React.FC = () => {
                                 ) : (canViewProduction || isAdmin) && (
                                     <button
                                         onClick={() => {
-                                            if (window.confirm('Mark this order as production complete? It will be removed from the production queue.')) {
-                                                markProductionDoneMutation.mutate();
-                                            }
+                                            setCompletionPhotos([]);
+                                            setIsCompleteModalOpen(true);
                                         }}
                                         disabled={markProductionDoneMutation.isPending}
                                         className="text-xs px-3 py-1.5 rounded-full border font-semibold bg-emerald-500/10 border-emerald-500/40 text-emerald-300 hover:bg-emerald-500/25 hover:text-white transition-colors flex items-center gap-1.5 disabled:opacity-50"

@@ -86,8 +86,7 @@ const SENDGRID_TEMPLATES = {
 
 const PRODUCTION_MANAGER_EMAILS = [
   'lilcustomerzdesign@gmail.com',
-  'lilcustomize550@gmail.com',
-  'pandaproductionoffice@gmail.com'
+  'lilcustomize550@gmail.com'
 ];
 
 // ✅ PVC Vendor Email (separate routing)
@@ -194,6 +193,7 @@ export const mapDbToOrder = (data: any): Order => {
     rushDate: data.rushDate ?? data.rush_date ?? undefined,
     productionCompletedAt: data.productionCompletedAt ?? data.production_completed_at ?? null,
     productionCompletedBy: data.productionCompletedBy ?? data.production_completed_by ?? null,
+    productionCompletionPhotos: data.productionCompletionPhotos ?? data.production_completion_photos ?? [],
     leadSource: data.leadSource ?? data.lead_source,
     salesAgent: data.salesAgent ?? data.sales_agent,
     assignedBy: data.assignedBy ?? data.assigned_by,
@@ -474,6 +474,65 @@ export const triggerStatusEmail = async (order: Order, statusToCheck: string) =>
       logger.warn(`[Email Service] Skipping communication logging`, err);
     }
   }
+};
+
+// ---------------------------------------------------------------------
+// 6b. PRODUCTION-COMPLETION INTERNAL EMAIL
+// Fired when production marks an order complete. Goes to hello@ (the internal
+// record inbox; send-email always CCs it anyway). Carries ONLY the order number,
+// customer/design/spec details and the completion-packet photos — NEVER any
+// financial data. Production must never see amounts, deposits, or balances, so we
+// deliberately build a money-free dynamic_data here instead of reusing prepareEmailData().
+// ---------------------------------------------------------------------
+const PRODUCTION_COMPLETE_RECIPIENT = 'hello@pandapatches.com';
+
+export const triggerProductionCompleteEmail = async (order: Order, photoUrls: string[]) => {
+  const photos = (photoUrls || [])
+    .filter(Boolean)
+    .map(url => ({ url, file_name: getFileName(url) }));
+
+  const emailPayload: any = {
+    to: PRODUCTION_COMPLETE_RECIPIENT,
+    template_id: 'INTERNAL_PRODUCTION_COMPLETE',
+    // Money-free by design: no total_price / amount_paid / amount_remaining / estimated_amount.
+    dynamic_data: {
+      order_number: order.orderNumber,
+      customer_name: order.customerName || '',
+      design_name: order.designName || '',
+      quantity: order.patchesQuantity,
+      patch_type: order.patchesType || '',
+      size: order.designSize || '',
+      production_photos: photos,
+      has_production_photos: photos.length > 0,
+      completed_by: order.productionCompletedBy || '',
+      order_link: `https://portal.pandapatches.com/order/${order.orderNumber}`,
+    },
+    headers: {
+      'Message-ID': `<order-${order.id}-prodcomplete-${Date.now()}@pandapatches.com>`,
+    },
+  };
+
+  const response = await supabase.functions.invoke('send-email', { body: emailPayload });
+  if (response.error) {
+    logger.error('[Email Service] Production-complete email failed', response.error);
+    throw response.error;
+  }
+
+  // Best-effort log to the order's communication history
+  try {
+    await supabase.from('order_communications').insert({
+      order_id: order.id,
+      recipient_email: PRODUCTION_COMPLETE_RECIPIENT,
+      template_id: 'INTERNAL_PRODUCTION_COMPLETE',
+      subject: `Production Complete: ${order.orderNumber}`,
+      body: `Completion packet sent (${photos.length} photo${photos.length === 1 ? '' : 's'})`,
+      visibility: 'internal',
+    });
+  } catch {
+    // ignore secondary log failure
+  }
+
+  return response;
 };
 
 // ---------------------------------------------------------------------

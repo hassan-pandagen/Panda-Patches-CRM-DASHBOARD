@@ -80,6 +80,7 @@ export interface Order {
   // --- Production completion (separate from status; production team flag) ---
   productionCompletedAt?: string | null;
   productionCompletedBy?: string | null;
+  productionCompletionPhotos?: string[]; // "completion packet" photos of the finished product
 
   // --- Financials ---
   orderAmount: number | null;

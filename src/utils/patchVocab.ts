@@ -22,7 +22,8 @@ export const PATCH_TYPE_CANON = [
   'Silicone Transfer', 'High Density Transfer', 'TPU+Chenille', 'TPU+Embroidery', 'TPU+Sublimation',
   'Glitter+Embroidery', 'Glitter+Chenille', 'Glitter+Embroidery 3D', 'DTF+Chenille', 'DTF+Embroidery',
   'Embroidery Transfer', 'DST Service', 'Challenge Coin', 'PVC Keychains', 'Embroidered Keychains',
-  'Leather Keychains', 'Sample Box', 'Customize Sample Box',
+  'Leather Keychains', 'Custom Lapel Pins', 'Custom PVC Shoe Charms',
+  'Sample Box', 'Customize Sample Box',
 ];
 
 // normKey(value) -> canonical, for variants that don't already match a canonical option.

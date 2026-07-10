@@ -94,6 +94,7 @@ const getEmailSubject = (templateId: string, data: any): string => {
     'INTERNAL_START_PRODUCTION': `[INTERNAL] Start Production - ${orderNumber}`,
     'PRODUCTION_TEAM_REVISION': `[INTERNAL] Revision Requested - ${orderNumber}`,
     'QUALITY_ASSURANCE': `[INTERNAL] QA Check - ${orderNumber}`,
+    'INTERNAL_PRODUCTION_COMPLETE': `[INTERNAL] Production Complete - ${orderNumber}`,
 
     // Remake templates
     'CUSTOMER_REMAKE': `We're Making It Right - ${orderNumber}${data.remake_reason ? ` (${data.remake_reason})` : ''}`,
@@ -162,6 +163,7 @@ const getTemplateMessage = (templateId: string, data?: any): string => {
     'INTERNAL_START_PRODUCTION': 'Internal: Order approved by customer. Begin production immediately.',
     'PRODUCTION_TEAM_REVISION': 'Production Team: Customer has requested revisions. Please review the feedback and update the mockup.',
     'QUALITY_ASSURANCE': 'Quality Assurance: Order ready for final QA check before shipping.',
+    'INTERNAL_PRODUCTION_COMPLETE': 'Production Team: This order has been marked production complete. The completion packet photos are below for your records.',
 
     // Remake templates (dynamic based on reason, with fallback)
     'CUSTOMER_REMAKE': customerRemakeMessages[remakeReason] || 'We sincerely apologize for the inconvenience with your order. Our production team did not meet the quality standards you deserved. This is entirely our fault, and we take full responsibility. We are remaking your custom patches at absolutely no extra cost to you. Your satisfaction is our top priority, and we will make this right.',
@@ -652,6 +654,39 @@ const buildEmailHTML = (templateId: string, data: any): string => {
   </table>
 
   <!-- SPACER AFTER SHIPPING PHOTOS -->
+  <table class="module" role="module" data-type="spacer" border="0" cellpadding="0" cellspacing="0" width="100%" style="table-layout: fixed;">
+    <tbody>
+      <tr>
+        <td style="padding:0px 0px 20px 0px;" role="module-content" bgcolor=""></td>
+      </tr>
+    </tbody>
+  </table>
+  ` : ''}
+
+  ${templateId === 'INTERNAL_PRODUCTION_COMPLETE' && data.has_production_photos && Array.isArray(data.production_photos) && data.production_photos.length ? `
+  <!-- PRODUCTION COMPLETION PACKET PHOTOS (Internal only) -->
+  <table class="module" role="module" data-type="text" border="0" cellpadding="0" cellspacing="0" width="100%" style="table-layout: fixed;">
+    <tbody>
+      <tr>
+        <td style="padding:25px 20px 25px 20px; line-height:26px; text-align:center; background-color:#f3f4f6; border-left: 5px solid #10b981; border-radius: 8px;" height="100%" valign="top" bgcolor="#f3f4f6" role="module-content">
+          <div>
+            <div style="font-family: inherit; text-align: center; margin-bottom: 15px;">
+              <span style="font-size: 22px; font-family: 'lucida sans unicode', 'lucida grande', sans-serif; color: #000; font-weight: bold;">📦 Production Completion Packet</span>
+            </div>
+            ${data.production_photos.map((p: any) => {
+              const u = String(p?.url || '');
+              const isImg = /\.(jpg|jpeg|png|gif|webp)(\?|$)/i.test(u);
+              return isImg
+                ? `<div style="margin:10px 0;"><img src="${escapeHtml(u)}" alt="Completion photo" width="100%" style="max-width:520px; width:100%; height:auto; border-radius:8px; border:1px solid #e0e0e0;" /></div>`
+                : `<div style="margin:10px 0;"><a href="${escapeHtml(u)}" target="_blank" style="display:inline-block; background:#ffffff; border:1px solid #10b981; color:#10b981; padding:10px 22px; border-radius:6px; text-decoration:none; font-size:15px; font-weight:bold; font-family: 'lucida sans unicode', 'lucida grande', sans-serif;">📄 ${escapeHtml(p?.file_name || 'Completion File')}</a></div>`;
+            }).join('')}
+          </div>
+        </td>
+      </tr>
+    </tbody>
+  </table>
+
+  <!-- SPACER AFTER PRODUCTION PHOTOS -->
   <table class="module" role="module" data-type="spacer" border="0" cellpadding="0" cellspacing="0" width="100%" style="table-layout: fixed;">
     <tbody>
       <tr>

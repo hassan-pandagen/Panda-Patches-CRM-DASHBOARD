@@ -9,6 +9,7 @@ export const PATCHES_TYPE_OPTIONS: string[] = [
   'DTF+Chenille', 'DTF+Embroidery', 'Embroidery Transfer',
   'DST Service', 'Challenge Coin',
   'PVC Keychains', 'Embroidered Keychains', 'Leather Keychains',
+  'Custom Lapel Pins', 'Custom PVC Shoe Charms',
   'Sample Box', 'Customize Sample Box'
 ];
 export const DESIGN_BACKING_OPTIONS: string[] = ['Iron-on', 'Velcro', 'Adhesive', 'None'];

@@ -1,4 +1,4 @@
-// supabase/functions/notify-new-checkout-order/index.ts
+// supabase/functions/super-handler/index.ts
 // ✅ Database Webhook: Fires on INSERT OR UPDATE of orders table (deployed as slug "super-handler")
 // Purpose: Send the INTERNAL production-team email for payment-form / checkout orders
 //          (sales_agent = hello@pandapatches.com) — but ONLY once the order has full
@@ -20,7 +20,6 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.10";
 const PRODUCTION_MANAGER_EMAILS = [
   'lilcustomerzdesign@gmail.com',
   'lilcustomize550@gmail.com',
-  'pandaproductionoffice@gmail.com',
 ];
 
 const PVC_VENDOR_EMAIL = 'Arsalan.ali.khan.85@gmail.com';
