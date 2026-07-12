@@ -35,6 +35,7 @@ const CompaniesPage = lazy(() => import('@/pages/CompaniesPage'));
 const ActivityPage = lazy(() => import('@/pages/ActivityPage'));
 const InboxPage = lazy(() => import('@/pages/InboxPage'));
 const PaymentFormPage = lazy(() => import('@/pages/PaymentFormPage'));
+const PatchGeneratorPage = lazy(() => import('@/pages/PatchGeneratorPage'));
 
 // Protection
 import ProtectedRoute from './ProtectedRoute';
@@ -86,6 +87,7 @@ const App: React.FC = () => {
               <Route path="/inbox" element={<InboxPage />} />
               <Route path="/inbox/:conversationId" element={<InboxPage />} />
               <Route path="/payment-forms" element={<PaymentFormPage />} />
+              <Route path="/patch-generator" element={<PatchGeneratorPage />} />
     
               {/* Attendance */}
               <Route path="/clock-in-out" element={<ClockInOutPage />} />

@@ -1,0 +1,137 @@
+{
+  "_about": "categories.json v2 — SUPERSEDES the version in PHASE-7-ADDENDUM. Reflects Panda Patches production answers + researched embroidery/puff limits (July 2026). Save to app/pipeline/categories.json in the engine repo.",
+  "_schema": {
+    "mockup": "always true — EVERY type gets a realistic JPEG mockup. The mockup is the primary deliverable; it is constrained to producible detail so it never over-promises the way an AI image generator does.",
+    "mockup_style": "which texture the renderer uses. embroidery|puff are built; flat_print|molded_pvc next; woven|leather|chenille|sequin start as labeled approximations.",
+    "production_file": "dst = auto stitch file (embroidery+puff only). vector = SVG for mold/cut/laser/print tooling. none_manual = no auto file; specialist machine/dept makes it.",
+    "sizes": "longest side in inches. max_size_in null = flexible (can be big or small). Only woven/pvc/silicone are capped at 8in.",
+    "limits": "min_text_height_mm / min_line_mm / max_line_mm / max_colors drive WARNINGS shown to staff; they inform, they do not block.",
+    "color_walls": "PVC/silicone only — render hard-edged color cells with a thin raised wall between colors (cloisonné look); colors never blend/bleed.",
+    "gradients_ok": "true only where the process can reproduce blends (printed). Everywhere else, quantize to flat solids."
+  },
+  "_thread_chart_note": "Color snapping needs Candle threads as code+name+RGB in threads.json. The website chart is an IMAGE only — provide the official Candle RGB list or a Sanity export. Do not derive RGB from the chart image.",
+  "categories": {
+    "embroidery": {
+      "label": "Custom Embroidery Patches",
+      "aliases": ["embroidered", "embroidery", "standard", "iron on", "iron-on"],
+      "mockup": true, "mockup_style": "embroidery",
+      "production_file": "dst",
+      "min_size_in": 1.0, "max_size_in": null,
+      "min_text_height_mm": 5.0, "recommended_text_height_mm": 6.0,
+      "min_line_mm": 1.0, "recommended_line_mm": 1.3, "max_line_mm": 12.0,
+      "max_colors": 12, "color_walls": false, "gradients_ok": false,
+      "notes": "Text <5mm illegible; warn <6mm. Lines <1mm drop out; warn <1.3mm. Solid colors only, no gradients. Max satin ~12mm."
+    },
+    "puff_3d": {
+      "label": "Custom 3D Embroidered Transfers",
+      "aliases": ["3d", "3d embroidered", "3d embroidered transfers", "puff", "3d puff"],
+      "mockup": true, "mockup_style": "puff",
+      "production_file": "dst",
+      "min_size_in": 1.5, "max_size_in": null,
+      "min_text_height_mm": 8.0, "recommended_text_height_mm": 10.0,
+      "min_line_mm": 3.0, "recommended_line_mm": 5.0, "max_line_mm": 10.0,
+      "max_colors": 2, "color_walls": false, "gradients_ok": false,
+      "requires_review": true,
+      "notes": "RESEARCHED LIMITS: columns 3-10mm (ideal 5mm); lines <2.5mm expose foam, >12mm won't hold. Bold columns only — NO thin lines, fine detail, holes, or complex shapes. Max 2 colors (foam); colors must not touch (~6mm gap). Small text must be FLAT, not puff. Always human-review before machine."
+    },
+    "pvc": {
+      "label": "Custom PVC Patches",
+      "aliases": ["pvc", "rubber", "2d pvc", "3d pvc"],
+      "mockup": true, "mockup_style": "molded_pvc",
+      "production_file": "vector",
+      "min_size_in": 0.75, "max_size_in": 8.0,
+      "min_text_height_mm": 3.0, "recommended_text_height_mm": 4.0,
+      "min_line_mm": 1.0, "recommended_line_mm": 1.5, "max_line_mm": null,
+      "max_colors": 10, "color_walls": true, "gradients_ok": false,
+      "notes": "Molded from vector; MAX 8in. COLOR WALLS required — render hard color cells with a thin raised divider between colors so nothing bleeds. Set every mockup parameter explicitly (size, border, base). No blends."
+    },
+    "silicone": {
+      "label": "Custom Silicone Labels",
+      "aliases": ["silicone", "silicone label", "silicone labels"],
+      "mockup": true, "mockup_style": "molded_pvc",
+      "production_file": "vector",
+      "min_size_in": 0.5, "max_size_in": 8.0,
+      "min_text_height_mm": 3.0, "recommended_text_height_mm": 4.0,
+      "min_line_mm": 1.0, "recommended_line_mm": 1.5, "max_line_mm": null,
+      "max_colors": 8, "color_walls": true, "gradients_ok": false,
+      "notes": "No stitch file — a sheet cut by plotter/laser, so vector cut path. MAX 8in. Color-walled like PVC."
+    },
+    "leather": {
+      "label": "Custom Leather Patches",
+      "aliases": ["leather", "pu leather", "faux leather"],
+      "mockup": true, "mockup_style": "leather",
+      "production_file": "vector",
+      "min_size_in": 0.75, "max_size_in": null,
+      "min_text_height_mm": 3.0, "recommended_text_height_mm": 4.0,
+      "min_line_mm": 0.5, "recommended_line_mm": 0.8, "max_line_mm": null,
+      "max_colors": 2, "color_walls": false, "gradients_ok": false,
+      "notes": "Laser engraved — vector engrave path. Typically 1-2 tones (engrave depth), not full color. Any size."
+    },
+    "woven": {
+      "label": "Custom Woven Patches",
+      "aliases": ["woven"],
+      "mockup": true, "mockup_style": "woven",
+      "production_file": "vector",
+      "min_size_in": 1.0, "max_size_in": 8.0,
+      "min_text_height_mm": 3.0, "recommended_text_height_mm": 3.5,
+      "min_line_mm": 0.5, "recommended_line_mm": 0.7, "max_line_mm": null,
+      "max_colors": 8, "color_walls": false, "gradients_ok": false,
+      "notes": "Thin threads hold FINER detail than embroidery — good for small text/logos. MAX 8in. Rough mockup easy. Production loom file is made externally."
+    },
+    "printed": {
+      "label": "Custom Printed Patches",
+      "aliases": ["printed", "dye sublimation", "sublimated", "digital"],
+      "mockup": true, "mockup_style": "flat_print",
+      "production_file": "vector",
+      "min_size_in": 0.5, "max_size_in": null,
+      "min_text_height_mm": 2.0, "recommended_text_height_mm": 2.5,
+      "min_line_mm": 0.3, "recommended_line_mm": 0.4, "max_line_mm": null,
+      "max_colors": null, "color_walls": false, "gradients_ok": true,
+      "notes": "Photographic — unlimited color, gradients OK, finest detail of all types. Any size. Print-ready vector/high-res raster."
+    },
+    "chenille": {
+      "label": "Custom Chenille Patches",
+      "aliases": ["chenille"],
+      "mockup": true, "mockup_style": "chenille",
+      "production_file": "none_manual",
+      "min_size_in": 3.0, "max_size_in": null,
+      "min_text_height_mm": 15.0, "recommended_text_height_mm": 20.0,
+      "min_line_mm": 5.0, "recommended_line_mm": 8.0, "max_line_mm": null,
+      "max_colors": 4, "color_walls": false, "gradients_ok": false,
+      "notes": "Mockup only — thick yarn, big bold shapes, no small text/detail. Can be big; practical MIN ~3in. Production file made manually by the chenille dept."
+    },
+    "chenille_tpu": {
+      "label": "Custom Chenille TPU Patches",
+      "aliases": ["chenille tpu", "tpu chenille"],
+      "mockup": true, "mockup_style": "chenille",
+      "production_file": "none_manual",
+      "min_size_in": 3.0, "max_size_in": null,
+      "min_text_height_mm": 15.0, "recommended_text_height_mm": 20.0,
+      "min_line_mm": 5.0, "recommended_line_mm": 8.0, "max_line_mm": null,
+      "max_colors": 4, "color_walls": false, "gradients_ok": false,
+      "notes": "As chenille, TPU backing. Mockup only."
+    },
+    "chenille_glitter": {
+      "label": "Custom Chenille Glitter Patches",
+      "aliases": ["chenille glitter", "glitter chenille"],
+      "mockup": true, "mockup_style": "chenille",
+      "production_file": "none_manual",
+      "min_size_in": 3.0, "max_size_in": null,
+      "min_text_height_mm": 15.0, "recommended_text_height_mm": 20.0,
+      "min_line_mm": 5.0, "recommended_line_mm": 8.0, "max_line_mm": null,
+      "max_colors": 4, "color_walls": false, "gradients_ok": false,
+      "notes": "As chenille, glitter yarn. Mockup only."
+    },
+    "sequin": {
+      "label": "Custom Sequin Patches",
+      "aliases": ["sequin", "sequins"],
+      "mockup": true, "mockup_style": "sequin",
+      "production_file": "none_manual",
+      "min_size_in": 3.0, "max_size_in": null,
+      "min_text_height_mm": 20.0, "recommended_text_height_mm": 25.0,
+      "min_line_mm": 7.0, "recommended_line_mm": 10.0, "max_line_mm": null,
+      "max_colors": 6, "color_walls": false, "gradients_ok": false,
+      "notes": "Mockup only — sequins ~7mm are coarse, large bold designs only. Can be big; practical MIN ~3in. Production file made via specialist sequin software."
+    }
+  }
+}

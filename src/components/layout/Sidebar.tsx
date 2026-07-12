@@ -16,6 +16,7 @@ import {
   Inbox,
   CreditCard,
   Building2,
+  Wand2,
 } from "lucide-react";
 import { useAuth } from "../../contexts/AuthContext";
 import { useQueryPrefetch } from "../../hooks/useQueryPrefetch";
@@ -180,6 +181,15 @@ const Sidebar: React.FC<SidebarProps> = ({ onNavigate }) => {
             to="/payment-forms"
             label="Payment Forms"
             icon={<CreditCard className="w-5 h-5" />}
+            onClick={onNavigate}
+          />
+        )}
+
+        {(isAdmin || role === "SALES_AGENT") && (
+          <SidebarItem
+            to="/patch-generator"
+            label="Patch Generator"
+            icon={<Wand2 className="w-5 h-5" />}
             onClick={onNavigate}
           />
         )}

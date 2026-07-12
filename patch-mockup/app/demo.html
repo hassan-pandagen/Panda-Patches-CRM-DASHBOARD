@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Proof Bench · Patch Mockup Service</title>
+<style>
+  :root{--ink:#20242b;--paper:#e9e6de;--card:#f5f3ec;--line:#c9c4b6;--accent:#0f6b4f;
+        --warn:#9a6a00;--mono:'Courier New',ui-monospace,monospace;}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--paper);color:var(--ink);font:15px/1.5 Georgia,serif}
+  header{padding:20px 22px 14px;border-bottom:2px solid var(--ink)}
+  header h1{margin:0;font-size:19px;letter-spacing:.4px}
+  header small{font-family:var(--mono);font-size:11px;letter-spacing:1.5px;text-transform:uppercase;color:#6f6a5c}
+  main{max-width:1000px;margin:0 auto;padding:18px 16px 60px;display:grid;gap:18px;grid-template-columns:300px 1fr}
+  @media(max-width:780px){main{grid-template-columns:1fr}}
+  .panel{background:var(--card);border:1px solid var(--line);padding:16px}
+  .panel h2{margin:0 0 10px;font-size:12px;font-family:var(--mono);letter-spacing:1.5px;text-transform:uppercase;color:#6f6a5c}
+  label{display:block;font-family:var(--mono);font-size:11px;letter-spacing:.5px;margin:12px 0 4px;color:#4a4639}
+  input,select{width:100%;padding:7px 8px;border:1px solid var(--line);background:#fff;font:14px var(--mono)}
+  .drop{border:2px dashed var(--ink);padding:24px 12px;text-align:center;cursor:pointer;
+        background:repeating-linear-gradient(45deg,transparent 0 9px,#00000006 9px 18px)}
+  .drop.on{border-color:var(--accent);background:#0f6b4f10}
+  button{margin-top:16px;width:100%;padding:11px;border:0;background:var(--ink);color:var(--paper);
+         font:600 13px var(--mono);letter-spacing:2px;text-transform:uppercase;cursor:pointer}
+  button:hover{background:var(--accent)} button:disabled{opacity:.4;cursor:wait}
+  .stage{min-height:420px;display:flex;align-items:center;justify-content:center;border:1px solid var(--line);
+         background:#7d8087 url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="6" height="6"><path d="M0 6L6 0" stroke="%23888c93" stroke-width="1.4"/></svg>')}
+  .stage img{max-width:92%;max-height:520px;filter:drop-shadow(0 10px 18px #0006)}
+  .stage .empty{color:#e8e8e8;font-family:var(--mono);font-size:12px;letter-spacing:1px}
+  .tag{display:inline-block;font:11px var(--mono);background:#e6efe9;border:1px solid #bcd;padding:3px 8px;margin-top:10px}
+  .meta{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+  .chip{display:flex;align-items:center;gap:8px;background:#fff;border:1px solid var(--line);padding:5px 10px 5px 6px;font:12px var(--mono)}
+  .chip i{width:18px;height:18px;border:1px solid #0003;display:inline-block}
+  .warn{margin-top:12px;background:#fdf5e3;border:1px solid #e6cf92;padding:10px 12px;font:12px var(--mono);color:var(--warn)}
+  .warn b{display:block;margin-bottom:4px;text-transform:uppercase;letter-spacing:1px;font-size:10px}
+  #err{color:#a02020;font:12px var(--mono);margin-top:10px;white-space:pre-wrap}
+</style>
+</head>
+<body>
+<header><small>panda patches · internal tool · not customer-facing</small>
+<h1>Proof Bench — realistic patch mockup</h1></header>
+<main>
+  <form class="panel" id="f">
+    <h2>Job ticket</h2>
+    <div class="drop" id="drop">drop artwork here<br>or tap to choose<br>
+      <span id="fname" style="font-family:var(--mono);font-size:11px;color:var(--accent)"></span></div>
+    <input type="file" id="file" accept="image/*" hidden>
+    <label>patch type</label>
+    <select id="patch_type">
+      <option value="Embroidered">Embroidered</option>
+      <option value="3D Embroidery Puff">3D Puff</option>
+      <option value="PVC">PVC</option>
+      <option value="Silicone">Silicone</option>
+      <option value="Woven">Woven</option>
+      <option value="Printed">Printed</option>
+      <option value="Leather">Leather</option>
+      <option value="Chenille">Chenille</option>
+      <option value="Chenille TPU">Chenille TPU</option>
+      <option value="Chenille Glitter">Chenille Glitter</option>
+      <option value="Sequin">Sequin</option>
+    </select>
+    <label>patch width — mm</label><input type="number" id="width_mm" value="80" step="1" min="20" max="360">
+    <label>border — mm</label><input type="number" id="border_mm" value="3" step="0.5" min="1" max="8">
+    <label>base / fabric hex</label><input type="text" id="base_hex" value="#232830">
+    <label>border hex — blank = auto</label><input type="text" id="border_hex" value="">
+    <button id="go" type="submit">Generate mockup</button>
+    <div id="err"></div>
+  </form>
+  <section class="panel">
+    <h2>Mockup</h2>
+    <div class="stage" id="stage"><span class="empty">no mockup yet — feed the bench</span></div>
+    <div id="tags"></div><div class="meta" id="chips"></div><div id="warnbox"></div>
+  </section>
+</main>
+<script>
+const $=id=>document.getElementById(id); let file=null;
+$('drop').onclick=()=>$('file').click();
+$('file').onchange=e=>{file=e.target.files[0];$('fname').textContent=file?file.name:''};
+['dragover','dragleave','drop'].forEach(ev=>$('drop').addEventListener(ev,e=>{
+  e.preventDefault();$('drop').classList.toggle('on',ev==='dragover');
+  if(ev==='drop'){file=e.dataTransfer.files[0];$('fname').textContent=file.name}}));
+$('f').onsubmit=async e=>{
+  e.preventDefault();$('err').textContent='';
+  if(!file){$('err').textContent='no artwork selected';return}
+  const fd=new FormData();fd.append('file',file);
+  for(const k of['patch_type','width_mm','border_mm','base_hex','border_hex'])fd.append(k,$(k).value);
+  $('go').disabled=true;$('go').textContent='Generating…';
+  try{
+    const r=await fetch('/mockup',{method:'POST',body:fd});
+    if(!r.ok)throw new Error(await r.text());
+    const d=await r.json();
+    $('stage').innerHTML=`<img src="data:image/png;base64,${d.png_base64}">`;
+    $('tags').innerHTML=`<span class="tag">${d.category}</span> <span class="tag">style: ${d.mockup_style}</span> <span class="tag">next: ${d.production_file}</span> <span class="tag">${d.size_mm[0]}×${d.size_mm[1]} mm</span>`;
+    $('chips').innerHTML=d.colors.map(t=>`<span class="chip"><i style="background:${t.hex}"></i>${t.code||''} ${t.name||''}</span>`).join('');
+    $('warnbox').innerHTML=d.warnings&&d.warnings.length
+      ? `<div class="warn"><b>Heads up — set expectations with the customer</b>${d.warnings.map(w=>'• '+w).join('<br>')}</div>`:'';
+  }catch(err){$('err').textContent=err.message}
+  $('go').disabled=false;$('go').textContent='Generate mockup';
+};
+</script>
+</body>
+</html>

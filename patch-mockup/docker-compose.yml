@@ -1,0 +1,39 @@
+services:
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    volumes: ["redis-data:/data"]
+
+  mockup:
+    build: .
+    restart: unless-stopped
+    ports: ["127.0.0.1:8000:8000"]
+    depends_on: [redis]
+    env_file: .env          # copy .env.example -> .env and fill in secrets first
+    environment:
+      ALLOWED_ORIGINS: "https://pandapatches.com,https://www.pandapatches.com,https://your-app.vercel.app"
+      REDIS_URL: "redis://redis:6379/0"
+
+  worker:
+    build: .
+    restart: unless-stopped
+    command: ["python", "-m", "app.worker"]
+    depends_on: [redis]
+    env_file: .env
+    environment:
+      REDIS_URL: "redis://redis:6379/0"
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports: ["80:80", "443:443"]
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on: [mockup]
+
+volumes:
+  redis-data:
+  caddy-data:
+  caddy-config:

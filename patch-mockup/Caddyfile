@@ -1,0 +1,3 @@
+api.pandapatches.com {
+	reverse_proxy mockup:8000
+}
