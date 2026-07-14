@@ -61,7 +61,8 @@ export const mapDbToQuote = (data: any): Quote => {
     customerEmail: data.customerEmail ?? data.customer_email,
     customerPhone: data.customerPhone ?? data.customer_phone,
     customerProfileUrl: data.customerProfileUrl ?? data.customer_profile_url,
-    
+    shippingAddress: data.shippingAddress ?? data.shipping_address ?? '',
+
     designName: data.designName ?? data.design_name,
     patchesType: data.patchesType ?? data.patches_type,
     patchesQuantity: toNumber(data.patchesQuantity ?? data.patches_quantity),
@@ -393,7 +394,7 @@ export const convertQuoteToOrder = async (quote: Quote): Promise<Order> => {
       convertedFromQuoteNumber: quote.quoteNumber,
       hadPriorQuoteRequest:     true,
 
-      shippingAddress: '',
+      shippingAddress: quote.shippingAddress || '',
       shippingCarrier: '',
       shippingTrackingNumber: '',
       isUrgent: false,

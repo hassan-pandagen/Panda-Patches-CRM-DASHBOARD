@@ -1112,6 +1112,11 @@ serve(async (req) => {
     const SMTP_FROM_EMAIL = Deno.env.get('SMTP_FROM_EMAIL') || 'hello@pandapatches.com';
     const SMTP_FROM_NAME = Deno.env.get('SMTP_FROM_NAME') || 'Panda Patches';
     const SMTP_REPLY_TO = Deno.env.get('SMTP_REPLY_TO') || 'hello@pandapatches.com';
+    // Second reply-to so customer replies also reach the design/agents inbox. Agents work out
+    // of design@ (not hello@), and we can't predict which email a customer will bring up
+    // artwork in — so EVERY email replies to both. A plain "Reply" addresses all reply-to
+    // entries, so both inboxes see the reply (unlike CC, which only catches "Reply All").
+    const SMTP_REPLY_TO_DESIGN = Deno.env.get('SMTP_REPLY_TO_DESIGN') || 'design@pandapatches.com';
 
     if (!ZEPTOMAIL_API_KEY) {
       console.error('❌ CRITICAL: ZEPTOMAIL_API_KEY not set in Supabase secrets');
@@ -1280,10 +1285,10 @@ serve(async (req) => {
         name: SMTP_FROM_NAME,
       },
       to: toAddresses,
-      reply_to: {
-        address: SMTP_REPLY_TO,
-        name: SMTP_FROM_NAME,
-      },
+      // Array of reply-to addresses (ZeptoMail format) — a customer "Reply" goes to all of
+      // them, so both hello@ and design@ receive it. Deduped in case they're ever set equal.
+      reply_to: [...new Set([SMTP_REPLY_TO, SMTP_REPLY_TO_DESIGN].filter(Boolean))]
+        .map((address) => ({ address, name: SMTP_FROM_NAME })),
       subject: emailSubject,
       htmlbody: htmlContent,
     };

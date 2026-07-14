@@ -209,6 +209,7 @@ export interface Quote {
    ccEmail?: string; // Secondary/CC email for companies with multiple contacts
    customerPhone?: string;
    customerProfileUrl?: string;
+   shippingAddress?: string;
 
    // --- Design & Production Details ---
    designName?: string;

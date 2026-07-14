@@ -89,6 +89,7 @@ const QuoteDetailPage: React.FC = () => {
       customerEmail: quote.customerEmail || '',
       customerPhone: quote.customerPhone || '',
       customerProfileUrl: quote.customerProfileUrl || '',
+      shippingAddress: quote.shippingAddress || '',
       designName: quote.designName || '',
       patchesQuantity: quote.patchesQuantity?.toString() || '',
       patchesType: quote.patchesType || '',
@@ -115,6 +116,7 @@ const QuoteDetailPage: React.FC = () => {
         customerEmail: editForm.customerEmail,
         customerPhone: editForm.customerPhone,
         customerProfileUrl: editForm.customerProfileUrl,
+        shippingAddress: editForm.shippingAddress,
         designName: editForm.designName,
         patchesQuantity: editForm.patchesQuantity ? Number(editForm.patchesQuantity) : undefined,
         patchesType: editForm.patchesType,
@@ -248,6 +250,10 @@ const QuoteDetailPage: React.FC = () => {
                   <div>
                     <label className={labelClass}>Profile URL</label>
                     <input className={inputClass} value={editForm.customerProfileUrl} onChange={e => setEditForm(p => ({ ...p, customerProfileUrl: e.target.value }))} placeholder="https://..." />
+                  </div>
+                  <div className="col-span-2">
+                    <label className={labelClass}>Shipping Address</label>
+                    <textarea className={inputClass} rows={2} value={editForm.shippingAddress} onChange={e => setEditForm(p => ({ ...p, shippingAddress: e.target.value }))} placeholder="Street, City, State ZIP, Country" />
                   </div>
                 </div>
               </div>
@@ -573,6 +579,12 @@ const QuoteDetailPage: React.FC = () => {
               <div className="mt-4">
                 <p className="text-sm text-slate-400">Special Instructions</p>
                 <p className="text-white bg-slate-800/50 rounded p-3 mt-2">{quote.instructions}</p>
+              </div>
+            )}
+            {quote.shippingAddress && (
+              <div className="mt-4">
+                <p className="text-sm text-slate-400">Shipping Address</p>
+                <p className="text-white bg-slate-800/50 rounded p-3 mt-2 whitespace-pre-line">{quote.shippingAddress}</p>
               </div>
             )}
           </SpotlightCard>
