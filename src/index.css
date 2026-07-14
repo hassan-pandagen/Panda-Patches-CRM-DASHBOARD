@@ -58,6 +58,75 @@ html.safari body {
   background-attachment: scroll;
 }
 
+/* 3c. Mobile tap reliability + layout (iOS + Android touch).
+   The touch fixes below (touch-action, reveal-on-tap, safe-area) apply to ALL touch devices,
+   so Android benefits too. The Safari-ONLY performance fix (disabling backdrop-blur, in 3b
+   above) stays Safari-scoped because Chrome/Android handle those effects fine. The iOS-only
+   quirks (100dvh, input auto-zoom) remain `html.safari`-scoped. These target the reasons taps
+   "don't register" on phones, plus the bottom spacing/overlap.
+
+   1. touch-action: manipulation → removes iOS's legacy 300ms tap delay + double-tap-zoom,
+      so a single tap fires immediately instead of feeling ignored.
+   2. -webkit-tap-highlight-color → a visible flash confirming the tap landed.
+   3. @media (hover: none): iPhone/iPad have no hover, so actions revealed only on :hover are
+      invisible / need a double-tap. Force them visible on touch. (Desktop Safari has hover,
+      so it keeps the hover-reveal behaviour.)
+   4. h-screen / min-h-screen → 100dvh: iOS 100vh counts the area behind the address bar and
+      mis-sizes the layout; 100dvh is the correct dynamic height. Falls back to 100vh on
+      older Safari that doesn't understand dvh.
+   5. Safe-area insets: keep the floating bottom nav and the last scroll content above the
+      iPhone home-indicator / swipe-to-home gesture zone, which otherwise swallows taps. */
+
+a,
+button,
+[role="button"],
+input,
+select,
+textarea,
+label,
+summary,
+.cursor-pointer {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: rgba(251, 110, 29, 0.18);
+}
+
+@media (hover: none) {
+  [class*="group-hover:opacity-100"],
+  [class*="hover:opacity-100"] {
+    opacity: 1 !important;
+  }
+  [class*="group-hover:visible"] {
+    visibility: visible !important;
+  }
+}
+
+html.safari .h-screen {
+  height: 100dvh;
+}
+html.safari .min-h-screen {
+  min-height: 100dvh;
+}
+
+/* Floating mobile nav — lift it above the home-indicator / gesture-bar area (iOS + Android). */
+.mobile-bottom-nav {
+  bottom: calc(1rem + env(safe-area-inset-bottom, 0px));
+}
+/* Match the scroll area's bottom clearance so the last item clears the nav + safe area. */
+.pb-24 {
+  padding-bottom: calc(6rem + env(safe-area-inset-bottom, 0px));
+}
+
+/* iOS zooms into any input/select/textarea with font-size < 16px when it's focused. Force
+   16px on touch Safari so tapping a field never triggers that jarring auto-zoom-in. Desktop
+   Safari (has hover) keeps the app's compact sizing. */
+@media (hover: none) {
+  html.safari input,
+  html.safari select,
+  html.safari textarea {
+    font-size: 16px;
+  }
+}
+
 /* 4. Custom Animations */
 @keyframes blob {
   0%, 100% {

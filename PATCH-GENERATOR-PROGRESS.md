@@ -10,7 +10,35 @@
 
 ---
 
-## ✅ DONE — CRM side (built + typechecks; NOT yet committed)
+## 📍 CURRENT STATUS (2026-07 session)
+
+- **CRM side: DONE + pushed** — commit `9082cd9 "new patch mockup generator"`. Page + proxy
+  are in the repo; Vercel should have deployed them.
+- **Vercel env vars:** `DIGITIZE_SERVICE_URL=https://api.pandapatches.com` +
+  `DIGITIZE_API_KEY` (exact names, no `VITE_` prefix) — **confirm these are saved in the CRM
+  Vercel project.**
+- **DNS: DONE** — `api.pandapatches.com → 93.127.132.136` (A record at Namecheap, verified
+  worldwide).
+- **Engine: deployed on the VPS, Windows-native (NOT Docker).** Runs as NSSM service
+  **`PandaMockup`** (auto-start), listening on **`127.0.0.1:8001`** (port 8000 was taken by
+  another app), key-enforcement ON. Verified locally (`/health`→ok, `/mockup` 401 w/o Bearer,
+  200 with). Source lives at `C:\Users\Administrator\Desktop\patch-mockup` on the VPS.
+- **⛔ BLOCKER 1 — VPS expired**, needs renewal/payment. On renewal the `PandaMockup` service
+  should auto-start.
+- **⛔ BLOCKER 2 — the last real task: the reverse-proxy route.** The VPS already runs
+  **Traefik** on ports 80/443 (fronting other apps) — it serves "TRAEFIK DEFAULT CERT" and
+  returns **404** for our domain (404 = no route; a down engine would be 502). **Caddy is
+  abandoned** (can't bind 80/443). Fix = add a **Traefik file-provider route**:
+  `Host(api.pandapatches.com) → http://127.0.0.1:8001`, TLS via Traefik's existing ACME
+  resolver (mirror how the other apps on the box get their certs).
+
+**To finish (when VPS is back):** (1) confirm `PandaMockup` running + `127.0.0.1:8001/health`
+ok → (2) add the Traefik route → (3) verify `https://api.pandapatches.com/health` = `{"ok":true}`
+with a valid cert → (4) test the CRM `/patch-generator` page end-to-end.
+
+---
+
+## ✅ DONE — CRM side (built + typechecks; committed & pushed in `9082cd9`)
 
 - [x] **Proxy:** `api/mockup-proxy.ts` — forwards the browser's `multipart/form-data` to the
       VPS `POST /mockup`, injecting `Authorization: Bearer <DIGITIZE_API_KEY>` server-side.

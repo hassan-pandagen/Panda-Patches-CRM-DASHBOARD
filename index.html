@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" href="/favicon.ico" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     
     <!-- Prevent caching of this HTML file -->
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
@@ -18,6 +18,15 @@
     <meta name="X-Robots-Tag" content="noindex, nofollow" />
     
     <title>Panda Patches CRM</title>
+
+    <!-- PWA / Add to Home Screen -->
+    <link rel="manifest" href="/manifest.json" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <meta name="theme-color" content="#0B1120" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black" />
+    <meta name="apple-mobile-web-app-title" content="Panda CRM" />
 
     <!-- Tag Safari so CSS can disable backdrop-filter + fixed background there.
          Those two combined make Safari's main thread janky (slow scroll, dropped

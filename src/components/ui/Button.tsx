@@ -23,7 +23,7 @@ const buttonVariants = cva(
         ghost: 'text-slate-300 hover:bg-white/10 focus:ring-slate-500',
       },
       size: {
-        sm: 'px-3 py-2 text-xs min-h-[36px]',
+        sm: 'px-3 py-2 text-xs min-h-[40px]',
         md: 'px-5 py-2.5 text-sm min-h-[44px]',
         lg: 'px-6 py-3 text-base min-h-[48px]',
       },

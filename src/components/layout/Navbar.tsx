@@ -32,7 +32,7 @@ const Navbar: React.FC = () => {
   return (
     <nav
       className="
-        md:hidden fixed bottom-4 left-1/2 -translate-x-1/2 
+        mobile-bottom-nav md:hidden fixed bottom-4 left-1/2 -translate-x-1/2
         bg-slate-900/90 backdrop-blur-md
         border border-slate-700/40 rounded-2xl 
         px-8 py-3 flex items-center justify-between w-[92%]
