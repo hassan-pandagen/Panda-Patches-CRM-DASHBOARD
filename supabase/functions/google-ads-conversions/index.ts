@@ -10,10 +10,21 @@
 //
 // Security: JWT verification ENABLED (verify_jwt: true). The Database Webhook must be
 // configured with an "Authorization: Bearer <service_role_key>" header in the Dashboard.
+//
+// ⚠️ LEGACY UPLOAD PATH DEPRECATED (2026-07-15) — see claude-code-task-datamanager-migration.md.
+// This account is NOT allowlisted for `ConversionUploadService.UploadClickConversions`
+// (Google stopped accepting new adopters 2026-06-15; verified live — see
+// `google_ads_upload_log`, error `CUSTOMER_NOT_ALLOWLISTED_FOR_THIS_FEATURE`). There is no
+// allowlisting path for this account. The Ads-API-version bump (v19→v22, still below) fixed
+// the earlier dead-endpoint bug but does NOT fix this — it's an account eligibility wall, not
+// a version issue. The mandated replacement is Google Data Manager (a scheduled Sheet
+// connection, config not code). Until that Sheets-export path is wired in, this function is a
+// documented no-op: it computes what it would have sent, then logs 'SKIPPED' and returns —
+// no network call to Google Ads, no more silent FAILED/rejected spam. Kept intact (not
+// deleted) so the reasoning + the match-key logic (gclid / hashed email+phone) stay visible
+// and reusable for the Data Manager Sheets writer.
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.10';
-
-const GADS_API_VERSION = 'v19'; // check https://developers.google.com/google-ads/api/docs/release-notes for latest
 
 async function sha256(s: string): Promise<string> {
   const data = new TextEncoder().encode(s);
@@ -28,21 +39,12 @@ const normPhone = (p: string) => {
   return digits.startsWith('+') ? digits : '+1' + digits.replace(/^1/, ''); // E.164, default US
 };
 
-async function getAccessToken(): Promise<string> {
-  const res = await fetch('https://oauth2.googleapis.com/token', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({
-      client_id: Deno.env.get('GADS_CLIENT_ID') ?? '',
-      client_secret: Deno.env.get('GADS_CLIENT_SECRET') ?? '',
-      refresh_token: Deno.env.get('GADS_REFRESH_TOKEN') ?? '',
-      grant_type: 'refresh_token',
-    }),
-  });
-  const j = await res.json();
-  if (!j.access_token) throw new Error('OAuth failed: ' + JSON.stringify(j));
-  return j.access_token;
-}
+// Exact Google Ads conversion action names — must match verbatim for Data Manager's
+// "Conversion Name" column mapping (see claude-code-task-datamanager-migration.md §3).
+const CONVERSION_NAME: Record<'LEAD' | 'ORDER', string> = {
+  LEAD: 'Quote Submitted (CRM)',
+  ORDER: 'Quote Converted to Order (CRM)',
+};
 
 // Google rejects a click id older than 90 days; past that window (or if we can't tell the age
 // at all) we drop the click id and rely on hashed user identifiers (Enhanced Conversions)
@@ -64,17 +66,7 @@ Deno.serve(async (req: Request) => {
   try {
     const SUPABASE_URL = Deno.env.get('SUPABASE_URL') ?? '';
     const SERVICE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
-    const GADS_CUSTOMER_ID = Deno.env.get('GADS_CUSTOMER_ID') ?? '';
-    const GADS_DEVELOPER_TOKEN = Deno.env.get('GADS_DEVELOPER_TOKEN') ?? '';
-    const GADS_ACTION_ID_LEAD = Deno.env.get('GADS_ACTION_ID_LEAD') ?? '';
-    const GADS_ACTION_ID_ORDER = Deno.env.get('GADS_ACTION_ID_ORDER') ?? '';
-    // Manager (MCC) account ID. When the ad account (GADS_CUSTOMER_ID) is accessed through a
-    // manager account, Google requires the login-customer-id header or the call is rejected
-    // with USER_PERMISSION_DENIED. Optional — leave unset for a standalone (non-MCC) account.
-    const GADS_LOGIN_CUSTOMER_ID = Deno.env.get('GADS_LOGIN_CUSTOMER_ID') ?? '';
-
     if (!SUPABASE_URL || !SERVICE_KEY) throw new Error('Supabase env vars not configured');
-    if (!GADS_CUSTOMER_ID || !GADS_DEVELOPER_TOKEN) throw new Error('Google Ads env vars not configured');
 
     const admin = createClient(SUPABASE_URL, SERVICE_KEY);
     const payload = await req.json(); // Supabase Database Webhook: { type, table, record, old_record }
@@ -87,16 +79,11 @@ Deno.serve(async (req: Request) => {
       return new Response(JSON.stringify({ received: true, skipped: 'not a lead or conversion event' }), { status: 200 });
     }
 
-    const eventType = isConversion ? 'ORDER' : 'LEAD';
-    const actionId = isConversion ? GADS_ACTION_ID_ORDER : GADS_ACTION_ID_LEAD;
-    if (!actionId) {
-      console.error(`[google-ads-conversions] missing conversion action id for ${eventType}`);
-      return new Response(JSON.stringify({ received: true, error: 'missing conversion action id' }), { status: 200 });
-    }
+    const eventType: 'LEAD' | 'ORDER' = isConversion ? 'ORDER' : 'LEAD';
 
-    // Idempotency: skip if we've already SUCCEEDED for this quote + event type. FAILED attempts
-    // are not blocked here — a later retry (Supabase resends failed webhook deliveries) can
-    // still succeed. Google itself also dedupes on `orderId`, so this is defense-in-depth.
+    // Idempotency: skip if we've already exported this quote + event type (SUCCESS will mean
+    // "written to the Data Manager Sheet" once that path is built). Google itself also dedupes
+    // on `orderId`, so this remains defense-in-depth for whatever the eventual sink is.
     const { data: existing } = await admin
       .from('google_ads_upload_log')
       .select('id')
@@ -115,8 +102,11 @@ Deno.serve(async (req: Request) => {
     const rawTs = isConversion ? q.converted_at : q.created_at;
     const conversionDateTime = String(rawTs).replace('T', ' ').replace(/\.\d+/, '').replace('Z', '+00:00');
 
+    // This shape is the future Data Manager Sheet row (Conversion Name / Time / Value /
+    // Currency / Order ID + gclid or hashed identifiers below) — kept as-is from the old
+    // Ads-API payload so the Sheets writer can reuse it directly.
     const conversion: Record<string, unknown> = {
-      conversionAction: `customers/${GADS_CUSTOMER_ID}/conversionActions/${actionId}`,
+      conversionName: CONVERSION_NAME[eventType],
       conversionDateTime,
       conversionValue: isConversion ? Number(q.quote_amount ?? q.estimated_amount ?? 0) : 0,
       currencyCode: 'USD',
@@ -136,59 +126,32 @@ Deno.serve(async (req: Request) => {
     if (q.customer_phone) userIdentifiers.push({ hashedPhoneNumber: await sha256(normPhone(q.customer_phone)) });
     if (userIdentifiers.length > 0) conversion.userIdentifiers = userIdentifiers;
 
-    if (!conversion.gclid && !conversion.wbraid && !conversion.gbraid && userIdentifiers.length === 0) {
-      await admin.from('google_ads_upload_log').insert({
-        quote_id: q.id, event_type: eventType, status: 'SKIPPED',
-        response: { reason: 'no click id or user identifiers' },
-      });
-      return new Response(JSON.stringify({ received: true, skipped: 'no identifiers' }), { status: 200 });
-    }
+    // DEPRECATED LEGACY PATH — no network call to Google Ads (see header comment). Logs
+    // exactly the row that WOULD be sent, so the Data Manager Sheets writer (next phase) can
+    // query `google_ads_upload_log` for reason='legacy_endpoint_deprecated_pending_data_manager_migration'
+    // to see/backfill the real export backlog. Never store raw email/phone — only hashed
+    // values (already what `conversion` contains) plus click-id presence flags.
+    const hadClickId = !!(conversion.gclid || conversion.wbraid || conversion.gbraid);
+    const hadUserIdentifiers = userIdentifiers.length > 0;
 
-    const token = await getAccessToken();
-    const gadsHeaders: Record<string, string> = {
-      'Authorization': `Bearer ${token}`,
-      'developer-token': GADS_DEVELOPER_TOKEN,
-      'Content-Type': 'application/json',
-    };
-    if (GADS_LOGIN_CUSTOMER_ID) gadsHeaders['login-customer-id'] = GADS_LOGIN_CUSTOMER_ID;
-
-    const res = await fetch(
-      `https://googleads.googleapis.com/${GADS_API_VERSION}/customers/${GADS_CUSTOMER_ID}:uploadClickConversions`,
-      {
-        method: 'POST',
-        headers: gadsHeaders,
-        body: JSON.stringify({ conversions: [conversion], partialFailure: true }),
-      }
-    );
-
-    const responseBody = await res.json().catch(() => ({}));
-
-    // With partialFailure:true, Google returns HTTP 200 even when the conversion itself was
-    // REJECTED — the actual outcome lives in `partialFailureError` in the body, not the status
-    // code. Checking res.ok alone would silently log a rejected conversion as SUCCESS, which
-    // would then block any future retry via the idempotency check above.
-    const rejected = !!responseBody?.partialFailureError;
-    const uploadSucceeded = res.ok && !rejected;
-
-    // Never store raw email/phone — only hashed values (already what `conversion` contains)
-    // plus click-id presence flags, so the log itself can't leak PII even if compromised.
     await admin.from('google_ads_upload_log').insert({
       quote_id: q.id,
       event_type: eventType,
-      status: uploadSucceeded ? 'SUCCESS' : 'FAILED',
+      status: 'SKIPPED',
       response: {
-        httpStatus: res.status,
-        rejected,
-        hadClickId: !!(conversion.gclid || conversion.wbraid || conversion.gbraid),
-        hadUserIdentifiers: userIdentifiers.length > 0,
-        googleResponse: responseBody,
+        reason: hadClickId || hadUserIdentifiers
+          ? 'legacy_endpoint_deprecated_pending_data_manager_migration'
+          : 'no click id or user identifiers',
+        hadClickId,
+        hadUserIdentifiers,
+        wouldHaveSent: conversion,
       },
     });
 
-    console.log(`[google-ads-conversions] quote ${q.quote_number} (${eventType}): http=${res.status} rejected=${rejected}`);
+    console.log(`[google-ads-conversions] quote ${q.quote_number} (${eventType}): legacy path deprecated, logged for Data Manager backfill`);
 
-    return new Response(JSON.stringify({ received: true, status: res.status, rejected }), {
-      status: uploadSucceeded ? 200 : 500,
+    return new Response(JSON.stringify({ received: true, skipped: 'legacy_endpoint_deprecated' }), {
+      status: 200,
       headers: { 'Content-Type': 'application/json' },
     });
 
