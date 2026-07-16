@@ -16,6 +16,7 @@ import { getStatusInfo } from '../constants';
 import { mapDbToOrder } from '../services/orderService';
 import { isWebCheckoutAgent, leadSourceDisplay } from '../utils/leadSource';
 import { queryKeys } from '../constants/queryKeys';
+import { getPremiumEmailsSet } from '../services/customerFlagsService';
 
 // UI Components
 import Button from '../components/ui/Button';
@@ -23,6 +24,7 @@ import Skeleton from '../components/ui/Skeleton';
 import EmptyState from '../components/ui/EmptyState';
 import SpotlightCard from '../components/ui/SpotlightCard';
 import StatusBadge from '../components/ui/StatusBadge';
+import PremiumBadge from '../components/ui/PremiumBadge';
 import {
     Search,
     Plus,
@@ -183,7 +185,7 @@ async function fetchPaginatedOrders(params: {
     userEmail?: string | null;
     dateRangeStart?: string;
     dateRangeEnd?: string;
-}): Promise<{ orders: Order[]; totalCount: number; repeatCustomerCounts: Record<string, number> }> {
+}): Promise<{ orders: Order[]; totalCount: number; repeatCustomerCounts: Record<string, number>; premiumEmails: Set<string> }> {
     const { page, filter, search, salesAgent, leadSource, date, ids, userRole, userEmail, dateRangeStart, dateRangeEnd } = params;
     const from = (page - 1) * ITEMS_PER_PAGE;
     const to = from + ITEMS_PER_PAGE - 1;
@@ -200,7 +202,9 @@ async function fetchPaginatedOrders(params: {
             .order('created_at', { ascending: false });
 
         if (error) throw new Error(error.message);
-        return { orders: (data || []).map(mapDbToOrder), totalCount: data?.length || 0, repeatCustomerCounts: {} };
+        const idOrders = (data || []).map(mapDbToOrder);
+        const idPremiumEmails = await getPremiumEmailsSet(idOrders.map(o => o.customerEmail));
+        return { orders: idOrders, totalCount: data?.length || 0, repeatCustomerCounts: {}, premiumEmails: idPremiumEmails };
     }
 
     // --- Build the base query ---
@@ -310,10 +314,16 @@ async function fetchPaginatedOrders(params: {
         }
     }
 
+    // Premium customer flags — always fetched (not gated to one filter tab) since production
+    // needs to see this regardless of which view they're looking at. One batched lookup per
+    // page of orders, same shape as the repeat-customer aggregate above.
+    const premiumEmails = await getPremiumEmailsSet(orders.map(o => o.customerEmail));
+
     return {
         orders,
         totalCount: count || 0,
         repeatCustomerCounts,
+        premiumEmails,
     };
 }
 
@@ -609,6 +619,7 @@ const AllOrdersPage: React.FC = () => {
     const totalCount = pageData?.totalCount || 0;
     const totalPages = Math.ceil(totalCount / ITEMS_PER_PAGE);
     const repeatCustomerCounts = pageData?.repeatCustomerCounts || {};
+    const premiumEmails = pageData?.premiumEmails || new Set<string>();
 
     // --- OVERDUE HELPER (for rendering badges) ---
     const isOrderOverdue = (order: Order) => {
@@ -789,6 +800,12 @@ const AllOrdersPage: React.FC = () => {
                     ) : (orders.map((order, index) => {
                         const daysOpen = Math.floor((new Date().getTime() - new Date(order.createdAt).getTime()) / (1000 * 60 * 60 * 24));
                         const isOverdue = isOrderOverdue(order);
+                        // Premium glow: same treatment as Urgent/Overdue (border + shadow + left
+                        // accent bar), just gold instead of red, so it's equally hard to miss
+                        // scanning the list — CEO ask. Red still wins if an order is BOTH urgent/
+                        // overdue AND premium (more time-critical), but the crown badge always
+                        // shows regardless so premium status is never silently lost.
+                        const isPremiumRow = premiumEmails.has((order.customerEmail || '').trim().toLowerCase());
 
                         return (
                             <motion.div
@@ -799,11 +816,16 @@ const AllOrdersPage: React.FC = () => {
                             >
                                 <Link to={`/order/${order.orderNumber}`} className="block group">
                                     <div className={`relative bg-slate-900/60 backdrop-blur-sm rounded-xl p-4 hover:bg-slate-800 transition-all duration-200 group-hover:shadow-lg group-hover:-translate-y-0.5 active:scale-[0.99]
-                      ${isOverdue ? 'border border-red-500/50 shadow-[0_0_15px_rgba(239,68,68,0.1)] hover:border-red-500/80' : 'border border-slate-700/50 hover:border-brand-orange/40'}`}
+                      ${isOverdue ? 'border-2 border-red-500 shadow-[0_0_24px_rgba(239,68,68,0.45)] hover:shadow-[0_0_32px_rgba(239,68,68,0.65)]'
+                        : isPremiumRow ? 'border-2 border-amber-400 shadow-[0_0_24px_rgba(251,191,36,0.45)] hover:shadow-[0_0_32px_rgba(251,191,36,0.65)]'
+                        : 'border border-slate-700/50 hover:border-brand-orange/40'}`}
                                     >
 
                                         {order.isUrgent && !isOverdue && (
                                             <div className="absolute left-0 top-3 bottom-3 w-1 bg-red-500 rounded-r-full shadow-[0_0_8px_rgba(239,68,68,0.6)]" />
+                                        )}
+                                        {isPremiumRow && !order.isUrgent && !isOverdue && (
+                                            <div className="absolute left-0 top-3 bottom-3 w-1 bg-amber-400 rounded-r-full shadow-[0_0_8px_rgba(251,191,36,0.6)]" />
                                         )}
 
                                         <div className="flex flex-col md:flex-row md:items-center gap-4 justify-between pl-2">
@@ -829,6 +851,9 @@ const AllOrdersPage: React.FC = () => {
                                                         <span className="text-white font-bold text-lg group-hover:text-brand-orange transition-colors">
                                                             {order.customerName}
                                                         </span>
+                                                        {isPremiumRow && (
+                                                            <PremiumBadge />
+                                                        )}
                                                         {isOverdue && (
                                                             <span className="flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-red-500 text-white animate-pulse">
                                                                 ⚠️ {daysOpen} DAYS OPEN

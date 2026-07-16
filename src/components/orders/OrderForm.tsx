@@ -12,8 +12,9 @@ import Textarea from '../ui/Textarea';
 import { LEAD_SOURCE_OPTIONS, PATCHES_TYPE_OPTIONS, COUNTRY_OPTIONS } from '../../constants/index';
 import { supabase } from '../../services/supabaseClient';
 import { logger } from '../../services/logger';
+import { getPremiumStatus, setPremiumStatus } from '../../services/customerFlagsService';
 import { sanitizeOrFilterValue, sanitizeIlikePattern } from '../../utils/supabaseFilters';
-import { History, UserCheck, ExternalLink, Copy, FileText, AlertTriangle } from 'lucide-react';
+import { History, UserCheck, ExternalLink, Copy, FileText, AlertTriangle, Crown } from 'lucide-react';
 
 const CANCELLATION_REASONS = [
   "Customer Ghosted / No Reply",
@@ -203,7 +204,7 @@ const OrderForm: React.FC<OrderFormProps> = ({
   isNewOrder = false,
   onFormChange
 }) => {
-  const { role, permissions } = useAuth();
+  const { user, role, permissions } = useAuth();
   
   // ✅ FIX: Get toast methods directly
   const { success, error: showError } = useToast();
@@ -239,6 +240,11 @@ const OrderForm: React.FC<OrderFormProps> = ({
   // ✅ State for live customer check
   const [existingCustomer, setExistingCustomer] = useState<ExistingCustomerInfo | null>(null);
   const [isCheckingCustomer, setIsCheckingCustomer] = useState(false);
+  // "Premium customer" tagging (CEO request: production applies extra QA/QC for these).
+  // Auto-detected from an existing customer_flags row when a returning customer's email is
+  // found; otherwise the agent can check it manually for a brand-new premium customer.
+  const [isPremiumCustomer, setIsPremiumCustomer] = useState(false);
+  const initialPremiumRef = React.useRef(false);
   // Live check: does this customer already have a quote in the system?
   // If yes, we nudge the agent to use Convert to Order on the quote instead of
   // creating a fresh order (preserves attribution, prevents data clutter).
@@ -302,8 +308,19 @@ const OrderForm: React.FC<OrderFormProps> = ({
 
           setExistingCustomer(customerData);
           // No automatic fill - user clicks button to fill
+
+          // Auto-detect Premium status from the customer's real email (not the raw
+          // identifier, which may be a phone number the agent typed instead).
+          if (customerData.customerEmail) {
+            const flag = await getPremiumStatus(customerData.customerEmail);
+            const isPremium = flag?.isPremium ?? false;
+            initialPremiumRef.current = isPremium;
+            setIsPremiumCustomer(isPremium);
+          }
         } else {
           setExistingCustomer(null);
+          initialPremiumRef.current = false;
+          setIsPremiumCustomer(false);
         }
       } catch (err) {
         logger.error("Error checking customer:", err);
@@ -387,6 +404,15 @@ const OrderForm: React.FC<OrderFormProps> = ({
       // The `changes` array is no longer needed as the DB trigger handles history.
       const saveData = { ...data };
       await onSave({ current: saveData, isNew: isNewOrder, changes: [] });
+
+      // Persist the Premium flag only after a successful save, and only when there's
+      // something meaningful to write — skip the no-op "never premium, still unchecked"
+      // case so customer_flags doesn't get a needless row for every ordinary new order.
+      if (isNewOrder && data.customerEmail && (isPremiumCustomer || initialPremiumRef.current)) {
+        setPremiumStatus(data.customerEmail, isPremiumCustomer, user?.email ?? 'unknown').catch((err) =>
+          logger.error('Failed to save premium customer flag', err)
+        );
+      }
     } catch (err: any) {
       logger.error("💥 Save Error:", err);
       showError(err.message || 'Failed to save order. Please try again.');
@@ -574,6 +600,23 @@ const OrderForm: React.FC<OrderFormProps> = ({
                   </a>
                 </div>
               </div>
+            </div>
+          )}
+
+          {isNewOrder && (
+            <div className="md:col-span-2 flex items-center gap-2 -mt-2 mb-2">
+              <input
+                type="checkbox"
+                id="premium-customer-checkbox"
+                checked={isPremiumCustomer}
+                onChange={(e) => setIsPremiumCustomer(e.target.checked)}
+                className="w-4 h-4 rounded border-slate-600 bg-slate-800 text-amber-400 focus:ring-amber-400/50"
+              />
+              <label htmlFor="premium-customer-checkbox" className="text-sm text-slate-300 flex items-center gap-1.5 cursor-pointer">
+                <Crown className="w-3.5 h-3.5 text-amber-400" />
+                Mark as Premium Customer
+                <span className="text-xs text-slate-500">(production will apply extra QA/QC)</span>
+              </label>
             </div>
           )}
 

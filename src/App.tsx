@@ -5,6 +5,7 @@ import { Routes, Route } from 'react-router-dom';
 import AppLayout from '@/components/layout/AppLayout';
 import LazyLoadingFallback from '@/components/LazyLoadingFallback';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
+import { ChunkErrorBoundary } from '@/components/ChunkErrorBoundary';
 import OfflineIndicator from '@/components/OfflineIndicator';
 
 // Hooks
@@ -62,11 +63,11 @@ const App: React.FC = () => {
         <HostnameRouter>
         <Routes>
           {/* Public Route */}
-          <Route path="/login" element={<ErrorBoundary><LoginPage /></ErrorBoundary>} />
+          <Route path="/login" element={<ErrorBoundary><ChunkErrorBoundary><LoginPage /></ChunkErrorBoundary></ErrorBoundary>} />
     
           {/* Protected Routes */}
           <Route element={<ProtectedRoute />}>
-            <Route element={<ErrorBoundary><AppLayout /></ErrorBoundary>}>
+            <Route element={<ErrorBoundary><ChunkErrorBoundary><AppLayout /></ChunkErrorBoundary></ErrorBoundary>}>
               
               {/* Critical */}
               <Route path="/" element={<Dashboard />} />
@@ -93,7 +94,7 @@ const App: React.FC = () => {
               <Route path="/clock-in-out" element={<ClockInOutPage />} />
               
               {/* Admin */}
-              <Route element={<ErrorBoundary><AdminRoute /></ErrorBoundary>}>
+              <Route element={<ErrorBoundary><ChunkErrorBoundary><AdminRoute /></ChunkErrorBoundary></ErrorBoundary>}>
                 <Route path="/bulk-cost-entry" element={<BulkCostEntryPage />} />
                 <Route path="/user-management" element={<UserManagementPage />} />
                 <Route path="/performance-metrics" element={<PerformanceMetricsPage />} />
@@ -107,8 +108,8 @@ const App: React.FC = () => {
           {/* ====== PUBLIC PAYMENT FORM ====== */}
           {/* Agent-generated payment link — no auth required. The customer login portal
               now lives on the marketing website; only this payment flow remains here. */}
-          <Route path="/pay/:token" element={<ErrorBoundary><PaymentFormLandingPage /></ErrorBoundary>} />
-          <Route path="/pay/:token/thank-you" element={<ErrorBoundary><PaymentFormLandingPage /></ErrorBoundary>} />
+          <Route path="/pay/:token" element={<ErrorBoundary><ChunkErrorBoundary><PaymentFormLandingPage /></ChunkErrorBoundary></ErrorBoundary>} />
+          <Route path="/pay/:token/thank-you" element={<ErrorBoundary><ChunkErrorBoundary><PaymentFormLandingPage /></ChunkErrorBoundary></ErrorBoundary>} />
 
           {/* 404 — outside protected routes so all unknown paths return not-found */}
           <Route path="*" element={<NotFoundPage />} />

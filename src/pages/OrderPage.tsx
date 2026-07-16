@@ -10,6 +10,7 @@ import { useToast } from '../hooks/useToast';
 import { queryKeys } from '../constants/queryKeys';
 import InvoiceModal from '../components/invoices/InvoiceModal';
 import { mapDbToOrder, triggerStatusEmail, sendPaymentConfirmationEmail, updateOrderDetails, triggerProductionCompleteEmail } from '../services/orderService';
+import { getPremiumStatus, setPremiumStatus } from '../services/customerFlagsService';
 import { isWebCheckoutAgent, leadSourceDisplay } from '../utils/leadSource';
 import FileUploadSection from '../components/orders/FileUpload';
 
@@ -18,9 +19,10 @@ import Spinner from '../components/ui/Spinner';
 import Button from '../components/ui/Button';
 import SpotlightCard from '../components/ui/SpotlightCard';
 import StatusBadge from '../components/ui/StatusBadge';
+import PremiumBadge from '../components/ui/PremiumBadge';
 
 // Icons (Check already imported below)
-import { Edit, Trash2, ShieldAlert, ArrowLeft, Lock, MapPin, Smartphone, Maximize, Check, XCircle, AlertTriangle, Copy, FileText, Upload, Package, X, Mail, DollarSign } from 'lucide-react';
+import { Edit, Trash2, ShieldAlert, ArrowLeft, Lock, MapPin, Smartphone, Maximize, Check, XCircle, AlertTriangle, Copy, FileText, Upload, Package, X, Mail, DollarSign, Crown } from 'lucide-react';
 
 // 1. Import the new component
 import OrderTimeline from '../components/orders/OrderTimeline';
@@ -130,6 +132,25 @@ const OrderPage: React.FC = () => {
             return mapDbToOrder(data);
         },
         enabled: !!orderNumber,
+    });
+
+    // --- PREMIUM CUSTOMER FLAG ---
+    const canTogglePremium = isAdmin || permissions?.orders_create === true;
+    const { data: premiumFlag } = useQuery({
+        queryKey: ['customer-premium', order?.customerEmail],
+        queryFn: () => getPremiumStatus(order!.customerEmail),
+        enabled: !!order?.customerEmail,
+    });
+    const togglePremiumMutation = useMutation({
+        mutationFn: async (next: boolean) => {
+            if (!order?.customerEmail) throw new Error('No customer email on this order');
+            await setPremiumStatus(order.customerEmail, next, user?.email ?? 'unknown');
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['customer-premium', order?.customerEmail] });
+            showSuccess(premiumFlag?.isPremium ? 'Premium flag removed' : 'Marked as Premium Customer');
+        },
+        onError: (err: any) => showError('Failed to update', err?.message || 'Could not update premium status.'),
     });
 
     // Populate production files when order loads
@@ -523,6 +544,7 @@ const OrderPage: React.FC = () => {
                             <h1 className="text-3xl font-bold text-white flex items-center gap-3 flex-wrap">
                                 Order {order.orderNumber}
                                 <AttributionQualityBadge quality={getAttributionQualityFromOrder(order)} />
+                                {premiumFlag?.isPremium && <PremiumBadge size="md" />}
 
                                 {/* Paid / Unpaid pill — for SHIPPING (and financial viewers); hidden from PRODUCTION (no payment info). */}
                                 {(canViewFinancials || role === UserRole.SHIPPING) && (() => {
@@ -598,6 +620,25 @@ const OrderPage: React.FC = () => {
                             </h1>
                         </div>
                         <div className="flex items-center gap-3">
+
+                            {/* --- PREMIUM CUSTOMER TOGGLE --- */}
+                            {canTogglePremium && (
+                                <Button
+                                    variant="secondary"
+                                    size="md"
+                                    disabled={togglePremiumMutation.isPending}
+                                    onClick={() => togglePremiumMutation.mutate(!premiumFlag?.isPremium)}
+                                    className={premiumFlag?.isPremium
+                                        ? 'bg-amber-400/10 text-amber-300 border-amber-400/30 hover:bg-amber-400/20'
+                                        : 'bg-slate-700/40 text-slate-300 border-slate-600 hover:bg-slate-700/60'}
+                                    title={premiumFlag?.isPremium ? 'Remove Premium flag from this customer' : 'Mark this customer as Premium — production will apply extra QA/QC'}
+                                >
+                                    <Crown size={16} />
+                                    <span className="hidden sm:inline">
+                                        {togglePremiumMutation.isPending ? 'Saving…' : premiumFlag?.isPremium ? 'Premium ✓' : 'Mark Premium'}
+                                    </span>
+                                </Button>
+                            )}
 
                             {/* --- NEW: DUPLICATE BUTTON --- */}
                             <Button

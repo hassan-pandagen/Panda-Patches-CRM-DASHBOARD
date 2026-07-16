@@ -9,8 +9,29 @@ interface ChunkErrorBoundaryState {
   retryCount: number;
 }
 
-// Global flag to prevent multiple reloads
+// Global flag to prevent multiple reloads within the same page instance
 let isReloading = false;
+
+// Guards against an infinite reload loop across FULL page reloads (isReloading alone resets
+// to false on every fresh JS context). If the auto-reload doesn't actually fix things — e.g.
+// a genuinely broken deploy, not just a stale client cache — sessionStorage remembers we
+// already tried once this tab session, so the second occurrence shows the manual Retry/Go
+// Home buttons instead of silently redirecting forever.
+const RELOAD_GUARD_KEY = 'chunk-error-auto-reload-attempted';
+const hasAlreadyAttemptedReload = (): boolean => {
+  try {
+    return sessionStorage.getItem(RELOAD_GUARD_KEY) === '1';
+  } catch {
+    return false; // sessionStorage unavailable (privacy mode etc.) — fail open, allow one attempt
+  }
+};
+const clearReloadGuard = (): void => {
+  try {
+    sessionStorage.removeItem(RELOAD_GUARD_KEY);
+  } catch {
+    // ignore
+  }
+};
 
 // Utility function to check for chunk loading errors
 const isChunkLoadError = (error: any): boolean => {
@@ -29,11 +50,20 @@ class ChunkErrorBoundary extends React.Component<
 > {
   constructor(props: { children: React.ReactNode }) {
     super(props);
-    this.state = { 
-      hasChunkError: false, 
+    this.state = {
+      hasChunkError: false,
       error: null,
-      retryCount: 0
+      // If we already auto-reloaded once this tab session, start at retryCount=1 so a repeat
+      // error goes straight to the manual buttons instead of looping through another silent
+      // auto-reload.
+      retryCount: hasAlreadyAttemptedReload() ? 1 : 0,
     };
+  }
+
+  componentDidMount() {
+    // Reaching a successful mount means the app is currently healthy — clear any leftover
+    // guard from a past incident so a genuinely new deploy still gets one auto-reload attempt.
+    clearReloadGuard();
   }
 
   static getDerivedStateFromError(error: Error): Partial<ChunkErrorBoundaryState> {
@@ -58,9 +88,13 @@ class ChunkErrorBoundary extends React.Component<
         timestamp: new Date().toISOString()
       });
 
-      // Auto-reload after first error (with delay to show message)
+      // Auto-reload after first error (with delay to show message). Record the attempt in
+      // sessionStorage FIRST — if this reload doesn't fix things (genuinely broken deploy,
+      // not just a stale cache), the next mount's constructor seeds retryCount=1 and skips
+      // straight to the manual buttons instead of looping forever.
       if (this.state.retryCount === 0 && !isReloading) {
         isReloading = true;
+        try { sessionStorage.setItem(RELOAD_GUARD_KEY, '1'); } catch { /* ignore */ }
         setTimeout(() => {
           window.location.href = '/';
         }, 1500);
@@ -69,25 +103,30 @@ class ChunkErrorBoundary extends React.Component<
   }
 
   handleRetry = () => {
-    this.setState(prev => ({ 
-      hasChunkError: false, 
+    this.setState(prev => ({
+      hasChunkError: false,
       error: null,
       retryCount: prev.retryCount + 1
     }));
-    
+
+    // A manual retry is a deliberate fresh attempt — clear the guard so a genuinely-fixed
+    // deploy isn't stuck treating this as "already tried" on the next natural page load.
+    clearReloadGuard();
+
     // Clear service worker cache if available
     if ('serviceWorker' in navigator && 'caches' in window) {
       caches.keys().then(names => {
         names.forEach(name => caches.delete(name));
       });
     }
-    
+
     // Hard reload with cache clear
     window.location.reload();
   };
 
   handleGoHome = () => {
     this.setState({ hasChunkError: false, error: null });
+    clearReloadGuard();
     window.location.href = '/';
   };
 
@@ -184,8 +223,9 @@ const ChunkErrorHandler: React.FC<{ children: React.ReactNode }> = ({ children }
           // Sentry not ready, that's ok
         });
 
-        if (!isReloading) {
+        if (!isReloading && !hasAlreadyAttemptedReload()) {
           isReloading = true;
+          try { sessionStorage.setItem(RELOAD_GUARD_KEY, '1'); } catch { /* ignore */ }
           console.log('Detected chunk loading error, reloading page...');
           setTimeout(() => {
             window.location.reload();
@@ -208,8 +248,9 @@ const ChunkErrorHandler: React.FC<{ children: React.ReactNode }> = ({ children }
           // Sentry not ready, that's ok
         });
 
-        if (!isReloading) {
+        if (!isReloading && !hasAlreadyAttemptedReload()) {
           isReloading = true;
+          try { sessionStorage.setItem(RELOAD_GUARD_KEY, '1'); } catch { /* ignore */ }
           console.log('Detected chunk loading error, reloading page...');
           setTimeout(() => {
             window.location.reload();

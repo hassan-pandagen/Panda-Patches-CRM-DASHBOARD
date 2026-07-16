@@ -25,6 +25,7 @@ const PRODUCTION_MANAGER_EMAILS = [
 const PVC_VENDOR_EMAIL = 'Arsalan.ali.khan.85@gmail.com';
 const DESIGN_TEAM_CC = 'design@pandapatches.com';
 const HELLO_EMAIL = 'hello@pandapatches.com';
+const LANCE_EMAIL = 'lance@pandapatches.com';
 
 // ✅ Only trigger for orders created by the checkout / payment-form SYSTEM (the webhook).
 // NOTE: 'hello@pandapatches.com' is intentionally NOT listed. When a human logged in as
@@ -154,6 +155,7 @@ serve(async (req) => {
       DESIGN_TEAM_CC,
       ...internalEmails.slice(1),
       HELLO_EMAIL,
+      LANCE_EMAIL,
     ].filter(Boolean).join(',');
 
     // Show the REAL sales agent who created the order so production contacts the right person.

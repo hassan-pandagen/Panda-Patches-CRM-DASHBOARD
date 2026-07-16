@@ -1,22 +1,30 @@
 import React, { useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { format } from 'date-fns';
 import { motion } from 'framer-motion';
 import { supabase } from '../services/supabaseClient';
 import { logger } from '../services/logger';
-import { Order, OrderStatus } from '../types';
+import { Order, OrderStatus, UserRole } from '../types';
 import { queryKeys } from '../constants/queryKeys';
 import Spinner from '../components/ui/Spinner';
 import { mapDbToOrder } from '../services/orderService';
-import StatusBadge from '../components/ui/StatusBadge';
+import { getPremiumStatus, setPremiumStatus } from '../services/customerFlagsService';
+import { useAuth } from '../contexts/AuthContext';
+import { useToast } from '../hooks/useToast';
 import { sanitizeOrFilterValue } from '../utils/supabaseFilters';
-import { ArrowLeft, Mail, Phone, DollarSign, ShoppingBag, Clock, TrendingUp } from 'lucide-react';
+import StatusBadge from '../components/ui/StatusBadge';
+import PremiumBadge from '../components/ui/PremiumBadge';
+import Button from '../components/ui/Button';
+import { ArrowLeft, Mail, Phone, DollarSign, ShoppingBag, Clock, TrendingUp, Crown } from 'lucide-react';
 
 const CustomerHistoryPage: React.FC = () => {
   const { identifier } = useParams<{ identifier: string }>();
   const navigate = useNavigate();
-  
+  const { user, role, permissions } = useAuth();
+  const { success: showSuccess, error: showError } = useToast();
+  const queryClient = useQueryClient();
+
   const customerId = decodeURIComponent(identifier || '').trim();
 
   logger.debug('[Customer History] Looking up customer', customerId);
@@ -86,16 +94,36 @@ const CustomerHistoryPage: React.FC = () => {
         .filter(Boolean)
     )];
 
-    return { 
-      totalSpent, 
+    return {
+      totalSpent,
       totalPaid,
-      orderCount, 
-      lastOrderDate, 
-      profile, 
+      orderCount,
+      lastOrderDate,
+      profile,
       uniqueEmails,
-      uniquePhones 
+      uniquePhones
     };
   }, [orders]);
+
+  // --- PREMIUM CUSTOMER FLAG ---
+  const canTogglePremium = role === UserRole.ADMIN || permissions?.orders_create === true;
+  const customerEmail = metrics?.profile.email || '';
+  const { data: premiumFlag } = useQuery({
+    queryKey: ['customer-premium', customerEmail],
+    queryFn: () => getPremiumStatus(customerEmail),
+    enabled: !!customerEmail,
+  });
+  const togglePremiumMutation = useMutation({
+    mutationFn: async (next: boolean) => {
+      if (!customerEmail) throw new Error('No customer email found');
+      await setPremiumStatus(customerEmail, next, user?.email ?? 'unknown');
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['customer-premium', customerEmail] });
+      showSuccess(premiumFlag?.isPremium ? 'Premium flag removed' : 'Marked as Premium Customer');
+    },
+    onError: (err: any) => showError('Failed to update', err?.message || 'Could not update premium status.'),
+  });
 
   const handleGoBack = () => {
     navigate('/orders');
@@ -183,6 +211,22 @@ const CustomerHistoryPage: React.FC = () => {
                     <span className="text-xs font-semibold bg-brand-green/10 text-brand-green border border-brand-green/20 px-3 py-1 rounded-full">
                       Tracked Customer
                     </span>
+                    {premiumFlag?.isPremium && <PremiumBadge size="md" />}
+                    {canTogglePremium && (
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        disabled={togglePremiumMutation.isPending}
+                        onClick={() => togglePremiumMutation.mutate(!premiumFlag?.isPremium)}
+                        className={premiumFlag?.isPremium
+                          ? 'bg-amber-400/10 text-amber-300 border-amber-400/30 hover:bg-amber-400/20'
+                          : 'bg-slate-700/40 text-slate-300 border-slate-600 hover:bg-slate-700/60'}
+                        title={premiumFlag?.isPremium ? 'Remove Premium flag' : 'Mark this customer as Premium — production will apply extra QA/QC'}
+                      >
+                        <Crown size={14} />
+                        {togglePremiumMutation.isPending ? 'Saving…' : premiumFlag?.isPremium ? 'Unmark' : 'Mark as Premium'}
+                      </Button>
+                    )}
                   </div>
                   
                   <div className="flex flex-col gap-3 mt-4">
