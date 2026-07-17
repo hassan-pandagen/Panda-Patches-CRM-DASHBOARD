@@ -11,6 +11,7 @@ import { queryKeys } from '../constants/queryKeys';
 import InvoiceModal from '../components/invoices/InvoiceModal';
 import { mapDbToOrder, triggerStatusEmail, sendPaymentConfirmationEmail, updateOrderDetails, triggerProductionCompleteEmail } from '../services/orderService';
 import { getPremiumStatus, setPremiumStatus } from '../services/customerFlagsService';
+import { getCustomerByEmail } from '../services/customersService';
 import { isWebCheckoutAgent, leadSourceDisplay } from '../utils/leadSource';
 import FileUploadSection from '../components/orders/FileUpload';
 
@@ -151,6 +152,13 @@ const OrderPage: React.FC = () => {
             showSuccess(premiumFlag?.isPremium ? 'Premium flag removed' : 'Marked as Premium Customer');
         },
         onError: (err: any) => showError('Failed to update', err?.message || 'Could not update premium status.'),
+    });
+
+    // --- LINKED CUSTOMER ACCOUNT (cross-link to /portal-customers/:id, degrades silently pre-backfill) ---
+    const { data: linkedCustomer } = useQuery({
+        queryKey: ['customer-by-email', order?.customerEmail],
+        queryFn: () => getCustomerByEmail(order!.customerEmail),
+        enabled: !!order?.customerEmail,
     });
 
     // Populate production files when order loads
@@ -763,6 +771,14 @@ const OrderPage: React.FC = () => {
                                 <div className="flex justify-between items-start mb-6">
                                     <h3 className="text-lg font-semibold text-white flex items-center gap-2">
                                         Customer Information
+                                        {linkedCustomer && (
+                                            <button
+                                                onClick={() => navigate(`/portal-customers/${linkedCustomer.id}`)}
+                                                className="text-xs font-normal text-brand-orange hover:underline"
+                                            >
+                                                View customer account
+                                            </button>
+                                        )}
                                     </h3>
                                     {!canViewShipping && <Lock className="w-4 h-4 text-slate-400" />}
                                 </div>

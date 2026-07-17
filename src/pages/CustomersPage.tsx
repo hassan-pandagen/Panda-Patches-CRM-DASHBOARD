@@ -1,8 +1,11 @@
-import React, { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import React, { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { useQuery, keepPreviousData } from '@tanstack/react-query';
 import { supabase } from '@/services/supabaseClient';
 import { useAuth } from '@/contexts/AuthContext';
+import { listCustomersPage, getCustomerStatsSummary } from '@/services/customersService';
 import Spinner from '@/components/ui/Spinner';
+import Button from '@/components/ui/Button';
 import { useToast } from '@/hooks/useToast';
 import {
   Users,
@@ -17,29 +20,19 @@ import {
   ShoppingBag,
   KeyRound,
   AlertCircle,
+  ChevronRight,
+  ChevronLeft,
 } from 'lucide-react';
 
-interface CustomerProfile {
-  id: string;
-  email: string;
-  full_name: string | null;
-  company_name: string | null;
-  phone: string | null;
-  is_active: boolean;
-  created_at: string;
-  last_login_at: string | null;
-}
-
-interface CustomerWithOrders extends CustomerProfile {
-  order_count: number;
-  total_spent: number;
-  last_order_at: string | null;
-}
+const ITEMS_PER_PAGE = 20;
 
 const CustomersPage: React.FC = () => {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const toast = useToast();
-  const [search, setSearch] = useState('');
+  const [searchInput, setSearchInput] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteName, setInviteName] = useState('');
@@ -50,78 +43,45 @@ const CustomersPage: React.FC = () => {
     last_login_at: string | null;
   } | null>(null);
 
-  // Fetch all customer profiles with their order stats
-  const { data: customers = [], isLoading, refetch } = useQuery({
-    queryKey: ['customers-portal-list'],
-    queryFn: async (): Promise<CustomerWithOrders[]> => {
-      const { data: profiles, error } = await supabase
-        .from('customer_profiles')
-        .select('*')
-        .order('created_at', { ascending: false });
+  // Debounce search input -> query param, and reset back to page 1 whenever the search changes
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(searchInput.trim());
+      setCurrentPage(1);
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [searchInput]);
 
-      if (error) throw error;
-      if (!profiles?.length) return [];
-
-      // Pull real auth login times via SECURITY DEFINER function
-      // (auth.users.last_sign_in_at is the source of truth, not customer_profiles.last_login_at)
-      const { data: loginTimes } = await supabase.rpc('get_customer_last_login_times');
-      const loginMap = new Map<string, string | null>();
-      (loginTimes || []).forEach((row: any) => {
-        loginMap.set(row.customer_id, row.last_sign_in_at);
-      });
-
-      // Get order stats per customer email
-      const emails = profiles.map((p) => p.email);
-      const { data: orders } = await supabase
-        .from('orders')
-        .select('customer_email, order_amount, created_at')
-        .in('customer_email', emails);
-
-      return profiles.map((profile) => {
-        const customerOrders = (orders || []).filter(
-          (o) => o.customer_email === profile.email
-        );
-        const total_spent = customerOrders.reduce(
-          (sum, o) => sum + (o.order_amount || 0),
-          0
-        );
-        const last_order_at =
-          customerOrders.length > 0
-            ? customerOrders.sort(
-                (a, b) =>
-                  new Date(b.created_at).getTime() -
-                  new Date(a.created_at).getTime()
-              )[0].created_at
-            : null;
-
-        // Use auth-tracked login time as source of truth, fall back to profile column
-        const real_last_login = loginMap.get(profile.id) ?? profile.last_login_at;
-
-        return {
-          ...profile,
-          last_login_at: real_last_login,
-          order_count: customerOrders.length,
-          total_spent,
-          last_order_at,
-        };
-      });
-    },
+  // Paginated page of customer accounts + order stats. Only the current page's orders are
+  // fetched (not the whole orders table) — keepPreviousData avoids a flash of empty state
+  // while a new page loads.
+  const {
+    data: pageData,
+    isLoading,
+    isFetching,
+    refetch,
+  } = useQuery({
+    queryKey: ['customers-portal-page', currentPage, debouncedSearch],
+    queryFn: () => listCustomersPage({ page: currentPage, pageSize: ITEMS_PER_PAGE, search: debouncedSearch }),
+    placeholderData: keepPreviousData,
   });
 
-  const filtered = customers.filter((c) => {
-    const q = search.toLowerCase();
-    return (
-      c.email.toLowerCase().includes(q) ||
-      (c.full_name || '').toLowerCase().includes(q) ||
-      (c.company_name || '').toLowerCase().includes(q)
-    );
+  const customers = pageData?.customers || [];
+  const totalCount = pageData?.totalCount || 0;
+  const totalPages = Math.max(1, Math.ceil(totalCount / ITEMS_PER_PAGE));
+
+  // Global stats tiles — decoupled from pagination so paging doesn't refetch them.
+  const { data: statsSummary } = useQuery({
+    queryKey: ['customers-portal-stats'],
+    queryFn: getCustomerStatsSummary,
+    staleTime: 1000 * 60 * 5,
   });
 
   const stats = {
-    total: customers.length,
-    active: customers.filter((c) => c.last_login_at).length,
-    neverLoggedIn: customers.filter((c) => !c.last_login_at).length,
-    totalRevenue: customers.reduce((sum, c) => sum + c.total_spent, 0),
+    total: statsSummary?.totalCustomers ?? 0,
+    active: statsSummary?.portalActive ?? 0,
+    neverLoggedIn: statsSummary?.neverLoggedIn ?? 0,
+    totalRevenue: statsSummary?.totalRevenue ?? 0,
   };
 
   // Detect if email belongs to existing customer (debounced on email change)
@@ -271,13 +231,13 @@ const CustomersPage: React.FC = () => {
         <input
           type="text"
           placeholder="Search by name, email, or company..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
+          value={searchInput}
+          onChange={(e) => setSearchInput(e.target.value)}
           className="w-full pl-9 pr-4 py-2.5 bg-slate-800/50 border border-white/10 rounded-lg text-sm text-white placeholder-slate-500 focus:outline-none focus:border-brand-orange/50 transition-colors"
         />
-        {search && (
+        {searchInput && (
           <button
-            onClick={() => setSearch('')}
+            onClick={() => setSearchInput('')}
             className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white"
           >
             <X className="w-4 h-4" />
@@ -291,13 +251,13 @@ const CustomersPage: React.FC = () => {
           <div className="flex justify-center py-16">
             <Spinner />
           </div>
-        ) : filtered.length === 0 ? (
+        ) : customers.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16 text-slate-400">
             <Users className="w-12 h-12 mb-3 opacity-30" />
             <p className="text-sm">
-              {search ? 'No customers match your search' : 'No customers yet'}
+              {debouncedSearch ? 'No customers match your search' : 'No customers yet'}
             </p>
-            {!search && (
+            {!debouncedSearch && (
               <p className="text-xs mt-1 text-slate-400">
                 Customers appear here once they set up their portal account
               </p>
@@ -326,25 +286,27 @@ const CustomersPage: React.FC = () => {
                   <th className="text-left px-5 py-3 text-xs font-medium text-slate-400 uppercase tracking-wider">
                     Status
                   </th>
+                  <th className="px-5 py-3" />
                 </tr>
               </thead>
               <tbody className="divide-y divide-white/5">
-                {filtered.map((customer) => (
+                {customers.map((customer) => (
                   <tr
                     key={customer.id}
-                    className="hover:bg-white/3 transition-colors"
+                    onClick={() => navigate(`/portal-customers/${customer.id}`)}
+                    className="hover:bg-white/3 transition-colors cursor-pointer"
                   >
                     {/* Customer */}
                     <td className="px-5 py-4">
                       <div className="flex items-center gap-3">
                         <div className="w-9 h-9 rounded-full bg-brand-orange/20 flex items-center justify-center flex-shrink-0">
                           <span className="text-brand-orange text-sm font-semibold">
-                            {(customer.full_name || customer.email)[0].toUpperCase()}
+                            {(customer.fullName || customer.email)[0].toUpperCase()}
                           </span>
                         </div>
                         <div>
                           <p className="text-sm font-medium text-white">
-                            {customer.full_name || '—'}
+                            {customer.fullName || '—'}
                           </p>
                           <p className="text-xs text-slate-400 flex items-center gap-1">
                             <Mail className="w-3 h-3" />
@@ -357,7 +319,7 @@ const CustomersPage: React.FC = () => {
                     {/* Company */}
                     <td className="px-5 py-4 hidden md:table-cell">
                       <span className="text-sm text-slate-300">
-                        {customer.company_name || '—'}
+                        {customer.companyName || '—'}
                       </span>
                     </td>
 
@@ -366,7 +328,7 @@ const CustomersPage: React.FC = () => {
                       <div className="flex items-center justify-center gap-1.5">
                         <Package className="w-3.5 h-3.5 text-slate-400" />
                         <span className="text-sm font-medium text-white">
-                          {customer.order_count}
+                          {customer.orderCount}
                         </span>
                       </div>
                     </td>
@@ -374,30 +336,40 @@ const CustomersPage: React.FC = () => {
                     {/* Total Spent */}
                     <td className="px-5 py-4 text-right hidden lg:table-cell">
                       <span className="text-sm font-semibold text-green-400">
-                        {formatCurrency(customer.total_spent)}
+                        {formatCurrency(customer.totalSpent)}
                       </span>
                     </td>
 
                     {/* Last Login */}
                     <td className="px-5 py-4 hidden lg:table-cell">
                       <span className="text-sm text-slate-400">
-                        {formatDate(customer.last_login_at)}
+                        {formatDate(customer.portalLastLoginAt)}
                       </span>
                     </td>
 
                     {/* Status */}
                     <td className="px-5 py-4">
-                      {customer.last_login_at ? (
+                      {customer.portalLastLoginAt ? (
                         <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-green-500/10 text-green-400">
                           <span className="w-1.5 h-1.5 rounded-full bg-green-400" />
                           Active
                         </span>
-                      ) : (
+                      ) : customer.customerProfileId ? (
                         <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-amber-500/10 text-amber-400">
                           <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
                           Pending
                         </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-slate-500/10 text-slate-400">
+                          <span className="w-1.5 h-1.5 rounded-full bg-slate-400" />
+                          Guest
+                        </span>
                       )}
+                    </td>
+
+                    {/* View affordance */}
+                    <td className="px-5 py-4 text-right">
+                      <ChevronRight className="w-4 h-4 text-slate-500" />
                     </td>
                   </tr>
                 ))}
@@ -406,6 +378,33 @@ const CustomersPage: React.FC = () => {
           </div>
         )}
       </div>
+
+      {totalPages > 1 && (
+        <div className="flex justify-center items-center gap-4 pt-2">
+          <Button
+            variant="secondary"
+            disabled={currentPage === 1 || isFetching}
+            onClick={() => setCurrentPage((p) => Math.max(p - 1, 1))}
+            className="bg-slate-800 border border-slate-600 text-white hover:bg-slate-700 disabled:opacity-50"
+          >
+            <ChevronLeft className="w-4 h-4 mr-1" /> Previous
+          </Button>
+
+          <span className="text-slate-300 font-medium text-sm">
+            Page <span className="text-white font-bold">{currentPage}</span> of {totalPages}
+            <span className="text-slate-400 ml-2">({totalCount} customers)</span>
+          </span>
+
+          <Button
+            variant="secondary"
+            disabled={currentPage === totalPages || isFetching}
+            onClick={() => setCurrentPage((p) => Math.min(p + 1, totalPages))}
+            className="bg-slate-800 border border-slate-600 text-white hover:bg-slate-700 disabled:opacity-50"
+          >
+            Next <ChevronRight className="w-4 h-4 ml-1" />
+          </Button>
+        </div>
+      )}
 
       {/* Invite Modal */}
       {showInviteModal && (

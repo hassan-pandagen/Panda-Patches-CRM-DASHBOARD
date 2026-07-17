@@ -13,8 +13,9 @@ import { LEAD_SOURCE_OPTIONS, PATCHES_TYPE_OPTIONS, COUNTRY_OPTIONS } from '../.
 import { supabase } from '../../services/supabaseClient';
 import { logger } from '../../services/logger';
 import { getPremiumStatus, setPremiumStatus } from '../../services/customerFlagsService';
+import { getCustomerByEmail, Customer } from '../../services/customersService';
 import { sanitizeOrFilterValue, sanitizeIlikePattern } from '../../utils/supabaseFilters';
-import { History, UserCheck, ExternalLink, Copy, FileText, AlertTriangle, Crown } from 'lucide-react';
+import { History, UserCheck, ExternalLink, Copy, FileText, AlertTriangle, Crown, BadgeCheck } from 'lucide-react';
 
 const CANCELLATION_REASONS = [
   "Customer Ghosted / No Reply",
@@ -240,6 +241,7 @@ const OrderForm: React.FC<OrderFormProps> = ({
   // ✅ State for live customer check
   const [existingCustomer, setExistingCustomer] = useState<ExistingCustomerInfo | null>(null);
   const [isCheckingCustomer, setIsCheckingCustomer] = useState(false);
+  const [accountMatch, setAccountMatch] = useState<Customer | null>(null);
   // "Premium customer" tagging (CEO request: production applies extra QA/QC for these).
   // Auto-detected from an existing customer_flags row when a returning customer's email is
   // found; otherwise the agent can check it manually for a brand-new premium customer.
@@ -339,6 +341,26 @@ const OrderForm: React.FC<OrderFormProps> = ({
 
     return () => clearTimeout(handler);
   }, [watchEmail, watchPhone, isNewOrder, setValue, watch]);
+
+  // --- CUSTOMER ACCOUNT LOOKUP (the curated `customers` master record, separate from the
+  // raw order-history check above) — lets a new order auto-fill from the account's saved
+  // details instead of just the latest order's snapshot. ---
+  useEffect(() => {
+    if (!isNewOrder || !watchEmail || watchEmail.trim().length < 5) {
+      setAccountMatch(null);
+      return;
+    }
+    const handler = setTimeout(async () => {
+      try {
+        const match = await getCustomerByEmail(watchEmail.trim());
+        setAccountMatch(match);
+      } catch (err) {
+        logger.error('Error looking up customer account:', err);
+        setAccountMatch(null);
+      }
+    }, 750);
+    return () => clearTimeout(handler);
+  }, [watchEmail, isNewOrder]);
 
   // --- LIVE QUOTE CHECK (separate from customer check) ---
   // If this email/phone has an open quote, nudge the agent to use Convert to Order
@@ -449,6 +471,23 @@ const OrderForm: React.FC<OrderFormProps> = ({
 
     // Show success feedback
     success('Customer info copied!');
+  };
+
+  // Fill from the customer's saved account (the curated master record), not just their last order
+  const handleUseAccountInfo = () => {
+    if (!accountMatch) return;
+
+    if (accountMatch.fullName) {
+      setValue('customerName', accountMatch.fullName, { shouldDirty: true });
+    }
+    if (accountMatch.phone) {
+      setValue('customerPhone', accountMatch.phone, { shouldDirty: true });
+    }
+    if (accountMatch.defaultShippingAddress) {
+      setValue('shippingAddress', accountMatch.defaultShippingAddress, { shouldDirty: true });
+    }
+
+    success('Account info applied!');
   };
 
   // Determine if the user can edit financials.
@@ -597,6 +636,47 @@ const OrderForm: React.FC<OrderFormProps> = ({
                   >
                     <History className="w-3.5 h-3.5" />
                     History
+                  </a>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {accountMatch && (
+            <div className="md:col-span-2 mb-6 p-4 bg-emerald-500/10 border border-emerald-500/30 rounded-xl animate-in fade-in slide-in-from-top-2">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-emerald-500/20 rounded-lg text-emerald-400 flex-shrink-0">
+                    <BadgeCheck className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-bold text-white flex items-center gap-2 flex-wrap">
+                      Customer Account Found
+                    </h4>
+                    <p className="text-xs text-slate-400">
+                      {accountMatch.fullName || accountMatch.email}
+                      {accountMatch.companyName ? ` · ${accountMatch.companyName}` : ''}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 ml-11 sm:ml-0">
+                  <button
+                    type="button"
+                    onClick={handleUseAccountInfo}
+                    className="flex items-center gap-1.5 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 border border-emerald-500/30 rounded-lg text-xs font-bold text-white transition-all"
+                  >
+                    <Copy className="w-3.5 h-3.5" />
+                    Use Account Info
+                  </button>
+                  <a
+                    href={`/portal-customers/${accountMatch.id}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-1.5 px-4 py-2.5 bg-slate-900/50 hover:bg-emerald-600 border border-emerald-500/30 rounded-lg text-xs font-bold text-emerald-400 hover:text-white transition-all"
+                  >
+                    <ExternalLink className="w-3.5 h-3.5" />
+                    View Account
                   </a>
                 </div>
               </div>
