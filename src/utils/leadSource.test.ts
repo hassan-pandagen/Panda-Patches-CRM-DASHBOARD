@@ -35,18 +35,27 @@ describe('detectLeadSource — precedence', () => {
     expect(detectLeadSource({ attribution: { utm_source: 'chatgpt' } })).toBe('ChatGPT');
     expect(detectLeadSource({ attribution: { utm_source: 'chatgpt.com' } })).toBe('ChatGPT');
     expect(detectLeadSource({ attribution: { utm_source: 'instagram' } })).toBe('Instagram');
+    expect(detectLeadSource({ attribution: { utm_source: 'grok' } })).toBe('Grok');
   });
 
   it('resolves referrer hostnames, incl. AI search', () => {
     expect(detectLeadSource({ attribution: { referrer: 'https://chatgpt.com/' } })).toBe('ChatGPT');
     expect(detectLeadSource({ attribution: { referrer: 'https://www.google.com/search' } })).toBe('Google');
     expect(detectLeadSource({ attribution: { referrer: 'https://perplexity.ai/' } })).toBe('Perplexity');
+    expect(detectLeadSource({ attribution: { referrer: 'https://grok.com/' } })).toBe('Grok');
+    expect(detectLeadSource({ attribution: { referrer: 'https://x.ai/' } })).toBe('Grok');
+  });
+
+  it('classifies x.com/i/grok as Grok but plain x.com as Twitter', () => {
+    expect(detectLeadSource({ attribution: { referrer: 'https://x.com/i/grok' } })).toBe('Grok');
+    expect(detectLeadSource({ attribution: { referrer: 'https://x.com/somepost' } })).toBe('Twitter');
   });
 
   it('honors a manually-entered legacy lead_source', () => {
     expect(detectLeadSource({ lead_source: 'Perplexity' })).toBe('Perplexity');
     expect(detectLeadSource({ lead_source: 'Claude' })).toBe('Claude');
     expect(detectLeadSource({ lead_source: 'Facebook Ad' })).toBe('Facebook Ad');
+    expect(detectLeadSource({ lead_source: 'Grok' })).toBe('Grok');
   });
 
   it('falls back to Direct — never "Checkout" — when there is no signal', () => {

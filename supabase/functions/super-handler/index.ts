@@ -22,7 +22,6 @@ const PRODUCTION_MANAGER_EMAILS = [
   'lilcustomize550@gmail.com',
 ];
 
-const PVC_VENDOR_EMAIL = 'Arsalan.ali.khan.85@gmail.com';
 const DESIGN_TEAM_CC = 'design@pandapatches.com';
 const HELLO_EMAIL = 'hello@pandapatches.com';
 const LANCE_EMAIL = 'lance@pandapatches.com';
@@ -37,8 +36,9 @@ const LANCE_EMAIL = 'lance@pandapatches.com';
 const CHECKOUT_AGENTS = ['web_checkout'];
 
 function getInternalEmails(patchType?: string): string[] {
+  // PVC: no internal email since the vendor change (2026-07) — customer emails only.
   if (patchType?.toLowerCase() === 'pvc') {
-    return [PVC_VENDOR_EMAIL];
+    return [];
   }
   return PRODUCTION_MANAGER_EMAILS;
 }
@@ -124,6 +124,16 @@ serve(async (req) => {
       return new Response(JSON.stringify({ skipped: true, reason: 'incomplete', missing, invited: isInsert }), { status: 200 });
     }
 
+    // No internal recipients for this patch type (PVC since the vendor change) → nothing
+    // to send. Checked BEFORE the claim so production_notified_at stays null — no email
+    // was sent, and the customer email is unaffected (it goes out via the normal paths).
+    const patchType = record.patches_type || '';
+    const internalEmails = getInternalEmails(patchType);
+    if (internalEmails.length === 0) {
+      console.log(`⏭️ No internal recipients for patch type "${patchType}" — skipping production email for ${orderNumber}`);
+      return new Response(JSON.stringify({ skipped: true, reason: 'no internal recipients for patch type', invited: isInsert }), { status: 200 });
+    }
+
     const admin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
     // ✅ ATOMIC CLAIM **before** sending — prevents the duplicate-email race.
@@ -148,8 +158,6 @@ serve(async (req) => {
     }
 
     // ✅ We won the claim → build + send the internal production email
-    const patchType = record.patches_type || '';
-    const internalEmails = getInternalEmails(patchType);
     const primaryRecipient = internalEmails[0];
     const ccEmails = [
       DESIGN_TEAM_CC,

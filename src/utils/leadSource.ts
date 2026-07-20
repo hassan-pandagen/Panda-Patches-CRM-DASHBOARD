@@ -13,7 +13,7 @@ export type LeadSource =
   | 'Facebook Ad' | 'Google Ad' | 'Bing Ad' | 'TikTok Ad'
   | 'Facebook' | 'Instagram' | 'Google' | 'Bing' | 'DuckDuckGo' | 'Brave' | 'TikTok' | 'YouTube'
   | 'LinkedIn' | 'Twitter' | 'Reddit' | 'Snapchat' | 'WhatsApp'
-  | 'ChatGPT' | 'Perplexity' | 'Claude' | 'Gemini' | 'Copilot' | 'Meta AI' | 'DeepSeek'
+  | 'ChatGPT' | 'Perplexity' | 'Claude' | 'Gemini' | 'Copilot' | 'Meta AI' | 'DeepSeek' | 'Grok'
   | 'Email' | 'Tawk.to' | 'Direct' | 'Repeat Order' | 'Referral' | 'Other';
 
 const REFERRER_MAP: Array<[RegExp, LeadSource]> = [
@@ -25,6 +25,8 @@ const REFERRER_MAP: Array<[RegExp, LeadSource]> = [
   [/copilot\.microsoft\.com|bing\.com\/chat/i,'Copilot'],
   [/meta\.ai/i,                               'Meta AI'],
   [/deepseek\.com/i,                          'DeepSeek'],
+  // Grok listed before Social so x.com/i/grok wins over the Twitter x.com pattern
+  [/grok\.com|\bx\.ai\b|x\.com\/i\/grok/i,    'Grok'],
 
   // Social
   [/facebook\.com|fb\.com|m\.facebook/i,       'Facebook'],
@@ -77,6 +79,8 @@ const UTM_MAP: Record<string, LeadSource> = {
   metaai:     'Meta AI',
   'meta.ai':  'Meta AI',
   deepseek:   'DeepSeek',
+  grok:       'Grok',
+  xai:        'Grok',
 };
 
 export interface AttributionLike {
@@ -162,6 +166,7 @@ export function detectLeadSource(input: AttributionLike): LeadSource {
       'copilot': 'Copilot',
       'meta ai': 'Meta AI', 'metaai': 'Meta AI', 'meta.ai': 'Meta AI',
       'deepseek': 'DeepSeek',
+      'grok': 'Grok', 'xai': 'Grok', 'x.ai': 'Grok',
       'email': 'Email', 'newsletter': 'Email',
       'repeat order': 'Repeat Order', 'repeat': 'Repeat Order',
       'referral': 'Referral',
@@ -227,6 +232,7 @@ export function getSourceBadgeClasses(source: LeadSource): string {
     'Copilot':      'bg-blue-400/15 text-blue-200 border-blue-400/30',
     'Meta AI':      'bg-blue-600/15 text-blue-200 border-blue-600/30',
     'DeepSeek':     'bg-indigo-500/15 text-indigo-300 border-indigo-500/30',
+    'Grok':         'bg-zinc-400/15 text-zinc-200 border-zinc-400/30',
     'Email':        'bg-amber-500/15 text-amber-300 border-amber-500/30',
     'Tawk.to':      'bg-blue-600/15 text-blue-300 border-blue-600/30',
     'Direct':       'bg-purple-500/15 text-purple-300 border-purple-500/30',

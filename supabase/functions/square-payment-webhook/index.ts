@@ -78,11 +78,13 @@ function resolveLeadSource(attribution: any): string {
     reddit: 'Reddit', snapchat: 'Snapchat', email: 'Email', newsletter: 'Email', whatsapp: 'WhatsApp',
     chatgpt: 'ChatGPT', 'chatgpt.com': 'ChatGPT', perplexity: 'Perplexity', claude: 'Claude',
     gemini: 'Gemini', copilot: 'Copilot', metaai: 'Meta AI', 'meta.ai': 'Meta AI', deepseek: 'DeepSeek',
+    grok: 'Grok', xai: 'Grok',
   };
   const REFERRER_MAP: Array<[RegExp, string]> = [
     [/chat\.?openai\.com|chatgpt\.com/i, 'ChatGPT'], [/perplexity\.ai/i, 'Perplexity'],
     [/claude\.ai|anthropic\.com/i, 'Claude'], [/gemini\.google\.com|bard\.google\.com/i, 'Gemini'],
     [/copilot\.microsoft\.com|bing\.com\/chat/i, 'Copilot'], [/meta\.ai/i, 'Meta AI'], [/deepseek\.com/i, 'DeepSeek'],
+    [/grok\.com|\bx\.ai\b|x\.com\/i\/grok/i, 'Grok'], // before the Twitter x.com pattern so x.com/i/grok wins
     [/facebook\.com|fb\.com|m\.facebook/i, 'Facebook'], [/instagram\.com/i, 'Instagram'],
     [/tiktok\.com/i, 'TikTok'], [/youtube\.com|youtu\.be/i, 'YouTube'],
     [/linkedin\.com|lnkd\.in/i, 'LinkedIn'], [/twitter\.com|x\.com|t\.co/i, 'Twitter'],

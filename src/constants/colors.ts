@@ -56,6 +56,7 @@ export const SOURCE_COLORS: Record<string, string> = {
     'Copilot': '#60A5FA', // Microsoft Light Blue
     'Meta AI': '#0866FF', // Meta Blue
     'DeepSeek': '#4D6BFE', // DeepSeek Blue
+    'Grok': '#A1A1AA', // Grok/xAI (brand is black — zinc for dark-bg visibility)
     // Other
     'Email': '#F59E0B', // Amber
     'Direct': '#8B5CF6', // Purple

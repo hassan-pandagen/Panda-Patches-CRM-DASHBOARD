@@ -89,9 +89,6 @@ const PRODUCTION_MANAGER_EMAILS = [
   'lilcustomize550@gmail.com'
 ];
 
-// ✅ PVC Vendor Email (separate routing)
-const PVC_VENDOR_EMAIL = 'Arsalan.ali.khan.85@gmail.com';
-
 // ✅ Design Team CC (for internal emails only)
 const DESIGN_TEAM_CC = 'design@pandapatches.com';
 
@@ -126,9 +123,10 @@ const fireLeadEvent = (orderId: number, eventName: 'Lead' | 'InitiateCheckout') 
 
 // ✅ Get internal team emails based on patch type
 const getInternalEmails = (patchType?: string): string[] => {
-  // PVC orders go only to Arsalan (vendor)
+  // PVC: no internal email since the vendor change (2026-07) — customer emails only.
+  // Every internal-email call site is guarded with internalEmails.length > 0.
   if (patchType?.toLowerCase() === 'pvc') {
-    return [PVC_VENDOR_EMAIL];
+    return [];
   }
   // All other patch types go to production team
   return PRODUCTION_MANAGER_EMAILS;
