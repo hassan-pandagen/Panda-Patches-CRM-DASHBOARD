@@ -1,12 +1,15 @@
 // supabase/functions/square-payment-webhook/index.ts
 // Receives Square payment.updated webhook events.
 //
-// Two flows:
+// Flows:
 //   A) Token-based (payment form): reference_id is a UUID token
 //      -> create new order from payment_form_tokens data + attribution
 //      -> mark token as used
+//   A2) Website "Buy Now" checkout: reference_id is a UUID token (possibly prefixed, e.g.
+//      "WEB-<uuid>") not found in payment_form_tokens -> square_pending_orders fallback
 //   B) Order-based (existing order): reference_id is PP-XXXXX or numeric order id
 //      -> update orders.amount_paid
+//   C) Quote-based: reference_id is "QUOTE-<id>" -> create order from quote
 //
 // Idempotency is at the PAYMENT level: Square emits MULTIPLE payment.updated events (each with its
 // own event_id) for the SAME payment, so per-event_id dedup is not enough — we claim payment.id once.
