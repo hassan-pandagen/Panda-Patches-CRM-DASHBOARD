@@ -445,6 +445,10 @@ Deno.serve(async (req: Request) => {
               instructions:     od.instructions || null,
               shipping_address: od.shipping_address || null,
               artwork_url:      od.artwork_url || null,
+              // Also surface the uploaded artwork as a customer attachment: the CRM order
+              // page renders customer_attachment_urls / mockup_urls, not artwork_url, so
+              // without this the design looks "missing" on website-checkout orders.
+              customer_attachment_urls: od.artwork_url ? [od.artwork_url] : [],
               delivery_option:  od.delivery_option || null,
               rush_date:        od.rush_date || null,
               website_addons:   Array.isArray(od.website_addons) ? od.website_addons : [],
