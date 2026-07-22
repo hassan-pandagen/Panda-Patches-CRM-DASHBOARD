@@ -74,6 +74,14 @@ const getFileName = (url: string) => {
 const getEmailSubject = (templateId: string, data: any): string => {
   const orderNumber = data.order_number || data.quote_number || 'N/A';
 
+  // Customer remake subject depends on WHO is at fault. "We're Making It Right" owns a
+  // mistake — right for quality/handling remakes, wrong for a carrier loss or force
+  // majeure, where the message is "you're getting a replacement", not "we failed".
+  const customerRemakeSubjects: Record<string, string> = {
+    'Package Lost': `Lost in Transit — Your Replacement Is On the Way - ${orderNumber}`,
+    'Force Majeure': `Your Order Is Being Remade - ${orderNumber}`,
+  };
+
   const subjects: Record<string, string> = {
     // Quote templates
     'd-fcd19c2e3d2d42a4b0e1bf3087179c7d': `Your Custom Patch Quote - ${orderNumber}`,
@@ -97,7 +105,7 @@ const getEmailSubject = (templateId: string, data: any): string => {
     'INTERNAL_PRODUCTION_COMPLETE': `[INTERNAL] Production Complete - ${orderNumber}`,
 
     // Remake templates
-    'CUSTOMER_REMAKE': `We're Making It Right - ${orderNumber}${data.remake_reason ? ` (${data.remake_reason})` : ''}`,
+    'CUSTOMER_REMAKE': customerRemakeSubjects[data.remake_reason] || `We're Making It Right - ${orderNumber}${data.remake_reason ? ` (${data.remake_reason})` : ''}`,
     'INTERNAL_REMAKE': `[URGENT] Remake Required - ${orderNumber}${data.remake_reason ? ` — ${data.remake_reason}` : ''}`,
 
     // Payment templates
@@ -131,7 +139,7 @@ const getEmailSubject = (templateId: string, data: any): string => {
 const getTemplateMessage = (templateId: string, data?: any): string => {
   const remakeReason = data?.remake_reason || '';
   const customerRemakeMessages: Record<string, string> = {
-    'Package Lost': 'We are sorry to inform you that your package was lost during shipping. This is not the experience we want for our customers. We are remaking your custom patches at absolutely no extra cost to you and will ensure secure delivery this time.',
+    'Package Lost': 'Unfortunately, the shipping carrier lost your package in transit — this was a delivery failure, not an issue with your patches. We are already remaking your custom patches at absolutely no extra cost to you, and your replacement will ship with tracking and secure delivery. We are sorry for the delay this causes.',
     'Quality Issues': 'We sincerely apologize — our production team did not meet the quality standards you deserved. This is entirely our fault, and we take full responsibility. We are remaking your custom patches at absolutely no extra cost to you.',
     'Handling Issues': 'We apologize for the handling issues with your order. Your patches were damaged and did not arrive in the condition we intended. We are remaking your custom patches at absolutely no extra cost to you.',
     'Force Majeure': 'Due to unforeseen circumstances beyond our control, your order was affected. We sincerely apologize for the inconvenience. We are remaking your custom patches at absolutely no extra cost to you.',
