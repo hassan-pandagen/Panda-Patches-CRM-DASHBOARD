@@ -56,6 +56,7 @@ describe('detectLeadSource — precedence', () => {
     expect(detectLeadSource({ lead_source: 'Claude' })).toBe('Claude');
     expect(detectLeadSource({ lead_source: 'Facebook Ad' })).toBe('Facebook Ad');
     expect(detectLeadSource({ lead_source: 'Grok' })).toBe('Grok');
+    expect(detectLeadSource({ lead_source: 'Google AI Overview' })).toBe('Google AI Overview');
   });
 
   it('falls back to Direct — never "Checkout" — when there is no signal', () => {

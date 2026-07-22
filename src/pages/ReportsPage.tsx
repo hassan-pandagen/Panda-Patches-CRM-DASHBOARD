@@ -778,7 +778,7 @@ const LeadSourceTooltip = ({ active, payload, totalRevenue }: any) => {
 // Group individual lead sources into clickable super-categories for the "Performance by Source" report.
 const SOURCE_CATEGORY: Record<string, string> = {
   ChatGPT: 'AI / LLMs', Perplexity: 'AI / LLMs', Claude: 'AI / LLMs', Gemini: 'AI / LLMs',
-  Copilot: 'AI / LLMs', 'Meta AI': 'AI / LLMs', DeepSeek: 'AI / LLMs', Grok: 'AI / LLMs',
+  Copilot: 'AI / LLMs', 'Meta AI': 'AI / LLMs', DeepSeek: 'AI / LLMs', Grok: 'AI / LLMs', 'Google AI Overview': 'AI / LLMs',
   Facebook: 'Social', Instagram: 'Social', TikTok: 'Social', YouTube: 'Social',
   LinkedIn: 'Social', Twitter: 'Social', Reddit: 'Social', Snapchat: 'Social',
   Google: 'Search', Bing: 'Search', DuckDuckGo: 'Search', Brave: 'Search',

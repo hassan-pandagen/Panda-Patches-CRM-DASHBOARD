@@ -82,6 +82,8 @@ function resolveLeadSource(attribution: any): string {
     chatgpt: 'ChatGPT', 'chatgpt.com': 'ChatGPT', perplexity: 'Perplexity', claude: 'Claude',
     gemini: 'Gemini', copilot: 'Copilot', metaai: 'Meta AI', 'meta.ai': 'Meta AI', deepseek: 'DeepSeek',
     grok: 'Grok', xai: 'Grok',
+    aioverview: 'Google AI Overview', ai_overview: 'Google AI Overview',
+    googleaioverview: 'Google AI Overview', sge: 'Google AI Overview',
   };
   const REFERRER_MAP: Array<[RegExp, string]> = [
     [/chat\.?openai\.com|chatgpt\.com/i, 'ChatGPT'], [/perplexity\.ai/i, 'Perplexity'],

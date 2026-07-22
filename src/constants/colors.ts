@@ -57,6 +57,7 @@ export const SOURCE_COLORS: Record<string, string> = {
     'Meta AI': '#0866FF', // Meta Blue
     'DeepSeek': '#4D6BFE', // DeepSeek Blue
     'Grok': '#A1A1AA', // Grok/xAI (brand is black — zinc for dark-bg visibility)
+    'Google AI Overview': '#4285F4', // Google Blue
     // Other
     'Email': '#F59E0B', // Amber
     'Direct': '#8B5CF6', // Purple

@@ -47,6 +47,7 @@ export const LEAD_SOURCE_OPTIONS: string[] = [
   'DeepSeek',
   'Copilot',
   'Grok',
+  'Google AI Overview',
   'Tawk.to',
   'Referral',
   'Repeat Order',
