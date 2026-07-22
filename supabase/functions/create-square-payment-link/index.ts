@@ -184,9 +184,16 @@ Deno.serve(async (req: Request) => {
 
     const checkoutUrl = squareJson.payment_link?.url;
     if (!checkoutUrl) throw new Error("No checkout URL in Square response");
+    const paymentLinkId = squareJson.payment_link?.id ?? null;
 
     // Audit trail for orders (quotes don't exist yet as an order)
     if (orderRowId) {
+      // Store the Square link id so the order carries a stable payment reference. (The webhook
+      // still resolves payments via the Square order's reference_id = order_number — never by
+      // amount or email — so deposit + balance links both credit the same order.)
+      if (paymentLinkId) {
+        await admin.from("orders").update({ square_payment_link_id: paymentLinkId }).eq("id", orderRowId);
+      }
       await admin.from("order_history").insert({
         order_id:      orderRowId,
         user_email:    staff.email,
@@ -203,6 +210,7 @@ Deno.serve(async (req: Request) => {
       url: checkoutUrl,
       amount: body.amount,
       order_number: refNumber,
+      payment_link_id: paymentLinkId,
       customer_email: customerEmail || "",
       customer_name: customerName || "",
     });

@@ -619,10 +619,15 @@ export const createOrder = async (orderData: any, userEmail: string) => {
     // Step 7: Map to frontend format
     const mappedOrder = mapDbToOrder(data);
 
-    // Step 8: Trigger welcome email
-    triggerStatusEmail(mappedOrder, OrderStatus.NEW_ORDER).catch(err => {
-      logger.error("[Email Service] Email trigger failed (background)", err);
-    });
+    // Step 8: Trigger welcome email — but NOT for a held "pending payment" order (Add Order /
+    // Re-order, wait-for-payment). Those fire their NEW_ORDER emails only once the Square webhook
+    // confirms payment and flips the order to NEW_ORDER; emailing here would notify the customer +
+    // production for an order that has not been paid or released to production yet.
+    if (mappedOrder.status !== OrderStatus.PENDING_PAYMENT) {
+      triggerStatusEmail(mappedOrder, OrderStatus.NEW_ORDER).catch(err => {
+        logger.error("[Email Service] Email trigger failed (background)", err);
+      });
+    }
 
     // Step 8b: Customer portal account provisioning is handled server-side by the
     // provision_customer_account() trigger (AFTER INSERT on orders → invite-customer), so it

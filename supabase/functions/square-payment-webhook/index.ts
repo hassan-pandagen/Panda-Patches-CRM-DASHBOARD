@@ -161,6 +161,19 @@ function canonicalize(value: unknown, canon: string[], alias: Record<string, str
 const normalizePatchType = (v: unknown) => canonicalize(v, PATCH_TYPE_CANON, PATCH_TYPE_ALIAS);
 const normalizeBacking = (v: unknown) => canonicalize(v, BACKING_CANON, BACKING_ALIAS);
 
+// Internal production-email recipients (mirrors orderService.ts / super-handler). Used when a
+// held "wait for payment" order (Add Order / Re-order) is released to production on payment —
+// createOrder suppressed the production email at creation, so the webhook fires it on release.
+const PRODUCTION_MANAGER_EMAILS = ['lilcustomerzdesign@gmail.com', 'lilcustomize550@gmail.com'];
+const DESIGN_TEAM_CC = 'design@pandapatches.com';
+const HELLO_EMAIL = 'hello@pandapatches.com';
+const LANCE_EMAIL = 'lance@pandapatches.com';
+function getInternalEmails(patchType?: string): string[] {
+  // PVC: no internal email since the vendor change (2026-07) — customer emails only.
+  if (patchType?.toLowerCase() === 'pvc') return [];
+  return PRODUCTION_MANAGER_EMAILS;
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method !== 'POST') return new Response('Method not allowed', { status: 405 });
 
@@ -678,11 +691,14 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    // FLOW B: Existing order (PP-XXXXX or numeric id)
+    // FLOW B: Existing order (PP-XXXXX or numeric id). Covers agent balance links AND the
+    // Add Order / Re-order flow (CL75FF): a held PENDING_PAYMENT order is RELEASED to
+    // production on payment (deposit or full); a process-without-payment order (already
+    // NEW_ORDER + unpaid) just has its payment recorded, status untouched.
     const isOrderNumber = referenceId.startsWith('PP-');
     const { data: order, error: orderErr } = await admin
       .from('orders')
-      .select('id, order_number, amount_paid, order_amount, attribution')
+      .select('id, order_number, amount_paid, order_amount, attribution, status, payment_status, customer_email, customer_name, customer_confirmation_sent_at, patches_type, patches_quantity, design_name, design_size, design_backing, border_type, instructions, shipping_address, is_urgent, rush_date, sales_agent, created_at, production_notified_at')
       .eq(isOrderNumber ? 'order_number' : 'id', isOrderNumber ? referenceId : parseInt(referenceId, 10))
       .single();
 
@@ -692,8 +708,16 @@ Deno.serve(async (req: Request) => {
       return new Response(JSON.stringify({ received: true, error: 'order not found' }), { status: 200 });
     }
 
-    const newAmountPaid  = (order.amount_paid || 0) + paidAmount;
-    const updatePayload: any = { amount_paid: newAmountPaid };
+    const total          = order.order_amount || 0;
+    const newAmountPaid   = (order.amount_paid || 0) + paidAmount;
+    const fullyPaid       = total > 0 && newAmountPaid >= total - 0.01;
+    const nextPaymentStatus = fullyPaid ? 'paid' : (newAmountPaid > 0 ? 'deposit_paid' : (order.payment_status || 'pending'));
+    // A held "wait for payment" order is released to production the moment any payment lands
+    // (deposit is enough, per owner spec). Process-without-payment orders are already NEW_ORDER.
+    const releasing       = order.status === 'PENDING_PAYMENT';
+
+    const updatePayload: any = { amount_paid: newAmountPaid, payment_status: nextPaymentStatus };
+    if (releasing) updatePayload.status = 'NEW_ORDER';
     const existingAttr   = order.attribution || {};
     if (!existingAttr.source) {
       updatePayload.attribution = { ...existingAttr, source: 'square_payment' };
@@ -714,11 +738,91 @@ Deno.serve(async (req: Request) => {
       field_changed: 'amount_paid',
       old_value: String(order.amount_paid || 0), new_value: String(newAmountPaid),
     }).then(() => {}, () => {});
+    if (releasing) {
+      await admin.from('order_history').insert({
+        order_id: order.id, user_email: 'square_webhook',
+        field_changed: 'status', old_value: 'PENDING_PAYMENT', new_value: 'NEW_ORDER',
+      }).then(() => {}, () => {});
+    }
 
-    console.log(`[square-payment-webhook] order ${order.order_number}: +$${paidAmount} -> $${newAmountPaid}/${order.order_amount}`);
+    // CUSTOMER "Payment Received" email — exactly once, guarded by customer_confirmation_sent_at.
+    if (order.customer_email) {
+      try {
+        const { data: custStamped } = await admin
+          .from('orders')
+          .update({ customer_confirmation_sent_at: new Date().toISOString() })
+          .eq('id', order.id)
+          .is('customer_confirmation_sent_at', null)
+          .select('id');
+        if (custStamped && custStamped.length > 0) {
+          await fetch(`${SUPABASE_URL}/functions/v1/send-email`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${SERVICE_KEY}` },
+            body: JSON.stringify({
+              to: order.customer_email,
+              template_id: 'CUSTOMER_PAYMENT_CONFIRMATION',
+              dynamic_data: {
+                customer_name: order.customer_name || 'there',
+                order_number: order.order_number,
+                amount_paid: `$${paidAmount.toFixed(2)}`,
+                total_amount: `$${(total || paidAmount).toFixed(2)}`,
+                portal_action_url: 'https://pandapatches.com/login',
+              },
+            }),
+          });
+        }
+      } catch (custErr) {
+        console.error(`[square-payment-webhook] customer email failed for ${order.order_number}:`, custErr);
+      }
+    }
+
+    // INTERNAL production email — ONLY when RELEASING a held order (createOrder suppressed it
+    // for PENDING_PAYMENT). Process-without-payment orders already got it at creation, so we
+    // never resend. Guarded by production_notified_at as defense-in-depth.
+    if (releasing && !order.production_notified_at) {
+      const internalEmails = getInternalEmails(order.patches_type || '');
+      if (internalEmails.length > 0) {
+        await admin.from('orders').update({ production_notified_at: new Date().toISOString() }).eq('id', order.id);
+        const primaryRecipient = internalEmails[0];
+        const ccEmails = [DESIGN_TEAM_CC, ...internalEmails.slice(1), HELLO_EMAIL, LANCE_EMAIL].filter(Boolean).join(',');
+        try {
+          await fetch(`${SUPABASE_URL}/functions/v1/send-email`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${SERVICE_KEY}` },
+            body: JSON.stringify({
+              to: primaryRecipient,
+              template_id: 'INTERNAL_NEW_ORDER',
+              cc: ccEmails,
+              dynamic_data: {
+                customer_name: order.customer_name || 'Unknown Customer',
+                order_number: order.order_number,
+                order_date: order.created_at ? new Date(order.created_at).toLocaleDateString() : new Date().toLocaleDateString(),
+                design_name: order.design_name || '',
+                quantity: order.patches_quantity || '',
+                patch_type: order.patches_type || '',
+                backing: order.design_backing || '',
+                size: order.design_size || '',
+                border_type: order.border_type || '',
+                instructions: order.instructions || '',
+                shipping_address: order.shipping_address || '',
+                order_link: `https://portal.pandapatches.com/order/${order.order_number}`,
+                sales_agent_name: order.sales_agent || HELLO_EMAIL,
+                is_urgent: order.is_urgent || false,
+                rush_date: order.rush_date ? new Date(order.rush_date).toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }) : null,
+                has_winner: false, has_gallery: false, winner_file: null, gallery_files: [],
+              },
+            }),
+          });
+        } catch (prodErr) {
+          console.error(`[square-payment-webhook] production email failed for ${order.order_number}:`, prodErr);
+        }
+      }
+    }
+
+    console.log(`[square-payment-webhook] order ${order.order_number}: +$${paidAmount} -> $${newAmountPaid}/${total} (${nextPaymentStatus}${releasing ? ', released to production' : ''})`);
 
     return new Response(
-      JSON.stringify({ received: true, order_number: order.order_number, paid: paidAmount, new_amount_paid: newAmountPaid }),
+      JSON.stringify({ received: true, order_number: order.order_number, paid: paidAmount, new_amount_paid: newAmountPaid, payment_status: nextPaymentStatus, released: releasing }),
       { status: 200, headers: { 'Content-Type': 'application/json' } }
     );
 
