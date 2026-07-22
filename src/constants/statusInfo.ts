@@ -21,6 +21,11 @@ export interface StatusInfo {
 }
 
 export const STATUS_INFO_MAP: Record<OrderStatus, StatusInfo> = {
+  [OrderStatus.PENDING_PAYMENT]: {
+    label: 'Pending Payment',
+    icon: Clock,
+    color: 'text-amber-400 bg-amber-500/10 border-amber-500/20',
+  },
   [OrderStatus.NEW_ORDER]: {
     label: 'New Order',
     icon: Sparkles,

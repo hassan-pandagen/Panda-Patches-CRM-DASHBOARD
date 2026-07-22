@@ -16,6 +16,10 @@ export enum UserRole {
 }
 
 export enum OrderStatus {
+  // Held state for "wait for payment" orders (Add Order / Re-order flow): the order exists
+  // and is tracked, but is NOT released to production until Square confirms payment. Excluded
+  // from the production queue/board; flipped to NEW_ORDER by the webhook once paid.
+  PENDING_PAYMENT = 'PENDING_PAYMENT',
   NEW_ORDER = 'NEW_ORDER',
   REVISION_REQUESTED = 'REVISION_REQUESTED',
   AWAITING_APPROVAL = 'AWAITING_CUSTOMER_APPROVAL',
