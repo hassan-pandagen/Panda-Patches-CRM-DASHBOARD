@@ -24,6 +24,7 @@ import {
   Tooltip,
   ResponsiveContainer,
   Cell,
+  LabelList,
   LineChart,
   Line,
   CartesianGrid,
@@ -141,8 +142,13 @@ const CustomTooltip: React.FC<TooltipProps<ValueType, NameType>> = ({
     if (!firstItem) return null;
 
     const title = label || firstItem.name || "Data";
+    // Some charts bucket a long tail into an "Other" row and attach the grouped items
+    // as `breakdown` — when present, list them so "Other" isn't a black box.
+    const breakdown = (firstItem.payload as any)?.breakdown as
+      | { name: string; count: number }[]
+      | undefined;
     return (
-      <div className="p-4 bg-slate-800/80 backdrop-blur-md border border-white/10 rounded-xl shadow-lg z-50">
+      <div className="p-4 bg-slate-800/80 backdrop-blur-md border border-white/10 rounded-xl shadow-lg z-50 max-w-xs">
         <p className="label text-base font-semibold text-white">{`${title}`}</p>
         <p className="intro text-sm text-cyan-400">{`${
           firstItem.name || "Value"
@@ -151,6 +157,22 @@ const CustomTooltip: React.FC<TooltipProps<ValueType, NameType>> = ({
             ? firstItem.value.toLocaleString()
             : firstItem.value
         }`}</p>
+        {breakdown && breakdown.length > 0 && (
+          <div className="mt-2 pt-2 border-t border-white/10 space-y-1">
+            <p className="text-[11px] uppercase tracking-wider text-slate-400">Includes</p>
+            {breakdown.slice(0, 12).map((b) => (
+              <div key={b.name} className="flex justify-between gap-4 text-xs text-slate-300">
+                <span className="truncate">{b.name}</span>
+                <span className="text-slate-400 tabular-nums">{b.count.toLocaleString()}</span>
+              </div>
+            ))}
+            {breakdown.length > 12 && (
+              <p className="text-[11px] text-slate-500">
+                +{breakdown.length - 12} more type{breakdown.length - 12 === 1 ? "" : "s"}
+              </p>
+            )}
+          </div>
+        )}
       </div>
     );
   }
@@ -1321,7 +1343,9 @@ const ProductionReportComponent: React.FC<ReportComponentProps> = ({
     }));
   }, [orders]);
 
-  const patchTypeStats = useMemo(() => {
+  const patchTypeStats = useMemo<
+    Array<{ name: string; count: number; breakdown?: Array<{ name: string; count: number }> }>
+  >(() => {
     const stats: Record<string, number> = {};
     orders.forEach((o) => {
       const type = o.patchesType || "Unknown";
@@ -1332,11 +1356,13 @@ const ProductionReportComponent: React.FC<ReportComponentProps> = ({
       .sort((a, b) => b.count - a.count);
     // Industry standard for categorical bar charts: show the top N + bucket the long tail
     // into "Other" so a 30-type list stays readable instead of cramming every bar in.
+    // Keep the bucketed items on `breakdown` so the tooltip can explain what "Other" holds.
     const TOP_N = 10;
     if (sorted.length <= TOP_N + 1) return sorted;
     const top = sorted.slice(0, TOP_N);
-    const otherCount = sorted.slice(TOP_N).reduce((s, d) => s + d.count, 0);
-    return [...top, { name: "Other", count: otherCount }];
+    const otherItems = sorted.slice(TOP_N);
+    const otherCount = otherItems.reduce((s, d) => s + d.count, 0);
+    return [...top, { name: "Other", count: otherCount, breakdown: otherItems }];
   }, [orders]);
 
   return (
@@ -1454,7 +1480,7 @@ const ProductionReportComponent: React.FC<ReportComponentProps> = ({
             <BarChart
               data={patchTypeStats}
               layout="vertical"
-              margin={{ left: 30, right: 20 }}
+              margin={{ left: 30, right: 44 }}
             >
               <XAxis type="number" stroke="#94A3B8" hide />
               <YAxis
@@ -1477,6 +1503,14 @@ const ProductionReportComponent: React.FC<ReportComponentProps> = ({
                     fill={PATCH_TYPE_COLORS[entry.name] || "#64748b"}
                   />
                 ))}
+                {/* Direct value labels — read the count without hovering */}
+                <LabelList
+                  dataKey="count"
+                  position="right"
+                  fill="#e2e8f0"
+                  fontSize={12}
+                  fontWeight={600}
+                />
               </Bar>
             </BarChart>
           </ResponsiveContainer>
