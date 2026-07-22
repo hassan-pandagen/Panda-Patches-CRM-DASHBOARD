@@ -955,6 +955,28 @@ const LeadSourceReportComponent: React.FC<ReportComponentProps> = ({
       );
     }, 0);
 
+    // Median days between a customer's consecutive orders (days-to-reorder).
+    const reorderGaps: number[] = [];
+    repeatCustomers.forEach((custOrders) => {
+      const sorted = [...custOrders].sort((a, b) =>
+        new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+      );
+      for (let i = 1; i < sorted.length; i++) {
+        const days = (new Date(sorted[i].createdAt).getTime() - new Date(sorted[i - 1].createdAt).getTime()) / (1000 * 60 * 60 * 24);
+        if (isFinite(days) && days >= 0) reorderGaps.push(days);
+      }
+    });
+    reorderGaps.sort((a, b) => a - b);
+    const medianDaysToReorder = reorderGaps.length === 0
+      ? 0
+      : reorderGaps.length % 2 === 1
+        ? reorderGaps[(reorderGaps.length - 1) / 2]
+        : (reorderGaps[reorderGaps.length / 2 - 1] + reorderGaps[reorderGaps.length / 2]) / 2;
+
+    // Reorder revenue share = repeat-order revenue as a % of all revenue in the window.
+    const allRevenue = orders.reduce((s, o) => s + (o.orderAmount || 0), 0);
+    const reorderRevenueShare = allRevenue > 0 ? (repeatRevenue / allRevenue) * 100 : 0;
+
     // Build detailed customer list with their order info
     const detailedCustomers = repeatCustomers.map((customerOrders) => {
       const sortedOrders = [...customerOrders].sort((a, b) =>
@@ -990,6 +1012,8 @@ const LeadSourceReportComponent: React.FC<ReportComponentProps> = ({
       totalRepeatOrders,
       repeatCustomerRate,
       repeatRevenue,
+      medianDaysToReorder,
+      reorderRevenueShare,
       detailedCustomers,
     };
   }, [orders]);
@@ -1055,6 +1079,30 @@ const LeadSourceReportComponent: React.FC<ReportComponentProps> = ({
           </div>
           <p className="text-3xl font-bold text-white">${repeatCustomerMetrics.repeatRevenue.toLocaleString()}</p>
           <p className="text-xs text-slate-400 mt-1">from returning customers</p>
+        </div>
+
+        <div className="bg-slate-900/40 backdrop-blur-xl border border-white/10 rounded-2xl p-6 shadow-xl">
+          <div className="flex items-center gap-3 mb-2">
+            <div className="p-2 bg-sky-500/20 rounded-lg">
+              <Calendar className="w-5 h-5 text-sky-400" />
+            </div>
+            <h5 className="text-sm font-medium text-slate-400">Median Days to Reorder</h5>
+          </div>
+          <p className="text-3xl font-bold text-white">
+            {repeatCustomerMetrics.medianDaysToReorder > 0 ? Math.round(repeatCustomerMetrics.medianDaysToReorder) : '—'}
+          </p>
+          <p className="text-xs text-slate-400 mt-1">between a customer's orders</p>
+        </div>
+
+        <div className="bg-slate-900/40 backdrop-blur-xl border border-white/10 rounded-2xl p-6 shadow-xl">
+          <div className="flex items-center gap-3 mb-2">
+            <div className="p-2 bg-emerald-500/20 rounded-lg">
+              <TrendingUp className="w-5 h-5 text-emerald-400" />
+            </div>
+            <h5 className="text-sm font-medium text-slate-400">Reorder Revenue Share</h5>
+          </div>
+          <p className="text-3xl font-bold text-white">{repeatCustomerMetrics.reorderRevenueShare.toFixed(1)}%</p>
+          <p className="text-xs text-slate-400 mt-1">of revenue from reorders</p>
         </div>
       </div>
 
