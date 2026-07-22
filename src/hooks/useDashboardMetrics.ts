@@ -23,15 +23,18 @@ export const useDashboardMetrics = (orders: Order[]) => {
         const amountPaid = Number(order.amountPaid) || 0;
         // Calculate remaining instead of relying on potentially stale amountRemaining
         const amountRemaining = Math.max(0, orderAmount - amountPaid);
-        // Pending Payment = not fully paid AND not cancelled/refunded
-        const isPending = amountRemaining > 0.01 &&
+        // PENDING_PAYMENT orders are held (Add Order / Re-order, wait-for-payment) and not yet
+        // confirmed — exclude them from revenue and pending-AR metrics until Square releases them.
+        const isHeld = order.status === OrderStatus.PENDING_PAYMENT;
+        // Pending Payment = not fully paid AND not cancelled/refunded/held
+        const isPending = amountRemaining > 0.01 && !isHeld &&
           order.status !== OrderStatus.CANCELLED &&
           order.status !== OrderStatus.REFUNDED;
-        const isUrgentAndActive = order.isUrgent && ![OrderStatus.COMPLETED, OrderStatus.SHIPPED, OrderStatus.DELIVERED].includes(order.status as OrderStatus);
+        const isUrgentAndActive = order.isUrgent && !isHeld && ![OrderStatus.COMPLETED, OrderStatus.SHIPPED, OrderStatus.DELIVERED].includes(order.status as OrderStatus);
 
-        // Count revenue from valid orders only (exclude cancelled AND refunded)
+        // Count revenue from valid orders only (exclude cancelled, refunded AND held)
         // Refunded orders should not count towards revenue as the money was returned
-        if (order.status !== OrderStatus.CANCELLED && order.status !== OrderStatus.REFUNDED) {
+        if (!isHeld && order.status !== OrderStatus.CANCELLED && order.status !== OrderStatus.REFUNDED) {
           acc.totalRevenue += orderAmount;
           acc.totalCollected += amountPaid;
         }

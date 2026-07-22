@@ -1708,7 +1708,10 @@ const ReportsPage: React.FC = () => {
           .from("orders")
           .select("*")
           .gte("created_at", localMidnightISO(dateRange.startDate))
-          .lt("created_at", localNextDayISO(dateRange.endDate));
+          .lt("created_at", localNextDayISO(dateRange.endDate))
+          // Held Add Order / Re-order orders (wait-for-payment) are not confirmed revenue or
+          // production yet — exclude them from every report until Square releases them.
+          .neq("status", "PENDING_PAYMENT");
 
         // Filter by sales agent for sales agents only (PRODUCTION can see all orders)
         if (role !== UserRole.ADMIN && role !== UserRole.PRODUCTION && user?.email) {
