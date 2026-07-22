@@ -21,6 +21,7 @@ const PATCH_TYPES = [
   'Embroidered Patches', 'Woven Patches', 'PVC Patches',
   'Leather Patches', 'Chenille Patches', 'Custom 3D Embroidered Transfers',
   'Heat Transfer', 'Screen Print', 'Sublimation Patch',
+  'DTF Prints', 'Silicone Patches',
 ];
 
 const BACKING_OPTIONS = ['Iron-on', 'Velcro', 'Sew-on', 'No Backing', 'Adhesive'];
@@ -35,6 +36,7 @@ interface Token {
   patches_type: string | null;
   patches_quantity: number | null;
   order_amount: number | null;
+  deposit_amount: number | null;
   is_deposit: boolean | null;
   expires_at: string;
   used_at: string | null;
@@ -65,6 +67,7 @@ const PaymentFormPage: React.FC = () => {
     design_backing:   '',
     instructions:     '',
     order_amount:     '',
+    deposit_amount:   '',
     is_deposit:       false,
   });
 
@@ -88,12 +91,26 @@ const PaymentFormPage: React.FC = () => {
 
   const createToken = useMutation({
     mutationFn: async () => {
-      if (!form.order_amount || parseFloat(form.order_amount) <= 0) {
-        throw new Error('Amount is required');
+      const total = parseFloat(form.order_amount);
+      if (!form.order_amount || total <= 0) {
+        throw new Error('Order total is required');
+      }
+      // Deposit: charge only part now; order_amount stays the full total so the created
+      // order shows Total / Paid / Remaining correctly (no manual fix — see PP-11132).
+      let depositAmount: number | null = null;
+      if (form.is_deposit) {
+        depositAmount = parseFloat(form.deposit_amount);
+        if (!form.deposit_amount || isNaN(depositAmount) || depositAmount <= 0) {
+          throw new Error('Deposit amount is required');
+        }
+        if (depositAmount > total) {
+          throw new Error('Deposit cannot exceed the order total');
+        }
       }
       const payload: any = {
         created_by:   user?.email || 'unknown',
-        order_amount: parseFloat(form.order_amount),
+        order_amount: total,
+        deposit_amount: depositAmount,
         is_deposit:   form.is_deposit, // agent flags this charge as a deposit (partial payment)
         allow_deposit: false,
         deposit_pct_options: null,
@@ -168,7 +185,7 @@ const PaymentFormPage: React.FC = () => {
   const removeImage = (url: string) => setMockupUrls(prev => prev.filter(u => u !== url));
 
   const resetForm = () => {
-    setForm({ customer_name: '', customer_email: '', customer_phone: '', patches_type: '', patches_quantity: '', design_name: '', design_size: '', design_backing: '', instructions: '', order_amount: '', is_deposit: false });
+    setForm({ customer_name: '', customer_email: '', customer_phone: '', patches_type: '', patches_quantity: '', design_name: '', design_size: '', design_backing: '', instructions: '', order_amount: '', deposit_amount: '', is_deposit: false });
     setMockupUrls([]);
     setGeneratedToken(null);
     setShowForm(false);
@@ -214,7 +231,7 @@ const PaymentFormPage: React.FC = () => {
               {/* Amount — primary field, prominent */}
               <div className="mb-5">
                 <label className="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">
-                  Amount to Charge <span className="text-red-400">*</span>
+                  Order Total <span className="text-red-400">*</span>
                 </label>
                 <div className="relative max-w-xs">
                   <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 text-lg font-semibold">$</span>
@@ -230,7 +247,7 @@ const PaymentFormPage: React.FC = () => {
                   />
                 </div>
                 <p className="text-xs text-slate-400 mt-1.5">
-                  This is exactly what the customer will pay — deposit, full, or any amount you agree on.
+                  The full value of the order. For a full payment this is what the customer pays; for a deposit, set the deposit amount below.
                 </p>
 
                 {/* Deposit toggle — marks the charge as a partial payment on the customer page */}
@@ -248,6 +265,33 @@ const PaymentFormPage: React.FC = () => {
                     </span>
                   </span>
                 </label>
+
+                {/* Deposit amount — only when the charge is a deposit. This is what the
+                    customer pays now; Order Total above stays the full order value. */}
+                {form.is_deposit && (
+                  <div className="mt-3 max-w-xs">
+                    <label className="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">
+                      Deposit to Collect Now <span className="text-red-400">*</span>
+                    </label>
+                    <div className="relative">
+                      <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 text-lg font-semibold">$</span>
+                      <input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        value={form.deposit_amount}
+                        onChange={e => setForm(f => ({ ...f, deposit_amount: e.target.value }))}
+                        placeholder="0.00"
+                        className="w-full pl-8 pr-4 py-3 bg-slate-800 border border-amber-500/40 focus:border-amber-500 text-white text-xl font-bold rounded-xl focus:outline-none transition-colors"
+                      />
+                    </div>
+                    <p className="text-xs text-slate-400 mt-1.5">
+                      Charged now.{form.order_amount && form.deposit_amount && parseFloat(form.order_amount) > parseFloat(form.deposit_amount)
+                        ? ` Remaining balance $${(parseFloat(form.order_amount) - parseFloat(form.deposit_amount)).toFixed(2)} collected separately later.`
+                        : ' The remaining balance is collected separately later.'}
+                    </p>
+                  </div>
+                )}
               </div>
 
               {/* Customer + Order details in a compact grid */}
@@ -264,7 +308,7 @@ const PaymentFormPage: React.FC = () => {
                     <label className="block text-xs text-slate-400 mb-1">Patch Type</label>
                     <select value={form.patches_type} onChange={e => setForm(f => ({ ...f, patches_type: e.target.value }))}
                       className="w-full bg-slate-800 border border-slate-700 text-white text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-brand-orange">
-                      <option value="">— Customer selects —</option>
+                      <option value="">Select patch type…</option>
                       {PATCH_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
                     </select>
                   </div>
@@ -322,11 +366,11 @@ const PaymentFormPage: React.FC = () => {
               <div className="mt-5 flex gap-3">
                 <button
                   onClick={() => createToken.mutate()}
-                  disabled={createToken.isPending || uploading || !form.order_amount || parseFloat(form.order_amount) <= 0}
+                  disabled={createToken.isPending || uploading || !form.order_amount || parseFloat(form.order_amount) <= 0 || (form.is_deposit && (!form.deposit_amount || parseFloat(form.deposit_amount) <= 0))}
                   className="flex-1 flex items-center justify-center gap-2 py-3 bg-brand-orange hover:bg-orange-500 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-xl text-sm font-semibold transition-colors"
                 >
                   <Link className="w-4 h-4" />
-                  {createToken.isPending ? 'Generating…' : `Generate $${parseFloat(form.order_amount || '0').toFixed(2)} Payment Link`}
+                  {createToken.isPending ? 'Generating…' : `Generate $${(form.is_deposit ? parseFloat(form.deposit_amount || '0') : parseFloat(form.order_amount || '0')).toFixed(2)} Payment Link`}
                 </button>
                 <button onClick={resetForm} className="px-4 py-3 border border-white/10 text-slate-400 hover:text-white rounded-xl text-sm transition-colors">
                   Cancel
@@ -379,7 +423,7 @@ const PaymentFormPage: React.FC = () => {
 
               <div className="flex gap-3">
                 <button
-                  onClick={() => { setGeneratedToken(null); setForm(f => ({ ...f, order_amount: '' })); }}
+                  onClick={() => { setGeneratedToken(null); setForm(f => ({ ...f, order_amount: '', deposit_amount: '', is_deposit: false })); }}
                   className="flex-1 py-2.5 border border-white/10 text-slate-400 hover:text-white rounded-xl text-sm transition-colors"
                 >
                   Create Another Link

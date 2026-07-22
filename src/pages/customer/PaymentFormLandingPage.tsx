@@ -98,6 +98,7 @@ const PATCH_TYPES = [
   'Embroidered Patches', 'Woven Patches', 'PVC Patches',
   'Leather Patches', 'Chenille Patches', 'Custom 3D Embroidered Transfers',
   'Heat Transfer', 'Screen Print', 'Sublimation Patch',
+  'DTF Prints', 'Silicone Patches',
 ];
 
 const BACKING_OPTIONS = ['Iron-on', 'Velcro', 'Sew-on', 'No Backing', 'Adhesive'];
@@ -120,9 +121,14 @@ const PaymentForm: React.FC<{ tokenData: any }> = ({ tokenData: tokenDataRaw }) 
 
   const [errors, setErrors] = useState<Record<string, string>>({});
 
-  const orderAmount  = parseFloat(form.order_amount) || 0;
-  const chargeAmount = orderAmount; // agent sets exact amount
+  const orderAmount  = parseFloat(form.order_amount) || 0; // full order total
   const isDeposit    = !!tokenData?.is_deposit; // agent flagged this charge as a deposit
+  const depositAmount = tokenData?.deposit_amount ? Number(tokenData.deposit_amount) : 0;
+  // Charge only the deposit when this is a deposit link; order_amount stays the full total
+  // so the created order shows Total / Paid / Remaining correctly. Legacy deposit links
+  // (created before deposit_amount existed) have no deposit_amount → charge the full amount
+  // as they did before, so nothing is ever over-charged.
+  const chargeAmount = isDeposit && depositAmount > 0 ? depositAmount : orderAmount;
 
   const validate = () => {
     const e: Record<string, string> = {};
