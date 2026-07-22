@@ -16,7 +16,7 @@ import Spinner from '../components/ui/Spinner';
 import Button from '../components/ui/Button';
 import PremiumBadge from '../components/ui/PremiumBadge';
 import CustomerOrderHistory from '../components/customers/CustomerOrderHistory';
-import { ArrowLeft, Crown, AlertCircle, Save, X } from 'lucide-react';
+import { ArrowLeft, Crown, AlertCircle, Save, X, Plus, RotateCcw } from 'lucide-react';
 
 interface FormValues {
   fullName: string;
@@ -101,6 +101,7 @@ const CustomerAccountPage: React.FC = () => {
   // Warn (don't silently allow) if the edited email already belongs to a different account.
   const watchEmail = watch('email');
   const [emailCollision, setEmailCollision] = useState<Customer | null>(null);
+  const [showReorderPicker, setShowReorderPicker] = useState(false);
   useEffect(() => {
     if (!customer) return;
     const trimmed = (watchEmail || '').trim().toLowerCase();
@@ -173,6 +174,23 @@ const CustomerAccountPage: React.FC = () => {
 
   const handleGoBack = () => navigate('/portal-customers');
 
+  // Add Order: open the builder pre-filled with this customer, in the payment flow.
+  const handleAddOrder = () => navigate('/new-order', {
+    state: {
+      paymentFlow: true,
+      prefillCustomer: {
+        fullName: customer?.fullName, email: customer?.email, phone: customer?.phone,
+        defaultShippingAddress: customer?.defaultShippingAddress,
+        country: customer?.country, companyName: customer?.companyName,
+      },
+    },
+  });
+  // Re-order: clone a chosen past order at its original prices (is_reorder = true).
+  const handleReorder = (order: Order) => {
+    setShowReorderPicker(false);
+    navigate('/new-order', { state: { paymentFlow: true, duplicateOrder: order, isReorder: true } });
+  };
+
   if (isLoading) {
     return (
       <div className="h-screen flex items-center justify-center">
@@ -238,7 +256,65 @@ const CustomerAccountPage: React.FC = () => {
             )}
           </div>
           <p className="text-slate-400 text-sm">{customer.email}</p>
+
+          <div className="flex flex-wrap gap-2 mt-4">
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={handleAddOrder}
+              className="bg-brand-orange/90 hover:bg-brand-orange text-white border-transparent"
+            >
+              <Plus size={14} /> Add Order
+            </Button>
+            <Button
+              variant="secondary"
+              size="sm"
+              disabled={orders.length === 0}
+              onClick={() => setShowReorderPicker(true)}
+              title={orders.length === 0 ? 'No past orders to re-order' : 'Clone a past order'}
+              className="bg-slate-700/40 text-slate-200 border-slate-600 hover:bg-slate-700/60"
+            >
+              <RotateCcw size={14} /> Re-order
+            </Button>
+          </div>
         </motion.div>
+
+        {/* Re-order picker — clone a past order at its original prices */}
+        {showReorderPicker && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={() => setShowReorderPicker(false)}>
+            <div className="bg-slate-900 border border-white/10 rounded-2xl max-w-lg w-full max-h-[80vh] overflow-hidden flex flex-col shadow-2xl" onClick={e => e.stopPropagation()}>
+              <div className="p-4 border-b border-white/10 flex items-center justify-between">
+                <h3 className="text-white font-semibold">Re-order — pick an order to clone</h3>
+                <button onClick={() => setShowReorderPicker(false)} className="text-slate-400 hover:text-white p-1"><X size={18} /></button>
+              </div>
+              <div className="overflow-y-auto p-2">
+                {orders.length === 0 ? (
+                  <p className="p-4 text-sm text-slate-400">No past orders for this customer.</p>
+                ) : (
+                  orders.map(o => (
+                    <button
+                      key={o.id}
+                      onClick={() => handleReorder(o)}
+                      className="w-full text-left p-3 rounded-xl hover:bg-white/5 border border-transparent hover:border-white/10 transition-colors"
+                    >
+                      <div className="flex justify-between items-center">
+                        <span className="text-white font-medium">{o.orderNumber}</span>
+                        <span className="text-slate-400 text-xs">{o.createdAt ? new Date(o.createdAt).toLocaleDateString() : ''}</span>
+                      </div>
+                      <div className="text-xs text-slate-400 mt-0.5 flex justify-between gap-3">
+                        <span className="truncate">{[o.patchesQuantity, o.patchesType, o.designName].filter(Boolean).join(' · ')}</span>
+                        <span className="text-slate-300 shrink-0">${(o.orderAmount || 0).toLocaleString()}</span>
+                      </div>
+                    </button>
+                  ))
+                )}
+              </div>
+              <div className="p-3 border-t border-white/10 text-[11px] text-slate-400">
+                Cloned at the original prices — review quantities and costs before sending.
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* DETAILS PANEL */}
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="relative group">
