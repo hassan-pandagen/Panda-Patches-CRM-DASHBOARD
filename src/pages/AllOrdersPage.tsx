@@ -931,6 +931,14 @@ const AllOrdersPage: React.FC = () => {
                                                             </span>
                                                         ) : (
                                                             <div className="flex flex-col items-end gap-1">
+                                                                {/* Explicit Unpaid / Partial pill so process-without-payment and deposit orders read at a glance */}
+                                                                <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold border ${
+                                                                    (order.amountPaid ?? 0) <= 0.01
+                                                                        ? 'bg-amber-500/15 text-amber-300 border-amber-500/30'
+                                                                        : 'bg-sky-500/15 text-sky-300 border-sky-500/30'
+                                                                }`}>
+                                                                    {(order.amountPaid ?? 0) <= 0.01 ? 'Unpaid' : 'Partial'}
+                                                                </span>
                                                                 <span className="text-amber-400 font-bold text-sm md:text-base tracking-tight">
                                                                     ${(order.amountRemaining ?? 0).toLocaleString()}
                                                                 </span>
