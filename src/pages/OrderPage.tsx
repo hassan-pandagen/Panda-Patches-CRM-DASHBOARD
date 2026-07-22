@@ -652,7 +652,7 @@ const OrderPage: React.FC = () => {
                             <Button
                                 variant="secondary"
                                 size="md"
-                                onClick={() => navigate('/new-order', { state: { duplicateOrder: order } })}
+                                onClick={() => navigate('/new-order', { state: { paymentFlow: true, duplicateOrder: order, isReorder: true } })}
                                 className="bg-blue-500/10 text-blue-400 border-blue-500/20 hover:bg-blue-500/20 hover:border-blue-500/30"
                             >
                                 <Copy size={16} />
