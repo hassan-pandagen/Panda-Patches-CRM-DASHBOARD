@@ -177,6 +177,9 @@ export const mapDbToOrder = (data: any): Order => {
     designBacking: data.designBacking ?? data.design_backing,
     borderType: data.borderType ?? data.border_type,
     instructions: data.instructions,
+    priorityMockup: data.priorityMockup ?? data.priority_mockup ?? false,
+    loyaltyCodeUsed: data.loyaltyCodeUsed ?? data.loyalty_code_used ?? null,
+    loyaltyDiscountPercent: data.loyaltyDiscountPercent ?? data.loyalty_discount_percent ?? null,
 
     orderAmount, amountPaid, productionCost, shippingCost, marketingCost,
     profit,

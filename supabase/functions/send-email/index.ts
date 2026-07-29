@@ -14,6 +14,11 @@ const ALLOWED_ORIGINS = [
   'https://www.pandapatches.com',                   // marketing website (www)
 ];
 
+// The write-a-review invite deep-link (NOT the /review/ public profile the site links to).
+// This is what the MASTER v3 review-invitation emails send customers to. If the owner wants
+// it to match the site's public profile instead, change to /review/pandapatches.com.
+const TRUSTPILOT_REVIEW_URL = 'https://www.trustpilot.com/evaluate/pandapatches.com';
+
 function isAllowedOrigin(origin: string): boolean {
   return ALLOWED_ORIGINS.includes(origin) || origin.startsWith('http://localhost:');
 }
@@ -70,9 +75,127 @@ const getFileName = (url: string) => {
   } catch { return 'file'; }
 };
 
+// 1b. Helper: First name from customer_name (for the personal review emails)
+const getFirstName = (data: any): string => {
+  const full = String(data?.first_name || data?.customer_name || '').trim();
+  if (!full) return 'there';
+  return full.split(/\s+/)[0];
+};
+
+// 1c. Helper: Is this a personal plain-text review email? (MASTER v3 review program)
+const isPlainReviewTemplate = (templateId: string): boolean =>
+  templateId === 'CUSTOMER_REVIEW_INVITE' || templateId === 'CUSTOMER_REVIEW_REMINDER';
+
+// 1d. Helper: Plain-text body for the review invite + its single reminder.
+// Compliance (Trustpilot + FTC 2024): no incentive, no review-gating — everyone who was
+// delivered gets the same ask, and the "reply to us" option sits ALONGSIDE the review link,
+// never as a satisfaction-based fork that routes unhappy customers away from the review.
+const buildReviewText = (templateId: string, data: any): string => {
+  const firstName = getFirstName(data);
+  if (templateId === 'CUSTOMER_REVIEW_REMINDER') {
+    return [
+      `Hi ${firstName},`,
+      ``,
+      `Just following up once on your recent Panda Patches order — whether the patches turned out great or not quite right, a short review on Trustpilot genuinely helps other people find us:`,
+      TRUSTPILOT_REVIEW_URL,
+      ``,
+      `This is the only reminder I'll send. Either way, just reply to this email if there's anything we can do for you.`,
+      ``,
+      `— Imran, Panda Patches`,
+    ].join('\n');
+  }
+  return [
+    `Hi ${firstName},`,
+    ``,
+    `Your Panda Patches order arrived a few days ago, and I wanted to check in personally — did the patches come out the way you hoped?`,
+    ``,
+    `If you have a minute, a short review on Trustpilot would mean a lot to our small team:`,
+    TRUSTPILOT_REVIEW_URL,
+    ``,
+    `Either way, just reply to this email if there's anything at all we can do for you.`,
+    ``,
+    `— Imran, Panda Patches`,
+  ].join('\n');
+};
+
+// 1e. Helper: Loyalty program emails (CL86F1). Plain-text, from Imran (like the review
+// emails). E1/E2 = customer award; E3 = drafted to Imran's inbox for one-click send (Gold
+// deserves a human touch); E4 = Bronze-expiry reminder; E5 = near-threshold nudge (marketing).
+const LOYALTY_EMAIL_TEMPLATES = [
+  'LOYALTY_BRONZE_AWARDED', 'LOYALTY_SILVER_AWARDED', 'LOYALTY_GOLD_DRAFT',
+  'LOYALTY_BRONZE_EXPIRY', 'LOYALTY_NEAR_THRESHOLD',
+];
+const isLoyaltyEmailTemplate = (templateId: string): boolean =>
+  LOYALTY_EMAIL_TEMPLATES.includes(templateId);
+
+const buildLoyaltyText = (templateId: string, data: any): string => {
+  const firstName = getFirstName(data);
+  const code = data.code || '';
+  const expiry = data.expiry || '';
+  const amountToNext = data.amount_to_next || '';
+  const nextTier = data.next_tier || 'the next tier';
+  const topBenefit = data.top_benefit || 'more perks';
+  const phone = data.phone || '(302) 250-4340';
+
+  switch (templateId) {
+    case 'LOYALTY_BRONZE_AWARDED':
+      return [
+        `Hi ${firstName},`, ``,
+        `Your orders with us just passed $1,000 — that makes you a Bronze member.`,
+        `As a thank-you, here's a personal 5% code for your next order: ${code}`,
+        `It's tied to this email address and valid until ${expiry}.`, ``,
+        `Thanks for building with us — it genuinely means a lot.`, ``,
+        `— Imran, Founder, Panda Patches`,
+      ].join('\n');
+    case 'LOYALTY_SILVER_AWARDED':
+      return [
+        `Hi ${firstName},`, ``,
+        `You've passed $5,000 in orders with us — welcome to Silver.`,
+        `From now on: 5% off standard pricing with your personal code ${code}, free Velcro`,
+        `backing on every order (normally $30), and your mockups jump the queue.`,
+        `No signup, no expiry — it's just yours now.`, ``,
+        `— Imran`,
+      ].join('\n');
+    case 'LOYALTY_GOLD_DRAFT':
+      // Goes to Imran's inbox, not the customer. Ready-to-send draft + who it's for.
+      return [
+        `${firstName} (${data.customer_email || ''}) just crossed $10,000 → GOLD.`,
+        `Their Gold code: ${code}. Send them this personally (one-click):`,
+        ``, `------------------------------------------------------------`,
+        `Hi ${firstName},`, ``,
+        `You've passed $10,000 with us, which puts you in a very small group.`,
+        `Gold means: 10% off standard pricing (${code}), a free rush upgrade every`,
+        `quarter, and me — you now have my direct line for anything: ${phone}.`, ``,
+        `Thank you. Customers like you are why we get to do this.`, ``,
+        `— Imran`,
+        `------------------------------------------------------------`,
+      ].join('\n');
+    case 'LOYALTY_BRONZE_EXPIRY':
+      return [
+        `Hi ${firstName},`, ``,
+        `Quick heads-up — the Bronze code from your last milestone (${code}) expires`,
+        `${expiry}. If a reorder's on the horizon, this is a good month for it.`, ``,
+        `— Imran`,
+      ].join('\n');
+    case 'LOYALTY_NEAR_THRESHOLD':
+      return [
+        `Hi ${firstName},`, ``,
+        `Small heads-up: your next order likely tips you into ${nextTier} status —`,
+        `you're ${amountToNext} away. That unlocks ${topBenefit}.`,
+        `Nothing to do; it happens automatically when you cross it.`, ``,
+        `— Imran`, ``,
+        `(Not interested in these occasional nudges? Reply "no nudges" and I'll switch`,
+        `them off — you'll still get all your order updates.)`,
+      ].join('\n');
+    default:
+      return '';
+  }
+};
+
 // 2. Helper: Get Email Subject based on Template ID
 const getEmailSubject = (templateId: string, data: any): string => {
   const orderNumber = data.order_number || data.quote_number || 'N/A';
+  const firstName = getFirstName(data);
 
   // Customer remake subject depends on WHO is at fault. "We're Making It Right" owns a
   // mistake — right for quality/handling remakes, wrong for a carrier loss or force
@@ -95,6 +218,17 @@ const getEmailSubject = (templateId: string, data: any): string => {
     'CUSTOMER_SHIPPED': `Your Order Has Shipped! - ${orderNumber}`,
     'CUSTOMER_DELIVERED': `Order Delivered - ${orderNumber}`,
     'CUSTOMER_FEEDBACK_REQUEST': `How Was Your Experience? - ${orderNumber}`,
+
+    // Review-generation program (MASTER v3) — personal, from Imran; no order number in subject
+    'CUSTOMER_REVIEW_INVITE': `Did the patches come out right, ${firstName}?`,
+    'CUSTOMER_REVIEW_REMINDER': `One more note about your patches, ${firstName}`,
+
+    // Loyalty program (CL86F1) — personal, from Imran
+    'LOYALTY_BRONZE_AWARDED': `You just earned Bronze status with us, ${firstName}`,
+    'LOYALTY_SILVER_AWARDED': `Silver status unlocked — Velcro's on us from now on`,
+    'LOYALTY_GOLD_DRAFT': `[DRAFT — send to customer] Gold status for ${firstName} (${data.customer_email || ''})`,
+    'LOYALTY_BRONZE_EXPIRY': `Your 5% code expires in 30 days`,
+    'LOYALTY_NEAR_THRESHOLD': `You're ${data.amount_to_next || ''} away from ${data.next_tier || 'the next tier'}`,
     'CUSTOMER_REFUND_ISSUED': `Refund Processed - ${orderNumber}`,
 
     // Internal templates
@@ -470,6 +604,19 @@ const buildEmailHTML = (templateId: string, data: any): string => {
       </tr>
     </tbody>
   </table>
+
+  ${data.loyalty_tier && !templateId.includes('INTERNAL') ? `
+  <!-- LOYALTY DISCOUNT LINE (CL86F1 E6) -->
+  <table class="module" role="module" data-type="text" border="0" cellpadding="0" cellspacing="0" width="100%" style="table-layout: fixed;">
+    <tbody>
+      <tr>
+        <td style="padding:12px 20px 12px 20px; line-height:22px; text-align:center; background-color:#fff8e1; border-left: 4px solid #fb6e1d;" height="100%" valign="top" bgcolor="#fff8e1" role="module-content">
+          <span style="font-size: 15px; font-family: 'lucida sans unicode', 'lucida grande', sans-serif; color: #7a4a00; text-transform: capitalize;">Your ${escapeHtml(data.loyalty_tier)} discount was applied</span><span style="font-size: 15px; font-family: 'lucida sans unicode', 'lucida grande', sans-serif; color: #7a4a00;"> — thanks for being a member.</span>
+        </td>
+      </tr>
+    </tbody>
+  </table>
+  ` : ''}
 
   ${templateId.includes('INTERNAL') && data.sales_agent_name ? `
   <!-- SALES AGENT INFO (Internal Emails Only) -->
@@ -1319,6 +1466,24 @@ serve(async (req) => {
     // Add regular attachments (downloadable files)
     if (emailAttachments.length > 0) {
       zeptomailPayload.attachments = emailAttachments;
+    }
+
+    // MASTER v3 review program: the review invite + its single reminder are personal,
+    // plain-text notes from the founder — not the branded HTML shell. Override everything
+    // the block above assembled so none of it (the branded from/name, the dual reply-to,
+    // the auto hello@ CC, the HTML body, inline images, attachments) leaks into them.
+    // From sales@ as "Imran at Panda Patches", one real reply-to, a text/plain body only.
+    if (isPlainReviewTemplate(template_id) || isLoyaltyEmailTemplate(template_id)) {
+      const IMRAN_FROM = { address: 'sales@pandapatches.com', name: 'Imran at Panda Patches' };
+      zeptomailPayload.from = IMRAN_FROM;
+      zeptomailPayload.reply_to = [IMRAN_FROM];
+      zeptomailPayload.textbody = isLoyaltyEmailTemplate(template_id)
+        ? buildLoyaltyText(template_id, processedData)
+        : buildReviewText(template_id, processedData);
+      delete zeptomailPayload.htmlbody;
+      delete zeptomailPayload.cc;
+      delete zeptomailPayload.inline_images;
+      delete zeptomailPayload.attachments;
     }
 
     // Send email via ZeptoMail REST API

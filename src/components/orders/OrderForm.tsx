@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useForm } from 'react-hook-form';
+import LoyaltyOrderPanel from './LoyaltyOrderPanel';
 import { useAuth } from '../../contexts/AuthContext';
 import { Order, OrderStatus, UserRole } from '../../types';
 import Button from '../ui/Button';
@@ -88,6 +89,9 @@ export interface SaveData {
   // ✅ Add these
   reasonCategory: string;
   reasonDetails: string;
+  // Loyalty program (CL86F1) — recorded when the agent applies a code; does not change orderAmount.
+  loyaltyCodeUsed?: string | null;
+  loyaltyDiscountPercent?: number | null;
 }
 
 export interface ChangeDetail {
@@ -185,6 +189,8 @@ const transformOrderToFormData = (order: Order | null | undefined): SaveData => 
     productionCost: order.productionCost || 0,
     shippingCost: order.shippingCost || 0,
     marketingCost: order.marketingCost || 0,
+    loyaltyCodeUsed: order.loyaltyCodeUsed ?? null,
+    loyaltyDiscountPercent: order.loyaltyDiscountPercent ?? null,
     
     // Ensure arrays are arrays
     mockupUrls: Array.isArray(order.mockupUrls) ? order.mockupUrls : [],
@@ -881,6 +887,18 @@ const OrderForm: React.FC<OrderFormProps> = ({
 
       {(showFinancialsProp || canEditFinancials) && (
         <FormSectionWrapper title="Financials">
+          {/* Loyalty (CL86F1) — informational; records the applied code, never changes Order Amount */}
+          <input type="hidden" {...register('loyaltyCodeUsed')} />
+          <input type="hidden" {...register('loyaltyDiscountPercent')} />
+          <LoyaltyOrderPanel
+            customerEmail={watch('customerEmail')}
+            orderAmount={watch('orderAmount', 0) || 0}
+            appliedCode={watch('loyaltyCodeUsed')}
+            onApply={(code, percent) => {
+              setValue('loyaltyCodeUsed', code, { shouldDirty: true });
+              setValue('loyaltyDiscountPercent', percent, { shouldDirty: true });
+            }}
+          />
           <div className="grid grid-cols-2 md:grid-cols-4 gap-5 md:gap-8">
             <div>
               <label className="block text-xs text-slate-400">Order Amount</label>

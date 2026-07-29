@@ -553,6 +553,12 @@ const OrderPage: React.FC = () => {
                                 Order {order.orderNumber}
                                 <AttributionQualityBadge quality={getAttributionQualityFromOrder(order)} />
                                 {premiumFlag?.isPremium && <PremiumBadge size="md" />}
+                                {/* Priority mockup — Silver/Gold customer (CL86F1 Task 3). No financial data; safe for production. */}
+                                {order.priorityMockup && (
+                                  <span title="Silver/Gold loyalty customer — prioritize the mockup" className="inline-flex items-center rounded-full border font-semibold text-xs px-2.5 py-1 bg-violet-400/15 border-violet-400/40 text-violet-300">
+                                    ⚡ Priority
+                                  </span>
+                                )}
 
                                 {/* Paid / Unpaid pill — for SHIPPING (and financial viewers); hidden from PRODUCTION (no payment info). */}
                                 {(canViewFinancials || role === UserRole.SHIPPING) && (() => {

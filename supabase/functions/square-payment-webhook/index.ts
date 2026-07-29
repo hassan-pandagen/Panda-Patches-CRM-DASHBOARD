@@ -256,18 +256,35 @@ Deno.serve(async (req: Request) => {
     // We set the token on the Square ORDER (reference_id + metadata.token) in create-square-checkout,
     // so fall back to fetching the order by payment.order_id and reading the token from there.
     let referenceId = payment.reference_id || '';
-    if (!referenceId && payment.order_id && SQUARE_TOKEN) {
+    // Loyalty code applied on the website checkout (CL86F1). The website sets it on the Square
+    // ORDER metadata (metadata.loyalty_code + metadata.loyalty_discount_percent) — same place as
+    // metadata.token. We read it here so redemption + the "discount applied" line work. Fetch runs
+    // whenever there's an order_id (not only when referenceId is empty) so loyalty is captured even
+    // if Square did copy reference_id onto the payment.
+    let loyaltyCode: string | null = null;
+    let loyaltyPercent: number | null = null;
+    if (payment.order_id && SQUARE_TOKEN) {
       try {
         const orderRes = await fetch(`https://connect.squareup.com/v2/orders/${payment.order_id}`, {
           headers: { 'Authorization': `Bearer ${SQUARE_TOKEN}`, 'Square-Version': '2025-05-21' },
         });
         const orderJson = await orderRes.json();
-        referenceId = orderJson?.order?.reference_id || orderJson?.order?.metadata?.token || '';
-        console.log(`[square-payment-webhook] resolved reference_id from Square order ${payment.order_id}: ${referenceId || '(none)'}`);
+        const meta = orderJson?.order?.metadata || {};
+        if (!referenceId) referenceId = orderJson?.order?.reference_id || meta.token || '';
+        if (meta.loyalty_code) {
+          loyaltyCode = String(meta.loyalty_code).trim().toUpperCase() || null;
+          const p = parseInt(String(meta.loyalty_discount_percent ?? ''), 10);
+          loyaltyPercent = Number.isFinite(p) ? p : null;
+        }
+        console.log(`[square-payment-webhook] Square order ${payment.order_id}: reference_id=${referenceId || '(none)'}, loyalty_code=${loyaltyCode || '(none)'}`);
       } catch (e) {
-        console.error('[square-payment-webhook] failed to fetch Square order for reference_id:', e);
+        console.error('[square-payment-webhook] failed to fetch Square order:', e);
       }
     }
+
+    // E6: tier for the "Your {tier} discount was applied" confirmation line. Derived from the
+    // code (PANDA-{TIER}-xxxx); null when no loyalty code, so the line stays hidden.
+    const loyaltyTierForEmail = loyaltyCode ? (loyaltyCode.split('-')[1] || '').toLowerCase() : null;
 
     if (!referenceId) {
       console.warn('[square-payment-webhook] no reference_id on payment or order', payment.id);
@@ -330,6 +347,8 @@ Deno.serve(async (req: Request) => {
           customer_attachment_urls: Array.isArray(quote.customer_attachment_urls) ? quote.customer_attachment_urls : [],
           is_urgent:                false,
           status:                   'NEW_ORDER',
+          loyalty_code_used:        loyaltyCode,
+          loyalty_discount_percent: loyaltyPercent,
           converted_from_quote_id:     quote.id,
           converted_from_quote_number: quote.quote_number,
           had_prior_quote_request:     true,
@@ -381,6 +400,7 @@ Deno.serve(async (req: Request) => {
                   order_number: newOrder.order_number,
                   amount_paid: `$${paidAmount.toFixed(2)}`,
                   total_amount: `$${(quote.estimated_amount || paidAmount).toFixed(2)}`,
+                  loyalty_tier: loyaltyTierForEmail,
                   portal_action_url: 'https://pandapatches.com/login',
                 },
               }),
@@ -477,6 +497,8 @@ Deno.serve(async (req: Request) => {
               attribution,
               is_urgent:        false,
               status:           'NEW_ORDER',
+              loyalty_code_used:        loyaltyCode,
+              loyalty_discount_percent: loyaltyPercent,
             })
             .select('id, order_number')
             .single();
@@ -520,6 +542,7 @@ Deno.serve(async (req: Request) => {
                       order_number: newOrder.order_number,
                       amount_paid: `$${paidAmount.toFixed(2)}`,
                       total_amount: `$${(od.order_amount || paidAmount).toFixed(2)}`,
+                      loyalty_tier: loyaltyTierForEmail,
                       portal_action_url: 'https://pandapatches.com/login',
                     },
                   }),
@@ -768,6 +791,7 @@ Deno.serve(async (req: Request) => {
                 order_number: order.order_number,
                 amount_paid: `$${paidAmount.toFixed(2)}`,
                 total_amount: `$${(total || paidAmount).toFixed(2)}`,
+                loyalty_tier: loyaltyTierForEmail,
                 portal_action_url: 'https://pandapatches.com/login',
               },
             }),

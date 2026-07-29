@@ -22,6 +22,9 @@ export interface Customer {
   mergedIntoId: string | null;
   createdAt: string;
   updatedAt: string;
+  // Loyalty program (CL86F1)
+  loyaltyTier: 'none' | 'bronze' | 'silver' | 'gold';
+  lifetimePaidValue: number;
 }
 
 export interface CustomerWithOrders extends Customer {
@@ -45,6 +48,8 @@ const mapDbToCustomer = (row: any): Customer => ({
   mergedIntoId: row.merged_into_id,
   createdAt: row.created_at,
   updatedAt: row.updated_at,
+  loyaltyTier: row.loyalty_tier ?? 'none',
+  lifetimePaidValue: Number(row.lifetime_paid_value ?? 0),
 });
 
 /**
@@ -111,6 +116,7 @@ export interface CustomersPageParams {
   page: number;
   pageSize: number;
   search?: string;
+  loyaltyTier?: string; // 'all' | 'none' | 'bronze' | 'silver' | 'gold'
 }
 
 export interface CustomersPageResult {
@@ -123,7 +129,7 @@ export interface CustomersPageResult {
  * to the customers on THIS page (not the whole orders table) — order stats are matched by
  * normalized email client-side, scoped to the current page's emails.
  */
-export const listCustomersPage = async ({ page, pageSize, search = '' }: CustomersPageParams): Promise<CustomersPageResult> => {
+export const listCustomersPage = async ({ page, pageSize, search = '', loyaltyTier = 'all' }: CustomersPageParams): Promise<CustomersPageResult> => {
   const from = (page - 1) * pageSize;
   const to = from + pageSize - 1;
 
@@ -137,6 +143,10 @@ export const listCustomersPage = async ({ page, pageSize, search = '' }: Custome
   const q = search.trim();
   if (q) {
     query = query.or(`email.ilike.%${q}%,full_name.ilike.%${q}%,company_name.ilike.%${q}%`);
+  }
+
+  if (loyaltyTier && loyaltyTier !== 'all') {
+    query = query.eq('loyalty_tier', loyaltyTier);
   }
 
   const { data: customerRows, count, error } = await query;

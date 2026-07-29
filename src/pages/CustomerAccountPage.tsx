@@ -15,6 +15,9 @@ import { useToast } from '../hooks/useToast';
 import Spinner from '../components/ui/Spinner';
 import Button from '../components/ui/Button';
 import PremiumBadge from '../components/ui/PremiumBadge';
+import LoyaltyBadge, { LoyaltyProgress } from '../components/ui/LoyaltyBadge';
+import LoyaltyCodesPanel from '../components/customer/LoyaltyCodesPanel';
+import LoyaltyAdminPanel from '../components/customer/LoyaltyAdminPanel';
 import CustomerOrderHistory from '../components/customers/CustomerOrderHistory';
 import { ArrowLeft, Crown, AlertCircle, Save, X, Plus, RotateCcw } from 'lucide-react';
 
@@ -237,6 +240,7 @@ const CustomerAccountPage: React.FC = () => {
           <div className="flex items-center gap-3 mb-2">
             <h1 className="text-3xl font-bold text-white">{customer.fullName || customer.email}</h1>
             {premiumFlag?.isPremium && <PremiumBadge size="md" />}
+            <LoyaltyBadge tier={customer.loyaltyTier} size="md" />
             {canTogglePremium && (
               <Button
                 variant="secondary"
@@ -256,6 +260,10 @@ const CustomerAccountPage: React.FC = () => {
             )}
           </div>
           <p className="text-slate-400 text-sm">{customer.email}</p>
+
+          {customer.loyaltyTier !== 'none' && (
+            <LoyaltyProgress tier={customer.loyaltyTier} lifetimePaidValue={customer.lifetimePaidValue} />
+          )}
 
           <div className="flex flex-wrap gap-2 mt-4">
             <Button
@@ -314,6 +322,14 @@ const CustomerAccountPage: React.FC = () => {
               </div>
             </div>
           </div>
+        )}
+
+        {/* LOYALTY CODES (CL86F1) — hidden if the customer has none */}
+        <LoyaltyCodesPanel customerId={customer.id} />
+
+        {/* LOYALTY ADMIN OVERRIDE (CL86F1 Task 2.4) — owner only */}
+        {role === UserRole.ADMIN && (
+          <LoyaltyAdminPanel customerId={customer.id} currentTier={customer.loyaltyTier} />
         )}
 
         {/* DETAILS PANEL */}

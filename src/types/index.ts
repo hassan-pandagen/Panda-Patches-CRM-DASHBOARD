@@ -76,6 +76,10 @@ export interface Order {
   designBacking?: string;
   borderType?: string;
   instructions?: string;
+  // Loyalty program (CL86F1)
+  priorityMockup?: boolean;
+  loyaltyCodeUsed?: string | null;
+  loyaltyDiscountPercent?: number | null;
   isUrgent: boolean;
   isUrgentApproved?: boolean;
   rushDate?: string; // Required ship-by date when order is marked urgent

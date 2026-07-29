@@ -6,6 +6,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { listCustomersPage, getCustomerStatsSummary } from '@/services/customersService';
 import Spinner from '@/components/ui/Spinner';
 import Button from '@/components/ui/Button';
+import LoyaltyBadge from '@/components/ui/LoyaltyBadge';
 import { useToast } from '@/hooks/useToast';
 import {
   Users,
@@ -32,6 +33,7 @@ const CustomersPage: React.FC = () => {
   const toast = useToast();
   const [searchInput, setSearchInput] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [tierFilter, setTierFilter] = useState('all'); // all | none | bronze | silver | gold
   const [currentPage, setCurrentPage] = useState(1);
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [inviteEmail, setInviteEmail] = useState('');
@@ -61,8 +63,8 @@ const CustomersPage: React.FC = () => {
     isFetching,
     refetch,
   } = useQuery({
-    queryKey: ['customers-portal-page', currentPage, debouncedSearch],
-    queryFn: () => listCustomersPage({ page: currentPage, pageSize: ITEMS_PER_PAGE, search: debouncedSearch }),
+    queryKey: ['customers-portal-page', currentPage, debouncedSearch, tierFilter],
+    queryFn: () => listCustomersPage({ page: currentPage, pageSize: ITEMS_PER_PAGE, search: debouncedSearch, loyaltyTier: tierFilter }),
     placeholderData: keepPreviousData,
   });
 
@@ -225,24 +227,38 @@ const CustomersPage: React.FC = () => {
         ))}
       </div>
 
-      {/* Search */}
-      <div className="relative">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-        <input
-          type="text"
-          placeholder="Search by name, email, or company..."
-          value={searchInput}
-          onChange={(e) => setSearchInput(e.target.value)}
-          className="w-full pl-9 pr-4 py-2.5 bg-slate-800/50 border border-white/10 rounded-lg text-sm text-white placeholder-slate-500 focus:outline-none focus:border-brand-orange/50 transition-colors"
-        />
-        {searchInput && (
-          <button
-            onClick={() => setSearchInput('')}
-            className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white"
-          >
-            <X className="w-4 h-4" />
-          </button>
-        )}
+      {/* Search + tier filter */}
+      <div className="flex flex-col sm:flex-row gap-2">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+          <input
+            type="text"
+            placeholder="Search by name, email, or company..."
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)}
+            className="w-full pl-9 pr-4 py-2.5 bg-slate-800/50 border border-white/10 rounded-lg text-sm text-white placeholder-slate-500 focus:outline-none focus:border-brand-orange/50 transition-colors"
+          />
+          {searchInput && (
+            <button
+              onClick={() => setSearchInput('')}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          )}
+        </div>
+        <select
+          value={tierFilter}
+          onChange={(e) => { setTierFilter(e.target.value); setCurrentPage(1); }}
+          className="py-2.5 px-3 bg-slate-800/50 border border-white/10 rounded-lg text-sm text-white focus:outline-none focus:border-brand-orange/50 transition-colors"
+          title="Filter by loyalty tier"
+        >
+          <option value="all">All tiers</option>
+          <option value="none">No tier</option>
+          <option value="bronze">Bronze</option>
+          <option value="silver">Silver</option>
+          <option value="gold">Gold</option>
+        </select>
       </div>
 
       {/* Table */}
@@ -273,6 +289,9 @@ const CustomersPage: React.FC = () => {
                   </th>
                   <th className="text-left px-5 py-3 text-xs font-medium text-slate-400 uppercase tracking-wider hidden md:table-cell">
                     Company
+                  </th>
+                  <th className="text-left px-5 py-3 text-xs font-medium text-slate-400 uppercase tracking-wider hidden md:table-cell">
+                    Tier
                   </th>
                   <th className="text-center px-5 py-3 text-xs font-medium text-slate-400 uppercase tracking-wider">
                     Orders
@@ -321,6 +340,13 @@ const CustomersPage: React.FC = () => {
                       <span className="text-sm text-slate-300">
                         {customer.companyName || '—'}
                       </span>
+                    </td>
+
+                    {/* Loyalty tier */}
+                    <td className="px-5 py-4 hidden md:table-cell">
+                      {customer.loyaltyTier !== 'none'
+                        ? <LoyaltyBadge tier={customer.loyaltyTier} />
+                        : <span className="text-sm text-slate-500">—</span>}
                     </td>
 
                     {/* Orders */}

@@ -37,3 +37,7 @@ src/assets/db_schema.sql
 /test-results
 /playwright-report
 /playwright/.cache
+
+# graphify generated output (keep local)
+graphify-out/
+.graphifyignore

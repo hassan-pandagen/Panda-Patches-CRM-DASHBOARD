@@ -67,6 +67,7 @@ import IncomeStatementReport from "../components/Reports/IncomeStatementReport";
 import ProductMixAnalysis from "../components/Reports/ProductMixAnalysis";
 import LeadSourceDistribution from "../components/Reports/LeadSourceDistribution";
 import FunnelAttributionReport from "../components/Reports/FunnelAttributionReport";
+import LoyaltyProgramReport from "../components/Reports/LoyaltyProgramReport";
 import { SOURCE_COLORS, PATCH_TYPE_COLORS } from "../constants/colors";
 
 const containerVariants: Variants = {
@@ -1580,7 +1581,8 @@ type ReportType =
   | "productMix"
   | "customerFeedback"
   | "formFeedback"
-  | "funnelAttribution";
+  | "funnelAttribution"
+  | "loyalty";
 
 const ReportsPage: React.FC = () => {
    const { user, role, permissions, isLoading: isAuthLoading } = useAuth();
@@ -1693,6 +1695,7 @@ const ReportsPage: React.FC = () => {
         { key: "funnelAttribution", label: "Funnel & Attribution", icon: ShieldAlert },
         { key: "customerFeedback", label: "Customer Feedback", icon: MessageSquare },
         { key: "formFeedback", label: "Form Feedback", icon: ClipboardList },
+        { key: "loyalty", label: "Loyalty & Reviews", icon: Award },
       ];
     }
 
@@ -1703,6 +1706,7 @@ const ReportsPage: React.FC = () => {
       tabs.push({ key: "quality", label: "Quality Issues", icon: ShieldAlert });
       tabs.push({ key: "customerFeedback", label: "Customer Feedback", icon: MessageSquare });
       tabs.push({ key: "formFeedback", label: "Form Feedback", icon: ClipboardList });
+      tabs.push({ key: "loyalty", label: "Loyalty & Reviews", icon: Award });
       return tabs;
     }
 
@@ -1986,6 +1990,7 @@ const ReportsPage: React.FC = () => {
               endDate={new Date(`${dateRange.endDate}T23:59:59`)}
             />
           )}
+          {activeReport === "loyalty" && <LoyaltyProgramReport />}
         </motion.div>
       </div>
     </div>
