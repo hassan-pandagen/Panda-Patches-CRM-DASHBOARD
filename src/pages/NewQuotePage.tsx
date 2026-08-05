@@ -39,7 +39,8 @@ const NewQuotePage: React.FC = () => {
     customerEmail: '',
     customerPhone: '',
     customerProfileUrl: '',
-    
+    organization: '',
+
     designName: '',
     patchesQuantity: '',
     patchesType: '',
@@ -117,7 +118,8 @@ const NewQuotePage: React.FC = () => {
         customerEmail: formData.customerEmail,
         customerPhone: formData.customerPhone,
         customerProfileUrl: formData.customerProfileUrl,
-        
+        organization: formData.organization || undefined,
+
         designName: formData.designName,
         patchesQuantity: formData.patchesQuantity ? Number(formData.patchesQuantity) : undefined,
         patchesType: formData.patchesType,
@@ -240,6 +242,18 @@ const NewQuotePage: React.FC = () => {
                   onChange={handleChange}
                   className="w-full bg-slate-800/50 border border-slate-600 text-white rounded-lg px-4 py-2 focus:ring-2 focus:ring-brand-orange/50 focus:border-brand-orange transition-all placeholder-slate-400"
                   placeholder="https://..."
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-2">Organization <span className="text-slate-500 font-normal">(optional)</span></label>
+                <input
+                  type="text"
+                  name="organization"
+                  value={formData.organization}
+                  onChange={handleChange}
+                  className="w-full bg-slate-800/50 border border-slate-600 text-white rounded-lg px-4 py-2 focus:ring-2 focus:ring-brand-orange/50 focus:border-brand-orange transition-all placeholder-slate-400"
+                  placeholder="Company / dept / team (if ordering for an org)"
                 />
               </div>
             </div>

@@ -467,6 +467,16 @@ Deno.serve(async (req: Request) => {
             source: od.attribution?.source || 'square_checkout',
           };
 
+          // Structured shipping location for clean geo analytics (see add_structured_ship_location.sql).
+          // The website checkout collects these as separate fields — accept a few likely shapes
+          // (flat od.ship_city / od.city, or nested od.shipping.city). Falls back to null; the
+          // free-text shipping_address is still stored separately for display.
+          const ship = od.shipping || od.shipping_details || {};
+          const shipCity    = (od.ship_city    ?? od.city    ?? ship.city    ?? null) || null;
+          const shipState   = (od.ship_state   ?? od.state   ?? od.region  ?? ship.state   ?? null) || null;
+          const shipPostal  = (od.ship_postal  ?? od.zip     ?? od.postal_code ?? ship.postal_code ?? ship.zip ?? null) || null;
+          const shipCountry = (od.country      ?? od.ship_country ?? ship.country ?? null) || null;
+
           const { data: newOrder, error: pendingOrderErr } = await admin
             .from('orders')
             .insert({
@@ -479,6 +489,11 @@ Deno.serve(async (req: Request) => {
               design_backing:   normalizeBacking(od.backing),
               instructions:     od.instructions || null,
               shipping_address: od.shipping_address || null,
+              ship_city:        shipCity,
+              ship_state:       shipState,
+              ship_postal:      shipPostal,
+              country:          shipCountry,
+              organization:     od.organization || od.company || od.company_name || null,
               artwork_url:      od.artwork_url || null,
               // Also surface the uploaded artwork as a customer attachment: the CRM order
               // page renders customer_attachment_urls / mockup_urls, not artwork_url, so
@@ -733,26 +748,28 @@ Deno.serve(async (req: Request) => {
       return new Response(JSON.stringify({ received: true, error: 'order not found' }), { status: 200 });
     }
 
-    const total          = order.order_amount || 0;
-    const newAmountPaid   = (order.amount_paid || 0) + paidAmount;
-    const fullyPaid       = total > 0 && newAmountPaid >= total - 0.01;
-    const nextPaymentStatus = fullyPaid ? 'paid' : (newAmountPaid > 0 ? 'deposit_paid' : (order.payment_status || 'pending'));
-    // A held "wait for payment" order is released to production the moment any payment lands
-    // (deposit is enough, per owner spec). Process-without-payment orders are already NEW_ORDER.
-    const releasing       = order.status === 'PENDING_PAYMENT';
-
-    const updatePayload: any = { amount_paid: newAmountPaid, payment_status: nextPaymentStatus };
-    if (releasing) updatePayload.status = 'NEW_ORDER';
-    const existingAttr   = order.attribution || {};
-    if (!existingAttr.source) {
-      updatePayload.attribution = { ...existingAttr, source: 'square_payment' };
-    }
-
-    const { error: updateErr } = await admin.from('orders').update(updatePayload).eq('id', order.id);
-    if (updateErr) {
-      console.error(`[square-payment-webhook] failed to update order ${order.order_number}:`, updateErr);
+    // Record the payment with an ATOMIC, row-locked increment (never read-then-write) so a
+    // concurrent CRM edit can't clobber it — the PP-11151 lost-update fix. The RPC also sets
+    // payment_status, releases a held PENDING_PAYMENT order to NEW_ORDER, and bumps updated_at,
+    // all inside one locked transaction.
+    const { data: rpcRows, error: rpcErr } = await admin.rpc('apply_order_payment', {
+      p_order_id: order.id, p_amount: paidAmount,
+    });
+    if (rpcErr || !rpcRows || (rpcRows as any[]).length === 0) {
+      console.error(`[square-payment-webhook] apply_order_payment failed for ${order.order_number}:`, rpcErr);
       await releasePayment();
-      return new Response(JSON.stringify({ received: true, error: updateErr.message }), { status: 200 });
+      return new Response(JSON.stringify({ received: true, error: rpcErr?.message || 'payment apply failed' }), { status: 200 });
+    }
+    const applied = (rpcRows as any[])[0];
+    const total           = Number(applied.order_amount);
+    const newAmountPaid    = Number(applied.new_amount_paid);
+    const nextPaymentStatus = applied.new_payment_status as string;
+    const releasing        = applied.released as boolean;
+
+    // Marketing attribution source is a separate, non-payment concern — set it if missing.
+    const existingAttr = order.attribution || {};
+    if (!existingAttr.source) {
+      await admin.from('orders').update({ attribution: { ...existingAttr, source: 'square_payment' } }).eq('id', order.id);
     }
 
     await admin.from('square_processed_payments')

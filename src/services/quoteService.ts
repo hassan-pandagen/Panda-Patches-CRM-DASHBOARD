@@ -309,6 +309,27 @@ export const getQuotesPaginated = async (params: {
   }
 };
 
+// Fetch ALL active (un-converted, non-Meta-chat) quotes since a date, for the Quotes-page
+// traffic/heard-about chips + client-side filtering (CLADB5 Task 1). Traffic + heard_about are
+// TS-derived (attribution/instructions), so they can't be filtered in SQL — the page fetches the
+// bounded date-range set and groups/filters client-side. Capped for safety.
+export const getActiveQuotesSince = async (sinceISO: string): Promise<Quote[]> => {
+  const { data, error } = await supabase
+    .from('quotes')
+    .select('*')
+    .is('meta_psid', null)
+    .is('meta_ig_id', null)
+    .is('converted_at', null)
+    .gte('created_at', sinceISO)
+    .order('created_at', { ascending: false })
+    .limit(5000);
+  if (error) {
+    logger.error('Failed to fetch active quotes', error);
+    throw error;
+  }
+  return (data || []).map(mapDbToQuote);
+};
+
 // Get single quote
 export const getQuoteByNumber = async (quoteNumber: string): Promise<Quote> => {
   try {

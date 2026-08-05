@@ -8,6 +8,7 @@ import { localMidnightISO, localNextDayISO } from '../utils/dateFilters';
 import { fetchAllPaged } from '../utils/fetchAllPaged';
 import BulkActionBar from '../components/orders/BulkActionBar';
 import QuickViewDrawer from '../components/orders/QuickViewDrawer';
+import ShipByPill from '../components/orders/ShipByPill';
 import SavedFilters from '../components/ui/SavedFilters';
 import { supabase } from '../services/supabaseClient';
 import { Order, OrderStatus, UserRole } from '../types';
@@ -864,6 +865,7 @@ const AllOrdersPage: React.FC = () => {
                                                                 URGENT
                                                             </span>
                                                         )}
+                                                        <ShipByPill shipByDate={order.shipByDate} status={order.status} />
                                                         <AttributionQualityBadge
                                                             quality={getAttributionQualityFromOrder(order)}
                                                             size="sm"

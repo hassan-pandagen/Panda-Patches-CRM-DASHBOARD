@@ -28,6 +28,7 @@ import { Edit, Trash2, ShieldAlert, ArrowLeft, Lock, MapPin, Smartphone, Maximiz
 // 1. Import the new component
 import OrderTimeline from '../components/orders/OrderTimeline';
 import ShippingLabelModal from '../components/orders/ShippingLabelModal';
+import ShipByPill from '../components/orders/ShipByPill';
 import AssignOrderSection from '../components/orders/AssignOrderSection';
 import EmailLogsSection from '../components/orders/EmailLogsSection';
 import OrderNotesSection from '../components/orders/OrderNotesSection';
@@ -631,6 +632,7 @@ const OrderPage: React.FC = () => {
                                         )}
                                     </div>
                                 )}
+                                <ShipByPill shipByDate={order.shipByDate} status={order.status} className="ml-1 align-middle" />
                             </h1>
                         </div>
                         <div className="flex items-center gap-3">

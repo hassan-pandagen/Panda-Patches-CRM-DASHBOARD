@@ -59,8 +59,15 @@ export interface SaveData {
   ccEmail?: string;
   customerPhone?: string;
   customerProfileUrl?: string;
+  // Optional buying organization (self-identified). Distinct from customerName (the individual).
+  organization?: string;
   purchaseOrder?: string;
   shippingAddress?: string;
+  // Structured shipping location (clean geo data for analytics/metro reporting).
+  // shippingAddress stays the full free-text address; these are the parsed parts.
+  shipCity?: string;
+  shipState?: string;
+  shipPostal?: string;
   designName?: string;
   patchesQuantity: number;
   patchesType?: string;
@@ -78,6 +85,8 @@ export interface SaveData {
   status: string;
   isUrgent: boolean;
   rushDate?: string;
+  // Soft ship-by reminder date — independent of isUrgent; drives a pill, not the urgent workflow.
+  shipByDate?: string | null;
   sampleBox?: boolean;
   shippingCarrier?: string;
   shippingTrackingNumber?: string;
@@ -133,6 +142,7 @@ const transformOrderToFormData = (order: Order | null | undefined): SaveData => 
       customerEmail: '',
       customerPhone: '',
       customerProfileUrl: '',
+      organization: '',
       purchaseOrder: '',
       
       // ✅ CRITICAL: Status always has default value
@@ -148,6 +158,9 @@ const transformOrderToFormData = (order: Order | null | undefined): SaveData => 
       
       // Shipping
       shippingAddress: '',
+      shipCity: '',
+      shipState: '',
+      shipPostal: '',
       shippingCarrier: '',
       shippingTrackingNumber: '',
       
@@ -201,6 +214,10 @@ const transformOrderToFormData = (order: Order | null | undefined): SaveData => 
     reasonCategory: order.reasonCategory || '',
     reasonDetails: order.reasonDetails || '',
     country: order.country || '',
+    organization: order.organization || '',
+    shipCity: order.shipCity || '',
+    shipState: order.shipState || '',
+    shipPostal: order.shipPostal || '',
   };
 };
 
@@ -234,11 +251,15 @@ const OrderForm: React.FC<OrderFormProps> = ({
     isUrgent: initialData?.isUrgent || false,
     sampleBox: initialData?.sampleBox || false,
     rushDate: initialData?.rushDate || '',
+    shipByDate: initialData?.shipByDate || '',
     mockupUrls: initialData?.mockupUrls || [],
     productionFileUrls: initialData?.productionFileUrls || [],
     shippingAttachmentUrls: initialData?.shippingAttachmentUrls || [],
     customerAttachmentUrls: initialData?.customerAttachmentUrls || [],
   }), [initialData]);
+
+  // Ship-By reminder checkbox — reveals the (optional) date box. Purely UI; only shipByDate persists.
+  const [showShipBy, setShowShipBy] = useState<boolean>(!!initialData?.shipByDate);
 
   // Internal state for the spinner, managed by the form itself.
   const [isSaving, setIsSaving] = useState(false);
@@ -741,6 +762,10 @@ const OrderForm: React.FC<OrderFormProps> = ({
             <label className="block text-sm font-medium text-slate-300">Purchase Order</label>
             <input type="text" {...register('purchaseOrder')} placeholder="Customer PO # (searchable)" className="mt-1 block w-full bg-slate-800 border-slate-600 rounded-md text-white placeholder-slate-500 focus:ring-brand-orange focus:border-brand-orange" />
           </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-300">Organization <span className="text-slate-500 font-normal">(optional)</span></label>
+            <input type="text" {...register('organization')} placeholder="Company / dept / team (if ordering for an org)" className="mt-1 block w-full bg-slate-800 border-slate-600 rounded-md text-white placeholder-slate-500 focus:ring-brand-orange focus:border-brand-orange" />
+          </div>
         </div>
       </FormSectionWrapper>
 
@@ -815,6 +840,38 @@ const OrderForm: React.FC<OrderFormProps> = ({
               error={errors.shippingAddress?.message}
               className="w-full mt-1"
             />
+          </div>
+          {/* Structured City / State / ZIP — clean geo data for metro analytics.
+              The address above stays the full display address; fill these too so reports don't
+              have to parse the free-text blob. Website orders auto-populate these from checkout. */}
+          <div className="md:col-span-2 grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-slate-300">City</label>
+              <input
+                type="text"
+                {...register('shipCity')}
+                placeholder="e.g. Houston"
+                className="mt-1 block w-full bg-slate-800 border-slate-600 rounded-md text-white focus:ring-brand-orange focus:border-brand-orange"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-300">State / Region</label>
+              <input
+                type="text"
+                {...register('shipState')}
+                placeholder="e.g. TX"
+                className="mt-1 block w-full bg-slate-800 border-slate-600 rounded-md text-white focus:ring-brand-orange focus:border-brand-orange"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-300">ZIP / Postcode</label>
+              <input
+                type="text"
+                {...register('shipPostal')}
+                placeholder="e.g. 77001"
+                className="mt-1 block w-full bg-slate-800 border-slate-600 rounded-md text-white focus:ring-brand-orange focus:border-brand-orange"
+              />
+            </div>
           </div>
           <div>
             <label className="block text-sm font-medium text-slate-300">Carrier</label>
@@ -907,8 +964,11 @@ const OrderForm: React.FC<OrderFormProps> = ({
             </div>
             <div>
               <label className="block text-xs text-slate-400">Amount Paid</label>
-              <input type="number" step="0.01" {...register('amountPaid', { required: 'Required', valueAsNumber: true, min: { value: 0, message: "Cannot be negative" } })} className="w-full bg-slate-800 border-slate-600 rounded-md text-white" disabled={!canEditFinancials} />
-              {errors.amountPaid && <p className="text-red-400 text-xs mt-1">{errors.amountPaid.message}</p>}
+              {/* Read-only: amount_paid is owned by the payment flows (Square webhook + Mark as Paid's
+                  atomic RPC). Editing it here is ignored on save — a stale value must never clobber a
+                  recorded payment (PP-11151 lost-update fix). */}
+              <input type="number" step="0.01" {...register('amountPaid', { valueAsNumber: true })} className="w-full bg-slate-800/60 border-slate-700 rounded-md text-slate-400 cursor-not-allowed" disabled title="Managed by payments — record via Mark as Paid or a Square payment link" />
+              <p className="text-[10px] text-slate-500 mt-1">Set by payments (Square / Mark as Paid) — not editable here.</p>
             </div>
             <div>
               <label className="block text-xs text-slate-400">Production Cost</label>
@@ -1002,6 +1062,35 @@ const OrderForm: React.FC<OrderFormProps> = ({
                   className="block w-full bg-slate-800 border-red-500/50 rounded-md text-white focus:ring-red-500 focus:border-red-500 text-sm px-3 py-2"
                 />
                 {errors.rushDate && <p className="text-red-400 text-xs mt-1">{errors.rushDate.message}</p>}
+              </div>
+            )}
+          </div>
+
+          {/* Ship-By reminder — soft target date. Tick to reveal the box. Does NOT mark the order urgent. */}
+          <div className="flex flex-col gap-2 pb-3">
+            <label className="flex items-center gap-2 cursor-pointer w-fit">
+              <input
+                type="checkbox"
+                checked={showShipBy}
+                onChange={(e) => {
+                  setShowShipBy(e.target.checked);
+                  if (!e.target.checked) setValue('shipByDate', null, { shouldDirty: true });
+                }}
+                className="h-5 w-5 rounded bg-slate-700 border-slate-600 text-brand-orange focus:ring-brand-orange"
+              />
+              <span className="text-sm font-bold text-slate-200">📦 Set a Ship-By reminder</span>
+            </label>
+            {showShipBy && (
+              <div className="mt-1 p-3 bg-slate-700/30 border border-slate-600 rounded-lg">
+                <label className="block text-xs font-semibold text-slate-300 mb-1.5 uppercase tracking-wide">
+                  Ship-By date
+                </label>
+                <input
+                  type="date"
+                  {...register('shipByDate')}
+                  className="block w-full bg-slate-800 border-slate-600 rounded-md text-white focus:ring-brand-orange focus:border-brand-orange text-sm px-3 py-2"
+                />
+                <p className="text-[11px] text-slate-400 mt-1">Soft target — shows a reminder pill on the order. Does not mark it urgent.</p>
               </div>
             )}
           </div>

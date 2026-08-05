@@ -188,6 +188,86 @@ export function detectLeadSource(input: AttributionLike): LeadSource {
   return 'Direct';
 }
 
+// --- Traffic grouping (CLADB5) — collapse granular LeadSource labels into the report/chip
+// buckets. "AI" groups every LLM/assistant source (the AI-influence view). ---
+export type TrafficGroup =
+  | 'Google Ads' | 'Google Organic' | 'Facebook' | 'Instagram' | 'AI' | 'Direct' | 'Other';
+
+export const TRAFFIC_GROUPS: TrafficGroup[] = [
+  'Google Ads', 'Google Organic', 'Facebook', 'Instagram', 'AI', 'Direct', 'Other',
+];
+
+export function groupTraffic(source: LeadSource): TrafficGroup {
+  switch (source) {
+    case 'Google Ad': return 'Google Ads';
+    case 'Google': return 'Google Organic';
+    case 'Facebook Ad':
+    case 'Facebook': return 'Facebook';
+    case 'Instagram': return 'Instagram';
+    case 'ChatGPT': case 'Claude': case 'Grok': case 'Perplexity': case 'Gemini':
+    case 'Copilot': case 'Meta AI': case 'DeepSeek': case 'Google AI Overview':
+      return 'AI';
+    case 'Direct': return 'Direct';
+    default: return 'Other';
+  }
+}
+
+// Resolve a quote/order into a traffic GROUP for the CLADB5 report + chips. Prefers the
+// website's own `attribution.traffic_source` (e.g. "Google (Organic)", "Facebook Ads (id)",
+// "Instagram Ads (id)", "Instagram"), normalizing its many string forms; falls back to
+// detectLeadSource() (utm/referrer/click-id) when traffic_source is absent (older quotes,
+// non-website quotes). This is CLADB5 Task 3's "normalize traffic values".
+export function resolveTrafficGroup(
+  input: AttributionLike,
+): TrafficGroup {
+  const ts = String(input.attribution?.traffic_source ?? '').toLowerCase().trim();
+  if (ts) {
+    if (ts.includes('google') && ts.includes('organic')) return 'Google Organic';
+    if (ts.includes('google') && ts.includes('ad'))      return 'Google Ads';
+    if (ts.includes('facebook'))                         return 'Facebook';   // "Facebook Ads (id)" or "Facebook"
+    if (ts.includes('instagram'))                        return 'Instagram';  // "Instagram Ads (id)" or "Instagram"
+    if (/chatgpt|claude|grok|perplexity|gemini|copilot|deepseek|meta ai/.test(ts)) return 'AI';
+    if (ts.includes('direct'))                           return 'Direct';
+    // Unknown traffic_source string → fall through to attribution/referrer resolution.
+  }
+  return groupTraffic(detectLeadSource(input));
+}
+
+// --- Heard-about (CLADB5) — self-reported "How did you hear about us?" answer. Persisted by
+// the website into attribution.heard_about (new quotes); historical quotes embed it as
+// "Source: X" in the instructions text. The literal option strings (all 4 forms identical):
+export const HEARD_ABOUT_OPTIONS = [
+  'Google Search', 'Google Ads', 'Facebook / Instagram', 'ChatGPT / Claude',
+  'YouTube', 'Reddit', 'Friend / Word of mouth', 'Returning customer', 'Other',
+] as const;
+export type HeardAbout = typeof HEARD_ABOUT_OPTIONS[number];
+
+// Historical fallback: recover heard_about from an "Source: X" line in the instructions, but
+// ONLY accept X when it matches a known option (so a form name in "Source:" isn't misread).
+function extractHeardFromInstructions(instructions?: string | null): string | null {
+  const m = String(instructions ?? '').match(/Source:\s*([^\n\r]+)/i);
+  return m ? m[1].trim() : null;
+}
+
+function normalizeHeard(raw: string): HeardAbout | null {
+  const v = raw.trim();
+  if (!v) return null;
+  const match = HEARD_ABOUT_OPTIONS.find((o) => o.toLowerCase() === v.toLowerCase());
+  return match ?? null; // unknown string from attribution → treat as free-text "Other" upstream
+}
+
+/** Resolve a quote's heard_about answer. attribution.heard_about wins; else the instructions
+ *  "Source: X" fallback (known options only). Returns null when the customer left it blank. */
+export function resolveHeardAbout(
+  attribution: Record<string, any> | null | undefined,
+  instructions?: string | null,
+): HeardAbout | null {
+  const attrRaw = String(attribution?.heard_about ?? '').trim();
+  if (attrRaw) return normalizeHeard(attrRaw) ?? 'Other'; // present-but-unmatched = free-text Other
+  const fromInstr = extractHeardFromInstructions(instructions);
+  return fromInstr ? normalizeHeard(fromInstr) : null; // historical: only trust matched options
+}
+
 /** Sentinel sales_agent value for self-serve web-checkout orders (no human agent handled it). */
 export const WEB_CHECKOUT_AGENT = 'WEB_CHECKOUT';
 

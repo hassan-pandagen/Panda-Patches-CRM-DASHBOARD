@@ -68,6 +68,7 @@ import ProductMixAnalysis from "../components/Reports/ProductMixAnalysis";
 import LeadSourceDistribution from "../components/Reports/LeadSourceDistribution";
 import FunnelAttributionReport from "../components/Reports/FunnelAttributionReport";
 import LoyaltyProgramReport from "../components/Reports/LoyaltyProgramReport";
+import LeadSourceAttributionReport from "../components/Reports/LeadSourceAttributionReport";
 import { SOURCE_COLORS, PATCH_TYPE_COLORS } from "../constants/colors";
 
 const containerVariants: Variants = {
@@ -217,7 +218,11 @@ const SalesReportComponent: React.FC<ReportComponentProps> = ({ orders, dateRang
     const breakdown = new Map<string, { currentMonth: number; previousMonths: Map<string, { amount: number; orders: Set<string> }>; total: number }>();
 
     for (const payment of paymentRecoveryData) {
-      if (payment.collectedAmount <= 0) continue;
+      // Include negative deltas so a corrected/overwritten payment nets out.
+      // e.g. an amount_paid fumble 50→1150 (+1100) then 1150→150 (−1000) must net to +100,
+      // NOT +1100 — skipping negatives left the mistaken over-payment counted (PP-11176 bug).
+      // Skip only true no-op rows (delta 0).
+      if (payment.collectedAmount === 0) continue;
       const agent = payment.salesAgent;
       if (!breakdown.has(agent)) breakdown.set(agent, { currentMonth: 0, previousMonths: new Map(), total: 0 });
       const d = breakdown.get(agent)!;
@@ -1582,7 +1587,8 @@ type ReportType =
   | "customerFeedback"
   | "formFeedback"
   | "funnelAttribution"
-  | "loyalty";
+  | "loyalty"
+  | "leadAttribution";
 
 const ReportsPage: React.FC = () => {
    const { user, role, permissions, isLoading: isAuthLoading } = useAuth();
@@ -1692,6 +1698,7 @@ const ReportsPage: React.FC = () => {
         { key: "incomeStatement", label: "Income Statement", icon: DollarSign },
         { key: "profitLoss", label: "Profit & Loss", icon: FileText },
         { key: "leadSource", label: "Lead Source", icon: Share2 },
+        { key: "leadAttribution", label: "Lead Attribution", icon: Share2 },
         { key: "funnelAttribution", label: "Funnel & Attribution", icon: ShieldAlert },
         { key: "customerFeedback", label: "Customer Feedback", icon: MessageSquare },
         { key: "formFeedback", label: "Form Feedback", icon: ClipboardList },
@@ -1991,6 +1998,7 @@ const ReportsPage: React.FC = () => {
             />
           )}
           {activeReport === "loyalty" && <LoyaltyProgramReport />}
+          {activeReport === "leadAttribution" && <LeadSourceAttributionReport dateRange={dateRange} />}
         </motion.div>
       </div>
     </div>

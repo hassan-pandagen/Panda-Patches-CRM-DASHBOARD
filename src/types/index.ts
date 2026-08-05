@@ -66,6 +66,7 @@ export interface Order {
   ccEmail?: string; // Secondary/CC email for companies with multiple contacts
   customerPhone?: string;
   customerProfileUrl?: string;
+  organization?: string; // Optional buying organization (self-identified); distinct from customerName
   purchaseOrder?: string; // Customer PO number/reference — searchable
 
   // --- Design & Production Details ---
@@ -83,6 +84,7 @@ export interface Order {
   isUrgent: boolean;
   isUrgentApproved?: boolean;
   rushDate?: string; // Required ship-by date when order is marked urgent
+  shipByDate?: string | null; // Soft ship-by reminder date (independent of urgent)
   sampleBox?: boolean; // Customer also wants a sample box alongside their patches
 
   // --- Production completion (separate from status; production team flag) ---
@@ -124,6 +126,9 @@ export interface Order {
 
   // --- Shipping ---
   shippingAddress?: string;
+  shipCity?: string;
+  shipState?: string;
+  shipPostal?: string;
   shippingTrackingNumber?: string;
   shippingCarrier?: string;
 }
@@ -217,7 +222,11 @@ export interface Quote {
    ccEmail?: string; // Secondary/CC email for companies with multiple contacts
    customerPhone?: string;
    customerProfileUrl?: string;
+   organization?: string; // Optional buying organization (self-identified); distinct from customerName
    shippingAddress?: string;
+   shipCity?: string;
+   shipState?: string;
+   shipPostal?: string;
 
    // --- Design & Production Details ---
    designName?: string;

@@ -136,3 +136,23 @@ delivered orders** — if it's not in the file, the site must **not** build a pa
 The loyalty tier/badge program (Bronze/Silver/Gold) and its website promo-validation
 endpoint (`validate_loyalty_code`) are a **separate brief** with their own contract — not
 covered here. Flagging so it's not conflated with the review program above.
+
+---
+
+## ADDENDUM (2026-07-31): #3 baseline values + structured shipping request
+
+### Item #3 — CompanyFacts values (from real CRM data, ready to write into Sanity)
+- `shippingCountries: ["US","CA","GB","NZ","FR","DE"]`
+  - Confirmed from real orders: US(346), CA(8), GB(4), NZ(4), FR(2), DE(1). **AU has zero orders** — drop it or keep only as a "we can ship there" capability claim, your call. (585 legacy orders have a blank country — historical, being fixed going forward.)
+- `medianOrderPieces: 22` and `orderDatasetCount: 925` — the site's "≈20 pieces / 896 orders" copy is stale; use these.
+
+### Item #2 — city pages: NOT built (data gate not met)
+Delivery volume is scattered one-per-city nationwide (top metro, Houston, = 4 orders). The brief's own rule is "no city page under 20 deliveries to that metro," so **no city pages are built**. Revisit when a metro actually crosses 20. Nothing for you to do here yet.
+
+### NEW request to the website: send **structured** shipping fields at checkout
+Today the checkout sends one free-text `shipping_address` blob (names/emails/phones mixed in, inconsistent formats) — unparseable for geo analytics. The CRM now has clean columns `ship_city`, `ship_state`, `ship_postal` (+ existing `country`). The Square-webhook order creation already reads these from the pending-checkout `order_data` if present. **Please add them to the checkout payload** (any ONE of these shapes works — the webhook accepts all):
+- Flat: `ship_city`, `ship_state`, `ship_postal`, `country`
+- or `city`, `state` (or `region`), `zip` (or `postal_code`), `country`
+- or nested: `shipping: { city, state, postal_code, country }`
+
+Keep sending the full `shipping_address` too (it stays the display address). This is what makes future metro analytics / city pages possible once volume concentrates.

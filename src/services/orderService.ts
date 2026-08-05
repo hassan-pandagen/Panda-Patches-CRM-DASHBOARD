@@ -167,6 +167,9 @@ export const mapDbToOrder = (data: any): Order => {
     customerProfileUrl: data.customerProfileUrl ?? data.customer_profile_url,
 
     shippingAddress: data.shippingAddress ?? data.shipping_address,
+    shipCity: data.shipCity ?? data.ship_city ?? null,
+    shipState: data.shipState ?? data.ship_state ?? null,
+    shipPostal: data.shipPostal ?? data.ship_postal ?? null,
     shippingTrackingNumber: data.shippingTrackingNumber ?? data.shipping_tracking_number,
     shippingCarrier: data.shippingCarrier ?? data.shipping_carrier,
 
@@ -192,6 +195,7 @@ export const mapDbToOrder = (data: any): Order => {
     isUrgentApproved: data.isUrgentApproved ?? data.is_urgent_approved,
     sampleBox: data.sampleBox ?? data.sample_box ?? false,
     rushDate: data.rushDate ?? data.rush_date ?? undefined,
+    shipByDate: data.shipByDate ?? data.ship_by_date ?? null,
     productionCompletedAt: data.productionCompletedAt ?? data.production_completed_at ?? null,
     productionCompletedBy: data.productionCompletedBy ?? data.production_completed_by ?? null,
     productionCompletionPhotos: data.productionCompletionPhotos ?? data.production_completion_photos ?? [],
@@ -201,6 +205,7 @@ export const mapDbToOrder = (data: any): Order => {
     assignedAt: data.assignedAt ?? data.assigned_at,
 
     country: data.country ?? null,
+    organization: data.organization ?? null,
     purchaseOrder: data.purchaseOrder ?? data.purchase_order ?? null,
 
     attribution: data.attribution ?? null,
@@ -653,8 +658,16 @@ export const updateOrderDetails = async (
   userEmail: string
 ) => {
   const endMeasure = performanceMonitor.startMeasure('updateOrderDetails', 'api');
-  
-  const dbPayload = toSnakeCase(updates);
+
+  // amount_paid / payment_status are owned EXCLUSIVELY by the payment flows (the Square webhook
+  // and MarkAsPaidModal's atomic RPC). A general order edit must NEVER write them: the edit form
+  // loads a snapshot of amount_paid, and a payment landing while the form is open would be
+  // clobbered by that stale value on save. This lost PP-11151's $160 balance on 2026-07-30 — the
+  // webhook set amount_paid to 210, then an order edit reverted it to 50 (the webhook doesn't bump
+  // updated_at, so optimistic locking never caught it). Strip both the camelCase (form) and
+  // snake_case forms so no edit path can ever regress a payment.
+  const { amountPaid, amount_paid, paymentStatus, payment_status, ...safeUpdates } = (updates || {}) as any;
+  const dbPayload = toSnakeCase(safeUpdates);
 
   // Optimistic locking: only update if the row hasn't been modified since we loaded it
   let query = supabase
@@ -682,7 +695,7 @@ export const updateOrderDetails = async (
   const newOrder = mapDbToOrder(data);
 
   const historyRecords = [];
-  for (const key in updates) {
+  for (const key in safeUpdates) {
     // ✅ FIX: Safe access to oldOrder properties
     const oldOrderKey = Object.keys(oldOrder).find(
       (k) => k.toLowerCase() === key.replace(/_/g, "").toLowerCase()
@@ -690,7 +703,7 @@ export const updateOrderDetails = async (
 
     if (oldOrderKey) {
       const oldValue = oldOrder[oldOrderKey];
-      const newValue = updates[key];
+      const newValue = safeUpdates[key];
       
       // ✅ FIX: Safe string conversion that handles undefined/null
       const safeOld = oldValue === null || oldValue === undefined ? "N/A" : String(oldValue);
