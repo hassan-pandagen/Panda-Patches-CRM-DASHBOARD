@@ -93,6 +93,34 @@ export interface AttributionLike {
   attribution?: Record<string, any> | null;
   lead_source?: string | null;
   leadSource?: string | null;
+  instructions?: string | null;
+}
+
+// Some agents type "Source: Facebook / Instagram" / "Source: Returning customer" into the order
+// instructions on pay-link/phone orders (which carry no trackable referrer). Parse that tag so the
+// real source isn't lost to "Direct". Mirrors the website's "How did you hear about us?" options.
+function sourceFromInstructions(instructions?: string | null): LeadSource | null {
+  if (!instructions) return null;
+  const m = instructions.match(/source\s*:\s*([^|\n\r]+)/i);
+  if (!m) return null;
+  const v = m[1].trim().toLowerCase();
+  const RULES: Array<[RegExp, LeadSource]> = [
+    [/google\s*ad/,                             'Google Ad'],
+    [/google/,                                  'Google'],
+    [/facebook|instagram|\bfb\b|\big\b|meta/,   'Facebook'],
+    [/chatgpt|openai/,                          'ChatGPT'],
+    [/claude|anthropic/,                        'Claude'],
+    [/perplexity/,                              'Perplexity'],
+    [/gemini|bard/,                             'Gemini'],
+    [/youtube/,                                 'YouTube'],
+    [/reddit/,                                  'Reddit'],
+    [/tiktok/,                                  'TikTok'],
+    [/returning|repeat/,                        'Repeat Order'],
+    [/friend|word of mouth|referral|recommend/, 'Referral'],
+    [/other/,                                    'Other'],
+  ];
+  for (const [re, label] of RULES) if (re.test(v)) return label;
+  return null;
 }
 
 /**
@@ -118,11 +146,14 @@ export function detectLeadSource(input: AttributionLike): LeadSource {
     if (/^(tiktok|tt)/.test(utmSrc))                     return 'TikTok Ad';
   }
 
-  // 1. Paid ad click IDs — strong signal, came from a specific ad
-  if (attr.fbclid)   return 'Facebook Ad';
-  if (attr.gclid)    return 'Google Ad';
-  if (attr.msclkid)  return 'Bing Ad';
-  if (attr.ttclid)   return 'TikTok Ad';
+  // 1. Paid ad click IDs — strong signal, came from a specific ad. Check the top-level fields AND
+  //    the referrer/page_url query string: a Square pay-link the customer reached from a Facebook ad
+  //    forwards ?fbclid=… into the pay-page referrer, which was leaking those orders into "Direct".
+  const clickUrlBlob = `${String(attr.referrer ?? '')} ${String(attr.http_referer ?? '')} ${String(attr.page_url ?? '')}`;
+  if (attr.fbclid  || /[?&]fbclid=/i.test(clickUrlBlob))  return 'Facebook Ad';
+  if (attr.gclid   || /[?&]gclid=/i.test(clickUrlBlob))   return 'Google Ad';
+  if (attr.msclkid || /[?&]msclkid=/i.test(clickUrlBlob)) return 'Bing Ad';
+  if (attr.ttclid  || /[?&]ttclid=/i.test(clickUrlBlob))  return 'TikTok Ad';
 
   // Meta-chat sources (from conversations table merge)
   if (attr.source === 'meta_messenger')  return 'Facebook';
@@ -138,15 +169,11 @@ export function detectLeadSource(input: AttributionLike): LeadSource {
     }
   }
 
-  // 3. Referrer hostname → organic/social/AI search
-  const referrer = String(attr.referrer ?? attr.http_referer ?? '').toLowerCase();
-  if (referrer) {
-    for (const [pattern, label] of REFERRER_MAP) {
-      if (pattern.test(referrer)) return label;
-    }
-  }
-
-  // 4. Legacy lead_source field (manual entry — agents typed/picked it from the dropdown)
+  // 3. Manual lead_source pick — the agent asked the customer "how did you hear about us?" and
+  //    selected it (or the website stored the customer's own answer). A DELIBERATE, human-confirmed
+  //    source, so it BEATS the auto-detected referrer below: a customer who discovered us on ChatGPT
+  //    and then brand-searched on Google has referrer=google.com, but the source they *told* us is
+  //    ChatGPT. Page-name junk ("Pvc Product Page") isn't in the map, so it still falls through.
   const legacy = String(input.leadSource ?? input.lead_source ?? '').trim();
   if (legacy) {
     // Normalize manual labels to clean LeadSource values. Mirrors the lead-source dropdown
@@ -181,8 +208,24 @@ export function detectLeadSource(input: AttributionLike): LeadSource {
       'other': 'Other',
       'direct': 'Direct',
     };
-    if (LEGACY_MAP[lower]) return LEGACY_MAP[lower];
+    const mapped = LEGACY_MAP[lower];
+    // A clean pick wins — but a literal "Direct" isn't a useful signal, so fall through.
+    if (mapped && mapped !== 'Direct') return mapped;
   }
+
+  // 4. Referrer hostname → organic/social/AI search (last-click). Fallback ONLY when there's no
+  //    deliberate manual pick above — a brand-search referrer shouldn't override a stated source.
+  const referrer = String(attr.referrer ?? attr.http_referer ?? '').toLowerCase();
+  if (referrer) {
+    for (const [pattern, label] of REFERRER_MAP) {
+      if (pattern.test(referrer)) return label;
+    }
+  }
+
+  // 5. Legacy "Source: X" tag some agents typed into the instructions field (manual attribution on
+  //    pay-link / phone orders that carry no trackable referrer). Last resort before Direct.
+  const fromInstructions = sourceFromInstructions(input.instructions);
+  if (fromInstructions) return fromInstructions;
 
   // No signal at all → user typed URL or paid click ID was stripped
   return 'Direct';

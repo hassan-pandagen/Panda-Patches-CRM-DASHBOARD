@@ -25,6 +25,7 @@ interface QuoteRow {
   id: number;
   attribution: Record<string, any> | null;
   lead_source: string | null;
+  instructions: string | null;
   estimated_amount: number | null;
   created_at: string;
 }
@@ -74,7 +75,7 @@ const LeadSourceDistribution: React.FC<Props> = ({ startDate, endDate }) => {
       return await fetchAllPaged<QuoteRow>((from, to) => {
         let q = supabase
           .from('quotes')
-          .select('id, attribution, lead_source, estimated_amount, created_at');
+          .select('id, attribution, lead_source, instructions, estimated_amount, created_at');
         if (startDate) q = q.gte('created_at', startDate.toISOString());
         if (endDate)   q = q.lte('created_at', endDate.toISOString());
         return q.order('created_at', { ascending: false }).range(from, to);
@@ -90,6 +91,7 @@ const LeadSourceDistribution: React.FC<Props> = ({ startDate, endDate }) => {
       const source = detectLeadSource({
         attribution: quote.attribution,
         lead_source: quote.lead_source,
+        instructions: quote.instructions,
       });
       const cur = map.get(source) ?? { leads: 0, totalEstValue: 0 };
       cur.leads += 1;

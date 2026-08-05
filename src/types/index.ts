@@ -59,7 +59,8 @@ export interface Order {
   status: OrderStatus | string;
   reasonCategory?: string;
   reasonDetails?: string;
-  
+  isWebCheckout?: boolean; // Durable self-serve web-checkout origin; survives agent reassignment
+
   // --- Customer Information ---
   customerName: string;
   customerEmail: string;

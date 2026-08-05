@@ -349,6 +349,9 @@ const SalesReportComponent: React.FC<ReportComponentProps> = ({ orders, dateRang
     const agentData = new Map<string, { orders: number; revenue: number; collected: number }>();
     for (const order of orders) {
       const agent = order.salesAgent || "Unassigned";
+      // WEB_CHECKOUT is a self-serve CHANNEL, not a sales agent — no one earns commission on it.
+      // Keep it out of the agent ranking; web-checkout revenue is shown in the Lead Source report.
+      if (agent === 'WEB_CHECKOUT') continue;
       if (!agentData.has(agent)) {
         agentData.set(agent, { orders: 0, revenue: 0, collected: 0 });
       }
@@ -820,6 +823,21 @@ const LeadSourceReportComponent: React.FC<ReportComponentProps> = ({
     [orders]
   );
 
+  // Self-serve website checkout as a CHANNEL. Counts by the durable is_web_checkout ORIGIN flag,
+  // so it stays correct even after an order is reassigned to an agent (the agent still earns
+  // commission via sales_agent — this is a separate, overlapping "how did they buy" view).
+  const webCheckoutStats = useMemo(() => {
+    let ordersCount = 0, revenue = 0;
+    for (const order of orders) {
+      if (!order.isWebCheckout) continue;
+      ordersCount += 1;
+      if (order.status !== 'REFUNDED' && order.status !== 'CANCELLED') {
+        revenue += order.orderAmount || 0;
+      }
+    }
+    return { orders: ordersCount, revenue };
+  }, [orders]);
+
   const leadSourceStats = useMemo(() => {
     const sourceStats = new Map<string, { revenue: number; orders: number }>();
     LEAD_SOURCE_OPTIONS.forEach((source) =>
@@ -834,6 +852,7 @@ const LeadSourceReportComponent: React.FC<ReportComponentProps> = ({
       const resolved = detectLeadSource({
         attribution: (order.attribution as Record<string, any> | null) ?? null,
         lead_source: order.leadSource,
+        instructions: order.instructions,
       });
       const sourceName = resolved !== 'Direct' ? resolved : (order.leadSource || "Unknown");
       if (!sourceStats.has(sourceName)) {
@@ -1220,6 +1239,19 @@ const LeadSourceReportComponent: React.FC<ReportComponentProps> = ({
               </tr>
             </thead>
             <tbody className="divide-y divide-white/5">
+              {!showingCategories && webCheckoutStats.orders > 0 && (
+                <tr className="bg-slate-800/40" title="Self-serve website checkout — a fulfillment CHANNEL. These orders also appear under their traffic source (Facebook, Google, ChatGPT…) below; this is the durable web-checkout origin total, correct even after an order is reassigned to an agent.">
+                  <td className="px-4 py-3.5 text-sm font-semibold text-white">
+                    <div className="flex items-center gap-3">
+                      <span className="w-2.5 h-2.5 rounded-full shadow-sm flex-shrink-0 bg-cyan-400" />
+                      <span>🌐 Web Checkout</span>
+                      <span className="text-[10px] text-slate-500 font-normal">self-serve channel · origin</span>
+                    </div>
+                  </td>
+                  <td className="px-4 py-3.5 text-sm text-center text-slate-300 font-medium">{webCheckoutStats.orders}</td>
+                  <td className="px-4 py-3.5 text-sm text-right text-cyan-300 font-bold tracking-wide">${webCheckoutStats.revenue.toLocaleString()}</td>
+                </tr>
+              )}
               {sourceTableData.map((source, index) => (
                 <tr key={index} className="hover:bg-white/5 cursor-pointer transition-colors group" onClick={() => handleSourceClick(source.name)}>
                   <td className="px-4 py-3.5 text-sm font-semibold text-white">

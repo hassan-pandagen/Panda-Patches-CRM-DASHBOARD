@@ -201,6 +201,7 @@ export const mapDbToOrder = (data: any): Order => {
     productionCompletionPhotos: data.productionCompletionPhotos ?? data.production_completion_photos ?? [],
     leadSource: data.leadSource ?? data.lead_source,
     salesAgent: data.salesAgent ?? data.sales_agent,
+    isWebCheckout: data.isWebCheckout ?? data.is_web_checkout ?? false,
     assignedBy: data.assignedBy ?? data.assigned_by,
     assignedAt: data.assignedAt ?? data.assigned_at,
 
