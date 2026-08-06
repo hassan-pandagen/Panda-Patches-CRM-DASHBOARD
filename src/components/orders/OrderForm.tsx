@@ -16,7 +16,8 @@ import { logger } from '../../services/logger';
 import { getPremiumStatus, setPremiumStatus } from '../../services/customerFlagsService';
 import { getCustomerByEmail, Customer } from '../../services/customersService';
 import { sanitizeOrFilterValue, sanitizeIlikePattern } from '../../utils/supabaseFilters';
-import { History, UserCheck, ExternalLink, Copy, FileText, AlertTriangle, Crown, BadgeCheck } from 'lucide-react';
+import { History, UserCheck, ExternalLink, Copy, FileText, AlertTriangle, Crown, BadgeCheck, DollarSign } from 'lucide-react';
+import MarkAsPaidModal from './MarkAsPaidModal';
 
 const CANCELLATION_REASONS = [
   "Customer Ghosted / No Reply",
@@ -260,6 +261,10 @@ const OrderForm: React.FC<OrderFormProps> = ({
 
   // Ship-By reminder checkbox — reveals the (optional) date box. Purely UI; only shipByDate persists.
   const [showShipBy, setShowShipBy] = useState<boolean>(!!initialData?.shipByDate);
+  // "Record payment" flow — reuses the atomic, audited record_manual_payment RPC (via MarkAsPaidModal)
+  // instead of a raw amount_paid write from this form, so a payment landing while the form is open
+  // can never be clobbered (PP-11151) and payment_status/paid_at/CAPI stay coherent.
+  const [showRecordPayment, setShowRecordPayment] = useState<boolean>(false);
 
   // Internal state for the spinner, managed by the form itself.
   const [isSaving, setIsSaving] = useState(false);
@@ -569,6 +574,7 @@ const OrderForm: React.FC<OrderFormProps> = ({
   ];
 
   return (
+    <>
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-8">
       <FormSectionWrapper title="Customer Information">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-5 md:gap-8">
@@ -964,11 +970,31 @@ const OrderForm: React.FC<OrderFormProps> = ({
             </div>
             <div>
               <label className="block text-xs text-slate-400">Amount Paid</label>
-              {/* Read-only: amount_paid is owned by the payment flows (Square webhook + Mark as Paid's
-                  atomic RPC). Editing it here is ignored on save — a stale value must never clobber a
-                  recorded payment (PP-11151 lost-update fix). */}
-              <input type="number" step="0.01" {...register('amountPaid', { valueAsNumber: true })} className="w-full bg-slate-800/60 border-slate-700 rounded-md text-slate-400 cursor-not-allowed" disabled title="Managed by payments — record via Mark as Paid or a Square payment link" />
-              <p className="text-[10px] text-slate-500 mt-1">Set by payments (Square / Mark as Paid) — not editable here.</p>
+              {/* amount_paid is owned by the payment flows (Square webhook + the atomic record_manual_payment
+                  RPC), never a raw write from this form — so a payment landing while the form is open can't
+                  clobber it (PP-11151), and payment_status/paid_at/CAPI stay coherent. To log a payment made
+                  by other means (bank / cash / Square / other), use "Record payment": it routes through that
+                  same audited RPC, validates against the balance, and writes the payment audit row. */}
+              <input type="hidden" {...register('amountPaid', { valueAsNumber: true })} />
+              <div className="w-full bg-slate-800/60 border border-slate-700 rounded-md px-3 py-2 text-white flex items-center justify-between min-h-[38px]">
+                <span>${amountPaid.toFixed(2)}</span>
+                {!isNewOrder && initialData?.id && canEditFinancials && amountRemaining > 0.01 && (
+                  <button
+                    type="button"
+                    onClick={() => setShowRecordPayment(true)}
+                    className="text-xs text-emerald-400 hover:text-emerald-300 font-medium flex items-center gap-1"
+                  >
+                    <DollarSign size={12} /> Record payment
+                  </button>
+                )}
+              </div>
+              <p className="text-[10px] text-slate-500 mt-1">
+                {isNewOrder
+                  ? 'Set by payments after the order is created.'
+                  : amountRemaining > 0.01
+                    ? 'Paid by bank / cash / Square? Click “Record payment”.'
+                    : 'Fully paid.'}
+              </p>
             </div>
             <div>
               <label className="block text-xs text-slate-400">Production Cost</label>
@@ -1157,6 +1183,21 @@ const OrderForm: React.FC<OrderFormProps> = ({
         </Button>
       </div>
     </form>
+
+    {/* Record a payment made outside the Square link (bank / cash / Square invoice / other) via the
+        same atomic, audited RPC used on the order page — rendered OUTSIDE the <form> so its buttons
+        (which default to type=submit) don't submit the order form. */}
+    {!isNewOrder && initialData?.id && (
+      <MarkAsPaidModal
+        isOpen={showRecordPayment}
+        onClose={() => setShowRecordPayment(false)}
+        orderId={initialData.id}
+        orderNumber={initialData.orderNumber}
+        orderAmount={orderAmount}
+        amountAlreadyPaid={amountPaid}
+      />
+    )}
+    </>
   );
 };
 

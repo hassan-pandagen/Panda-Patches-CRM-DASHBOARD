@@ -839,9 +839,9 @@ const LeadSourceReportComponent: React.FC<ReportComponentProps> = ({
   }, [orders]);
 
   const leadSourceStats = useMemo(() => {
-    const sourceStats = new Map<string, { revenue: number; orders: number }>();
+    const sourceStats = new Map<string, { revenue: number; orders: number; orderNumbers: string[] }>();
     LEAD_SOURCE_OPTIONS.forEach((source) =>
-      sourceStats.set(source, { revenue: 0, orders: 0 })
+      sourceStats.set(source, { revenue: 0, orders: 0, orderNumbers: [] })
     );
 
     orders.forEach((order) => {
@@ -856,11 +856,12 @@ const LeadSourceReportComponent: React.FC<ReportComponentProps> = ({
       });
       const sourceName = resolved !== 'Direct' ? resolved : (order.leadSource || "Unknown");
       if (!sourceStats.has(sourceName)) {
-        sourceStats.set(sourceName, { revenue: 0, orders: 0 });
+        sourceStats.set(sourceName, { revenue: 0, orders: 0, orderNumbers: [] });
       }
       const current = sourceStats.get(sourceName)!;
       current.revenue += order.orderAmount || 0;
       current.orders += 1;
+      if (order.orderNumber) current.orderNumbers.push(order.orderNumber);
     });
 
     return Array.from(sourceStats.entries())
@@ -898,7 +899,11 @@ const LeadSourceReportComponent: React.FC<ReportComponentProps> = ({
       ? (CATEGORY_COLORS[name] || CATEGORY_COLORS['Direct / Other'])
       : (SOURCE_COLORS[name] || SOURCE_COLORS['Other']);
   const handleSourceClick = (name: string) => {
-    if (showingCategories) setDrillCategory(name);
+    if (showingCategories) { setDrillCategory(name); return; }
+    // Drill into the SAME orders the report counted for this source (resolved via attribution),
+    // not just raw-label matches — clicking "Facebook Ad" shows all 5, not the 1 literally labeled it.
+    const nums = leadSourceStats.find((s) => s.name === name)?.orderNumbers ?? [];
+    if (nums.length > 0) navigate(`/orders?ids=${encodeURIComponent(nums.join(','))}`);
     else navigate(`/orders?leadSource=${encodeURIComponent(name)}`);
   };
 
