@@ -337,17 +337,12 @@ const OrderPage: React.FC = () => {
     // --- DELETE MUTATION ---
     const deleteMutation = useMutation({
         mutationFn: async (orderToDelete: Order) => {
-            await supabase.from('order_history').insert({
-                order_id: orderToDelete.id,
-                user_email: user?.email || 'unknown',
-                field_changed: 'ORDER_DELETED',
-                new_value: `Deleted by ${user?.email}`,
-            });
-            // Soft-delete: set deleted_at instead of hard-deleting. RLS hides it from every
-            // read path, but the row + its full order_history survive (no more untraceable loss).
-            const { error } = await supabase.from('orders')
-                .update({ deleted_at: new Date().toISOString() })
-                .eq('id', orderToDelete.id);
+            // Soft-delete via an admin-only SECURITY DEFINER RPC. It runs as the table owner, so it
+            // bypasses an RLS WITH-CHECK interaction that blocked a direct client-side UPDATE of
+            // deleted_at (admins hit "new row violates row-level security policy for table orders").
+            // The function enforces is_admin(), writes the ORDER_DELETED history row, and sets
+            // deleted_at atomically — the row + its history survive (no untraceable loss).
+            const { error } = await supabase.rpc('admin_soft_delete_order', { p_order_id: orderToDelete.id });
             if (error) throw error;
         },
         onSuccess: () => {
