@@ -874,11 +874,11 @@ const buildEmailHTML = (templateId: string, data: any): string => {
                   <span style="font-size: 18px; font-family: 'lucida sans unicode', 'lucida grande', sans-serif; color: #2e7d32; font-weight: bold; float: right;">${escapeHtml(String(data.amount_paid))}</span>
                 </td>
               </tr>
-              ${templateId !== 'CUSTOMER_PAYMENT_CONFIRMATION' && data.amount_remaining && data.amount_remaining !== '$0' ? `
+              ${data.is_paid_in_full === false ? `
               <tr>
                 <td style="padding: 12px 20px; background-color: #fffde7;">
                   <span style="font-size: 15px; font-family: 'lucida sans unicode', 'lucida grande', sans-serif; color: #f57f17;">⏳ Remaining Balance</span>
-                  <span style="font-size: 18px; font-family: 'lucida sans unicode', 'lucida grande', sans-serif; color: #f57f17; font-weight: bold; float: right;">${escapeHtml(String(data.amount_remaining))}</span>
+                  <span style="font-size: 18px; font-family: 'lucida sans unicode', 'lucida grande', sans-serif; color: #f57f17; font-weight: bold; float: right;">${escapeHtml(String(data.amount_remaining || 'N/A'))}</span>
                 </td>
               </tr>
               ` : `

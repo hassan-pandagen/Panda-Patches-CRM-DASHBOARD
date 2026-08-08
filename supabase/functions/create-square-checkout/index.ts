@@ -3,7 +3,10 @@
 // Creates a Square Checkout session and returns the checkout URL.
 // Sets reference_id = token so square-payment-webhook can look up the token.
 
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.10";
+// Deno-native JSR import, NOT esm.sh — the esm.sh build bundles Node `ws`, which crashed
+// square-payment-webhook on cold boot (`node:url not found`) and took the whole Square path
+// down for ~2 days on 2026-08-08. jsr uses the built-in WebSocket. See memory: square-webhook-esmsh-ws-crash.
+import { createClient } from "jsr:@supabase/supabase-js@2";
 import { z } from "https://deno.land/x/zod@v3.22.4/mod.ts";
 
 const SQUARE_BASE_URL = "https://connect.squareup.com"; // production

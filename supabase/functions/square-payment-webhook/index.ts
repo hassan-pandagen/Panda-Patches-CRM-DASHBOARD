@@ -16,7 +16,13 @@
 //
 // Security: JWT verification DISABLED. Auth via HMAC-SHA256 of (webhookUrl + rawBody).
 
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.10';
+// NOTE: use the Deno-native JSR distribution, NOT esm.sh. The esm.sh build bundles the
+// Node `ws` package (ws@8.x/denonext/ws.mjs), which on cold boot in the edge runtime crashed
+// with `module "node:url" not found` -> `Cannot destructure property 'URL' ... as it is null`,
+// taking the whole invocation down with a 500 BEFORE any handler code ran. That silently broke
+// every Square payment webhook for ~2 days (last good payment PP-11212, 2026-08-06). The jsr
+// build uses the runtime's built-in WebSocket and never imports `ws`. Do NOT revert to esm.sh.
+import { createClient } from 'jsr:@supabase/supabase-js@2';
 
 const WEBHOOK_URL = 'https://uxgzlneefybifvccfhwp.supabase.co/functions/v1/square-payment-webhook';
 const enc = new TextEncoder();
@@ -400,6 +406,8 @@ Deno.serve(async (req: Request) => {
                   order_number: newOrder.order_number,
                   amount_paid: `$${paidAmount.toFixed(2)}`,
                   total_amount: `$${(quote.estimated_amount || paidAmount).toFixed(2)}`,
+                  amount_remaining: `$${Math.max(0, (quote.estimated_amount || paidAmount) - paidAmount).toFixed(2)}`,
+                  is_paid_in_full: paidAmount >= (quote.estimated_amount || paidAmount),
                   loyalty_tier: loyaltyTierForEmail,
                   portal_action_url: 'https://pandapatches.com/login',
                 },
@@ -557,6 +565,8 @@ Deno.serve(async (req: Request) => {
                       order_number: newOrder.order_number,
                       amount_paid: `$${paidAmount.toFixed(2)}`,
                       total_amount: `$${(od.order_amount || paidAmount).toFixed(2)}`,
+                      amount_remaining: `$${Math.max(0, (od.order_amount || paidAmount) - paidAmount).toFixed(2)}`,
+                      is_paid_in_full: paidAmount >= (od.order_amount || paidAmount),
                       loyalty_tier: loyaltyTierForEmail,
                       portal_action_url: 'https://pandapatches.com/login',
                     },
@@ -691,6 +701,8 @@ Deno.serve(async (req: Request) => {
                   order_number: newOrder.order_number,
                   amount_paid: `$${paidAmount.toFixed(2)}`,
                   total_amount: `$${(orderAmount || paidAmount).toFixed(2)}`,
+                  amount_remaining: `$${Math.max(0, (orderAmount || paidAmount) - paidAmount).toFixed(2)}`,
+                  is_paid_in_full: paidAmount >= (orderAmount || paidAmount),
                   portal_action_url: 'https://pandapatches.com/login',
                 },
               }),
@@ -808,6 +820,8 @@ Deno.serve(async (req: Request) => {
                 order_number: order.order_number,
                 amount_paid: `$${paidAmount.toFixed(2)}`,
                 total_amount: `$${(total || paidAmount).toFixed(2)}`,
+                amount_remaining: `$${Math.max(0, total - newAmountPaid).toFixed(2)}`,
+                is_paid_in_full: nextPaymentStatus === 'PAID' || newAmountPaid >= total,
                 loyalty_tier: loyaltyTierForEmail,
                 portal_action_url: 'https://pandapatches.com/login',
               },
