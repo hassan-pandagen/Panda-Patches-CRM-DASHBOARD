@@ -70,11 +70,15 @@ function resolveLeadSource(attribution: any): string {
     if (/^(tiktok|tt)/.test(utmSrc))                     return 'TikTok Ad';
   }
 
-  // 1. Paid ad click IDs — came from a specific ad
-  if (attr.fbclid)  return 'Facebook Ad';
-  if (attr.gclid)   return 'Google Ad';
-  if (attr.msclkid) return 'Bing Ad';
-  if (attr.ttclid)  return 'TikTok Ad';
+  // 1. Paid ad click IDs — top-level, embedded in the pay-link referrer/page_url, or captured as
+  //    fbc. Square pay-links opened from a Facebook ad forward ?fbclid=… into the referrer and store
+  //    fbc ("fb.1.<ts>.<fbclid>"), which was leaking these orders into "Direct". MUST stay in sync
+  //    with src/utils/leadSource.ts -> detectLeadSource. (fbp is NOT a click id — do not use it.)
+  const clickUrlBlob = `${String(attr.referrer ?? '')} ${String(attr.http_referer ?? '')} ${String(attr.page_url ?? '')}`;
+  if (attr.fbclid  || attr.fbc || /[?&]fbclid=/i.test(clickUrlBlob))  return 'Facebook Ad';
+  if (attr.gclid   || /[?&]gclid=/i.test(clickUrlBlob))   return 'Google Ad';
+  if (attr.msclkid || /[?&]msclkid=/i.test(clickUrlBlob)) return 'Bing Ad';
+  if (attr.ttclid  || /[?&]ttclid=/i.test(clickUrlBlob))  return 'TikTok Ad';
 
   // Meta-chat sources (conversations merge)
   if (attr.source === 'meta_messenger') return 'Facebook';

@@ -150,7 +150,10 @@ export function detectLeadSource(input: AttributionLike): LeadSource {
   //    the referrer/page_url query string: a Square pay-link the customer reached from a Facebook ad
   //    forwards ?fbclid=… into the pay-page referrer, which was leaking those orders into "Direct".
   const clickUrlBlob = `${String(attr.referrer ?? '')} ${String(attr.http_referer ?? '')} ${String(attr.page_url ?? '')}`;
-  if (attr.fbclid  || /[?&]fbclid=/i.test(clickUrlBlob))  return 'Facebook Ad';
+  // attr.fbc ("fb.1.<ts>.<fbclid>") is set whenever a Facebook click id was present — even when the
+  // raw ?fbclid= didn't survive into the referrer (agent pay-links opened inside the FB app). Treat
+  // it as a Facebook Ad click, consistent with the fbclid handling. (fbp is NOT a click — skip it.)
+  if (attr.fbclid  || attr.fbc || /[?&]fbclid=/i.test(clickUrlBlob))  return 'Facebook Ad';
   if (attr.gclid   || /[?&]gclid=/i.test(clickUrlBlob))   return 'Google Ad';
   if (attr.msclkid || /[?&]msclkid=/i.test(clickUrlBlob)) return 'Bing Ad';
   if (attr.ttclid  || /[?&]ttclid=/i.test(clickUrlBlob))  return 'TikTok Ad';
