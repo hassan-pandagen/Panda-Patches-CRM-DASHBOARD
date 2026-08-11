@@ -970,31 +970,43 @@ const OrderForm: React.FC<OrderFormProps> = ({
             </div>
             <div>
               <label className="block text-xs text-slate-400">Amount Paid</label>
-              {/* amount_paid is owned by the payment flows (Square webhook + the atomic record_manual_payment
-                  RPC), never a raw write from this form — so a payment landing while the form is open can't
-                  clobber it (PP-11151), and payment_status/paid_at/CAPI stay coherent. To log a payment made
-                  by other means (bank / cash / Square / other), use "Record payment": it routes through that
-                  same audited RPC, validates against the balance, and writes the payment audit row. */}
-              <input type="hidden" {...register('amountPaid', { valueAsNumber: true })} />
-              <div className="w-full bg-slate-800/60 border border-slate-700 rounded-md px-3 py-2 text-white flex items-center justify-between min-h-[38px]">
-                <span>${amountPaid.toFixed(2)}</span>
-                {!isNewOrder && initialData?.id && canEditFinancials && amountRemaining > 0.01 && (
-                  <button
-                    type="button"
-                    onClick={() => setShowRecordPayment(true)}
-                    className="text-xs text-emerald-400 hover:text-emerald-300 font-medium flex items-center gap-1"
-                  >
-                    <DollarSign size={12} /> Record payment
-                  </button>
-                )}
-              </div>
-              <p className="text-[10px] text-slate-500 mt-1">
-                {isNewOrder
-                  ? 'Set by payments after the order is created.'
-                  : amountRemaining > 0.01
-                    ? 'Paid by bank / cash / Square? Click “Record payment”.'
-                    : 'Fully paid.'}
-              </p>
+              {canEditFinancials && !isNewOrder && initialData?.id ? (
+                <>
+                  {/* Editable for admins / financial editors. On save, a CHANGE here is routed through the
+                      guarded correct_order_payment RPC (see EditOrderPage) — never a raw write — so a payment
+                      landing while the form is open still can't clobber it (PP-11151), and a confirmed Square
+                      payment can't be silently wiped. "Record payment" logs a payment WITH method/reference. */}
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    {...register('amountPaid', { valueAsNumber: true, min: { value: 0, message: 'Cannot be negative' } })}
+                    className="w-full bg-slate-800 border-slate-600 rounded-md text-white"
+                  />
+                  <div className="flex items-center justify-between mt-1">
+                    <p className="text-[10px] text-slate-500">
+                      {amountRemaining > 0.01 ? `Remaining $${amountRemaining.toFixed(2)}` : 'Fully paid.'}
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => setShowRecordPayment(true)}
+                      className="text-[11px] text-emerald-400 hover:text-emerald-300 font-medium flex items-center gap-1"
+                    >
+                      <DollarSign size={12} /> Record payment
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <input type="hidden" {...register('amountPaid', { valueAsNumber: true })} />
+                  <div className="w-full bg-slate-800/60 border border-slate-700 rounded-md px-3 py-2 text-white flex items-center justify-between min-h-[38px]">
+                    <span>${amountPaid.toFixed(2)}</span>
+                  </div>
+                  <p className="text-[10px] text-slate-500 mt-1">
+                    {isNewOrder ? 'Set by payments after the order is created.' : 'Financials restricted.'}
+                  </p>
+                </>
+              )}
             </div>
             <div>
               <label className="block text-xs text-slate-400">Production Cost</label>

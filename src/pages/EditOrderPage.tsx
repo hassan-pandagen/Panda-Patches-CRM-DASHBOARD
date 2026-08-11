@@ -80,14 +80,33 @@ const EditOrderPage: React.FC = () => {
   const updateOrderMutation = useMutation({
     mutationFn: async (updateData: Partial<Order> & { [key: string]: any }) => {
       console.log('💾 Saving order with data:', updateData);
-      
-      // ✅ Import and use the service function that has email trigger logic
-      return await updateOrderDetails(
+
+      // ✅ Import and use the service function that has email trigger logic.
+      // NOTE: updateOrderDetails deliberately STRIPS amount_paid (payment-flow-owned) so a stale
+      // form value can never clobber a payment that landed while the form was open (PP-11151).
+      const result = await updateOrderDetails(
         initialOrder!.id,
         updateData,
         initialOrder!,
         user?.email || 'unknown'
       );
+
+      // Amount Paid is editable for financial editors, but owned by the payment flow — so apply a
+      // CHANGE via the guarded correct_order_payment RPC (admin/orders_edit_financials only, blocks
+      // wiping a confirmed Square payment, audited). Only fires when the value actually changed, so an
+      // untouched save can't overwrite a background payment.
+      const newPaid = Number(updateData.amountPaid);
+      const oldPaid = Number(initialOrder!.amountPaid ?? 0);
+      if (Number.isFinite(newPaid) && Math.abs(newPaid - oldPaid) > 0.005) {
+        const { error: rpcErr } = await supabase.rpc('correct_order_payment', {
+          p_order_id: initialOrder!.id,
+          p_new_amount_paid: newPaid,
+          p_reason: 'Adjusted on order edit form',
+        });
+        if (rpcErr) throw rpcErr;
+      }
+
+      return result;
     },
     onSuccess: async () => {
       console.log('✅ Save successful, invalidating queries...');
