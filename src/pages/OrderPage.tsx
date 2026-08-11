@@ -23,7 +23,7 @@ import StatusBadge from '../components/ui/StatusBadge';
 import PremiumBadge from '../components/ui/PremiumBadge';
 
 // Icons (Check already imported below)
-import { Edit, Trash2, ShieldAlert, ArrowLeft, Lock, MapPin, Smartphone, Maximize, Check, XCircle, AlertTriangle, Copy, FileText, Upload, Package, X, Mail, DollarSign, Crown } from 'lucide-react';
+import { Edit, Trash2, ShieldAlert, ArrowLeft, Lock, MapPin, Smartphone, Maximize, Check, XCircle, AlertTriangle, Copy, FileText, Upload, Package, X, Mail, DollarSign, Crown, RotateCcw } from 'lucide-react';
 
 // 1. Import the new component
 import OrderTimeline from '../components/orders/OrderTimeline';
@@ -35,6 +35,7 @@ import OrderNotesSection from '../components/orders/OrderNotesSection';
 import OrderMessageThread from '../components/messaging/OrderMessageThread';
 import AttributionQualityBadge, { getAttributionQualityFromOrder } from '../components/AttributionQualityBadge';
 import MarkAsPaidModal from '../components/orders/MarkAsPaidModal';
+import CorrectPaymentModal from '../components/orders/CorrectPaymentModal';
 import MetaCapiPanel from '../components/orders/MetaCapiPanel';
 import GeneratePaymentLinkModal from '../components/orders/GeneratePaymentLinkModal';
 
@@ -83,6 +84,7 @@ const OrderPage: React.FC = () => {
     const [isEditingProduction, setIsEditingProduction] = React.useState(false);
     const [isSendingPaymentEmail, setIsSendingPaymentEmail] = React.useState(false);
     const [isMarkPaidModalOpen, setIsMarkPaidModalOpen] = React.useState(false);
+    const [isCorrectPaymentOpen, setIsCorrectPaymentOpen] = React.useState(false);
     const [isGenerateLinkModalOpen, setIsGenerateLinkModalOpen] = React.useState(false);
     // Production/digitizer mockup-upload → Send for Approval flow
     const [mockupFiles, setMockupFiles] = React.useState<string[]>([]);
@@ -99,6 +101,9 @@ const OrderPage: React.FC = () => {
         isAdmin ||
         permissions?.reports_view_financials === true ||
         permissions?.orders_edit_financials === true;
+
+    // Editing what's actually paid (record + correct) requires the financial-edit permission.
+    const canEditFinancials = isAdmin || permissions?.orders_edit_financials === true;
 
     // Check for the correct 'shipping_view' key.
     const canViewShipping = isAdmin || permissions?.shipping_view === true;
@@ -453,6 +458,15 @@ const OrderPage: React.FC = () => {
             <MarkAsPaidModal
                 isOpen={isMarkPaidModalOpen}
                 onClose={() => setIsMarkPaidModalOpen(false)}
+                orderId={order.id}
+                orderNumber={order.orderNumber}
+                orderAmount={order.orderAmount || 0}
+                amountAlreadyPaid={order.amountPaid || 0}
+            />
+
+            <CorrectPaymentModal
+                isOpen={isCorrectPaymentOpen}
+                onClose={() => setIsCorrectPaymentOpen(false)}
                 orderId={order.id}
                 orderNumber={order.orderNumber}
                 orderAmount={order.orderAmount || 0}
@@ -1120,6 +1134,21 @@ const OrderPage: React.FC = () => {
                                 >
                                     <DollarSign size={14} />
                                     <span>Record Manual Payment</span>
+                                </Button>
+                            </div>
+                        )}
+
+                        {/* CORRECT PAYMENT — fix a payment recorded in error (only when something is recorded) */}
+                        {canEditFinancials && order && (order.amountPaid || 0) > 0 && (
+                            <div className="pt-2">
+                                <Button
+                                    variant="secondary"
+                                    size="sm"
+                                    onClick={() => setIsCorrectPaymentOpen(true)}
+                                    className="w-full bg-amber-500/10 text-amber-400 hover:bg-amber-500/20 hover:text-amber-300 border border-amber-500/30"
+                                >
+                                    <RotateCcw size={14} />
+                                    <span>Correct Payment</span>
                                 </Button>
                             </div>
                         )}
