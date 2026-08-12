@@ -9,6 +9,7 @@ import { useQuery, useMutation } from '@tanstack/react-query';
 import { supabase } from '../../services/supabaseClient';
 import { BrandLogo } from '../../components/ui/BrandLogo';
 import { CreditCard, CheckCircle, AlertCircle, Package, User, MapPin } from 'lucide-react';
+import { PATCHES_TYPE_OPTIONS, DESIGN_BACKING_OPTIONS } from '../../constants/index';
 
 // ── Browser signal helpers ────────────────────────────────────────────────────
 function getCookie(name: string): string | null {
@@ -94,14 +95,9 @@ const PaymentFormLandingPage: React.FC = () => {
 };
 
 // ── Payment Form ───────────────────────────────────────────────────────────────
-const PATCH_TYPES = [
-  'Embroidered Patches', 'Woven Patches', 'PVC Patches',
-  'Leather Patches', 'Chenille Patches', 'Custom 3D Embroidered Transfers',
-  'Heat Transfer', 'Screen Print', 'Sublimation Patch',
-  'DTF Prints', 'Silicone Patches',
-];
-
-const BACKING_OPTIONS = ['Iron-on', 'Velcro', 'Sew-on', 'No Backing', 'Adhesive'];
+// Single source of truth — shared with the CRM order form + agent payment form.
+const PATCH_TYPES = PATCHES_TYPE_OPTIONS;
+const BACKING_OPTIONS = DESIGN_BACKING_OPTIONS;
 
 const PaymentForm: React.FC<{ tokenData: any }> = ({ tokenData: tokenDataRaw }) => {
   const tokenData = tokenDataRaw ?? {};

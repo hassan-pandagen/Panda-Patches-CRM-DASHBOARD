@@ -44,11 +44,17 @@ export const PATCH_TYPE_ALIAS: Record<string, string> = {
   embroideredkeychain: 'Embroidered Keychains',
 };
 
-export const BACKING_CANON = ['Iron on', 'Sew on', 'Sticker', 'Velcro'];
+// The SIX canonical backings (website + database). Aliases map every legacy/short/website form
+// (incl. the pre-2026-08 stored values "Iron on"/"Sew on"/"Velcro"/"Sticker") to these.
+export const BACKING_CANON = ['Iron-On', 'Sew-On', 'Velcro (Hook & Loop)', 'Adhesive (Peel & Stick)', 'Magnetic', 'Button-Loop'];
 export const BACKING_ALIAS: Record<string, string> = {
-  iron: 'Iron on', justheatpress: 'Iron on', heatpress: 'Iron on',
-  sew: 'Sew on',
-  stickerbacking: 'Sticker', adhesive: 'Sticker',
+  iron: 'Iron-On', ironon: 'Iron-On', justheatpress: 'Iron-On', heatpress: 'Iron-On',
+  sew: 'Sew-On', sewon: 'Sew-On',
+  velcro: 'Velcro (Hook & Loop)', hookloop: 'Velcro (Hook & Loop)', hookandloop: 'Velcro (Hook & Loop)',
+  adhesive: 'Adhesive (Peel & Stick)', sticker: 'Adhesive (Peel & Stick)', stickerbacking: 'Adhesive (Peel & Stick)',
+  peelstick: 'Adhesive (Peel & Stick)', peelandstick: 'Adhesive (Peel & Stick)',
+  magnet: 'Magnetic',
+  button: 'Button-Loop', buttonloop: 'Button-Loop',
 };
 
 const normKey = (s: unknown): string => String(s ?? '').toLowerCase().replace(/[^a-z0-9]+/g, '');

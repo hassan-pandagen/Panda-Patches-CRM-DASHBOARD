@@ -14,6 +14,7 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useParams } from 'react-router-dom';
+import { PATCHES_TYPE_OPTIONS, DESIGN_BACKING_OPTIONS } from '../constants/index';
 import { supabase } from '../services/supabaseClient';
 import { uploadFile } from '../services/storageService';
 import { useAuth } from '../contexts/AuthContext';
@@ -465,7 +466,7 @@ const ConvertToOrderModal: React.FC<{
   const [patchType, setPatchType] = useState('Embroidered');
   const [quantity, setQuantity] = useState('');
   const [designSize, setDesignSize] = useState('');
-  const [designBacking, setDesignBacking] = useState('Iron-on');
+  const [designBacking, setDesignBacking] = useState('Iron on');
   const [orderAmount, setOrderAmount] = useState(
     conv.agreed_price != null ? String(conv.agreed_price) : ''
   );
@@ -617,7 +618,7 @@ const ConvertToOrderModal: React.FC<{
                 onChange={e => setPatchType(e.target.value)}
                 className="w-full px-3 py-2 bg-slate-800 border border-white/10 rounded-lg text-sm text-white focus:outline-none focus:border-brand-orange/50"
               >
-                {['Embroidered', 'PVC', 'Woven', 'Chenille', 'Leather', '3D Embroidery Puff', 'Sublimation Patch', 'DTF Transfer'].map(t => (
+                {PATCHES_TYPE_OPTIONS.map(t => (
                   <option key={t} value={t}>{t}</option>
                 ))}
               </select>
@@ -650,7 +651,7 @@ const ConvertToOrderModal: React.FC<{
                 onChange={e => setDesignBacking(e.target.value)}
                 className="w-full px-3 py-2 bg-slate-800 border border-white/10 rounded-lg text-sm text-white focus:outline-none focus:border-brand-orange/50"
               >
-                {['Iron-on', 'Velcro', 'Adhesive', 'None'].map(b => (
+                {DESIGN_BACKING_OPTIONS.map(b => (
                   <option key={b} value={b}>{b}</option>
                 ))}
               </select>

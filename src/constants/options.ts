@@ -1,18 +1,23 @@
 export const COURIER_OPTIONS: string[] = ['FedEx', 'DHL', 'UPS', 'Other'];
 export const PATCHES_TYPE_OPTIONS: string[] = [
-  'Embroidered', 'PVC', 'Woven', 'Chenille', 'Leather',
+  'Embroidered', 'PVC', 'Woven', 'Chenille', 'Chenille+Embroidery', 'Leather',
   '3D Embroidery Puff', '3D Embroidery Transfer', 'Chenille Transfer',
   'Sequin Patch', 'Sublimation Patch', 'Sublimation+Embroidery', 'DTF Transfer',
   'Silicone Transfer', 'High Density Transfer',
   'TPU+Chenille', 'TPU+Embroidery', 'TPU+Sublimation',
   'Glitter+Embroidery', 'Glitter+Chenille', 'Glitter+Embroidery 3D',
-  'DTF+Chenille', 'DTF+Embroidery', 'Embroidery Transfer',
+  'DTF+Chenille', 'DTF+Embroidery', 'Embroidery Transfer', 'Heat Transfer',
   'DST Service', 'Challenge Coin',
   'PVC Keychains', 'Embroidered Keychains', 'Leather Keychains',
   'Custom Lapel Pins', 'Custom PVC Shoe Charms',
   'Sample Box', 'Customize Sample Box'
 ];
-export const DESIGN_BACKING_OPTIONS: string[] = ['Iron-on', 'Velcro', 'Adhesive', 'None'];
+// Canonical backing values — the SIX backings used on the website + database (single source of
+// truth). Keep in sync with BACKING_CANON in src/utils/patchVocab.ts AND the webhook's
+// resolveBacking. Shared by the order form, agent payment form, customer payment page, and inbox.
+export const DESIGN_BACKING_OPTIONS: string[] = [
+  'Iron-On', 'Sew-On', 'Velcro (Hook & Loop)', 'Adhesive (Peel & Stick)', 'Magnetic', 'Button-Loop',
+];
 // Shipping countries we sell into. Extend this list AND the CHECK constraint in
 // supabase/migrations/add_country_to_orders.sql when a new country is added.
 export const COUNTRY_OPTIONS: string[] = [

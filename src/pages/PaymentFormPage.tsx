@@ -10,6 +10,7 @@ import { uploadFile } from '../services/storageService';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../hooks/useToast';
 import SpotlightCard from '../components/ui/SpotlightCard';
+import { PATCHES_TYPE_OPTIONS, DESIGN_BACKING_OPTIONS } from '../constants/index';
 import {
   Link, Copy, Check, Plus, ExternalLink, Trash2,
   CreditCard, ChevronDown, ChevronUp, MessageCircle, Mail,
@@ -17,14 +18,10 @@ import {
 } from 'lucide-react';
 import { format, parseISO, isPast } from 'date-fns';
 
-const PATCH_TYPES = [
-  'Embroidered Patches', 'Woven Patches', 'PVC Patches',
-  'Leather Patches', 'Chenille Patches', 'Custom 3D Embroidered Transfers',
-  'Heat Transfer', 'Screen Print', 'Sublimation Patch',
-  'DTF Prints', 'Silicone Patches',
-];
-
-const BACKING_OPTIONS = ['Iron-on', 'Velcro', 'Sew-on', 'No Backing', 'Adhesive'];
+// Single source of truth — patch types + backing come from src/constants/options.ts,
+// shared with the CRM order form, quotes, and the customer payment page.
+const PATCH_TYPES = PATCHES_TYPE_OPTIONS;
+const BACKING_OPTIONS = DESIGN_BACKING_OPTIONS;
 
 interface Token {
   id: number;

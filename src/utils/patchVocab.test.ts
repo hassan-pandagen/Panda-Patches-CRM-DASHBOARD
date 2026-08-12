@@ -40,23 +40,26 @@ describe('normalizePatchType', () => {
 });
 
 describe('normalizeBacking', () => {
-  it('normalizes the common storefront spellings of iron-on', () => {
-    expect(normalizeBacking('Iron on')).toBe('Iron on');
-    expect(normalizeBacking('iron-on')).toBe('Iron on');
-    expect(normalizeBacking('Iron On')).toBe('Iron on');
-    expect(normalizeBacking('iron')).toBe('Iron on');
-    expect(normalizeBacking('heatpress')).toBe('Iron on');
+  it('normalizes the storefront spellings of iron-on (incl. old stored "Iron on")', () => {
+    expect(normalizeBacking('Iron on')).toBe('Iron-On');
+    expect(normalizeBacking('iron-on')).toBe('Iron-On');
+    expect(normalizeBacking('Iron On')).toBe('Iron-On');
+    expect(normalizeBacking('iron')).toBe('Iron-On');
+    expect(normalizeBacking('heatpress')).toBe('Iron-On');
   });
 
-  it('normalizes the other backings', () => {
-    expect(normalizeBacking('velcro')).toBe('Velcro');
-    expect(normalizeBacking('sew')).toBe('Sew on');
-    expect(normalizeBacking('adhesive')).toBe('Sticker');
-    expect(normalizeBacking('stickerbacking')).toBe('Sticker');
+  it('normalizes the other backings to the six canonical values', () => {
+    expect(normalizeBacking('velcro')).toBe('Velcro (Hook & Loop)');
+    expect(normalizeBacking('sew')).toBe('Sew-On');
+    expect(normalizeBacking('adhesive')).toBe('Adhesive (Peel & Stick)');
+    expect(normalizeBacking('stickerbacking')).toBe('Adhesive (Peel & Stick)');
+    expect(normalizeBacking('Sticker')).toBe('Adhesive (Peel & Stick)');
+    expect(normalizeBacking('magnetic')).toBe('Magnetic');
+    expect(normalizeBacking('button-loop')).toBe('Button-Loop');
   });
 
   it('keeps unknown values and returns null for empty', () => {
-    expect(normalizeBacking('magnetic')).toBe('magnetic');
+    expect(normalizeBacking('plastic')).toBe('plastic');
     expect(normalizeBacking('')).toBeNull();
     expect(normalizeBacking(null)).toBeNull();
   });

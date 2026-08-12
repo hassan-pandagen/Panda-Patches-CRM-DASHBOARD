@@ -151,11 +151,18 @@ const PATCH_TYPE_ALIAS: Record<string, string> = {
   chenilleglitter: 'Glitter+Chenille', customchenilleglitterpatches: 'Glitter+Chenille',
   pvckeychain: 'PVC Keychains', embroideredkeychain: 'Embroidered Keychains',
 };
-const BACKING_CANON = ['Iron on', 'Sew on', 'Sticker', 'Velcro'];
+// The SIX canonical backings (website + database). MUST match BACKING_CANON in
+// src/utils/patchVocab.ts + DESIGN_BACKING_OPTIONS in src/constants/options.ts. Aliases map every
+// legacy/short/website form (incl. old stored "Iron on"/"Sew on"/"Velcro"/"Sticker") to these.
+const BACKING_CANON = ['Iron-On', 'Sew-On', 'Velcro (Hook & Loop)', 'Adhesive (Peel & Stick)', 'Magnetic', 'Button-Loop'];
 const BACKING_ALIAS: Record<string, string> = {
-  iron: 'Iron on', justheatpress: 'Iron on', heatpress: 'Iron on',
-  sew: 'Sew on',
-  stickerbacking: 'Sticker', adhesive: 'Sticker',
+  iron: 'Iron-On', ironon: 'Iron-On', justheatpress: 'Iron-On', heatpress: 'Iron-On',
+  sew: 'Sew-On', sewon: 'Sew-On',
+  velcro: 'Velcro (Hook & Loop)', hookloop: 'Velcro (Hook & Loop)', hookandloop: 'Velcro (Hook & Loop)',
+  adhesive: 'Adhesive (Peel & Stick)', sticker: 'Adhesive (Peel & Stick)', stickerbacking: 'Adhesive (Peel & Stick)',
+  peelstick: 'Adhesive (Peel & Stick)', peelandstick: 'Adhesive (Peel & Stick)',
+  magnet: 'Magnetic',
+  button: 'Button-Loop', buttonloop: 'Button-Loop',
 };
 
 const normKey = (s: unknown) => String(s ?? '').toLowerCase().replace(/[^a-z0-9]+/g, '');
