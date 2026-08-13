@@ -41,7 +41,7 @@ const SearchResultsPage: React.FC = () => {
       const { data, error } = await supabase
         .from('orders_with_details')
         .select('*')
-        .or(`order_number.ilike.${searchTerm},customer_name.ilike.${searchTerm},customer_email.ilike.${searchTerm},sales_agent.ilike.${searchTerm},customer_phone.ilike.${searchTerm}`)
+        .or(`order_number.ilike.${searchTerm},customer_name.ilike.${searchTerm},customer_email.ilike.${searchTerm},sales_agent.ilike.${searchTerm},customer_phone.ilike.${searchTerm},organization.ilike.${searchTerm},agency_name.ilike.${searchTerm}`)
         .order('created_at', { ascending: false });
 
       if (error) throw new Error(error.message);

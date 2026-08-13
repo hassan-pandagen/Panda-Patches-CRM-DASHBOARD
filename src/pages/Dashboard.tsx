@@ -16,6 +16,7 @@ import { motion } from "framer-motion";
 
 import { useAuth } from "../contexts/AuthContext";
 import SpotlightCard from "../components/ui/SpotlightCard";
+import StaleOrdersAlert from "../components/dashboard/StaleOrdersAlert";
 import { supabase } from "../services/supabaseClient";
 import { useDashboardMetrics } from "../hooks/useDashboardMetrics";
 import { mapDbToOrder } from "../services/orderService";
@@ -410,6 +411,9 @@ export default function Dashboard() {
             isLoading={isLoading}
           />
         </motion.div>
+
+        {/* Backlog alert — orders stuck in SHIPPED/IN_PRODUCTION past 30 days (admins only) */}
+        {isAdmin && <StaleOrdersAlert />}
 
         {/* MAIN CONTENT GRID */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

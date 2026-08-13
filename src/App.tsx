@@ -31,6 +31,7 @@ const CustomerHistoryPage = lazy(() => import('@/pages/CustomerHistoryPage'));
 const ClockInOutPage = lazy(() => import('@/pages/ClockInOutPage'));
 const PerformanceMetricsPage = lazy(() => import('@/pages/PerformanceMetricsPage'));
 const BulkCostEntryPage = lazy(() => import('@/pages/BulkCostEntryPage'));
+const BulkCloseOrdersPage = lazy(() => import('@/pages/BulkCloseOrdersPage'));
 const CustomersPage = lazy(() => import('@/pages/CustomersPage'));
 const CustomerAccountPage = lazy(() => import('@/pages/CustomerAccountPage'));
 const CompaniesPage = lazy(() => import('@/pages/CompaniesPage'));
@@ -97,6 +98,7 @@ const App: React.FC = () => {
               {/* Admin */}
               <Route element={<ErrorBoundary><ChunkErrorBoundary><AdminRoute /></ChunkErrorBoundary></ErrorBoundary>}>
                 <Route path="/bulk-cost-entry" element={<BulkCostEntryPage />} />
+                <Route path="/bulk-close" element={<BulkCloseOrdersPage />} />
                 <Route path="/user-management" element={<UserManagementPage />} />
                 <Route path="/performance-metrics" element={<PerformanceMetricsPage />} />
                 <Route path="/portal-customers" element={<CustomersPage />} />

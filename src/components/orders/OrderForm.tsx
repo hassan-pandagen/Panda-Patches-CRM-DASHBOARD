@@ -60,8 +60,12 @@ export interface SaveData {
   ccEmail?: string;
   customerPhone?: string;
   customerProfileUrl?: string;
-  // Optional buying organization (self-identified). Distinct from customerName (the individual).
+  // Company / end client the order is FOR (searchable). Distinct from customerName (the individual).
   organization?: string;
+  // End-client provenance: whether we bought direct or via an agency/distributor, and white-label terms.
+  orderChannel?: string;          // 'Direct' | 'Agency'
+  agencyName?: string;
+  endClientConfidential?: boolean;
   purchaseOrder?: string;
   shippingAddress?: string;
   // Structured shipping location (clean geo data for analytics/metro reporting).
@@ -144,6 +148,9 @@ const transformOrderToFormData = (order: Order | null | undefined): SaveData => 
       customerPhone: '',
       customerProfileUrl: '',
       organization: '',
+      orderChannel: '',
+      agencyName: '',
+      endClientConfidential: false,
       purchaseOrder: '',
       
       // ✅ CRITICAL: Status always has default value
@@ -216,6 +223,9 @@ const transformOrderToFormData = (order: Order | null | undefined): SaveData => 
     reasonDetails: order.reasonDetails || '',
     country: order.country || '',
     organization: order.organization || '',
+    orderChannel: order.orderChannel || '',
+    agencyName: order.agencyName || '',
+    endClientConfidential: order.endClientConfidential || false,
     shipCity: order.shipCity || '',
     shipState: order.shipState || '',
     shipPostal: order.shipPostal || '',
@@ -542,6 +552,7 @@ const OrderForm: React.FC<OrderFormProps> = ({
   const shippingCarriers = ["FedEx", "DHL", "UPS", "USPS", "Other"];
   const backingOptions = DESIGN_BACKING_OPTIONS;
   const watchedPatchType = watch('patchesType');
+  const watchedOrderChannel = watch('orderChannel');
   const isDSTService = watchedPatchType === 'DST Service';
 
   // Auto-set quantity to 1 for DST Service (no physical quantity needed)
@@ -769,8 +780,28 @@ const OrderForm: React.FC<OrderFormProps> = ({
             <input type="text" {...register('purchaseOrder')} placeholder="Customer PO # (searchable)" className="mt-1 block w-full bg-slate-800 border-slate-600 rounded-md text-white placeholder-slate-500 focus:ring-brand-orange focus:border-brand-orange" />
           </div>
           <div>
-            <label className="block text-sm font-medium text-slate-300">Organization <span className="text-slate-500 font-normal">(optional)</span></label>
-            <input type="text" {...register('organization')} placeholder="Company / dept / team (if ordering for an org)" className="mt-1 block w-full bg-slate-800 border-slate-600 rounded-md text-white placeholder-slate-500 focus:ring-brand-orange focus:border-brand-orange" />
+            <label className="block text-sm font-medium text-slate-300">Company / End Client <span className="text-slate-500 font-normal">(optional, searchable)</span></label>
+            <input type="text" {...register('organization')} placeholder="Brand / company the order is FOR (e.g. Microsoft)" className="mt-1 block w-full bg-slate-800 border-slate-600 rounded-md text-white placeholder-slate-500 focus:ring-brand-orange focus:border-brand-orange" />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-300">Ordered via <span className="text-slate-500 font-normal">(optional)</span></label>
+            <select {...register('orderChannel')} className="mt-1 block w-full bg-slate-800 border-slate-600 rounded-md text-white focus:ring-brand-orange focus:border-brand-orange">
+              <option value="">—</option>
+              <option value="Direct">Direct</option>
+              <option value="Agency">Agency / Distributor</option>
+            </select>
+          </div>
+          {watchedOrderChannel === 'Agency' && (
+            <div>
+              <label className="block text-sm font-medium text-slate-300">Agency / Distributor name</label>
+              <input type="text" {...register('agencyName')} placeholder="Who placed it for the end client" className="mt-1 block w-full bg-slate-800 border-slate-600 rounded-md text-white placeholder-slate-500 focus:ring-brand-orange focus:border-brand-orange" />
+            </div>
+          )}
+          <div className="flex items-start gap-2 pt-6 sm:col-span-2">
+            <input type="checkbox" id="end_client_confidential" {...register('endClientConfidential')} className="mt-0.5 rounded border-slate-600 bg-slate-800 text-brand-orange focus:ring-brand-orange" />
+            <label htmlFor="end_client_confidential" className="text-sm text-slate-300 leading-tight">
+              End client is <span className="text-amber-300">confidential</span> (white-label) — don't name them publicly
+            </label>
           </div>
         </div>
       </FormSectionWrapper>

@@ -207,6 +207,11 @@ export const mapDbToOrder = (data: any): Order => {
 
     country: data.country ?? null,
     organization: data.organization ?? null,
+    orderChannel: data.orderChannel ?? data.order_channel ?? null,
+    agencyName: data.agencyName ?? data.agency_name ?? null,
+    endClientConfidential: data.endClientConfidential ?? data.end_client_confidential ?? false,
+    deliveredAt: data.deliveredAt ?? data.delivered_at ?? null,
+    deliveredAtEstimated: data.deliveredAtEstimated ?? data.delivered_at_estimated ?? false,
     purchaseOrder: data.purchaseOrder ?? data.purchase_order ?? null,
 
     attribution: data.attribution ?? null,

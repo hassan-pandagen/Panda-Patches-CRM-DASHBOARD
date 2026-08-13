@@ -67,7 +67,12 @@ export interface Order {
   ccEmail?: string; // Secondary/CC email for companies with multiple contacts
   customerPhone?: string;
   customerProfileUrl?: string;
-  organization?: string; // Optional buying organization (self-identified); distinct from customerName
+  organization?: string; // Company / end client the order is FOR (searchable); distinct from customerName
+  orderChannel?: string | null;    // 'Direct' | 'Agency' — how the order reached us
+  agencyName?: string | null;      // agency/distributor name when orderChannel = 'Agency'
+  endClientConfidential?: boolean; // white-label: end client must NOT be named publicly
+  deliveredAt?: string | null;     // observed OR estimated delivery timestamp
+  deliveredAtEstimated?: boolean;  // true = delivered_at is an estimate (bulk-close), not observed
   purchaseOrder?: string; // Customer PO number/reference — searchable
 
   // --- Design & Production Details ---
@@ -223,7 +228,12 @@ export interface Quote {
    ccEmail?: string; // Secondary/CC email for companies with multiple contacts
    customerPhone?: string;
    customerProfileUrl?: string;
-   organization?: string; // Optional buying organization (self-identified); distinct from customerName
+   organization?: string; // Company / end client the order is FOR (searchable); distinct from customerName
+  orderChannel?: string | null;    // 'Direct' | 'Agency' — how the order reached us
+  agencyName?: string | null;      // agency/distributor name when orderChannel = 'Agency'
+  endClientConfidential?: boolean; // white-label: end client must NOT be named publicly
+  deliveredAt?: string | null;     // observed OR estimated delivery timestamp
+  deliveredAtEstimated?: boolean;  // true = delivered_at is an estimate (bulk-close), not observed
    shippingAddress?: string;
    shipCity?: string;
    shipState?: string;
