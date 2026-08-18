@@ -57,6 +57,7 @@ const PaymentFormPage: React.FC = () => {
     customer_name:    '',
     customer_email:   '',
     customer_phone:   '',
+    shipping_address: '',
     patches_type:     '',
     patches_quantity: '',
     design_name:      '',
@@ -115,6 +116,7 @@ const PaymentFormPage: React.FC = () => {
       if (form.customer_name.trim())    payload.customer_name    = form.customer_name.trim();
       if (form.customer_email.trim())   payload.customer_email   = form.customer_email.trim();
       if (form.customer_phone.trim())   payload.customer_phone   = form.customer_phone.trim();
+      if (form.shipping_address.trim()) payload.shipping_address = form.shipping_address.trim();
       if (form.patches_type)            payload.patches_type     = form.patches_type;
       if (form.patches_quantity)        payload.patches_quantity = parseInt(form.patches_quantity);
       if (form.design_name.trim())      payload.design_name      = form.design_name.trim();
@@ -182,7 +184,7 @@ const PaymentFormPage: React.FC = () => {
   const removeImage = (url: string) => setMockupUrls(prev => prev.filter(u => u !== url));
 
   const resetForm = () => {
-    setForm({ customer_name: '', customer_email: '', customer_phone: '', patches_type: '', patches_quantity: '', design_name: '', design_size: '', design_backing: '', instructions: '', order_amount: '', deposit_amount: '', is_deposit: false });
+    setForm({ customer_name: '', customer_email: '', customer_phone: '', shipping_address: '', patches_type: '', patches_quantity: '', design_name: '', design_size: '', design_backing: '', instructions: '', order_amount: '', deposit_amount: '', is_deposit: false });
     setMockupUrls([]);
     setGeneratedToken(null);
     setShowForm(false);
@@ -298,6 +300,18 @@ const PaymentFormPage: React.FC = () => {
                   <FI label="Name" value={form.customer_name} onChange={v => setForm(f => ({ ...f, customer_name: v }))} placeholder="Aaron Leupp" />
                   <FI label="Email" value={form.customer_email} onChange={v => setForm(f => ({ ...f, customer_email: v }))} placeholder="aaron@example.com" type="email" />
                   <FI label="Phone" value={form.customer_phone} onChange={v => setForm(f => ({ ...f, customer_phone: v }))} placeholder="+1 623 238 6390" type="tel" />
+                  {/* Prefills the customer's pay page. If left blank the customer enters it there —
+                      either way it now lands on the created order (City/State/ZIP parsed on insert). */}
+                  <div>
+                    <label className="block text-xs text-slate-400 mb-1">Shipping Address</label>
+                    <textarea
+                      value={form.shipping_address}
+                      onChange={e => setForm(f => ({ ...f, shipping_address: e.target.value }))}
+                      rows={3}
+                      placeholder={'123 Main St\nHouston, TX 77001'}
+                      className="w-full bg-slate-800 border border-slate-700 text-white text-sm rounded-lg px-3 py-2 placeholder-slate-600 focus:outline-none focus:border-brand-orange resize-none"
+                    />
+                  </div>
                 </div>
                 <div className="space-y-3">
                   <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Order (optional)</p>

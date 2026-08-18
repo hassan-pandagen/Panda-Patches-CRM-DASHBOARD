@@ -681,6 +681,27 @@ const buildEmailHTML = (templateId: string, data: any): string => {
   </table>
   ` : ''}
 
+  ${templateId === 'PRODUCTION_TEAM_REVISION' && data.revision_notes ? `
+  <!-- CUSTOMER'S REVISION REQUEST (internal revision email only) — what the agent captured on the
+       order when they set status = REVISION_REQUESTED, so design/production can act on it directly. -->
+  <table class="module" role="module" data-type="text" border="0" cellpadding="0" cellspacing="0" width="100%" style="table-layout: fixed;">
+    <tbody>
+      <tr>
+        <td style="padding:20px; line-height:26px; text-align:left; background-color:#fff3e0; border-left: 5px solid #ff9800; border-radius: 8px; margin: 10px 0;" height="100%" valign="top" bgcolor="#fff3e0" role="module-content">
+          <div>
+            <div style="font-family: inherit; text-align: left; margin-bottom: 12px;">
+              <span style="font-size: 20px; font-family: 'lucida sans unicode', 'lucida grande', sans-serif; color: #e65100; font-weight: bold;">✏️ Customer's Revision Request</span>
+            </div>
+            <div style="font-family: inherit; text-align: left; background-color: #ffffff; padding: 15px; border-radius: 8px; border: 1px solid #ffe0b2;">
+              <span style="font-size: 16px; font-family: 'lucida sans unicode', 'lucida grande', sans-serif; color: #333; white-space: pre-wrap;">${escapeHtml(data.revision_notes)}</span>
+            </div>
+          </div>
+        </td>
+      </tr>
+    </tbody>
+  </table>
+  ` : ''}
+
   ${templateId === 'INTERNAL_REMAKE' && data.instructions ? `
   <!-- REMAKE INSTRUCTIONS (INTERNAL_REMAKE Only) -->
   <table class="module" role="module" data-type="text" border="0" cellpadding="0" cellspacing="0" width="100%" style="table-layout: fixed;">
@@ -1206,7 +1227,9 @@ const buildEmailHTML = (templateId: string, data: any): string => {
 };
 
 // 5. Helper: Download & Detect Type (STRICT MODE)
-const fetchFile = async (url: string) => {
+// maxMB lets the caller reject a file from its Content-Length BEFORE the body is read, so a file
+// that could never fit the attachment budget is never downloaded or base64-encoded at all.
+const fetchFile = async (url: string, maxMB = 10) => {
   try {
     // A. Extension Check (Filter out DST/EMB immediately)
     const cleanUrl = url.split('?')[0].toLowerCase();
@@ -1234,10 +1257,10 @@ const fetchFile = async (url: string) => {
 
       if (!response.ok) return null;
 
-      // C. Size Check (Limit to 10MB)
+      // C. Size Check — reject from the header, before reading the body into memory.
       const size = Number(response.headers.get('content-length'));
-      if (size && size > 10 * 1024 * 1024) {
-          console.warn(`Skipping large file (>10MB): ${url}`);
+      if (size && size > maxMB * 1024 * 1024) {
+          console.warn(`Skipping large file (>${maxMB}MB): ${url}`);
           return null;
       }
 
@@ -1300,24 +1323,30 @@ serve(async (req) => {
     let usedBudgetMB = 0;
 
     if (processedData.winner_file && processedData.winner_file.url) {
-        const file = await fetchFile(processedData.winner_file.url);
+        const winnerUrl = String(processedData.winner_file.url || '');
+        const isImageUrl = /\.(jpg|jpeg|png|gif|webp)$/i.test(winnerUrl.split('?')[0]);
 
-        if (processedData.winner_file && /\.(jpg|jpeg|png|gif|webp)$/i.test((processedData.winner_file.url || '').split('?')[0])) {
-            // Images live in a PUBLIC bucket — reference the URL directly so email
-            // clients load it. Avoids the flaky download/base64 embed that caused
-            // intermittent "File Attached" placeholders when emails fire concurrently.
-            processedData.winner_file.preview = processedData.winner_file.url;
+        if (isImageUrl) {
+            // Images live in a PUBLIC bucket — reference the URL directly so email clients load it.
+            // We deliberately do NOT download/base64 them: fetchFile() used to run unconditionally
+            // here, allocating the file (~1.4x its size as a base64 string) only to discard it and
+            // use the URL anyway. On orders with customer artwork that pushed the function past the
+            // edge runtime's memory ceiling — "Memory limit exceeded" kills the invocation, which
+            // returns a non-2xx and made EVERY email on that order show as failed in the CRM.
+            processedData.winner_file.preview = winnerUrl;
             processedData.winner_file.is_image = true;
-        }
-        else if (file && !file.isImage) {
-            // PDF -> ATTACHMENT (Never Inline)
-            attachments.push({
-                "Content-type": file.type,
-                "Filename": file.filename,
-                "Base64Content": file.content
-            });
-            processedData.winner_file.preview = "https://cdn-icons-png.flaticon.com/512/337/337946.png";
-            processedData.winner_file.is_image = false;
+        } else {
+            // Non-image (PDF) -> download + ATTACHMENT (never inline). Only fetched in this branch.
+            const file = await fetchFile(winnerUrl);
+            if (file && !file.isImage) {
+                attachments.push({
+                    "Content-type": file.type,
+                    "Filename": file.filename,
+                    "Base64Content": file.content
+                });
+                processedData.winner_file.preview = "https://cdn-icons-png.flaticon.com/512/337/337946.png";
+                processedData.winner_file.is_image = false;
+            }
         }
     }
 
@@ -1333,11 +1362,14 @@ serve(async (req) => {
                 break;
             }
 
-            const file = await fetchFile(item.url);
+            // Cap the download at whatever budget is left, so an oversized file is rejected from
+            // its Content-Length instead of being downloaded + base64-encoded and then discarded.
+            const remainingBudget = TOTAL_BUDGET_MB - usedBudgetMB;
+            if (remainingBudget <= 0) break;
+            const file = await fetchFile(item.url, remainingBudget);
 
             if (file) {
                 const fileSizeMB = (file.content.length * 0.75) / (1024 * 1024);
-                const remainingBudget = TOTAL_BUDGET_MB - usedBudgetMB;
                 if (fileSizeMB > remainingBudget) {
                     console.log(`📎 Skipping gallery file (${fileSizeMB.toFixed(1)}MB) — would exceed total budget (${remainingBudget.toFixed(1)}MB remaining)`);
                     continue;

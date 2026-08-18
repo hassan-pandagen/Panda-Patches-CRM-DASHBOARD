@@ -105,7 +105,7 @@ const PaymentForm: React.FC<{ tokenData: any }> = ({ tokenData: tokenDataRaw }) 
     customer_name:    tokenData?.customer_name    || '',
     customer_email:   tokenData?.customer_email   || '',
     customer_phone:   tokenData?.customer_phone   || '',
-    shipping_address: '',
+    shipping_address: tokenData?.shipping_address || '',
     design_name:      tokenData?.design_name      || '',
     patches_type:     tokenData?.patches_type     || '',
     patches_quantity: tokenData?.patches_quantity ? String(tokenData.patches_quantity) : '',

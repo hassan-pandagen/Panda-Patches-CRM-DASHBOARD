@@ -153,6 +153,9 @@ Deno.serve(async (req: Request) => {
       customer_name:    body.customer_name,
       customer_email:   body.customer_email,
       customer_phone:   body.customer_phone || null,
+      // Persist the address the customer typed on the pay page (or the agent prefilled) — this was
+      // accepted but never stored, so every payment-form order lost its shipping address.
+      shipping_address: body.shipping_address || null,
       design_name:      body.design_name    || null,
       patches_type:     body.patches_type,
       patches_quantity: body.patches_quantity,

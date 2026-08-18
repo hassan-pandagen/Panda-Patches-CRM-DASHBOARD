@@ -76,7 +76,9 @@ function resolveLeadSource(attribution: any): string {
   //    with src/utils/leadSource.ts -> detectLeadSource. (fbp is NOT a click id — do not use it.)
   const clickUrlBlob = `${String(attr.referrer ?? '')} ${String(attr.http_referer ?? '')} ${String(attr.page_url ?? '')}`;
   if (attr.fbclid  || attr.fbc || /[?&]fbclid=/i.test(clickUrlBlob))  return 'Facebook Ad';
-  if (attr.gclid   || /[?&]gclid=/i.test(clickUrlBlob))   return 'Google Ad';
+  // gclid + gbraid/wbraid are all Google Ads click IDs (gbraid/wbraid are the iOS privacy paths).
+  // All three ⇒ Google Ad. MUST stay in sync with src/utils/leadSource.ts.
+  if (attr.gclid || attr.gbraid || attr.wbraid || /[?&](gclid|gbraid|wbraid)=/i.test(clickUrlBlob)) return 'Google Ad';
   if (attr.msclkid || /[?&]msclkid=/i.test(clickUrlBlob)) return 'Bing Ad';
   if (attr.ttclid  || /[?&]ttclid=/i.test(clickUrlBlob))  return 'TikTok Ad';
 
@@ -179,6 +181,29 @@ function canonicalize(value: unknown, canon: string[], alias: Record<string, str
 
 const normalizePatchType = (v: unknown) => canonicalize(v, PATCH_TYPE_CANON, PATCH_TYPE_ALIAS);
 const normalizeBacking = (v: unknown) => canonicalize(v, BACKING_CANON, BACKING_ALIAS);
+
+// Parse a free-text US address into City / State / ZIP so payment-form orders carry clean geo data
+// (the website checkout sends these as separate fields; the pay page only has one free-text box).
+// Mirrors src/utils/parseUsAddress.ts. ZIP anchors it; the state must be a REAL code so a street
+// suffix like "St" is never read as one; city is the segment before the state.
+const US_STATE_CODES = new Set(['AL','AK','AZ','AR','CA','CO','CT','DE','FL','GA','HI','ID','IL','IN','IA','KS','KY','LA','ME','MD','MA','MI','MN','MS','MO','MT','NE','NV','NH','NJ','NM','NY','NC','ND','OH','OK','OR','PA','RI','SC','SD','TN','TX','UT','VT','VA','WA','WV','WI','WY','DC','PR','VI','GU','AS','MP']);
+function parseUsAddress(addr?: string | null): { city: string | null; state: string | null; postal: string | null } {
+  if (!addr || !String(addr).trim()) return { city: null, state: null, postal: null };
+  const norm = String(addr).replace(/\r/g, '').replace(/\n+/g, ', ').replace(/\s*,\s*/g, ', ').replace(/\s+/g, ' ').trim();
+  const zip = norm.match(/\b(\d{5})(?:-\d{4})?\b/);
+  const postal = zip ? zip[1] : null;
+  const head = (zip ? norm.slice(0, zip.index) : norm).replace(/[\s,]+$/, '');
+  const code = head.match(/\b([A-Za-z]{2})$/);
+  let state: string | null = null;
+  let city: string | null = null;
+  if (code && US_STATE_CODES.has(code[1].toUpperCase())) {
+    state = code[1].toUpperCase();
+    const beforeState = head.replace(/\s*,?\s*[A-Za-z]{2}$/, '').replace(/[\s,]+$/, '');
+    const lastComma = beforeState.lastIndexOf(',');
+    if (lastComma >= 0) city = beforeState.slice(lastComma + 1).trim() || null;
+  }
+  return { city, state, postal };
+}
 
 // Internal production-email recipients (mirrors orderService.ts / super-handler). Used when a
 // held "wait for payment" order (Add Order / Re-order) is released to production on payment —
@@ -639,12 +664,22 @@ Deno.serve(async (req: Request) => {
         ? String(tokenRow.instructions).trim()
         : null;
 
+      // Shipping address captured on the pay page (or prefilled by the agent). Parse it into the
+      // structured ship_* columns so payment-form orders match website-checkout orders for geo
+      // reporting, instead of arriving with no address at all.
+      const pfAddress = tokenRow.shipping_address || null;
+      const pfGeo = parseUsAddress(pfAddress);
+
       const { data: newOrder, error: orderErr } = await admin
         .from('orders')
         .insert({
           customer_name:    tokenRow.customer_name,
           customer_email:   tokenRow.customer_email,
           customer_phone:   tokenRow.customer_phone   || null,
+          shipping_address: pfAddress,
+          ship_city:        pfGeo.city,
+          ship_state:       pfGeo.state,
+          ship_postal:      pfGeo.postal,
           design_name:      tokenRow.design_name      || null,
           patches_type:     normalizePatchType(tokenRow.patches_type),
           patches_quantity: tokenRow.patches_quantity || 0,

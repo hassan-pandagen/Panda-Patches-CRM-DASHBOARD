@@ -154,7 +154,9 @@ export function detectLeadSource(input: AttributionLike): LeadSource {
   // raw ?fbclid= didn't survive into the referrer (agent pay-links opened inside the FB app). Treat
   // it as a Facebook Ad click, consistent with the fbclid handling. (fbp is NOT a click — skip it.)
   if (attr.fbclid  || attr.fbc || /[?&]fbclid=/i.test(clickUrlBlob))  return 'Facebook Ad';
-  if (attr.gclid   || /[?&]gclid=/i.test(clickUrlBlob))   return 'Google Ad';
+  // gclid + gbraid/wbraid are all Google Ads click IDs (gbraid/wbraid are the iOS privacy paths
+  // Google sends when gclid is unavailable). All three ⇒ Google Ad. MUST match the webhook.
+  if (attr.gclid || attr.gbraid || attr.wbraid || /[?&](gclid|gbraid|wbraid)=/i.test(clickUrlBlob)) return 'Google Ad';
   if (attr.msclkid || /[?&]msclkid=/i.test(clickUrlBlob)) return 'Bing Ad';
   if (attr.ttclid  || /[?&]ttclid=/i.test(clickUrlBlob))  return 'TikTok Ad';
 

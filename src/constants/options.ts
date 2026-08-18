@@ -32,6 +32,13 @@ export const COUNTRY_OPTIONS: string[] = [
 ];
 
 export const LEAD_SOURCE_OPTIONS: string[] = [
+  // Paid-ad sources the webhook / detectLeadSource auto-assign from click IDs (fbclid/gclid/…).
+  // These MUST be selectable here — otherwise an order edit finds no matching <option>, renders a
+  // BLANK Lead Source, and silently WIPES the real source on save (this reverted PP-11232/11245).
+  'Facebook Ad',
+  'Google Ad',
+  'Bing Ad',
+  'TikTok Ad',
   'Google',
   'Bing',
   'DuckDuckGo',

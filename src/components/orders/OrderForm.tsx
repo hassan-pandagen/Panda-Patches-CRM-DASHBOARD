@@ -11,6 +11,7 @@ import Spinner from '../ui/Spinner';
 import FileUploadSection from './FileUpload'; 
 import Textarea from '../ui/Textarea'; 
 import { LEAD_SOURCE_OPTIONS, PATCHES_TYPE_OPTIONS, COUNTRY_OPTIONS, DESIGN_BACKING_OPTIONS } from '../../constants/index';
+import { parseUsAddress } from '../../utils/parseUsAddress';
 import { supabase } from '../../services/supabaseClient';
 import { logger } from '../../services/logger';
 import { getPremiumStatus, setPremiumStatus } from '../../services/customerFlagsService';
@@ -103,6 +104,9 @@ export interface SaveData {
   // ✅ Add these
   reasonCategory: string;
   reasonDetails: string;
+  // What the customer asked to change — captured when status = REVISION_REQUESTED and sent to the
+  // production/design team in the internal revision email.
+  revisionNotes?: string;
   // Loyalty program (CL86F1) — recorded when the agent applies a code; does not change orderAmount.
   loyaltyCodeUsed?: string | null;
   loyaltyDiscountPercent?: number | null;
@@ -194,6 +198,7 @@ const transformOrderToFormData = (order: Order | null | undefined): SaveData => 
       // Reason fields
       reasonCategory: '',
       reasonDetails: '',
+      revisionNotes: '',
     } as SaveData;
   }
 
@@ -221,6 +226,7 @@ const transformOrderToFormData = (order: Order | null | undefined): SaveData => 
     
     reasonCategory: order.reasonCategory || '',
     reasonDetails: order.reasonDetails || '',
+    revisionNotes: order.revisionNotes || '',
     country: order.country || '',
     organization: order.organization || '',
     orderChannel: order.orderChannel || '',
@@ -300,7 +306,7 @@ const OrderForm: React.FC<OrderFormProps> = ({
     created_at: string;
   } | null>(null);
 
-  const { register, handleSubmit, watch, formState: { errors, isDirty }, reset, setValue } = useForm<SaveData>({
+  const { register, handleSubmit, watch, formState: { errors, isDirty }, reset, setValue, getValues } = useForm<SaveData>({
     defaultValues: formDefaultValues,
   });
 
@@ -553,6 +559,24 @@ const OrderForm: React.FC<OrderFormProps> = ({
   const backingOptions = DESIGN_BACKING_OPTIONS;
   const watchedPatchType = watch('patchesType');
   const watchedOrderChannel = watch('orderChannel');
+
+  // True when the order arrived on a real paid-ad click, so its Lead Source is verified tracking
+  // data rather than a guess (drives the "don't change this" warning below).
+  const _attr = (initialData?.attribution ?? {}) as Record<string, any>;
+  const hasAdClickId = !!(_attr.fbc || _attr.fbclid || _attr.gclid || _attr.gbraid || _attr.wbraid || _attr.msclkid || _attr.ttclid);
+
+  // Agents were pasting a full address and leaving City/State/ZIP blank, so orders shipped with no
+  // structured geo data. Parse the pasted address on blur and fill ONLY the fields still empty —
+  // never overwrite something typed by hand.
+  const shippingAddressReg = register('shippingAddress');
+  const autofillShipFields = (raw: string) => {
+    const { city, state, postal } = parseUsAddress(raw);
+    if (!city && !state && !postal) return;
+    const isBlank = (v: unknown) => !String(v ?? '').trim();
+    if (city   && isBlank(getValues('shipCity')))   setValue('shipCity',   city,   { shouldDirty: true });
+    if (state  && isBlank(getValues('shipState')))  setValue('shipState',  state,  { shouldDirty: true });
+    if (postal && isBlank(getValues('shipPostal'))) setValue('shipPostal', postal, { shouldDirty: true });
+  };
   const isDSTService = watchedPatchType === 'DST Service';
 
   // Auto-set quantity to 1 for DST Service (no physical quantity needed)
@@ -873,10 +897,17 @@ const OrderForm: React.FC<OrderFormProps> = ({
           <div className="md:col-span-2">
             <label className="block text-sm font-medium text-slate-300">Shipping Address</label>
             <Textarea
-              {...register('shippingAddress')}
+              {...shippingAddressReg}
+              onBlur={(e: React.FocusEvent<HTMLTextAreaElement>) => {
+                shippingAddressReg.onBlur(e);
+                autofillShipFields(e.currentTarget.value);
+              }}
               error={errors.shippingAddress?.message}
               className="w-full mt-1"
             />
+            <p className="text-[10px] text-slate-500 mt-1">
+              Paste the full address — City / State / ZIP below fill in automatically.
+            </p>
           </div>
           {/* Structured City / State / ZIP — clean geo data for metro analytics.
               The address above stays the full display address; fill these too so reports don't
@@ -1095,6 +1126,20 @@ const OrderForm: React.FC<OrderFormProps> = ({
               <option value="" disabled hidden>Select...</option>
               {LEAD_SOURCE_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
             </select>
+            {/* Orders that arrived on a real ad click carry a click ID (fbclid/gclid/…). The source was
+                auto-detected from it and is more reliable than a guess — agents overwriting it is what
+                silently wiped ad attribution on PP-11232 / PP-11245. Warn loudly on exactly those orders. */}
+            {hasAdClickId ? (
+              <p className="mt-1.5 text-[11px] text-amber-300 bg-amber-500/10 border border-amber-500/30 rounded px-2 py-1.5 leading-snug">
+                🔒 Auto-detected from the customer's ad click — <strong>please don't change this.</strong> It's
+                verified tracking data; overwriting it breaks ad reporting. Only change it if the customer
+                explicitly told you a different source.
+              </p>
+            ) : (
+              <p className="text-[10px] text-slate-500 mt-1">
+                Auto-detected where possible — only change it if the customer told you otherwise.
+              </p>
+            )}
           </div>
           <div>
             <label className="block text-sm font-medium text-slate-300">
@@ -1212,6 +1257,26 @@ const OrderForm: React.FC<OrderFormProps> = ({
                 />
               </div>
             </div>
+          </div>
+        )}
+
+        {/* REVISION REQUESTED — capture exactly what the customer asked to change. This text is sent
+            to the production/design team in the internal "Revision Requested" email, so they can act
+            on it without chasing the agent. */}
+        {watchedStatus === OrderStatus.REVISION_REQUESTED && (
+          <div className="mt-6 p-6 rounded-xl bg-orange-500/10 border border-orange-500/30">
+            <h4 className="text-orange-200 font-semibold mb-1 flex items-center gap-2">
+              ✏️ What did the customer ask to change?
+            </h4>
+            <p className="text-xs text-orange-200/70 mb-4">
+              Emailed to the design &amp; production team with this order. Be specific — they work from this.
+            </p>
+            <textarea
+              rows={4}
+              {...register('revisionNotes')}
+              className="block w-full bg-slate-800 border-slate-600 rounded-md text-white focus:ring-brand-orange focus:border-brand-orange placeholder-slate-400"
+              placeholder={"e.g. Make the text larger and change the border to gold.\nCustomer wants the dog's ears rounder."}
+            />
           </div>
         )}
 

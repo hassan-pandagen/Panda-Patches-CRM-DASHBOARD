@@ -639,6 +639,12 @@ const FunnelAttributionReport: React.FC<Props> = ({ startDate, endDate }) => {
                   const hasUa   = !!(attr.client_ua);
                   const hasEmail = !!(o.customer_email);
                   const hasUtm  = !!(attr.utm_source);
+                  // Google Ads click IDs — the Google-side parallel to Meta's fbc/fbp. gbraid is the
+                  // iOS web-to-app path Google sends when gclid is absent, so show it as the fallback.
+                  // (Trust the click id over attribution.traffic_source when they disagree.)
+                  const hasGclid  = !!(attr.gclid);
+                  const hasGbraid = !!(attr.gbraid);
+                  const trafficSource = String(attr.traffic_source ?? '').trim();
 
                   // EMQ estimate: each signal adds points
                   let emq = 0;
@@ -659,6 +665,7 @@ const FunnelAttributionReport: React.FC<Props> = ({ startDate, endDate }) => {
 
                   const emqColor = emq >= 7 ? 'text-emerald-400' : emq >= 4 ? 'text-amber-400' : 'text-red-400';
 
+                  // GCLID / GBRAID render as a distinct blue badge chip below; the rest as text.
                   const signals = [
                     hasEmail && 'Email',
                     hasFbc   && 'FBC',
@@ -706,7 +713,18 @@ const FunnelAttributionReport: React.FC<Props> = ({ startDate, endDate }) => {
                           {o.capi_purchase_sent ? '✓' : '—'}
                         </span>
                       </td>
-                      <td className="px-3 py-2.5 text-slate-400 text-xs">{signals}</td>
+                      <td className="px-3 py-2.5 text-xs"
+                          title={attr.gclid ? `gclid: ${attr.gclid}` : attr.gbraid ? `gbraid: ${attr.gbraid}` : undefined}>
+                        <div className="flex flex-wrap items-center gap-1">
+                          {(hasGclid || hasGbraid) && (
+                            <span className="px-1.5 py-0.5 rounded border border-blue-500/30 bg-blue-500/10 text-blue-300 font-semibold text-[10px]">
+                              {hasGclid ? 'GCLID' : 'GBRAID'}
+                            </span>
+                          )}
+                          <span className="text-slate-400">{signals}</span>
+                        </div>
+                        {trafficSource && <span className="text-[10px] text-slate-600">{trafficSource}</span>}
+                      </td>
                     </tr>
                   );
                 })}

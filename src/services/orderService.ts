@@ -306,6 +306,12 @@ export const prepareEmailData = (order: Order, triggerStatus: string) => {
 
     remake_reason: order.reasonCategory || null,
     remake_details: order.reasonDetails || null,
+
+    // What the customer asked to change — drives the INTERNAL "Revision Requested" email so the
+    // design/production team can act without chasing the agent. Add {{revision_notes}} to that
+    // SendGrid template (guard it with {{#if has_revision_notes}}).
+    revision_notes: order.revisionNotes || '',
+    has_revision_notes: !!(order.revisionNotes && String(order.revisionNotes).trim()),
   };
 };
 
