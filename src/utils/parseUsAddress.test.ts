@@ -8,6 +8,12 @@ describe('parseUsAddress', () => {
     });
   });
 
+  it('handles an "Attention to:" line and a # unit number', () => {
+    expect(parseUsAddress('Attention to: Krystal Ortega\n3200 N Central Ave #1450\nPhoenix, AZ 85012')).toEqual({
+      city: 'Phoenix', state: 'AZ', postal: '85012',
+    });
+  });
+
   it('parses a single-line address', () => {
     expect(parseUsAddress('68 Talcott Ave, Crystal Lake, IL 60014')).toEqual({
       city: 'Crystal Lake', state: 'IL', postal: '60014',

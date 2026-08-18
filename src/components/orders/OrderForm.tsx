@@ -314,6 +314,19 @@ const OrderForm: React.FC<OrderFormProps> = ({
     reset(transformOrderToFormData(initialData));
   }, [initialData, reset]);
 
+  // Back-fill City / State / ZIP from an address that's ALREADY saved. The blur handler below only
+  // fires when someone edits the address box, so existing orders (and webhook/quote-created ones)
+  // would otherwise sit there with a full address and three empty boxes. shouldDirty:false so just
+  // opening an order never trips the "unsaved changes" warning — the values still submit on save.
+  useEffect(() => {
+    if (!initialData?.shippingAddress) return;
+    const { city, state, postal } = parseUsAddress(initialData.shippingAddress);
+    const blank = (v: unknown) => !String(v ?? '').trim();
+    if (city   && blank(initialData.shipCity))   setValue('shipCity',   city,   { shouldDirty: false });
+    if (state  && blank(initialData.shipState))  setValue('shipState',  state,  { shouldDirty: false });
+    if (postal && blank(initialData.shipPostal)) setValue('shipPostal', postal, { shouldDirty: false });
+  }, [initialData, setValue]);
+
   // ✅ Track form changes and notify parent (only call when explicitly user-modified, not on reset)
   useEffect(() => {
     if (isDirty && onFormChange) {
