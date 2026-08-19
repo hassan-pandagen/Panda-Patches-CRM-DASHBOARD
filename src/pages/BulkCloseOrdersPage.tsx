@@ -9,11 +9,19 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../services/supabaseClient';
 import { useToast } from '../hooks/useToast';
 import Spinner from '../components/ui/Spinner';
-import { CheckCircle2, PackageCheck } from 'lucide-react';
+import { CheckCircle2, PackageCheck, AlertTriangle } from 'lucide-react';
 
 const STALE_STATUSES = ['SHIPPED', 'IN_PRODUCTION', 'NEW_ORDER', 'AWAITING_CUSTOMER_APPROVAL', 'APPROVED', 'REMAKE'];
 const todayStr = () => new Date().toISOString().slice(0, 10);
+const daysAgoStr = (n: number) => new Date(Date.now() - n * 86400000).toISOString().slice(0, 10);
 const ageDays = (iso: string) => Math.floor((Date.now() - new Date(iso).getTime()) / 86400000);
+
+// review-invite-cron emails a Trustpilot request for any DELIVERED order whose delivered_at is
+// 2–5 days old. Closing a big backlog with a RECENT date would drop every one of those orders into
+// that window and blast review requests for orders actually delivered months ago. Default the date
+// well outside the window, and warn if the user picks a recent one.
+const REVIEW_WINDOW_DAYS = 6;
+const DEFAULT_CLOSE_DATE_DAYS_AGO = 30;
 
 const BulkCloseOrdersPage: React.FC = () => {
   const queryClient = useQueryClient();
@@ -22,7 +30,7 @@ const BulkCloseOrdersPage: React.FC = () => {
   const [statuses, setStatuses] = useState<string[]>(['SHIPPED', 'IN_PRODUCTION']);
   const [minAgeDays, setMinAgeDays] = useState<number>(30);
   const [selected, setSelected] = useState<Set<number>>(new Set());
-  const [deliveredDate, setDeliveredDate] = useState<string>(todayStr());
+  const [deliveredDate, setDeliveredDate] = useState<string>(daysAgoStr(DEFAULT_CLOSE_DATE_DAYS_AGO));
   const [estimated, setEstimated] = useState<boolean>(true);
 
   const { data: orders = [], isLoading, refetch } = useQuery({
@@ -152,6 +160,20 @@ const BulkCloseOrdersPage: React.FC = () => {
           <CheckCircle2 className="w-4 h-4" />
           {closeMutation.isPending ? 'Closing…' : `Close ${selected.size || ''} as Delivered`}
         </button>
+
+        {/* A recent delivery date drops these orders into the review-invite window (2–5 days after
+            delivery) and would email every customer a Trustpilot request for a months-old order. */}
+        {ageDays(deliveredDate) < REVIEW_WINDOW_DAYS && (
+          <div className="w-full flex items-start gap-2 text-xs text-amber-300 bg-amber-500/10 border border-amber-500/30 rounded-lg px-3 py-2">
+            <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+            <span>
+              <strong>This date will send review-request emails.</strong> Orders delivered 2–5 days ago
+              automatically get a Trustpilot invite — closing {selected.size || 'these'} order
+              {selected.size === 1 ? '' : 's'} with a recent date would email every one of those customers
+              about an order actually delivered long ago. Pick a date at least {REVIEW_WINDOW_DAYS} days back.
+            </span>
+          </div>
+        )}
       </div>
 
       {/* Table */}
