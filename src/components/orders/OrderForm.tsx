@@ -1255,17 +1255,24 @@ const OrderForm: React.FC<OrderFormProps> = ({
                 {errors.reasonCategory && <p className="text-red-400 text-xs mt-1">{errors.reasonCategory.message}</p>}
               </div>
 
-              {/* Reason Details Text Area */}
+              {/* Reason Details Text Area. On REMAKE this is the customer's own words, and it is
+                  emailed to the design/production team (INTERNAL_REMAKE) so they know what to fix —
+                  it is deliberately NOT shown in the customer-facing remake email. */}
               <div className="md:col-span-2">
                 <label className="block text-sm font-medium text-slate-300">
-                  Additional Notes / Explanation
+                  {watchedStatus === 'REMAKE' ? 'What did the customer say?' : 'Additional Notes / Explanation'}
                 </label>
+                {watchedStatus === 'REMAKE' && (
+                  <p className="text-xs text-amber-200/70 mt-0.5 mb-1">
+                    Emailed to the design &amp; production team so they know exactly what to fix. Not shown to the customer.
+                  </p>
+                )}
                 <textarea
-                  rows={3}
+                  rows={watchedStatus === 'REMAKE' ? 4 : 3}
                   {...register('reasonDetails')}
                   className="mt-1 block w-full bg-slate-800 border-slate-600 rounded-md text-white focus:ring-brand-orange focus:border-brand-orange placeholder-slate-400"
                   placeholder={watchedStatus === 'REMAKE'
-                    ? "Describe the issue (e.g., 'Package lost in transit, customer never received')..."
+                    ? "e.g. Customer says the stitching came loose on the edges and the gold looks\norange, not gold. Wants the border re-done in the original thread."
                     : "Provide specific details (e.g., 'Customer denies receiving')..."}
                 />
               </div>

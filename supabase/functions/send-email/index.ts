@@ -672,7 +672,6 @@ const buildEmailHTML = (templateId: string, data: any): string => {
             </div>
             <div style="font-family: inherit; text-align: center; background-color: #ffffff; padding: 15px; border-radius: 8px; border: 1px solid #ffe0b2;">
               <span style="font-size: 18px; font-family: 'lucida sans unicode', 'lucida grande', sans-serif; color: #e65100; font-weight: bold;">${escapeHtml(data.remake_reason)}</span>
-              ${data.remake_details ? `<br/><span style="font-size: 14px; font-family: 'lucida sans unicode', 'lucida grande', sans-serif; color: #555; margin-top: 8px; display: inline-block;">${escapeHtml(data.remake_details)}</span>` : ''}
             </div>
           </div>
         </td>
@@ -694,6 +693,28 @@ const buildEmailHTML = (templateId: string, data: any): string => {
             </div>
             <div style="font-family: inherit; text-align: left; background-color: #ffffff; padding: 15px; border-radius: 8px; border: 1px solid #ffe0b2;">
               <span style="font-size: 16px; font-family: 'lucida sans unicode', 'lucida grande', sans-serif; color: #333; white-space: pre-wrap;">${escapeHtml(data.revision_notes)}</span>
+            </div>
+          </div>
+        </td>
+      </tr>
+    </tbody>
+  </table>
+  ` : ''}
+
+  ${templateId === 'INTERNAL_REMAKE' && data.remake_details ? `
+  <!-- WHAT THE CUSTOMER SAID (internal remake email only) — the agent's capture of the customer's
+       own words, so production knows exactly what to fix. Deliberately NOT in CUSTOMER_REMAKE:
+       this often quotes the complaint verbatim and must never be emailed back to the customer. -->
+  <table class="module" role="module" data-type="text" border="0" cellpadding="0" cellspacing="0" width="100%" style="table-layout: fixed;">
+    <tbody>
+      <tr>
+        <td style="padding:20px; line-height:26px; text-align:left; background-color:#fff3e0; border-left: 5px solid #ff9800; border-radius: 8px; margin: 10px 0;" height="100%" valign="top" bgcolor="#fff3e0" role="module-content">
+          <div>
+            <div style="font-family: inherit; text-align: left; margin-bottom: 12px;">
+              <span style="font-size: 20px; font-family: 'lucida sans unicode', 'lucida grande', sans-serif; color: #e65100; font-weight: bold;">✏️ What the Customer Said</span>
+            </div>
+            <div style="font-family: inherit; text-align: left; background-color: #ffffff; padding: 15px; border-radius: 8px; border: 1px solid #ffe0b2;">
+              <span style="font-size: 16px; font-family: 'lucida sans unicode', 'lucida grande', sans-serif; color: #333; white-space: pre-wrap;">${escapeHtml(data.remake_details)}</span>
             </div>
           </div>
         </td>
