@@ -1,4 +1,6 @@
-const CACHE_NAME = 'panda-patches-v2';
+// v3 — bumped so the activate handler purges the v2 cache, which could still hold a stale
+// index.html from before documents were excluded from caching (see the fetch handler below).
+const CACHE_NAME = 'panda-patches-v3';
 
 // Install — skip waiting immediately so new SW activates right away
 self.addEventListener('install', () => {
@@ -29,6 +31,13 @@ self.addEventListener('fetch', (event) => {
   // Skip third-party requests (Supabase, ZeptoMail, Vercel analytics, etc.)
   const url = new URL(event.request.url);
   if (url.origin !== self.location.origin) return;
+
+  // NEVER cache or serve the HTML document. index.html points at content-hashed entry chunks
+  // (/assets/index-<hash>.js), so a stale copy references files that no longer exist after a
+  // deploy — no JS runs at all and the user gets a blank screen, which the React error boundary
+  // cannot catch because it never mounts. Let the browser fetch the document normally; the
+  // hashed assets below are still cached for offline use.
+  if (event.request.mode === 'navigate' || event.request.destination === 'document') return;
 
   event.respondWith(
     fetch(event.request)
