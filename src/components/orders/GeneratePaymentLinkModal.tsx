@@ -6,6 +6,7 @@
 
 import React, { useState, useEffect, useId } from 'react';
 import { useMutation } from '@tanstack/react-query';
+import { copyToClipboard } from '../../utils/copyToClipboard';
 import { supabase } from '../../services/supabaseClient';
 import { useToast } from '../../hooks/useToast';
 import Modal from '../ui/Modal';
@@ -115,7 +116,9 @@ const GeneratePaymentLinkModal: React.FC<Props> = (props) => {
 
   const handleCopy = async () => {
     if (!generated) return;
-    await navigator.clipboard.writeText(generated.url);
+    // Was an unguarded await: on iOS navigator.clipboard throws, so setCopied never ran and the
+    // button looked dead. copyToClipboard falls back to execCommand and never throws.
+    if (!(await copyToClipboard(generated.url))) return;
     setCopied(true);
     setTimeout(() => setCopied(false), 2500);
   };

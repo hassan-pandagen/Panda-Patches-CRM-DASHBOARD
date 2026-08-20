@@ -11,6 +11,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../hooks/useToast';
 import SpotlightCard from '../components/ui/SpotlightCard';
 import { PATCHES_TYPE_OPTIONS, DESIGN_BACKING_OPTIONS } from '../constants/index';
+import { copyToClipboard } from '../utils/copyToClipboard';
 import {
   Link, Copy, Check, Plus, ExternalLink, Trash2,
   CreditCard, ChevronDown, ChevronUp, MessageCircle, Mail,
@@ -136,7 +137,7 @@ const PaymentFormPage: React.FC = () => {
     onSuccess: (token) => {
       queryClient.invalidateQueries({ queryKey: ['payment-form-tokens'] });
       setGeneratedToken(token);
-      navigator.clipboard.writeText(portalUrl(token)).catch(() => {});
+      copyToClipboard(portalUrl(token));
       setCopiedToken(token);
       setTimeout(() => setCopiedToken(null), 3000);
     },
@@ -152,8 +153,12 @@ const PaymentFormPage: React.FC = () => {
     onError: (err: any) => showError('Delete failed', err?.message),
   });
 
-  const handleCopy = (token: string) => {
-    navigator.clipboard.writeText(portalUrl(token));
+  const handleCopy = async (token: string) => {
+    // copyToClipboard falls back to execCommand on iOS, where navigator.clipboard fails.
+    if (!(await copyToClipboard(portalUrl(token)))) {
+      showError('Failed to copy', 'Long-press the link to copy it manually');
+      return;
+    }
     setCopiedToken(token);
     setTimeout(() => setCopiedToken(null), 2500);
   };

@@ -4,6 +4,7 @@ import { Order } from '../../types';
 import { X, Package, Copy, Check, AlertTriangle } from 'lucide-react';
 import { useToast } from '../../hooks/useToast';
 import { getCustomsData, formatCustomsText } from '../../services/customsService';
+import { copyToClipboard } from '../../utils/copyToClipboard';
 
 interface ShippingLabelModalProps {
     isOpen: boolean;
@@ -58,25 +59,24 @@ Quantity: ${order.patchesQuantity?.toLocaleString() || '0'} pieces
 ${formatCustomsText(customs, order.orderNumber)}
         `.trim();
 
-        try {
-            await navigator.clipboard.writeText(labelText);
+        // copyToClipboard falls back to execCommand for iOS, where navigator.clipboard fails.
+        if (await copyToClipboard(labelText)) {
             setCopiedSection('entire');
             toast.success('Entire label copied to clipboard!');
             setTimeout(() => setCopiedSection(null), 2000);
-        } catch (err) {
-            toast.error('Failed to copy to clipboard');
+        } else {
+            toast.error('Failed to copy — long-press the text to copy it manually');
         }
     };
 
     // Copy individual section
     const copySection = async (sectionName: string, content: string) => {
-        try {
-            await navigator.clipboard.writeText(content);
+        if (await copyToClipboard(content)) {
             setCopiedSection(sectionName);
             toast.success(`${sectionName} copied to clipboard!`);
             setTimeout(() => setCopiedSection(null), 2000);
-        } catch (err) {
-            toast.error('Failed to copy to clipboard');
+        } else {
+            toast.error('Failed to copy — long-press the text to copy it manually');
         }
     };
 

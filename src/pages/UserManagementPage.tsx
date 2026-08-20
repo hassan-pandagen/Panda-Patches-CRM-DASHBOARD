@@ -6,6 +6,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { createUserWithRole, getAllUsers, deleteUser, updateUserProfile } from '@/services/authService';
 import { logger } from '@/services/logger';
 import { useAuth } from '../contexts/AuthContext';
+import { copyToClipboard } from '../utils/copyToClipboard';
 import { UserProfile, UserPermissions, UserRole } from '@/types';
 import { Check, X, Plus, Edit, Trash2, Key, AlertCircle, Copy, CheckCircle } from 'lucide-react';
 import Spinner from '@/components/ui/Spinner';
@@ -358,8 +359,8 @@ const UserManagementPage: React.FC = () => {
     }));
   };
 
-  const handleCopyPassword = () => {
-    navigator.clipboard.writeText(formData.password);
+  const handleCopyPassword = async () => {
+    if (!(await copyToClipboard(formData.password))) return;
     setPasswordCopied(true);
     setTimeout(() => setPasswordCopied(false), 2000);
   };
