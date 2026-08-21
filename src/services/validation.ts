@@ -45,7 +45,7 @@ export const orderSchema = z.object({
   
   // ✅ Optional Fields
   customerPhone: z.string().optional().nullable(),
-  customerProfileUrl: z.string().url().optional().nullable(),
+  customerProfileUrl: z.union([z.string().url(), z.literal('')]).optional().nullable(),
   
   designName: z.string().optional(),
   patchesType: z.enum(PATCHES_TYPE_OPTIONS as [string, ...string[]]).optional(),
