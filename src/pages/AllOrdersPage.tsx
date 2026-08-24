@@ -26,6 +26,7 @@ import EmptyState from '../components/ui/EmptyState';
 import SpotlightCard from '../components/ui/SpotlightCard';
 import StatusBadge from '../components/ui/StatusBadge';
 import PremiumBadge from '../components/ui/PremiumBadge';
+import MaskedAmount from '../components/ui/MaskedAmount';
 import {
     Search,
     Plus,
@@ -914,7 +915,7 @@ const AllOrdersPage: React.FC = () => {
                                                 <div className="flex flex-col items-center md:items-end md:min-w-[90px]">
                                                     <span className="text-[10px] text-slate-400 uppercase tracking-wider font-bold mb-1">Amount</span>
                                                     {canViewFinancials ? (
-                                                        <span className="text-white font-bold text-sm md:text-base tracking-tight">${(order.orderAmount ?? 0).toLocaleString()}</span>
+                                                        <span className="text-white font-bold text-sm md:text-base tracking-tight"><MaskedAmount value={order.orderAmount ?? 0} /></span>
                                                     ) : (
                                                         <div className="flex items-center gap-1 text-slate-400">
                                                             <Lock className="w-3 h-3" />
@@ -942,7 +943,7 @@ const AllOrdersPage: React.FC = () => {
                                                                     {(order.amountPaid ?? 0) <= 0.01 ? 'Unpaid' : 'Partial'}
                                                                 </span>
                                                                 <span className="text-amber-400 font-bold text-sm md:text-base tracking-tight">
-                                                                    ${(order.amountRemaining ?? 0).toLocaleString()}
+                                                                    <MaskedAmount value={order.amountRemaining ?? 0} />
                                                                 </span>
                                                                 {/* Delivered/shipped orders with a balance are often expected — repeat/reseller
                                                                     customers who receive product before paying in full and settle up later.

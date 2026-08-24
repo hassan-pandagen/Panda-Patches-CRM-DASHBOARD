@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Order, OrderStatus } from '@/types';
 import { Calendar, ArrowDown, ArrowUp, Mail, Phone, ExternalLink, ChevronRight, CheckCircle } from 'lucide-react';
 import StatusBadge from '@/components/ui/StatusBadge';
+import MaskedAmount from '@/components/ui/MaskedAmount';
 import { useAuth } from '@/contexts/AuthContext'; // 1. Import Auth
 
 // --- LOADING SKELETON ---
@@ -182,7 +183,7 @@ const OrdersTable: React.FC<OrdersTableProps> = ({ orders, isLoading = false }) 
                     <td className="px-6 py-4 text-sm text-slate-400">{order.salesAgent}</td>
                     <td className="px-6 py-4"><StatusBadge status={order.status as OrderStatus} /></td>
                     <td className="px-6 py-4 text-left font-medium text-emerald-400 font-mono">
-                        ${(order.orderAmount ?? 0).toLocaleString()}
+                        <MaskedAmount value={order.orderAmount ?? 0} />
                     </td>
 
                     {/* PENDING COLUMN - Show checkmark if fully paid, otherwise show pending amount */}
@@ -194,7 +195,7 @@ const OrdersTable: React.FC<OrdersTableProps> = ({ orders, isLoading = false }) 
                         </span>
                       ) : (
                         <span className="text-amber-400">
-                          ${(order.amountRemaining ?? 0).toLocaleString()}
+                          <MaskedAmount value={order.amountRemaining ?? 0} />
                         </span>
                       )}
                     </td>
@@ -202,7 +203,7 @@ const OrdersTable: React.FC<OrdersTableProps> = ({ orders, isLoading = false }) 
                     {/* 4. ONLY SHOW PROFIT CELL IF ADMIN */}
                     {isAdmin && (
                         <td className="px-6 py-4 text-left font-medium text-green-400 font-mono">
-                            ${(order.profit ?? 0).toLocaleString()}
+                            <MaskedAmount value={order.profit ?? 0} />
                         </td>
                     )}
                   </motion.tr>

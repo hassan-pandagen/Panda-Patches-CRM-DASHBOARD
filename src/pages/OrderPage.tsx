@@ -21,6 +21,7 @@ import Button from '../components/ui/Button';
 import SpotlightCard from '../components/ui/SpotlightCard';
 import StatusBadge from '../components/ui/StatusBadge';
 import PremiumBadge from '../components/ui/PremiumBadge';
+import MaskedAmount from '../components/ui/MaskedAmount';
 
 // Icons (Check already imported below)
 import { Edit, Trash2, ShieldAlert, ArrowLeft, Lock, MapPin, Smartphone, Maximize, Check, XCircle, AlertTriangle, Copy, FileText, Upload, Package, X, Mail, DollarSign, Crown, RotateCcw } from 'lucide-react';
@@ -1062,30 +1063,30 @@ const OrderPage: React.FC = () => {
                                 <div className="space-y-3">
                                     <div className="flex justify-between items-center py-1">
                                         <p className="text-slate-300">Total Amount</p>
-                                        <p className="font-bold text-white text-lg">${(order.orderAmount ?? 0).toLocaleString()}</p>
+                                        <p className="font-bold text-white text-lg"><MaskedAmount value={order.orderAmount ?? 0} /></p>
                                     </div>
                                     <div className="w-full bg-slate-700 h-px my-1"></div>
 
                                     <div className="flex justify-between items-center">
                                         <p className="text-slate-400 text-sm">Amount Paid</p>
-                                        <p className="font-medium text-green-400">${(order.amountPaid ?? 0).toLocaleString()}</p>
+                                        <p className="font-medium text-green-400"><MaskedAmount value={order.amountPaid ?? 0} /></p>
                                     </div>
                                     <div className="flex justify-between items-center">
                                         <p className="text-slate-400 text-sm">Remaining</p>
-                                        <p className="font-medium text-yellow-400">${(order.amountRemaining ?? 0).toLocaleString()}</p>
+                                        <p className="font-medium text-yellow-400"><MaskedAmount value={order.amountRemaining ?? 0} /></p>
                                     </div>
 
                                     {/* Detailed Breakdown (Admin Only) */}
                                     {isAdmin && (
                                         <div className="bg-slate-900/50 rounded-lg p-3 mt-4 space-y-2 border border-white/5">
                                             <p className="text-xs font-bold text-slate-400 uppercase mb-2">Internal Costs</p>
-                                            <div className="flex justify-between items-center"><p className="text-xs text-slate-400">Production</p><p className="text-xs font-medium text-white">-${(order.productionCost ?? 0).toLocaleString()}</p></div>
-                                            <div className="flex justify-between items-center"><p className="text-xs text-slate-400">Shipping</p><p className="text-xs font-medium text-white">-${(order.shippingCost ?? 0).toLocaleString()}</p></div>
-                                            <div className="flex justify-between items-center"><p className="text-xs text-slate-400">Marketing</p><p className="text-xs font-medium text-white">-${(order.marketingCost ?? 0).toLocaleString()}</p></div>
+                                            <div className="flex justify-between items-center"><p className="text-xs text-slate-400">Production</p><p className="text-xs font-medium text-white">-<MaskedAmount value={order.productionCost ?? 0} /></p></div>
+                                            <div className="flex justify-between items-center"><p className="text-xs text-slate-400">Shipping</p><p className="text-xs font-medium text-white">-<MaskedAmount value={order.shippingCost ?? 0} /></p></div>
+                                            <div className="flex justify-between items-center"><p className="text-xs text-slate-400">Marketing</p><p className="text-xs font-medium text-white">-<MaskedAmount value={order.marketingCost ?? 0} /></p></div>
                                             <div className="border-t border-white/10 pt-2 mt-1 flex justify-between items-center">
                                                 <p className="text-sm text-slate-300">Net Profit</p>
                                                 <p className={`text-sm font-bold ${(order.profit ?? 0) >= 0 ? 'text-cyan-400' : 'text-red-400'}`}>
-                                                    ${(order.profit ?? 0).toLocaleString()}
+                                                    <MaskedAmount value={order.profit ?? 0} />
                                                 </p>
                                             </div>
                                         </div>

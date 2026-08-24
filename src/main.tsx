@@ -7,6 +7,7 @@ import { ToastProvider } from './constants/ToastContext';
 import { SpeedInsights } from '@vercel/speed-insights/react';
 import { Analytics } from '@vercel/analytics/react';
 import { AuthProvider } from './contexts/AuthContext';
+import { PaymentVisibilityProvider } from './contexts/PaymentVisibilityContext';
 import { ChunkErrorBoundary } from './components/ChunkErrorBoundary';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { offlineManager } from './services/offlineManager';
@@ -136,9 +137,11 @@ ReactDOM.createRoot(rootElement).render(
       <ChunkErrorBoundary>
         <QueryClientProvider client={queryClient}>
           <AuthProvider>
-            <ToastProvider>
-              <RouterProvider router={router} />
-            </ToastProvider>
+            <PaymentVisibilityProvider>
+              <ToastProvider>
+                <RouterProvider router={router} />
+              </ToastProvider>
+            </PaymentVisibilityProvider>
           </AuthProvider>
         </QueryClientProvider>
       </ChunkErrorBoundary>

@@ -15,6 +15,7 @@ import {
 import { motion } from "framer-motion";
 
 import { useAuth } from "../contexts/AuthContext";
+import { usePaymentVisibility } from "../contexts/PaymentVisibilityContext";
 import SpotlightCard from "../components/ui/SpotlightCard";
 import StaleOrdersAlert from "../components/dashboard/StaleOrdersAlert";
 import { supabase } from "../services/supabaseClient";
@@ -56,6 +57,7 @@ interface DashboardCardProps {
   gradient: string; // e.g. "bg-gradient-to-r from-orange-500 to-red-500"
   onClick: () => void;
   isLoading?: boolean;
+  sensitive?: boolean; // mask this value behind the header's payment-visibility eye toggle
 }
 
 const DashboardStatCard: React.FC<DashboardCardProps> = ({
@@ -67,8 +69,12 @@ const DashboardStatCard: React.FC<DashboardCardProps> = ({
   gradient,
   onClick,
   isLoading,
+  sensitive = false,
 }) => {
+  const { visible: paymentsVisible } = usePaymentVisibility();
   if (isLoading) return <CardSkeleton />;
+
+  const masked = sensitive && !paymentsVisible;
 
   return (
     <motion.div variants={cardVariants}>
@@ -77,9 +83,15 @@ const DashboardStatCard: React.FC<DashboardCardProps> = ({
           <div className="flex-1">
             <p className="text-sm font-medium text-slate-400 mb-1">{title}</p>
             <h3 className="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-br from-white to-slate-400 drop-shadow-sm tracking-tight">
-              {prefix}
-              {typeof value === "number" ? value.toLocaleString() : value}
-              {suffix}
+              {masked ? (
+                "••••••"
+              ) : (
+                <>
+                  {prefix}
+                  {typeof value === "number" ? value.toLocaleString() : value}
+                  {suffix}
+                </>
+              )}
             </h3>
           </div>
           <div className="p-2 bg-gradient-to-br from-white/10 to-white/5 rounded-xl border border-white/5 shadow-inner">
@@ -377,6 +389,7 @@ export default function Dashboard() {
             gradient="bg-gradient-to-r from-brand-orange to-orange-600"
             onClick={() => navigate(ordersUrl())}
             isLoading={isLoading}
+            sensitive
           />
 
           {/* 2. Pending Payment - Amber Gradient */}
@@ -388,6 +401,7 @@ export default function Dashboard() {
             gradient="bg-gradient-to-r from-amber-500 to-yellow-500"
             onClick={() => navigate(ordersUrl("filter=PAYMENT_PENDING"))}
             isLoading={isLoading}
+            sensitive
           />
 
           {/* 3. Total Orders - Purple Gradient */}
@@ -409,6 +423,7 @@ export default function Dashboard() {
             gradient="bg-gradient-to-r from-green-500 to-emerald-500"
             onClick={() => navigate(ordersUrl("filter=PAID"))}
             isLoading={isLoading}
+            sensitive
           />
         </motion.div>
 

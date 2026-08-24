@@ -5,6 +5,7 @@ import { CheckCircle, ArrowRight, Calendar } from 'lucide-react';
 import { Order, OrderStatus } from '../../types';
 import StatusBadge from '../ui/StatusBadge';
 import Skeleton from '../ui/Skeleton';
+import MaskedAmount from '../ui/MaskedAmount';
 
 interface TableRowProps {
   order: Order;
@@ -39,7 +40,7 @@ const TableRow: React.FC<TableRowProps> = React.memo(({ order }) => {
         <StatusBadge status={order.status as OrderStatus} />
       </td>
       <td className="whitespace-nowrap px-6 py-4 text-left font-bold text-emerald-400 w-32">
-        ${(order.orderAmount || 0).toLocaleString()}
+        <MaskedAmount value={order.orderAmount ?? 0} />
       </td>
       <td className="whitespace-nowrap px-6 py-4 text-left font-medium w-28">
         {(order.amountRemaining ?? 0) <= 0.01 ? (
@@ -49,7 +50,7 @@ const TableRow: React.FC<TableRowProps> = React.memo(({ order }) => {
           </span>
         ) : (
           <span className="text-amber-400 font-bold">
-            ${(order.amountRemaining ?? 0).toLocaleString()}
+            <MaskedAmount value={order.amountRemaining ?? 0} />
           </span>
         )}
       </td>
@@ -88,14 +89,14 @@ const MobileCard: React.FC<TableRowProps> = React.memo(({ order }) => {
           )}
         </div>
         <div className="flex flex-col items-end gap-1 flex-shrink-0">
-          <span className="text-sm font-bold text-emerald-400">${(order.orderAmount || 0).toLocaleString()}</span>
+          <span className="text-sm font-bold text-emerald-400"><MaskedAmount value={order.orderAmount ?? 0} /></span>
           {(order.amountRemaining ?? 0) <= 0.01 ? (
             <span className="inline-flex items-center gap-1 text-green-400 text-xs">
               <CheckCircle className="w-3 h-3" /> Paid
             </span>
           ) : (
             <span className="text-xs text-amber-400 font-medium">
-              ${(order.amountRemaining ?? 0).toLocaleString()} pending
+              <MaskedAmount value={order.amountRemaining ?? 0} /> pending
             </span>
           )}
         </div>

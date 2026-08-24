@@ -1,7 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
+import { usePaymentVisibility } from '../../contexts/PaymentVisibilityContext';
 import { Link } from 'react-router-dom';
-import { User, LogOut, Settings, ChevronDown, Menu } from 'lucide-react';
+import { User, LogOut, Settings, ChevronDown, Menu, Eye, EyeOff } from 'lucide-react';
 import NotificationBell from '../ui/NotificationBell';
 import ActivityBell from '../ui/ActivityBell';
 
@@ -10,10 +11,18 @@ interface HeaderProps {
 }
 
 const Header: React.FC<HeaderProps> = ({ onMenuToggle }) => {
-  const { user, role, signOut } = useAuth();
+  const { user, role, permissions, signOut } = useAuth();
+  const { visible: paymentsVisible, toggle: togglePaymentsVisible } = usePaymentVisibility();
   const fullName = user?.user_metadata?.full_name;
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+
+  // Same rule used everywhere else to decide who can see financials at all;
+  // the eye toggle only matters (and only appears) for that group.
+  const canViewFinancials =
+    role === 'ADMIN' ||
+    permissions?.orders_edit_financials === true ||
+    permissions?.reports_view_financials === true;
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -40,6 +49,18 @@ const Header: React.FC<HeaderProps> = ({ onMenuToggle }) => {
 
       {/* Right side - notifications & user menu */}
       <div className="flex items-center gap-2 md:gap-4">
+        {/* Payment visibility toggle — masks amounts/balances everywhere until clicked, so someone standing over your shoulder can't read them */}
+        {canViewFinancials && (
+          <button
+            onClick={togglePaymentsVisible}
+            className="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 transition-colors"
+            title={paymentsVisible ? 'Hide payment amounts' : 'Show payment amounts'}
+            aria-label={paymentsVisible ? 'Hide payment amounts' : 'Show payment amounts'}
+          >
+            {paymentsVisible ? <Eye className="w-5 h-5" /> : <EyeOff className="w-5 h-5" />}
+          </button>
+        )}
+
         {/* New Activity bell — shows customer messages + order events to all staff */}
         <ActivityBell />
 

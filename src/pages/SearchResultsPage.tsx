@@ -12,6 +12,7 @@ import { Package, Lock, Search, ArrowRight } from 'lucide-react';
 import EmptyState from '../components/ui/EmptyState';
 import Spinner from '../components/ui/Spinner';
 import { sanitizeIlikePattern } from '../utils/supabaseFilters';
+import MaskedAmount from '../components/ui/MaskedAmount';
 
 // Helper for Badge
 const StatusBadge = ({ status }: { status: OrderStatus }) => {
@@ -130,7 +131,7 @@ const SearchResultsPage: React.FC = () => {
                     <div className="flex flex-col items-end min-w-[90px]">
                       <span className="text-[10px] text-slate-400 uppercase tracking-wider font-bold mb-1">Amount</span>
                       {canViewFinancials ? (
-                        <span className="text-white font-bold text-base tracking-tight">${(order.orderAmount ?? 0).toLocaleString()}</span>
+                        <span className="text-white font-bold text-base tracking-tight"><MaskedAmount value={order.orderAmount ?? 0} /></span>
                       ) : (
                         <div className="flex items-center gap-1 text-slate-400">
                           <Lock className="w-3 h-3" />
