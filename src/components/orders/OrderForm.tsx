@@ -42,7 +42,8 @@ const REMAKE_REASONS = [
   "Package Lost",
   "Quality Issues",
   "Handling Issues",
-  "Force Majeure"
+  "Force Majeure",
+  "Other"
 ];
 
 const FormSectionWrapper: React.FC<{ title: string; children: React.ReactNode }> = ({ title, children }) => (
@@ -577,6 +578,16 @@ const OrderForm: React.FC<OrderFormProps> = ({
   // data rather than a guess (drives the "don't change this" warning below).
   const _attr = (initialData?.attribution ?? {}) as Record<string, any>;
   const hasAdClickId = !!(_attr.fbc || _attr.fbclid || _attr.gclid || _attr.gbraid || _attr.wbraid || _attr.msclkid || _attr.ttclid);
+
+  // The website/webhook sometimes writes a lead_source string that isn't one of the options below
+  // (e.g. "Google (Organic)", "Direct / Unknown", "Instagram Ads (12345)"). A plain <select> can't
+  // represent a value with no matching <option> — the browser silently resets it to "", and saving
+  // the order (for ANY reason) wipes the real source to blank. This is what wiped PP-11232 / PP-11245
+  // originally, and it recurred on PP-11303 / PP-11321 after the options list was patched for just
+  // those two cases. Injecting the raw value as an extra option keeps it intact until an agent
+  // deliberately picks a real replacement, instead of losing it on the next unrelated save.
+  const watchedLeadSource = watch('leadSource');
+  const isUnrecognizedLeadSource = !!watchedLeadSource && !LEAD_SOURCE_OPTIONS.includes(watchedLeadSource);
 
   // Agents were pasting a full address and leaving City/State/ZIP blank, so orders shipped with no
   // structured geo data. Parse the pasted address on blur and fill ONLY the fields still empty —
@@ -1137,12 +1148,20 @@ const OrderForm: React.FC<OrderFormProps> = ({
             <label className="block text-sm font-medium text-slate-300">Lead Source</label>
             <select {...register('leadSource')} className="mt-1 block w-full bg-slate-800 border-slate-600 rounded-md text-white focus:ring-brand-orange focus:border-brand-orange">
               <option value="" disabled hidden>Select...</option>
+              {isUnrecognizedLeadSource && (
+                <option value={watchedLeadSource}>{watchedLeadSource} (unrecognized)</option>
+              )}
               {LEAD_SOURCE_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
             </select>
             {/* Orders that arrived on a real ad click carry a click ID (fbclid/gclid/…). The source was
                 auto-detected from it and is more reliable than a guess — agents overwriting it is what
                 silently wiped ad attribution on PP-11232 / PP-11245. Warn loudly on exactly those orders. */}
-            {hasAdClickId ? (
+            {isUnrecognizedLeadSource ? (
+              <p className="mt-1.5 text-[11px] text-amber-300 bg-amber-500/10 border border-amber-500/30 rounded px-2 py-1.5 leading-snug">
+                ⚠️ "{watchedLeadSource}" isn't a standard option — kept as-is so saving doesn't erase it.
+                Replace it with the real source below only if you know the actual channel.
+              </p>
+            ) : hasAdClickId ? (
               <p className="mt-1.5 text-[11px] text-amber-300 bg-amber-500/10 border border-amber-500/30 rounded px-2 py-1.5 leading-snug">
                 🔒 Auto-detected from the customer's ad click — <strong>please don't change this.</strong> It's
                 verified tracking data; overwriting it breaks ad reporting. Only change it if the customer
