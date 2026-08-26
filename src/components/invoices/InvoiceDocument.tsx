@@ -178,11 +178,16 @@ const InvoiceDocument: React.FC<InvoiceProps> = ({ order, poNumber, companyName,
   const date = new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }); 
   const qty = order.patchesQuantity || 1;
 
-  // --- REFACTORED MATH LOGIC ---
-  const rate = Number(((order.orderAmount || 0) / qty).toFixed(2)); // Calculate rate first with rounding
-  const amount = rate * qty; // Derive the final amount from the rounded rate
+  // --- MATH LOGIC ---
+  // The rate is derived (for line-item display only) from the real order total — it's just an
+  // approximate per-unit price and won't always multiply back to an exact total on odd quantities.
+  // The invoice total/balance must stay pinned to order.orderAmount (what was actually charged and
+  // paid), otherwise rounding the rate up (e.g. 1700/121 -> 14.05) inflates the total by a few cents
+  // and a fully-paid order shows as "partially paid" with a phantom balance due.
+  const amount = Number((order.orderAmount || 0).toFixed(2));
+  const rate = qty > 0 ? Number((amount / qty).toFixed(2)) : amount;
   const amountPaid = order.amountPaid || 0;
-  const balanceDue = Math.max(0, amount - amountPaid); // Recalculate balance due based on the derived amount
+  const balanceDue = Math.max(0, Number((amount - amountPaid).toFixed(2)));
 
   // Payment state — drives the PAID stamp and the totals breakdown.
   const isPaid = amountPaid > 0 && balanceDue <= 0;           // fully paid
