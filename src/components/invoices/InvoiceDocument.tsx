@@ -138,19 +138,6 @@ const styles = StyleSheet.create({
   link: { color: '#7C3AED', textDecoration: 'none' },
 
   // --- PAID / STATUS ---
-  paidStamp: {
-    position: 'absolute',
-    top: 150,
-    right: 55,
-    borderWidth: 3,
-    borderColor: '#16A34A',
-    borderRadius: 8,
-    paddingVertical: 4,
-    paddingHorizontal: 16,
-    transform: 'rotate(-16deg)',
-  },
-  paidStampText: { fontSize: 26, fontWeight: 'bold', color: '#16A34A', letterSpacing: 3 },
-  paidStampSub: { fontSize: 7, color: '#16A34A', textAlign: 'center', marginTop: 1 },
   statusPill: {
     alignSelf: 'flex-end',
     paddingVertical: 2,
@@ -160,12 +147,6 @@ const styles = StyleSheet.create({
   },
   statusPillText: { fontSize: 9, fontWeight: 'bold' },
 });
-
-// Format a date the same way across the invoice.
-const fmtDate = (d?: string | null) => {
-  const dt = d ? new Date(d) : new Date();
-  return dt.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
-};
 
 interface InvoiceProps {
   order: Order;
@@ -189,22 +170,13 @@ const InvoiceDocument: React.FC<InvoiceProps> = ({ order, poNumber, companyName,
   const amountPaid = order.amountPaid || 0;
   const balanceDue = Math.max(0, Number((amount - amountPaid).toFixed(2)));
 
-  // Payment state — drives the PAID stamp and the totals breakdown.
+  // Payment state — drives the status pill and the totals breakdown.
   const isPaid = amountPaid > 0 && balanceDue <= 0;           // fully paid
   const isPartiallyPaid = amountPaid > 0 && balanceDue > 0;   // deposit / partial
-
 
   return (
     <Document>
       <Page size="A4" style={styles.page}>
-
-        {/* PAID STAMP — only when fully paid */}
-        {isPaid && (
-          <View style={styles.paidStamp}>
-            <Text style={styles.paidStampText}>PAID</Text>
-            <Text style={styles.paidStampSub}>{fmtDate(order.updatedAt)}</Text>
-          </View>
-        )}
 
         {/* HEADER */}
         <View style={styles.headerContainer}>
