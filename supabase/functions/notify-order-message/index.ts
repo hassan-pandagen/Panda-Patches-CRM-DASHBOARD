@@ -167,7 +167,9 @@ Deno.serve(async (req: Request) => {
                 customer_name: order.customer_name || 'Customer',
                 order_number,
                 message_content: content,
-                order_link: `https://login.pandapatches.com/customer/order/${order_number}`,
+                // login.pandapatches.com does not resolve to the customer portal (confirmed by
+                // the website dev) — it's served on www.pandapatches.com.
+                order_link: `https://www.pandapatches.com/customer/order/${order_number}`,
               },
             }),
           });

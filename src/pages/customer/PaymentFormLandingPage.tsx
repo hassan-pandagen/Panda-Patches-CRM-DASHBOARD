@@ -9,7 +9,7 @@ import { useQuery, useMutation } from '@tanstack/react-query';
 import { supabase } from '../../services/supabaseClient';
 import { BrandLogo } from '../../components/ui/BrandLogo';
 import { CreditCard, CheckCircle, AlertCircle, Package, User, MapPin } from 'lucide-react';
-import { PATCHES_TYPE_OPTIONS, DESIGN_BACKING_OPTIONS } from '../../constants/index';
+import { PATCHES_TYPE_OPTIONS, DESIGN_BACKING_OPTIONS, COUNTRY_OPTIONS } from '../../constants/index';
 
 // ── Browser signal helpers ────────────────────────────────────────────────────
 function getCookie(name: string): string | null {
@@ -98,6 +98,8 @@ const PaymentFormLandingPage: React.FC = () => {
 // Single source of truth — shared with the CRM order form + agent payment form.
 const PATCH_TYPES = PATCHES_TYPE_OPTIONS;
 const BACKING_OPTIONS = DESIGN_BACKING_OPTIONS;
+// Not a shared constant — mirrors the hardcoded list in OrderForm.tsx / PaymentFormPage.tsx.
+const BORDER_TYPE_OPTIONS = ['Merrow Border', 'Embroidery Border', 'Laser Cut', 'No Border'];
 
 const PaymentForm: React.FC<{ tokenData: any }> = ({ tokenData: tokenDataRaw }) => {
   const tokenData = tokenDataRaw ?? {};
@@ -111,6 +113,11 @@ const PaymentForm: React.FC<{ tokenData: any }> = ({ tokenData: tokenDataRaw }) 
     patches_quantity: tokenData?.patches_quantity ? String(tokenData.patches_quantity) : '',
     design_size:      tokenData?.design_size      || '',
     design_backing:   tokenData?.design_backing   || '',
+    border_type:      tokenData?.border_type      || '',
+    sample_box:       tokenData?.sample_box       || false,
+    country:          tokenData?.country          || '',
+    purchase_order:   tokenData?.purchase_order   || '',
+    organization:     tokenData?.organization     || '',
     instructions:     tokenData?.instructions     || '',
     order_amount:     tokenData?.order_amount     ? String(tokenData.order_amount) : '',
   });
@@ -164,6 +171,11 @@ const PaymentForm: React.FC<{ tokenData: any }> = ({ tokenData: tokenDataRaw }) 
             patches_quantity: parseInt(form.patches_quantity) || 1,
             design_size:      form.design_size.trim() || null,
             design_backing:   form.design_backing || null,
+            border_type:      form.border_type || null,
+            sample_box:       form.sample_box,
+            country:          form.country || null,
+            purchase_order:   form.purchase_order.trim() || null,
+            organization:     form.organization.trim() || null,
             instructions:     form.instructions.trim() || null,
             order_amount:     orderAmount,
             charge_amount:    chargeAmount,
@@ -183,6 +195,7 @@ const PaymentForm: React.FC<{ tokenData: any }> = ({ tokenData: tokenDataRaw }) 
   });
 
   const set = (k: string) => (v: string) => setForm(f => ({ ...f, [k]: v }));
+  const setBool = (k: string) => (v: boolean) => setForm(f => ({ ...f, [k]: v }));
 
   return (
     <div className="min-h-screen bg-[#0B1120] text-white">
@@ -231,6 +244,13 @@ const PaymentForm: React.FC<{ tokenData: any }> = ({ tokenData: tokenDataRaw }) 
 
         {/* Order Details */}
         <Section title="Order Details" icon={<Package className="w-4 h-4" />}>
+          {/* CL0FAA §1: invoice number, visible before the order/payment exists. Becomes
+              INV-{order_number} once this form converts to an order on payment. */}
+          {tokenData?.id != null && (
+            <p className="text-xs text-slate-400">
+              Invoice No. <span className="text-slate-200 font-mono">INV-PF-{tokenData.id}</span>
+            </p>
+          )}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <Field label="Design / Project Name">
               <input type="text" value={form.design_name} onChange={e => set('design_name')(e.target.value)}
@@ -263,7 +283,43 @@ const PaymentForm: React.FC<{ tokenData: any }> = ({ tokenData: tokenDataRaw }) 
                 {BACKING_OPTIONS.map(b => <option key={b} value={b}>{b}</option>)}
               </select>
             </Field>
+            <Field label="Border Type">
+              <select value={form.border_type} onChange={e => set('border_type')(e.target.value)}
+                disabled={!!tokenData.border_type}
+                className={inputCls(!!tokenData.border_type)}>
+                <option value="">Select border…</option>
+                {BORDER_TYPE_OPTIONS.map(b => <option key={b} value={b}>{b}</option>)}
+              </select>
+            </Field>
+            <Field label="Country">
+              <select value={form.country} onChange={e => set('country')(e.target.value)}
+                disabled={!!tokenData.country}
+                className={inputCls(!!tokenData.country)}>
+                <option value="">Select country…</option>
+                {COUNTRY_OPTIONS.map(c => <option key={c} value={c}>{c}</option>)}
+              </select>
+            </Field>
+            <Field label="Purchase Order #">
+              <input type="text" value={form.purchase_order} onChange={e => set('purchase_order')(e.target.value)}
+                placeholder="PO-1234" disabled={!!tokenData.purchase_order}
+                className={inputCls(!!tokenData.purchase_order)} />
+            </Field>
+            <Field label="Company / End Client">
+              <input type="text" value={form.organization} onChange={e => set('organization')(e.target.value)}
+                placeholder="Acme Corp" disabled={!!tokenData.organization}
+                className={inputCls(!!tokenData.organization)} />
+            </Field>
           </div>
+          <label className="flex items-center gap-2 cursor-pointer select-none w-fit">
+            <input
+              type="checkbox"
+              checked={form.sample_box}
+              onChange={e => setBool('sample_box')(e.target.checked)}
+              disabled={!!tokenData.sample_box}
+              className="w-4 h-4 rounded border-slate-600 bg-slate-800 text-brand-orange focus:ring-brand-orange focus:ring-offset-0 disabled:opacity-70"
+            />
+            <span className="text-sm text-slate-300">Include a Sample Box</span>
+          </label>
           <Field label="Special Instructions">
             <textarea value={form.instructions} onChange={e => set('instructions')(e.target.value)}
               placeholder="Any special notes about your design, colours, or requirements…"

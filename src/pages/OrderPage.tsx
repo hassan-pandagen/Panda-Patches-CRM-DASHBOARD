@@ -562,6 +562,16 @@ const OrderPage: React.FC = () => {
                             </button>
                             <h1 className="text-3xl font-bold text-white flex items-center gap-3 flex-wrap">
                                 Order {order.orderNumber}
+                                {/* CL0FAA §3: pre-migration customer-facing number, so an agent can confirm a
+                                    match when a customer quotes an old number from a prior email. */}
+                                {order.legacyCustomerRef && (
+                                    <span
+                                        title="Legacy customer-facing reference (pre-migration)"
+                                        className="text-xs font-normal px-2 py-1 rounded-full bg-slate-700/60 text-slate-300 border border-slate-600"
+                                    >
+                                        Legacy Ref: {order.legacyCustomerRef}
+                                    </span>
+                                )}
                                 <AttributionQualityBadge quality={getAttributionQualityFromOrder(order)} />
                                 {premiumFlag?.isPremium && <PremiumBadge size="md" />}
                                 {/* Priority mockup — Silver/Gold customer (CL86F1 Task 3). No financial data; safe for production. */}
@@ -698,6 +708,17 @@ const OrderPage: React.FC = () => {
                                 <span className="hidden sm:inline">Invoice</span>
                             </Button>
                             {/* ----------------------------- */}
+
+                            {/* CL0FAA §2: auto PAID-invoice email sent — shown once, never re-sent */}
+                            {order.paidInvoiceSentAt && (
+                                <span
+                                    title={`Paid invoice emailed to the customer on ${new Date(order.paidInvoiceSentAt).toLocaleString()}`}
+                                    className="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
+                                >
+                                    <FileText size={14} />
+                                    Paid invoice sent ✓
+                                </span>
+                            )}
 
                             {/* ✅ FIXED: Show Edit for Admin or users with financials/status perms (not production-only) */}
                             {canEdit && (isAdmin || permissions?.orders_edit_financials || permissions?.orders_change_status) && (

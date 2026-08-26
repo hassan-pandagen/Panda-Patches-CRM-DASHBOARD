@@ -54,6 +54,7 @@ export interface Order {
   // --- Core Order Details ---
   id: number;
   orderNumber: string;
+  legacyCustomerRef?: string | null; // CL0FAA §3: pre-migration customer-facing number, for search only
   createdAt: string; // Comes as an ISO string from Supabase
   updatedAt: string;
   status: OrderStatus | string;
@@ -107,6 +108,7 @@ export interface Order {
   marketingCost: number | null;
   profit: number | null;
   originalAmount?: number;
+  paidInvoiceSentAt?: string | null; // CL0FAA §2: set once the auto PAID-invoice email has been sent
 
   // --- Personnel & Sourcing ---
   salesAgent: string;

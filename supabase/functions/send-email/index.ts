@@ -65,6 +65,15 @@ const sendEmailSchema = z.object({
     ),
 
   from_email: z.string().email().optional(),
+
+  // Pre-built attachments (e.g. a PDF generated in-process by the caller, like the auto PAID
+  // invoice from square-payment-webhook) — skips the fetchFile(url) download path entirely since
+  // the bytes already exist in memory on the caller's side.
+  attachments: z.array(z.object({
+    filename: z.string().min(1).max(255),
+    content_base64: z.string().min(1),
+    mime_type: z.string().min(1).max(100),
+  })).optional(),
 });
 
 // 1. Helper: Get Clean Filename — strip timestamp/UUID prefix, preserve original name
@@ -312,7 +321,7 @@ const getTemplateMessage = (templateId: string, data?: any): string => {
     'INTERNAL_REMAKE': internalRemakeMessages[remakeReason] || 'URGENT REMAKE REQUIRED: The customer was not satisfied with the patches we produced. This order needs to be remade immediately. Please contact the sales agent to get full details about what the customer wants changed. Review all specifications carefully and ask questions if anything is unclear. This is our second chance to get it right - quality check everything before shipping.',
 
     // Payment templates
-    'CUSTOMER_PAYMENT_CONFIRMATION': 'We have received your payment — thank you! Your order is confirmed. Here\'s what happens next: our design team will send your mockup within 24 hours for approval, and once you approve it your order moves straight into production. Track every step below.',
+    'CUSTOMER_PAYMENT_CONFIRMATION': `We have received your payment — thank you! Your order is confirmed.${data?.invoice_attached ? ' Your invoice is attached to this email for your records.' : ''} Here's what happens next: our design team will send your mockup within 24 hours for approval, and once you approve it your order moves straight into production. Track every step below.`,
     'INTERNAL_PAYMENT_NOTIFICATION': 'A payment has been recorded for this order. Please review the payment details below and update records accordingly.',
 
     // Customer portal invite templates
@@ -432,7 +441,7 @@ const shouldShowFullDetails = (templateId: string): boolean => {
     'CUSTOMER_DELIVERED',
     'CUSTOMER_FEEDBACK_REQUEST',
     'CUSTOMER_REFUND_ISSUED',
-    'CUSTOMER_PAYMENT_CONFIRMATION',
+    'CUSTOMER_PAYMENT_CONFIRMATION', // the attached invoice PDF has the full order details when paid in full
     'INTERNAL_PAYMENT_NOTIFICATION',
     'CUSTOMER_WELCOME_INVITE',
     'CUSTOMER_RETURNING_LOGIN',
@@ -1117,7 +1126,7 @@ const buildEmailHTML = (templateId: string, data: any): string => {
               <tr>
                 <td align="center" bgcolor="#FB6E1D" class="inner-td" style="border-radius:8px; font-size:18px; text-align:center; background-color:#FB6E1D;">
                   <a href="${escapeHtml(data.portal_action_url)}" style="background-color:#FB6E1D; border:1px solid #FB6E1D; border-radius:8px; color:#ffffff; display:block; font-size:18px; font-weight:bold; line-height:1.3; padding:18px 24px; text-align:center; text-decoration:none; font-family: 'lucida sans unicode', 'lucida grande', sans-serif;" target="_blank">
-                    ${templateId === 'CUSTOMER_WELCOME_INVITE' ? 'Set Your Password &rarr;' : templateId === 'CUSTOMER_PASSWORD_RESET' ? 'Reset Password &rarr;' : templateId === 'CUSTOMER_PAYMENT_LINK' ? 'Pay Now &rarr;' : templateId === 'WEBSITE_AUTH_SIGNUP_CONFIRM' ? 'Confirm My Email &rarr;' : templateId === 'WEBSITE_AUTH_MAGIC_LINK' ? 'Sign In To My Account &rarr;' : templateId === 'WEBSITE_AUTH_PASSWORD_RESET' ? 'Reset My Password &rarr;' : templateId === 'WEBSITE_AUTH_EMAIL_CHANGE' ? 'Confirm Email Change &rarr;' : templateId === 'WEBSITE_AUTH_ORDER_ACCOUNT' ? 'Set Your Password &rarr;' : 'Log In &amp; Track Order &rarr;'}
+                    ${templateId === 'CUSTOMER_WELCOME_INVITE' ? 'Set Your Password &rarr;' : templateId === 'CUSTOMER_PASSWORD_RESET' ? 'Reset Password &rarr;' : templateId === 'CUSTOMER_PAYMENT_LINK' ? 'Pay Now &rarr;' : templateId === 'WEBSITE_AUTH_SIGNUP_CONFIRM' ? 'Confirm My Email &rarr;' : templateId === 'WEBSITE_AUTH_MAGIC_LINK' ? 'Sign In To My Account &rarr;' : templateId === 'WEBSITE_AUTH_PASSWORD_RESET' ? 'Reset My Password &rarr;' : templateId === 'WEBSITE_AUTH_EMAIL_CHANGE' ? 'Confirm Email Change &rarr;' : templateId === 'WEBSITE_AUTH_ORDER_ACCOUNT' ? 'Set Your Password &rarr;' : templateId === 'CUSTOMER_PAYMENT_CONFIRMATION' && data.is_new_account ? 'Set Your Password &amp; Track Order &rarr;' : 'Log In &amp; Track Order &rarr;'}
                   </a>
                 </td>
               </tr>
@@ -1326,7 +1335,7 @@ serve(async (req) => {
     const body = await req.json();
     const validatedData = sendEmailSchema.parse(body);
 
-    const { to, template_id, dynamic_data, cc, from_email } = validatedData;
+    const { to, template_id, dynamic_data, cc, from_email, attachments: providedAttachments } = validatedData;
     const attachments = [];
     const inlineAttachments = [];
 
@@ -1482,6 +1491,18 @@ serve(async (req) => {
         content: attachment.Base64Content,
         mime_type: attachment["Content-type"],
       });
+    }
+
+    // Add caller-provided attachments (bytes already in memory on the caller's side, e.g. the
+    // auto-generated PAID invoice PDF from square-payment-webhook) — no fetchFile(url) needed.
+    if (Array.isArray(providedAttachments)) {
+      for (const attachment of providedAttachments) {
+        emailAttachments.push({
+          name: attachment.filename,
+          content: attachment.content_base64,
+          mime_type: attachment.mime_type,
+        });
+      }
     }
 
     // Build ZeptoMail API payload

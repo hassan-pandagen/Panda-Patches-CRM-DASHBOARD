@@ -284,7 +284,7 @@ async function fetchPaginatedOrders(params: {
     // Apply search (server-side ilike across multiple columns)
     if (search) {
         query = query.or(
-            `customer_name.ilike.%${search}%,order_number.ilike.%${search}%,customer_email.ilike.%${search}%,customer_phone.ilike.%${search}%,design_name.ilike.%${search}%,sales_agent.ilike.%${search}%,purchase_order.ilike.%${search}%,organization.ilike.%${search}%,agency_name.ilike.%${search}%`
+            `customer_name.ilike.%${search}%,order_number.ilike.%${search}%,customer_email.ilike.%${search}%,customer_phone.ilike.%${search}%,design_name.ilike.%${search}%,sales_agent.ilike.%${search}%,purchase_order.ilike.%${search}%,organization.ilike.%${search}%,agency_name.ilike.%${search}%,legacy_customer_ref.ilike.%${search}%`
         );
     }
 

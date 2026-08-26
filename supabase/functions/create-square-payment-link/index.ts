@@ -145,11 +145,17 @@ Deno.serve(async (req: Request) => {
     // portal-authed order/quote route that would 404 or bounce to auth.
     const redirectUrl = "https://pandapatches.com/login?paid=1";
 
+    // CL0FAA §1: invoice number carried onto the Square order/receipt so it reconciles 1:1 with
+    // ours. Only defined for an existing order (INV-{order_number}) — a quote-mode link creates
+    // the order fresh on payment (Flow C), so there's no invoice number to reference yet.
+    const invoiceNote = body.mode === 'order' ? `Invoice INV-${referenceId}` : undefined;
+
     const checkoutBody = {
       idempotency_key: idempotencyKey,
       order: {
         location_id:  SQUARE_LOCATION,
         reference_id: referenceId, // webhook reads this off the Square order
+        ...(invoiceNote ? { note: invoiceNote } : {}),
         line_items: [
           {
             name:     `${itemName} — ${labelText}`,

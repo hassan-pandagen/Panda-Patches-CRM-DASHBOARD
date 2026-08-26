@@ -160,6 +160,7 @@ export const mapDbToOrder = (data: any): Order => {
   return {
     id: data.id,
     orderNumber: data.orderNumber ?? data.order_number,
+    legacyCustomerRef: data.legacyCustomerRef ?? data.legacy_customer_ref ?? null,
     customerName: data.customerName ?? data.customer_name,
     customerEmail: data.customerEmail ?? data.customer_email,
     ccEmail: data.ccEmail ?? data.cc_email ?? undefined,
@@ -187,6 +188,7 @@ export const mapDbToOrder = (data: any): Order => {
     orderAmount, amountPaid, productionCost, shippingCost, marketingCost,
     profit,
     amountRemaining: orderAmount - amountPaid,
+    paidInvoiceSentAt: data.paidInvoiceSentAt ?? data.paid_invoice_sent_at ?? null,
 
     status,
     reasonCategory: data.reasonCategory ?? data.reason_category,
@@ -298,7 +300,10 @@ export const prepareEmailData = (order: Order, triggerStatus: string) => {
     shipping_photos: (order.shippingAttachmentUrls || []).map(url => ({ url, file_name: getFileName(url) })),
     has_shipping_photos: (order.shippingAttachmentUrls || []).length > 0,
 
-    order_link: `https://login.pandapatches.com/customer/order/${order.orderNumber}`,
+    // login.pandapatches.com does not resolve to the customer portal (confirmed by the website
+    // dev) — the portal is served on www.pandapatches.com. Points to the /customer/order/:ref
+    // shim, which 308s to the canonical /account/orders/:ref route.
+    order_link: `https://www.pandapatches.com/customer/order/${order.orderNumber}`,
     sales_agent_name: order.salesAgent || "Panda Team",
 
     is_urgent: order.isUrgent || false,
@@ -819,7 +824,10 @@ export const sendPaymentConfirmationEmail = async (order: Order): Promise<void> 
     amount_remaining: `$${(order.amountRemaining || 0).toLocaleString()}`,
     is_paid_in_full: (order.amountRemaining || 0) <= 0,
     design_name: order.designName || '',
-    order_link: `https://login.pandapatches.com/customer/order/${order.orderNumber}`,
+    // login.pandapatches.com does not resolve to the customer portal (confirmed by the website
+    // dev) — the portal is served on www.pandapatches.com. Points to the /customer/order/:ref
+    // shim, which 308s to the canonical /account/orders/:ref route.
+    order_link: `https://www.pandapatches.com/customer/order/${order.orderNumber}`,
     sales_agent_name: order.salesAgent || 'Panda Team',
   };
 

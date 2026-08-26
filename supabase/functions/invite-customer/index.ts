@@ -47,6 +47,10 @@ const inviteSchema = z.object({
   mode: z.enum(['auto', 'reset_password']).optional().default('auto'),
   // Manual resends bypass the per-order once-guard.
   force: z.boolean().optional().default(false),
+  // Caller (square-payment-webhook) wants to fold the account link into its OWN combined
+  // payment/invoice email instead of a separate one — do all the account-creation work but
+  // skip send-email, and return the link for the caller to use instead.
+  suppress_email: z.boolean().optional().default(false),
 });
 
 // Customer portal lives on the marketing website (CRM /customer/* routes were removed).
@@ -83,7 +87,7 @@ Deno.serve(async (req: Request) => {
     const admin = createClient(SUPABASE_URL, SERVICE_KEY);
 
     const body = await req.json();
-    const { email, customer_name, order_number, customer_phone, mode, force } = inviteSchema.parse(body);
+    const { email, customer_name, order_number, customer_phone, mode, force, suppress_email } = inviteSchema.parse(body);
 
     const emailLc = email.trim().toLowerCase();
     const setPasswordRedirect = WEBSITE_SET_PASSWORD_URL;
@@ -222,34 +226,37 @@ Deno.serve(async (req: Request) => {
 
       if (!actionLink) throw new Error('Failed to generate portal link');
 
-      // 4. Send via the shared send-email function
-      const emailResp = await fetch(`${SUPABASE_URL}/functions/v1/send-email`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${SERVICE_KEY}`,
-        },
-        body: JSON.stringify({
-          to: emailLc,
-          template_id: templateId,
-          dynamic_data: {
-            customer_name,
-            order_number,
-            portal_action_url: actionLink,
-            portal_login_url: 'https://www.pandapatches.com/login',
+      // 4. Send via the shared send-email function — unless the caller (square-payment-webhook)
+      // is folding this link into its OWN combined email and just wants the link back.
+      if (!suppress_email) {
+        const emailResp = await fetch(`${SUPABASE_URL}/functions/v1/send-email`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${SERVICE_KEY}`,
           },
-        }),
-      });
+          body: JSON.stringify({
+            to: emailLc,
+            template_id: templateId,
+            dynamic_data: {
+              customer_name,
+              order_number,
+              portal_action_url: actionLink,
+              portal_login_url: 'https://www.pandapatches.com/login',
+            },
+          }),
+        });
 
-      if (!emailResp.ok) {
-        const text = await emailResp.text();
-        // Cleanup: if we just created this auth user and the email failed, delete the orphan so a
-        // retry starts clean instead of getting stuck on a passwordless/unconfirmed row.
-        if (createdNow && createdUserId) {
-          await admin.auth.admin.deleteUser(createdUserId).catch(() => {});
+        if (!emailResp.ok) {
+          const text = await emailResp.text();
+          // Cleanup: if we just created this auth user and the email failed, delete the orphan so a
+          // retry starts clean instead of getting stuck on a passwordless/unconfirmed row.
+          if (createdNow && createdUserId) {
+            await admin.auth.admin.deleteUser(createdUserId).catch(() => {});
+          }
+          await rollbackClaim();
+          throw new Error(`send-email failed: ${text}`);
         }
-        await rollbackClaim();
-        throw new Error(`send-email failed: ${text}`);
       }
 
       // New customer's profile row now exists (created by the signup trigger) — fill phone. Best-effort.
@@ -258,7 +265,7 @@ Deno.serve(async (req: Request) => {
       }
 
       return new Response(
-        JSON.stringify({ success: true, new_customer: !existing, template: templateId }),
+        JSON.stringify({ success: true, new_customer: !existing, template: templateId, action_link: actionLink }),
         { headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' }, status: 200 }
       );
     } catch (innerErr) {

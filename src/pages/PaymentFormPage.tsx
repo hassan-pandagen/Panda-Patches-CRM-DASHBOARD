@@ -10,7 +10,7 @@ import { uploadFile } from '../services/storageService';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../hooks/useToast';
 import SpotlightCard from '../components/ui/SpotlightCard';
-import { PATCHES_TYPE_OPTIONS, DESIGN_BACKING_OPTIONS } from '../constants/index';
+import { PATCHES_TYPE_OPTIONS, DESIGN_BACKING_OPTIONS, COUNTRY_OPTIONS } from '../constants/index';
 import { copyToClipboard } from '../utils/copyToClipboard';
 import {
   Link, Copy, Check, Plus, ExternalLink, Trash2,
@@ -23,6 +23,8 @@ import { format, parseISO, isPast } from 'date-fns';
 // shared with the CRM order form, quotes, and the customer payment page.
 const PATCH_TYPES = PATCHES_TYPE_OPTIONS;
 const BACKING_OPTIONS = DESIGN_BACKING_OPTIONS;
+// Not a shared constant — mirrors the hardcoded list in OrderForm.tsx.
+const BORDER_TYPE_OPTIONS = ['Merrow Border', 'Embroidery Border', 'Laser Cut', 'No Border'];
 
 interface Token {
   id: number;
@@ -58,16 +60,24 @@ const PaymentFormPage: React.FC = () => {
     customer_name:    '',
     customer_email:   '',
     customer_phone:   '',
+    cc_email:         '',
     shipping_address: '',
     patches_type:     '',
     patches_quantity: '',
     design_name:      '',
     design_size:      '',
     design_backing:   '',
+    border_type:      '',
+    sample_box:       false,
+    country:          '',
+    purchase_order:   '',
+    organization:     '',
     instructions:     '',
     order_amount:     '',
     deposit_amount:   '',
     is_deposit:       false,
+    is_urgent:        false,
+    rush_date:        '',
   });
 
   // Design/mockup images the agent attaches at link creation → copied to the order on payment
@@ -106,6 +116,9 @@ const PaymentFormPage: React.FC = () => {
           throw new Error('Deposit cannot exceed the order total');
         }
       }
+      if (form.is_urgent && !form.rush_date) {
+        throw new Error('Ship-by date is required for urgent orders');
+      }
       const payload: any = {
         created_by:   user?.email || 'unknown',
         order_amount: total,
@@ -117,12 +130,20 @@ const PaymentFormPage: React.FC = () => {
       if (form.customer_name.trim())    payload.customer_name    = form.customer_name.trim();
       if (form.customer_email.trim())   payload.customer_email   = form.customer_email.trim();
       if (form.customer_phone.trim())   payload.customer_phone   = form.customer_phone.trim();
+      if (form.cc_email.trim())         payload.cc_email         = form.cc_email.trim();
       if (form.shipping_address.trim()) payload.shipping_address = form.shipping_address.trim();
       if (form.patches_type)            payload.patches_type     = form.patches_type;
       if (form.patches_quantity)        payload.patches_quantity = parseInt(form.patches_quantity);
       if (form.design_name.trim())      payload.design_name      = form.design_name.trim();
       if (form.design_size.trim())      payload.design_size      = form.design_size.trim();
       if (form.design_backing)          payload.design_backing   = form.design_backing;
+      if (form.border_type)             payload.border_type      = form.border_type;
+      if (form.country)                 payload.country          = form.country;
+      if (form.purchase_order.trim())   payload.purchase_order   = form.purchase_order.trim();
+      if (form.organization.trim())     payload.organization     = form.organization.trim();
+      payload.sample_box = form.sample_box;
+      payload.is_urgent  = form.is_urgent;
+      if (form.is_urgent)               payload.rush_date        = form.rush_date;
       if (form.instructions.trim())     payload.instructions     = form.instructions.trim();
       if (mockupUrls.length > 0)        payload.mockup_urls      = mockupUrls;
 
@@ -189,7 +210,14 @@ const PaymentFormPage: React.FC = () => {
   const removeImage = (url: string) => setMockupUrls(prev => prev.filter(u => u !== url));
 
   const resetForm = () => {
-    setForm({ customer_name: '', customer_email: '', customer_phone: '', shipping_address: '', patches_type: '', patches_quantity: '', design_name: '', design_size: '', design_backing: '', instructions: '', order_amount: '', deposit_amount: '', is_deposit: false });
+    setForm({
+      customer_name: '', customer_email: '', customer_phone: '', cc_email: '',
+      shipping_address: '', patches_type: '', patches_quantity: '',
+      design_name: '', design_size: '', design_backing: '', border_type: '',
+      sample_box: false, country: '', purchase_order: '', organization: '',
+      instructions: '', order_amount: '', deposit_amount: '', is_deposit: false,
+      is_urgent: false, rush_date: '',
+    });
     setMockupUrls([]);
     setGeneratedToken(null);
     setShowForm(false);
@@ -305,6 +333,7 @@ const PaymentFormPage: React.FC = () => {
                   <FI label="Name" value={form.customer_name} onChange={v => setForm(f => ({ ...f, customer_name: v }))} placeholder="Aaron Leupp" />
                   <FI label="Email" value={form.customer_email} onChange={v => setForm(f => ({ ...f, customer_email: v }))} placeholder="aaron@example.com" type="email" />
                   <FI label="Phone" value={form.customer_phone} onChange={v => setForm(f => ({ ...f, customer_phone: v }))} placeholder="+1 623 238 6390" type="tel" />
+                  <FI label="CC Email" value={form.cc_email} onChange={v => setForm(f => ({ ...f, cc_email: v }))} placeholder="agency@example.com" type="email" />
                   {/* Prefills the customer's pay page. If left blank the customer enters it there —
                       either way it now lands on the created order (City/State/ZIP parsed on insert). */}
                   <div>
@@ -333,15 +362,74 @@ const PaymentFormPage: React.FC = () => {
                     <FI label="Size" value={form.design_size} onChange={v => setForm(f => ({ ...f, design_size: v }))} placeholder='3"x3"' />
                   </div>
                   <FI label="Design Name" value={form.design_name} onChange={v => setForm(f => ({ ...f, design_name: v }))} placeholder="Company Logo" />
-                  <div>
-                    <label className="block text-xs text-slate-400 mb-1">Backing</label>
-                    <select value={form.design_backing} onChange={e => setForm(f => ({ ...f, design_backing: e.target.value }))}
-                      className="w-full bg-slate-800 border border-slate-700 text-white text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-brand-orange">
-                      <option value="">— Customer selects —</option>
-                      {BACKING_OPTIONS.map(b => <option key={b} value={b}>{b}</option>)}
-                    </select>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="block text-xs text-slate-400 mb-1">Backing</label>
+                      <select value={form.design_backing} onChange={e => setForm(f => ({ ...f, design_backing: e.target.value }))}
+                        className="w-full bg-slate-800 border border-slate-700 text-white text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-brand-orange">
+                        <option value="">— Customer selects —</option>
+                        {BACKING_OPTIONS.map(b => <option key={b} value={b}>{b}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs text-slate-400 mb-1">Border Type</label>
+                      <select value={form.border_type} onChange={e => setForm(f => ({ ...f, border_type: e.target.value }))}
+                        className="w-full bg-slate-800 border border-slate-700 text-white text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-brand-orange">
+                        <option value="">— Customer selects —</option>
+                        {BORDER_TYPE_OPTIONS.map(b => <option key={b} value={b}>{b}</option>)}
+                      </select>
+                    </div>
+                  </div>
+                  <FI label="Purchase Order #" value={form.purchase_order} onChange={v => setForm(f => ({ ...f, purchase_order: v }))} placeholder="PO-1234" />
+                  <FI label="Company / End Client" value={form.organization} onChange={v => setForm(f => ({ ...f, organization: v }))} placeholder="Acme Corp" />
+                  <div className="grid grid-cols-2 gap-2 items-end">
+                    <div>
+                      <label className="block text-xs text-slate-400 mb-1">Country</label>
+                      <select value={form.country} onChange={e => setForm(f => ({ ...f, country: e.target.value }))}
+                        className="w-full bg-slate-800 border border-slate-700 text-white text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-brand-orange">
+                        <option value="">— Customer selects —</option>
+                        {COUNTRY_OPTIONS.map(c => <option key={c} value={c}>{c}</option>)}
+                      </select>
+                    </div>
+                    <label className="flex items-center gap-2 cursor-pointer pb-2 select-none">
+                      <input
+                        type="checkbox"
+                        checked={form.sample_box}
+                        onChange={e => setForm(f => ({ ...f, sample_box: e.target.checked }))}
+                        className="w-4 h-4 rounded border-slate-600 bg-slate-800 text-brand-orange focus:ring-brand-orange focus:ring-offset-0"
+                      />
+                      <span className="text-xs text-slate-300">Sample Box</span>
+                    </label>
                   </div>
                 </div>
+              </div>
+
+              {/* Priority — agent-only judgment call, never shown to the customer */}
+              <div className="mt-4 max-w-xs">
+                <label className="flex items-center gap-2 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={form.is_urgent}
+                    onChange={e => setForm(f => ({ ...f, is_urgent: e.target.checked, rush_date: e.target.checked ? f.rush_date : '' }))}
+                    className="h-5 w-5 rounded bg-slate-700 border-slate-600 text-brand-orange focus:ring-brand-orange"
+                  />
+                  <span className="text-sm font-bold text-slate-200">Mark as Urgent</span>
+                </label>
+                {form.is_urgent && (
+                  <div className="mt-2 p-3 bg-red-500/10 border border-red-500/30 rounded-lg">
+                    <label className="block text-xs font-semibold text-red-400 mb-1.5 uppercase tracking-wide">
+                      🚨 Required Ship-By Date
+                    </label>
+                    <input
+                      type="date"
+                      value={form.rush_date}
+                      onChange={e => setForm(f => ({ ...f, rush_date: e.target.value }))}
+                      min={new Date().toISOString().split('T')[0]}
+                      className="block w-full bg-slate-800 border-red-500/50 rounded-md text-white focus:ring-red-500 focus:border-red-500 text-sm px-3 py-2"
+                    />
+                    {!form.rush_date && <p className="text-red-400 text-xs mt-1">Ship-by date is required for urgent orders</p>}
+                  </div>
+                )}
               </div>
 
               <div className="mt-3">
@@ -382,7 +470,7 @@ const PaymentFormPage: React.FC = () => {
               <div className="mt-5 flex gap-3">
                 <button
                   onClick={() => createToken.mutate()}
-                  disabled={createToken.isPending || uploading || !form.order_amount || parseFloat(form.order_amount) <= 0 || (form.is_deposit && (!form.deposit_amount || parseFloat(form.deposit_amount) <= 0))}
+                  disabled={createToken.isPending || uploading || !form.order_amount || parseFloat(form.order_amount) <= 0 || (form.is_deposit && (!form.deposit_amount || parseFloat(form.deposit_amount) <= 0)) || (form.is_urgent && !form.rush_date)}
                   className="flex-1 flex items-center justify-center gap-2 py-3 bg-brand-orange hover:bg-orange-500 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-xl text-sm font-semibold transition-colors"
                 >
                   <Link className="w-4 h-4" />

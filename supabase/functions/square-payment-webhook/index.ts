@@ -23,6 +23,8 @@
 // every Square payment webhook for ~2 days (last good payment PP-11212, 2026-08-06). The jsr
 // build uses the runtime's built-in WebSocket and never imports `ws`. Do NOT revert to esm.sh.
 import { createClient } from 'jsr:@supabase/supabase-js@2';
+import { encode } from 'https://deno.land/std@0.168.0/encoding/base64.ts';
+import { buildPaidInvoicePdf } from './invoicePdf.ts';
 
 const WEBHOOK_URL = 'https://uxgzlneefybifvccfhwp.supabase.co/functions/v1/square-payment-webhook';
 const enc = new TextEncoder();
@@ -212,6 +214,17 @@ const PRODUCTION_MANAGER_EMAILS = ['lilcustomerzdesign@gmail.com', 'lilcustomize
 const DESIGN_TEAM_CC = 'design@pandapatches.com';
 const HELLO_EMAIL = 'hello@pandapatches.com';
 const LANCE_EMAIL = 'lance@pandapatches.com';
+// CL0FAA §2: from-address for the auto PAID-invoice email. billing@pandapatches.com is planned
+// but not live yet (mailbox + SPF/DKIM unconfirmed) — default to the known-working hello@ and
+// switch via this env var alone (no redeploy) once billing@ is verified.
+const INVOICE_FROM_EMAIL = Deno.env.get('BILLING_FROM_EMAIL') || HELLO_EMAIL;
+
+// A payment makes an order "fully paid" once it covers the total (within a cent of rounding
+// tolerance) — mirrors apply_order_payment's own threshold so every flow agrees on the same
+// definition of "paid".
+function isFullyPaidAmount(paidAmount: number, orderAmount: number): boolean {
+  return paidAmount > 0 && paidAmount >= orderAmount - 0.01;
+}
 function getInternalEmails(patchType?: string): string[] {
   // PVC: no internal email since the vendor change (2026-07) — customer emails only.
   if (patchType?.toLowerCase() === 'pvc') return [];
@@ -246,6 +259,153 @@ Deno.serve(async (req: Request) => {
 
     const event = JSON.parse(rawBody);
     const admin = createClient(SUPABASE_URL, SERVICE_KEY);
+
+    // Consolidated customer email: ONE email per payment event instead of up to 3 separate ones
+    // (payment confirmation, paid invoice, account/login) that used to arrive within the same
+    // minute. Two independent send-guards (customer_confirmation_sent_at, paid_invoice_sent_at)
+    // stay independent — a deposit today and its completing balance payment next week are two
+    // genuinely separate real-world moments, not clutter — but when ONE payment event satisfies
+    // both (the common "pay in full immediately" case), this builds a single combined payload
+    // instead of firing two separate emails. For Flow A/C (new order creation) it ALSO provisions
+    // the portal account synchronously (suppress_email=true) and folds the real invite/magic-link
+    // in as the CTA, instead of a 3rd email arriving later from the async
+    // provision_customer_account() DB trigger (which those inserts tell to stand down via
+    // skip_auto_invite). Never throws — a failure here must never affect the webhook's own 200
+    // response or the payment recording that already succeeded.
+    const sendCustomerPaymentEmail = async (order: {
+      id: number; orderNumber: string; customerEmail: string | null; customerName: string | null;
+      customerPhone?: string | null;
+      shippingAddress: string | null; designName: string | null; patchesType: string | null;
+      patchesQuantity: number | null; designBacking: string | null;
+      orderAmount: number; amountPaidTotal: number;
+      isNewOrderCreation: boolean; // Flow A/C only — provisions the portal account synchronously
+    }, squarePaymentId: string) => {
+      if (!order.customerEmail) return;
+      try {
+        const isFullyPaid = isFullyPaidAmount(order.amountPaidTotal, order.orderAmount);
+
+        const { data: confirmClaimed } = await admin
+          .from('orders')
+          .update({ customer_confirmation_sent_at: new Date().toISOString() })
+          .eq('id', order.id)
+          .is('customer_confirmation_sent_at', null)
+          .select('id');
+        const confirmationDue = !!(confirmClaimed && confirmClaimed.length > 0);
+
+        let invoiceDue = false;
+        if (isFullyPaid) {
+          const { data: invoiceClaimed } = await admin
+            .from('orders')
+            .update({ paid_invoice_sent_at: new Date().toISOString() })
+            .eq('id', order.id)
+            .is('paid_invoice_sent_at', null)
+            .select('id');
+          invoiceDue = !!(invoiceClaimed && invoiceClaimed.length > 0);
+        }
+
+        if (!confirmationDue && !invoiceDue) return; // nothing new to tell the customer this call
+
+        const invoiceNumber = `INV-${order.orderNumber}`;
+        let pdfBase64: string | null = null;
+        if (invoiceDue) {
+          const pdfBytes = await buildPaidInvoicePdf({
+            invoiceNumber,
+            customerName: order.customerName || 'Customer',
+            shippingAddress: order.shippingAddress,
+            designName: order.designName,
+            patchesType: order.patchesType,
+            patchesQuantity: order.patchesQuantity,
+            designBacking: order.designBacking,
+            orderAmount: order.orderAmount,
+            amountPaid: order.amountPaidTotal,
+            paymentMethod: 'Card via Square',
+            squarePaymentId,
+            paidAt: new Date(),
+          });
+          pdfBase64 = encode(pdfBytes);
+        }
+
+        // Fold the real portal account link in — only Flow A/C provision a brand-new account
+        // here. Everyone else keeps the generic static login link, exactly as before.
+        let portalActionUrl = 'https://pandapatches.com/login';
+        let isNewAccount = false;
+        if (order.isNewOrderCreation) {
+          try {
+            const inviteResp = await fetch(`${SUPABASE_URL}/functions/v1/invite-customer`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${SERVICE_KEY}` },
+              body: JSON.stringify({
+                email: order.customerEmail,
+                customer_name: order.customerName || 'Customer',
+                order_number: order.orderNumber,
+                customer_phone: order.customerPhone || undefined,
+                suppress_email: true,
+              }),
+            });
+            if (!inviteResp.ok) throw new Error(`invite-customer returned ${inviteResp.status}`);
+            const inviteJson = await inviteResp.json();
+            if (inviteJson?.action_link) {
+              portalActionUrl = inviteJson.action_link;
+              isNewAccount = !!inviteJson.new_customer;
+            }
+          } catch (inviteErr) {
+            console.error(`[square-payment-webhook] synchronous invite failed for ${order.orderNumber}, falling back to async:`, inviteErr);
+            // Safety net so the customer is never silently stranded without portal access — safe
+            // to fire even if the suppressed attempt actually succeeded server-side, since
+            // invite-customer's own invite_sent_at guard makes this a no-op in that case.
+            fetch(`${SUPABASE_URL}/functions/v1/invite-customer`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${SERVICE_KEY}` },
+              body: JSON.stringify({
+                email: order.customerEmail,
+                customer_name: order.customerName || 'Customer',
+                order_number: order.orderNumber,
+                customer_phone: order.customerPhone || undefined,
+              }),
+            }).catch(() => {});
+          }
+        }
+
+        const amountRemaining = Math.max(0, order.orderAmount - order.amountPaidTotal);
+        const dynamicData: Record<string, unknown> = {
+          customer_name: order.customerName || 'there',
+          order_number: order.orderNumber,
+          amount_paid: `$${order.amountPaidTotal.toFixed(2)}`,
+          total_amount: `$${order.orderAmount.toFixed(2)}`,
+          amount_remaining: `$${amountRemaining.toFixed(2)}`,
+          is_paid_in_full: isFullyPaid,
+          loyalty_tier: loyaltyTierForEmail,
+          portal_action_url: portalActionUrl,
+          is_new_account: isNewAccount,
+        };
+
+        const attachments = [];
+        if (invoiceDue && pdfBase64) {
+          dynamicData.invoice_number = invoiceNumber;
+          dynamicData.invoice_attached = true;
+          attachments.push({
+            filename: `${invoiceNumber}.pdf`,
+            content_base64: pdfBase64,
+            mime_type: 'application/pdf',
+          });
+        }
+
+        await fetch(`${SUPABASE_URL}/functions/v1/send-email`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${SERVICE_KEY}` },
+          body: JSON.stringify({
+            to: order.customerEmail,
+            template_id: 'CUSTOMER_PAYMENT_CONFIRMATION',
+            from_email: INVOICE_FROM_EMAIL,
+            dynamic_data: dynamicData,
+            ...(attachments.length > 0 ? { attachments } : {}),
+          }),
+        });
+        console.log(`[square-payment-webhook] customer email sent for ${order.orderNumber} (confirmation=${confirmationDue}, invoice=${invoiceDue}, newAccount=${isNewAccount})`);
+      } catch (err) {
+        console.error(`[square-payment-webhook] customer email failed for ${order.orderNumber}:`, err);
+      }
+    };
 
     // Idempotency (per webhook delivery) — catches literal retries of the SAME event_id.
     const { error: dedupErr } = await admin
@@ -364,6 +524,9 @@ Deno.serve(async (req: Request) => {
         source: quote.attribution?.source || 'square_quote_payment',
       };
 
+      const quoteOrderAmount = quote.estimated_amount || 0;
+      const quoteIsFullyPaid = isFullyPaidAmount(paidAmount, quoteOrderAmount);
+
       const { data: newOrder, error: orderErr } = await admin
         .from('orders')
         .insert({
@@ -377,8 +540,17 @@ Deno.serve(async (req: Request) => {
           design_size:              quote.design_size || null,
           design_backing:           normalizeBacking(quote.design_backing),
           instructions:             quote.instructions || null,
-          order_amount:             quote.estimated_amount || 0,
+          order_amount:             quoteOrderAmount,
           amount_paid:              paidAmount,
+          // Flows A/A2/C create orders already paid — set payment_status/paid_at explicitly
+          // (they used to rely on the column default 'pending', which never reflected a fully-
+          // paid order created via these flows; only the apply_order_payment RPC set it).
+          payment_status:           quoteIsFullyPaid ? 'paid' : 'pending',
+          paid_at:                  quoteIsFullyPaid ? new Date().toISOString() : null,
+          // The webhook provisions the portal account itself right below (synchronously, so it
+          // can fold the account link into the combined payment email) — tell the async
+          // provision_customer_account() DB trigger to stand down for this order.
+          skip_auto_invite:         true,
           production_cost:          0,
           shipping_cost:            0,
           marketing_cost:           0,
@@ -421,39 +593,16 @@ Deno.serve(async (req: Request) => {
         .update({ converted_at: new Date().toISOString(), converted_order_id: newOrder.id })
         .eq('id', quoteId);
 
-      // CUSTOMER "Payment Received" email — guarded so it fires exactly once.
-      if (quote.customer_email) {
-        try {
-          const { data: custStamped } = await admin
-            .from('orders')
-            .update({ customer_confirmation_sent_at: new Date().toISOString() })
-            .eq('id', newOrder.id)
-            .is('customer_confirmation_sent_at', null)
-            .select('id');
-          if (custStamped && custStamped.length > 0) {
-            await fetch(`${SUPABASE_URL}/functions/v1/send-email`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${SERVICE_KEY}` },
-              body: JSON.stringify({
-                to: quote.customer_email,
-                template_id: 'CUSTOMER_PAYMENT_CONFIRMATION',
-                dynamic_data: {
-                  customer_name: quote.customer_name || 'there',
-                  order_number: newOrder.order_number,
-                  amount_paid: `$${paidAmount.toFixed(2)}`,
-                  total_amount: `$${(quote.estimated_amount || paidAmount).toFixed(2)}`,
-                  amount_remaining: `$${Math.max(0, (quote.estimated_amount || paidAmount) - paidAmount).toFixed(2)}`,
-                  is_paid_in_full: paidAmount >= (quote.estimated_amount || paidAmount),
-                  loyalty_tier: loyaltyTierForEmail,
-                  portal_action_url: 'https://pandapatches.com/login',
-                },
-              }),
-            });
-          }
-        } catch (custErr) {
-          console.error(`[square-payment-webhook] customer email failed for ${newOrder.order_number}:`, custErr);
-        }
-      }
+      await sendCustomerPaymentEmail({
+        id: newOrder.id, orderNumber: newOrder.order_number,
+        customerEmail: quote.customer_email, customerName: quote.customer_name,
+        customerPhone: quote.customer_phone,
+        shippingAddress: quote.shipping_address ?? null,
+        designName: quote.design_name, patchesType: quote.patches_type,
+        patchesQuantity: quote.patches_quantity, designBacking: quote.design_backing,
+        orderAmount: quoteOrderAmount, amountPaidTotal: paidAmount,
+        isNewOrderCreation: true,
+      }, payment.id);
 
       // Notify admins in-app.
       try {
@@ -521,6 +670,9 @@ Deno.serve(async (req: Request) => {
           const shipPostal  = (od.ship_postal  ?? od.zip     ?? od.postal_code ?? ship.postal_code ?? ship.zip ?? null) || null;
           const shipCountry = (od.country      ?? od.ship_country ?? ship.country ?? null) || null;
 
+          const pendingOrderAmount = od.order_amount || paidAmount;
+          const pendingIsFullyPaid = isFullyPaidAmount(paidAmount, pendingOrderAmount);
+
           const { data: newOrder, error: pendingOrderErr } = await admin
             .from('orders')
             .insert({
@@ -546,8 +698,10 @@ Deno.serve(async (req: Request) => {
               delivery_option:  od.delivery_option || null,
               rush_date:        od.rush_date || null,
               website_addons:   Array.isArray(od.website_addons) ? od.website_addons : [],
-              order_amount:     od.order_amount || paidAmount,
+              order_amount:     pendingOrderAmount,
               amount_paid:      paidAmount,
+              payment_status:   pendingIsFullyPaid ? 'paid' : 'pending',
+              paid_at:          pendingIsFullyPaid ? new Date().toISOString() : null,
               production_cost:  0,
               shipping_cost:    0,
               marketing_cost:   0,
@@ -581,38 +735,20 @@ Deno.serve(async (req: Request) => {
             new_value:     `Created from website checkout (token: ${referenceId}) via Square payment $${paidAmount}`,
           }).then(() => {}, () => {});
 
-          if (od.customer_email) {
-            try {
-              const { data: custStamped } = await admin
-                .from('orders')
-                .update({ customer_confirmation_sent_at: new Date().toISOString() })
-                .eq('id', newOrder.id)
-                .is('customer_confirmation_sent_at', null)
-                .select('id');
-              if (custStamped && custStamped.length > 0) {
-                await fetch(`${SUPABASE_URL}/functions/v1/send-email`, {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${SERVICE_KEY}` },
-                  body: JSON.stringify({
-                    to: od.customer_email,
-                    template_id: 'CUSTOMER_PAYMENT_CONFIRMATION',
-                    dynamic_data: {
-                      customer_name: od.customer_name || 'there',
-                      order_number: newOrder.order_number,
-                      amount_paid: `$${paidAmount.toFixed(2)}`,
-                      total_amount: `$${(od.order_amount || paidAmount).toFixed(2)}`,
-                      amount_remaining: `$${Math.max(0, (od.order_amount || paidAmount) - paidAmount).toFixed(2)}`,
-                      is_paid_in_full: paidAmount >= (od.order_amount || paidAmount),
-                      loyalty_tier: loyaltyTierForEmail,
-                      portal_action_url: 'https://pandapatches.com/login',
-                    },
-                  }),
-                });
-              }
-            } catch (custErr) {
-              console.error(`[square-payment-webhook] customer email failed for ${newOrder.order_number}:`, custErr);
-            }
-          }
+          // No skip_auto_invite / synchronous invite here: website-checkout orders (sales_agent =
+          // 'WEB_CHECKOUT') are already excluded from provision_customer_account() entirely — the
+          // website's own ensureCustomerAccount helper handles that account, so this stays a
+          // 2-email case (payment + invoice), never 3.
+          await sendCustomerPaymentEmail({
+            id: newOrder.id, orderNumber: newOrder.order_number,
+            customerEmail: od.customer_email, customerName: od.customer_name,
+            customerPhone: od.customer_phone,
+            shippingAddress: od.shipping_address ?? null,
+            designName: null, patchesType: od.product_name,
+            patchesQuantity: od.quantity, designBacking: od.backing,
+            orderAmount: pendingOrderAmount, amountPaidTotal: paidAmount,
+            isNewOrderCreation: false,
+          }, payment.id);
 
           try {
             const { data: admins } = await admin.from('user_profiles').select('id').eq('role', 'ADMIN');
@@ -670,32 +806,47 @@ Deno.serve(async (req: Request) => {
       const pfAddress = tokenRow.shipping_address || null;
       const pfGeo = parseUsAddress(pfAddress);
 
+      const tokenIsFullyPaid = isFullyPaidAmount(paidAmount, orderAmount);
+
       const { data: newOrder, error: orderErr } = await admin
         .from('orders')
         .insert({
           customer_name:    tokenRow.customer_name,
           customer_email:   tokenRow.customer_email,
           customer_phone:   tokenRow.customer_phone   || null,
+          cc_email:         tokenRow.cc_email          || null,
           shipping_address: pfAddress,
           ship_city:        pfGeo.city,
           ship_state:       pfGeo.state,
           ship_postal:      pfGeo.postal,
+          country:          tokenRow.country          || null,
           design_name:      tokenRow.design_name      || null,
           patches_type:     normalizePatchType(tokenRow.patches_type),
           patches_quantity: tokenRow.patches_quantity || 0,
           design_size:      tokenRow.design_size      || null,
           design_backing:   normalizeBacking(tokenRow.design_backing),
+          border_type:      tokenRow.border_type      || null,
+          sample_box:       tokenRow.sample_box       || false,
+          purchase_order:   tokenRow.purchase_order   || null,
+          organization:     tokenRow.organization     || null,
           instructions:     orderInstructions,
           mockup_urls:      Array.isArray(tokenRow.mockup_urls) ? tokenRow.mockup_urls : [],
           order_amount:     orderAmount,
           amount_paid:      paidAmount,
+          payment_status:   tokenIsFullyPaid ? 'paid' : 'pending',
+          paid_at:          tokenIsFullyPaid ? new Date().toISOString() : null,
+          // The webhook provisions the portal account itself right below (synchronously, so it
+          // can fold the account link into the combined payment email) — tell the async
+          // provision_customer_account() DB trigger to stand down for this order.
+          skip_auto_invite: true,
           production_cost:  0,
           shipping_cost:    0,
           marketing_cost:   0,
           sales_agent:      tokenRow.created_by,
           lead_source:      resolveLeadSource(attribution),
           attribution,
-          is_urgent:        false,
+          is_urgent:        tokenRow.is_urgent || false,
+          rush_date:        tokenRow.is_urgent && tokenRow.rush_date ? tokenRow.rush_date : null,
           status:           'NEW_ORDER',
         })
         .select('id, order_number')
@@ -726,39 +877,16 @@ Deno.serve(async (req: Request) => {
         new_value:     `Created from Payment Form (token: ${referenceId}) via Square payment $${paidAmount}`,
       }).then(() => {}, () => {});
 
-      // CUSTOMER "Payment Received" email — guarded by customer_confirmation_sent_at (exactly once)
-      if (tokenRow.customer_email) {
-        try {
-          const { data: custStamped } = await admin
-            .from('orders')
-            .update({ customer_confirmation_sent_at: new Date().toISOString() })
-            .eq('id', newOrder.id)
-            .is('customer_confirmation_sent_at', null)
-            .select('id');
-          if (custStamped && custStamped.length > 0) {
-            await fetch(`${SUPABASE_URL}/functions/v1/send-email`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${SERVICE_KEY}` },
-              body: JSON.stringify({
-                to: tokenRow.customer_email,
-                template_id: 'CUSTOMER_PAYMENT_CONFIRMATION',
-                dynamic_data: {
-                  customer_name: tokenRow.customer_name || 'there',
-                  order_number: newOrder.order_number,
-                  amount_paid: `$${paidAmount.toFixed(2)}`,
-                  total_amount: `$${(orderAmount || paidAmount).toFixed(2)}`,
-                  amount_remaining: `$${Math.max(0, (orderAmount || paidAmount) - paidAmount).toFixed(2)}`,
-                  is_paid_in_full: paidAmount >= (orderAmount || paidAmount),
-                  portal_action_url: 'https://pandapatches.com/login',
-                },
-              }),
-            });
-            console.log(`[square-payment-webhook] customer payment-confirmation email sent for ${newOrder.order_number}`);
-          }
-        } catch (custErr) {
-          console.error(`[square-payment-webhook] customer email failed for ${newOrder.order_number}:`, custErr);
-        }
-      }
+      await sendCustomerPaymentEmail({
+        id: newOrder.id, orderNumber: newOrder.order_number,
+        customerEmail: tokenRow.customer_email, customerName: tokenRow.customer_name,
+        customerPhone: tokenRow.customer_phone,
+        shippingAddress: pfAddress, designName: tokenRow.design_name,
+        patchesType: tokenRow.patches_type, patchesQuantity: tokenRow.patches_quantity,
+        designBacking: tokenRow.design_backing,
+        orderAmount, amountPaidTotal: paidAmount,
+        isNewOrderCreation: true,
+      }, payment.id);
 
       // Notify admins in-app
       try {
@@ -845,39 +973,17 @@ Deno.serve(async (req: Request) => {
       }).then(() => {}, () => {});
     }
 
-    // CUSTOMER "Payment Received" email — exactly once, guarded by customer_confirmation_sent_at.
-    if (order.customer_email) {
-      try {
-        const { data: custStamped } = await admin
-          .from('orders')
-          .update({ customer_confirmation_sent_at: new Date().toISOString() })
-          .eq('id', order.id)
-          .is('customer_confirmation_sent_at', null)
-          .select('id');
-        if (custStamped && custStamped.length > 0) {
-          await fetch(`${SUPABASE_URL}/functions/v1/send-email`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${SERVICE_KEY}` },
-            body: JSON.stringify({
-              to: order.customer_email,
-              template_id: 'CUSTOMER_PAYMENT_CONFIRMATION',
-              dynamic_data: {
-                customer_name: order.customer_name || 'there',
-                order_number: order.order_number,
-                amount_paid: `$${paidAmount.toFixed(2)}`,
-                total_amount: `$${(total || paidAmount).toFixed(2)}`,
-                amount_remaining: `$${Math.max(0, total - newAmountPaid).toFixed(2)}`,
-                is_paid_in_full: nextPaymentStatus === 'PAID' || newAmountPaid >= total,
-                loyalty_tier: loyaltyTierForEmail,
-                portal_action_url: 'https://pandapatches.com/login',
-              },
-            }),
-          });
-        }
-      } catch (custErr) {
-        console.error(`[square-payment-webhook] customer email failed for ${order.order_number}:`, custErr);
-      }
-    }
+    // No skip_auto_invite / synchronous invite here: this is an EXISTING order (no new account
+    // to provision), so this stays a payment+invoice email, never a 3rd account email.
+    await sendCustomerPaymentEmail({
+      id: order.id, orderNumber: order.order_number,
+      customerEmail: order.customer_email, customerName: order.customer_name,
+      shippingAddress: order.shipping_address, designName: order.design_name,
+      patchesType: order.patches_type, patchesQuantity: order.patches_quantity,
+      designBacking: order.design_backing,
+      orderAmount: total, amountPaidTotal: newAmountPaid,
+      isNewOrderCreation: false,
+    }, payment.id);
 
     // INTERNAL production email — ONLY when RELEASING a held order (createOrder suppressed it
     // for PENDING_PAYMENT). Process-without-payment orders already got it at creation, so we

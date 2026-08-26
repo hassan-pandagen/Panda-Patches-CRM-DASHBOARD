@@ -193,7 +193,7 @@ const InvoiceDocument: React.FC<InvoiceProps> = ({ order, poNumber, companyName,
 
           <View style={styles.invoiceTitleSection}>
             <Text style={styles.invoiceTitle}>INVOICE</Text>
-            <Text style={styles.invoiceNumber}># INV-{order.orderNumber.replace('PP-', '')}</Text>
+            <Text style={styles.invoiceNumber}># INV-{order.orderNumber}</Text>
             <Text style={styles.balanceDueHeader}>{isPaid ? 'Amount Paid' : 'Balance Due'}</Text>
             <Text style={[styles.balanceDueAmount, isPaid ? { color: '#16A34A' } : {}]}>
               ${(isPaid ? amountPaid : balanceDue).toLocaleString()}

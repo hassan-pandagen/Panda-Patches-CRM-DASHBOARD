@@ -313,21 +313,38 @@ export const getQuotesPaginated = async (params: {
 // traffic/heard-about chips + client-side filtering (CLADB5 Task 1). Traffic + heard_about are
 // TS-derived (attribution/instructions), so they can't be filtered in SQL — the page fetches the
 // bounded date-range set and groups/filters client-side. Capped for safety.
+//
+// A single .limit(5000) call is NOT enough to actually get 5000 rows — PostgREST silently caps
+// any single response at its project-configured max-rows (1000 here), regardless of the limit
+// requested. With high quote volume, that quietly dropped every quote older than the newest ~1000
+// from the page (search included, since it filters client-side over this already-truncated set).
+// Same failure mode already fixed once in getAllQuotes' old implementation — reintroduced here in
+// a sibling function that was never migrated. Page through in batches to actually reach the cap.
+const ACTIVE_QUOTES_BATCH = 1000;
+const ACTIVE_QUOTES_MAX = 5000;
 export const getActiveQuotesSince = async (sinceISO: string): Promise<Quote[]> => {
-  const { data, error } = await supabase
-    .from('quotes')
-    .select('*')
-    .is('meta_psid', null)
-    .is('meta_ig_id', null)
-    .is('converted_at', null)
-    .gte('created_at', sinceISO)
-    .order('created_at', { ascending: false })
-    .limit(5000);
-  if (error) {
-    logger.error('Failed to fetch active quotes', error);
-    throw error;
+  const all: any[] = [];
+  let from = 0;
+  while (from < ACTIVE_QUOTES_MAX) {
+    const to = Math.min(from + ACTIVE_QUOTES_BATCH, ACTIVE_QUOTES_MAX) - 1;
+    const { data, error } = await supabase
+      .from('quotes')
+      .select('*')
+      .is('meta_psid', null)
+      .is('meta_ig_id', null)
+      .is('converted_at', null)
+      .gte('created_at', sinceISO)
+      .order('created_at', { ascending: false })
+      .range(from, to);
+    if (error) {
+      logger.error('Failed to fetch active quotes', error);
+      throw error;
+    }
+    all.push(...(data || []));
+    if (!data || data.length < to - from + 1) break; // fewer than a full page → no more rows
+    from += ACTIVE_QUOTES_BATCH;
   }
-  return (data || []).map(mapDbToQuote);
+  return all.map(mapDbToQuote);
 };
 
 // Get single quote

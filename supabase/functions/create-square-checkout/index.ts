@@ -39,6 +39,11 @@ const bodySchema = z.object({
   patches_quantity: z.number().int().positive(),
   design_size:      z.string().optional().nullable(),
   design_backing:   z.string().optional().nullable(),
+  border_type:      z.string().optional().nullable(),
+  sample_box:       z.boolean().optional(),
+  country:          z.string().optional().nullable(),
+  purchase_order:   z.string().optional().nullable(),
+  organization:     z.string().optional().nullable(),
   instructions:     z.string().optional().nullable(),
   order_amount:     z.number().positive(),
   charge_amount:    z.number().positive(),
@@ -98,6 +103,10 @@ Deno.serve(async (req: Request) => {
       order: {
         location_id: SQUARE_LOCATION,
         reference_id: body.token, // webhook uses this to find the token
+        // CL0FAA §1: the invoice number shown on the pay page before the order exists
+        // (see PaymentFormLandingPage.tsx) — carried onto the Square order/receipt so the two
+        // reconcile 1:1.
+        note: `Invoice INV-PF-${tokenRow.id}`,
         line_items: [
           {
             name:     `${itemName} — ${paymentLabel}`,
@@ -161,6 +170,11 @@ Deno.serve(async (req: Request) => {
       patches_quantity: body.patches_quantity,
       design_size:      body.design_size    || null,
       design_backing:   body.design_backing || null,
+      border_type:      body.border_type    || null,
+      sample_box:       body.sample_box ?? false,
+      country:          body.country        || null,
+      purchase_order:   body.purchase_order || null,
+      organization:     body.organization   || null,
       instructions:     body.instructions   || null,
       order_amount:     body.order_amount,
     }).eq("id", tokenRow.id);
