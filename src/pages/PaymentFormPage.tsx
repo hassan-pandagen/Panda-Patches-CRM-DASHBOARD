@@ -80,8 +80,10 @@ const PaymentFormPage: React.FC = () => {
     rush_date:        '',
   });
 
-  // Design/mockup images the agent attaches at link creation → copied to the order on payment
-  const [mockupUrls, setMockupUrls] = useState<string[]>([]);
+  // Customer reference images the agent attaches at link creation → copied to the order's
+  // Customer References (NOT Mockups/Proofs — those are internal design-team files, not
+  // customer-supplied references) on payment.
+  const [attachmentUrls, setAttachmentUrls] = useState<string[]>([]);
   const [uploading, setUploading] = useState(false);
 
   const { data: tokens = [], isLoading } = useQuery({
@@ -145,7 +147,7 @@ const PaymentFormPage: React.FC = () => {
       payload.is_urgent  = form.is_urgent;
       if (form.is_urgent)               payload.rush_date        = form.rush_date;
       if (form.instructions.trim())     payload.instructions     = form.instructions.trim();
-      if (mockupUrls.length > 0)        payload.mockup_urls      = mockupUrls;
+      if (attachmentUrls.length > 0)    payload.customer_attachment_urls = attachmentUrls;
 
       const { data, error } = await supabase
         .from('payment_form_tokens')
@@ -199,7 +201,7 @@ const PaymentFormPage: React.FC = () => {
     setUploading(true);
     try {
       const urls = await Promise.all(files.map(f => uploadFile(f)));
-      setMockupUrls(prev => [...prev, ...urls]);
+      setAttachmentUrls(prev => [...prev, ...urls]);
     } catch (err: any) {
       showError('Image upload failed', err?.message);
     } finally {
@@ -207,7 +209,7 @@ const PaymentFormPage: React.FC = () => {
     }
   };
 
-  const removeImage = (url: string) => setMockupUrls(prev => prev.filter(u => u !== url));
+  const removeImage = (url: string) => setAttachmentUrls(prev => prev.filter(u => u !== url));
 
   const resetForm = () => {
     setForm({
@@ -218,7 +220,7 @@ const PaymentFormPage: React.FC = () => {
       instructions: '', order_amount: '', deposit_amount: '', is_deposit: false,
       is_urgent: false, rush_date: '',
     });
-    setMockupUrls([]);
+    setAttachmentUrls([]);
     setGeneratedToken(null);
     setShowForm(false);
   };
@@ -439,11 +441,12 @@ const PaymentFormPage: React.FC = () => {
                   className="w-full bg-slate-800 border border-slate-700 text-white text-sm rounded-lg px-3 py-2 placeholder-slate-600 focus:outline-none focus:border-brand-orange resize-none" />
               </div>
 
-              {/* Design / mockup images (optional) — attached to the order on payment */}
+              {/* Customer reference images (optional) — attached to the order's Customer
+                  References on payment (NOT Mockups/Proofs, which are internal-only). */}
               <div className="mt-3">
-                <label className="block text-xs text-slate-400 mb-1">Design / Reference Images (optional)</label>
+                <label className="block text-xs text-slate-400 mb-1">Customer Reference Images (optional)</label>
                 <div className="flex flex-wrap items-center gap-3">
-                  {mockupUrls.map(url => (
+                  {attachmentUrls.map(url => (
                     <div key={url} className="relative w-20 h-20 rounded-lg overflow-hidden border border-slate-700 group">
                       <img src={url} alt="Design reference" className="w-full h-full object-cover" />
                       <button

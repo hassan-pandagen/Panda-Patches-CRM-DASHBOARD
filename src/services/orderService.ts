@@ -320,16 +320,16 @@ export const prepareEmailData = (order: Order, triggerStatus: string) => {
   };
 };
 
-export const triggerStatusEmail = async (order: Order, statusToCheck: string) => {
+export const triggerStatusEmail = async (order: Order, statusToCheck: string, extraCustomerData?: Record<string, unknown>) => {
   console.log(`📧 [Email Service] triggerStatusEmail called with status: ${statusToCheck}, customer: ${order.customerEmail}`);
-  
+
   if (!order.customerEmail || !isValidEmail(order.customerEmail)) {
     console.warn(`❌ [Email Service] Invalid email: ${order.customerEmail}`);
     logger.warn(`[Email Service] Skipping email trigger - invalid customer email: ${order.customerEmail}`);
     return;
   }
 
-  const emailData = prepareEmailData(order, statusToCheck);
+  const emailData = { ...prepareEmailData(order, statusToCheck), ...extraCustomerData };
   const requests: { to: string; template_id: string; isInternal: boolean; cc?: string }[] = [];
 
   console.log(`📧 [Email Service] Triggering emails for status: ${statusToCheck}`);
@@ -604,6 +604,19 @@ export const createOrder = async (orderData: any, userEmail: string) => {
     // Step 4: Convert to database format
     const payload = toSnakeCase({ ...safeData, salesAgent: userEmail });
 
+    // Held "wait for payment" orders (Add Order / Re-order) don't get any customer email at
+    // creation — the async provision_customer_account() trigger stays on for them so the
+    // customer still gets portal access right away. Every OTHER order sends its Order
+    // Confirmation email immediately below, so THIS call provisions the account synchronously
+    // instead (suppress_email=true, folding the link into that same email) — closing the gap
+    // where the async trigger fired its own uncoordinated 3rd "welcome" email alongside Order
+    // Confirmation (the Payment Form / quote-payment webhook flows already do this; CRM-created
+    // orders were the one path that hadn't been updated to match).
+    const willSendImmediateConfirmation = safeData.status !== OrderStatus.PENDING_PAYMENT;
+    if (willSendImmediateConfirmation) {
+      payload.skip_auto_invite = true;
+    }
+
     // Step 4b: Detect "agent bypassed quote" — if this customer already has a quote
     // in the system but the agent didn't use Convert to Order, flag it.
     // This populates had_prior_quote_request even for orders NOT going through convertQuoteToOrder.
@@ -649,15 +662,53 @@ export const createOrder = async (orderData: any, userEmail: string) => {
     // confirms payment and flips the order to NEW_ORDER; emailing here would notify the customer +
     // production for an order that has not been paid or released to production yet.
     if (mappedOrder.status !== OrderStatus.PENDING_PAYMENT) {
-      triggerStatusEmail(mappedOrder, OrderStatus.NEW_ORDER).catch(err => {
+      (async () => {
+        // Provision the portal account synchronously (suppress_email=true) so its action_link can
+        // be folded into the Order Confirmation email as one combined send — mirrors the Payment
+        // Form / quote-payment webhook flows (skip_auto_invite was set above so the async DB
+        // trigger stands down for this order).
+        let portalActionUrl: string | undefined;
+        let isNewAccount = false;
+        try {
+          const { data: inviteData, error: inviteErr } = await supabase.functions.invoke('invite-customer', {
+            body: {
+              email: mappedOrder.customerEmail,
+              customer_name: mappedOrder.customerName || 'Customer',
+              order_number: mappedOrder.orderNumber,
+              customer_phone: mappedOrder.customerPhone || undefined,
+              suppress_email: true,
+            },
+          });
+          if (inviteErr) throw inviteErr;
+          if (inviteData?.action_link) {
+            portalActionUrl = inviteData.action_link;
+            isNewAccount = !!inviteData.new_customer;
+          }
+        } catch (inviteErr) {
+          logger.error('[Order Service] synchronous invite failed, falling back to async', inviteErr);
+          // Safety net so the customer is never stranded without portal access — invite-customer's
+          // own invite_sent_at guard makes this a no-op if the suppressed attempt actually landed.
+          supabase.functions.invoke('invite-customer', {
+            body: {
+              email: mappedOrder.customerEmail,
+              customer_name: mappedOrder.customerName || 'Customer',
+              order_number: mappedOrder.orderNumber,
+              customer_phone: mappedOrder.customerPhone || undefined,
+            },
+          }).catch(() => {});
+        }
+
+        return triggerStatusEmail(mappedOrder, OrderStatus.NEW_ORDER, {
+          portal_action_url: portalActionUrl || 'https://pandapatches.com/login',
+          is_new_account: isNewAccount,
+        });
+      })().catch(err => {
         logger.error("[Email Service] Email trigger failed (background)", err);
       });
     }
-
-    // Step 8b: Customer portal account provisioning is handled server-side by the
-    // provision_customer_account() trigger (AFTER INSERT on orders → invite-customer), so it
-    // fires reliably for every order path — not just the ones created through this frontend.
-    // (Removed the old client-side invite-customer call to avoid double-provisioning the order.)
+    // Held orders keep the async provision_customer_account() DB trigger (skip_auto_invite was
+    // NOT set above for them), so the customer still gets portal access right away even though
+    // no Order Confirmation email fires until the order is released to production.
 
     end();
     return mappedOrder;

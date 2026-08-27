@@ -407,6 +407,56 @@ Deno.serve(async (req: Request) => {
       }
     };
 
+    // Internal "new order" notification for Flows A/A2/C — these create a brand-new order
+    // directly (never via createOrder()'s CRM-UI path, which already sends this), and previously
+    // had NO internal-email code path at all, only an in-app activity_notification for ADMIN-role
+    // users. Mirrors the Flow B release-path email below (same template, same recipients, same
+    // PVC suppression via getInternalEmails). Never throws — a failure here must not affect the
+    // webhook's own response or the payment/order already recorded.
+    const sendInternalNewOrderEmail = async (order: {
+      orderNumber: string; customerName: string | null; designName: string | null;
+      patchesQuantity: number | null; patchesType: string | null; designBacking: string | null;
+      designSize: string | null; borderType: string | null; instructions: string | null;
+      shippingAddress: string | null; salesAgent: string | null;
+      isUrgent: boolean; rushDate: string | null; createdAt: string;
+    }) => {
+      const internalEmails = getInternalEmails(order.patchesType || '');
+      if (internalEmails.length === 0) return;
+      const primaryRecipient = internalEmails[0];
+      const ccEmails = [DESIGN_TEAM_CC, ...internalEmails.slice(1), HELLO_EMAIL, LANCE_EMAIL].filter(Boolean).join(',');
+      try {
+        await fetch(`${SUPABASE_URL}/functions/v1/send-email`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${SERVICE_KEY}` },
+          body: JSON.stringify({
+            to: primaryRecipient,
+            template_id: 'INTERNAL_NEW_ORDER',
+            cc: ccEmails,
+            dynamic_data: {
+              customer_name: order.customerName || 'Unknown Customer',
+              order_number: order.orderNumber,
+              order_date: order.createdAt ? new Date(order.createdAt).toLocaleDateString() : new Date().toLocaleDateString(),
+              design_name: order.designName || '',
+              quantity: order.patchesQuantity || '',
+              patch_type: order.patchesType || '',
+              backing: order.designBacking || '',
+              size: order.designSize || '',
+              border_type: order.borderType || '',
+              instructions: order.instructions || '',
+              shipping_address: order.shippingAddress || '',
+              order_link: `https://portal.pandapatches.com/order/${order.orderNumber}`,
+              sales_agent_name: order.salesAgent || HELLO_EMAIL,
+              is_urgent: order.isUrgent || false,
+              rush_date: order.rushDate ? new Date(order.rushDate).toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }) : null,
+              has_winner: false, has_gallery: false, winner_file: null, gallery_files: [],
+            },
+          }),
+        });
+      } catch (err) {
+        console.error(`[square-payment-webhook] internal new-order email failed for ${order.orderNumber}:`, err);
+      }
+    };
+
     // Idempotency (per webhook delivery) — catches literal retries of the SAME event_id.
     const { error: dedupErr } = await admin
       .from('square_webhook_events')
@@ -604,6 +654,15 @@ Deno.serve(async (req: Request) => {
         isNewOrderCreation: true,
       }, payment.id);
 
+      await sendInternalNewOrderEmail({
+        orderNumber: newOrder.order_number, customerName: quote.customer_name,
+        designName: quote.design_name, patchesQuantity: quote.patches_quantity,
+        patchesType: quote.patches_type, designBacking: quote.design_backing,
+        designSize: quote.design_size, borderType: null, instructions: quote.instructions,
+        shippingAddress: quote.shipping_address ?? null, salesAgent: quote.sales_agent,
+        isUrgent: false, rushDate: null, createdAt: new Date().toISOString(),
+      });
+
       // Notify admins in-app.
       try {
         const { data: admins } = await admin.from('user_profiles').select('id').eq('role', 'ADMIN');
@@ -750,6 +809,15 @@ Deno.serve(async (req: Request) => {
             isNewOrderCreation: false,
           }, payment.id);
 
+          await sendInternalNewOrderEmail({
+            orderNumber: newOrder.order_number, customerName: od.customer_name,
+            designName: null, patchesQuantity: od.quantity,
+            patchesType: od.product_name, designBacking: od.backing,
+            designSize: od.design_size ?? null, borderType: null, instructions: od.instructions ?? null,
+            shippingAddress: od.shipping_address ?? null, salesAgent: 'WEB_CHECKOUT',
+            isUrgent: false, rushDate: null, createdAt: new Date().toISOString(),
+          });
+
           try {
             const { data: admins } = await admin.from('user_profiles').select('id').eq('role', 'ADMIN');
             const notifRows = (admins || []).map((a: { id: string }) => ({
@@ -830,7 +898,11 @@ Deno.serve(async (req: Request) => {
           purchase_order:   tokenRow.purchase_order   || null,
           organization:     tokenRow.organization     || null,
           instructions:     orderInstructions,
-          mockup_urls:      Array.isArray(tokenRow.mockup_urls) ? tokenRow.mockup_urls : [],
+          // Payment Form uploads are customer-supplied reference images, not internal design-team
+          // mockups/proofs — stored on the token as customer_attachment_urls (see migration
+          // add_customer_attachment_urls_to_payment_form_tokens.sql) and mapped to the same column
+          // on the order so they land in "Customer References", not "Mockups / Proofs".
+          customer_attachment_urls: Array.isArray(tokenRow.customer_attachment_urls) ? tokenRow.customer_attachment_urls : [],
           order_amount:     orderAmount,
           amount_paid:      paidAmount,
           payment_status:   tokenIsFullyPaid ? 'paid' : 'pending',
@@ -887,6 +959,18 @@ Deno.serve(async (req: Request) => {
         orderAmount, amountPaidTotal: paidAmount,
         isNewOrderCreation: true,
       }, payment.id);
+
+      await sendInternalNewOrderEmail({
+        orderNumber: newOrder.order_number, customerName: tokenRow.customer_name,
+        designName: tokenRow.design_name, patchesQuantity: tokenRow.patches_quantity,
+        patchesType: tokenRow.patches_type, designBacking: tokenRow.design_backing,
+        designSize: tokenRow.design_size, borderType: tokenRow.border_type,
+        instructions: orderInstructions, shippingAddress: pfAddress,
+        salesAgent: tokenRow.created_by,
+        isUrgent: tokenRow.is_urgent || false,
+        rushDate: tokenRow.is_urgent && tokenRow.rush_date ? tokenRow.rush_date : null,
+        createdAt: new Date().toISOString(),
+      });
 
       // Notify admins in-app
       try {

@@ -124,14 +124,26 @@ const PaymentForm: React.FC<{ tokenData: any }> = ({ tokenData: tokenDataRaw }) 
 
   const [errors, setErrors] = useState<Record<string, string>>({});
 
-  const orderAmount  = parseFloat(form.order_amount) || 0; // full order total
+  // Sample Box is a paid add-on when the CUSTOMER opts in themselves — but if the agent already
+  // included it for free (tokenData.sample_box), the checkbox is locked on and stays free (see
+  // the disabled={!!tokenData.sample_box} prop below), matching how every other prefilled field
+  // on this page works.
+  const SAMPLE_BOX_FEE = 20;
+  const sampleBoxIsPaidAddOn = form.sample_box && !tokenData?.sample_box;
+  const sampleBoxFee = sampleBoxIsPaidAddOn ? SAMPLE_BOX_FEE : 0;
+
+  const baseOrderAmount = parseFloat(form.order_amount) || 0; // agent-set total, before add-ons
+  const orderAmount  = baseOrderAmount + sampleBoxFee; // full order total, incl. any add-ons
   const isDeposit    = !!tokenData?.is_deposit; // agent flagged this charge as a deposit
   const depositAmount = tokenData?.deposit_amount ? Number(tokenData.deposit_amount) : 0;
   // Charge only the deposit when this is a deposit link; order_amount stays the full total
   // so the created order shows Total / Paid / Remaining correctly. Legacy deposit links
   // (created before deposit_amount existed) have no deposit_amount → charge the full amount
-  // as they did before, so nothing is ever over-charged.
-  const chargeAmount = isDeposit && depositAmount > 0 ? depositAmount : orderAmount;
+  // as they did before, so nothing is ever over-charged. The Sample Box add-on is always
+  // collected up front (added once, whichever branch is taken), on top of whatever's being
+  // charged today.
+  const isDepositLink = isDeposit && depositAmount > 0;
+  const chargeAmount = (isDepositLink ? depositAmount : baseOrderAmount) + sampleBoxFee;
 
   const validate = () => {
     const e: Record<string, string> = {};
@@ -140,7 +152,7 @@ const PaymentForm: React.FC<{ tokenData: any }> = ({ tokenData: tokenDataRaw }) 
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.customer_email)) e.customer_email = 'Valid email required';
     if (!form.patches_type)          e.patches_type   = 'Patch type is required';
     if (!form.patches_quantity || parseInt(form.patches_quantity) <= 0) e.patches_quantity = 'Quantity required';
-    if (!form.order_amount || orderAmount <= 0) e.order_amount = 'Order amount required';
+    if (!form.order_amount || baseOrderAmount <= 0) e.order_amount = 'Order amount required';
     if (chargeAmount <= 0)           e.order_amount   = 'Amount must be greater than 0';
     return e;
   };
@@ -179,6 +191,7 @@ const PaymentForm: React.FC<{ tokenData: any }> = ({ tokenData: tokenDataRaw }) 
             instructions:     form.instructions.trim() || null,
             order_amount:     orderAmount,
             charge_amount:    chargeAmount,
+            sample_box_fee:   sampleBoxFee,
             payment_type:     isDeposit ? 'deposit' : 'full',
             deposit_pct:      null,
           }),
@@ -318,7 +331,9 @@ const PaymentForm: React.FC<{ tokenData: any }> = ({ tokenData: tokenDataRaw }) 
               disabled={!!tokenData.sample_box}
               className="w-4 h-4 rounded border-slate-600 bg-slate-800 text-brand-orange focus:ring-brand-orange focus:ring-offset-0 disabled:opacity-70"
             />
-            <span className="text-sm text-slate-300">Include a Sample Box</span>
+            <span className="text-sm text-slate-300">
+              Include a Sample Box{tokenData?.sample_box ? '' : ` (+$${SAMPLE_BOX_FEE})`}
+            </span>
           </label>
           <Field label="Special Instructions">
             <textarea value={form.instructions} onChange={e => set('instructions')(e.target.value)}
@@ -354,6 +369,12 @@ const PaymentForm: React.FC<{ tokenData: any }> = ({ tokenData: tokenDataRaw }) 
                     Deposit
                   </span>
                   <span className="text-xs text-amber-200/80">Partial payment — not full</span>
+                </div>
+              )}
+              {sampleBoxFee > 0 && (
+                <div className="flex justify-between text-xs text-slate-400 mb-1">
+                  <span>Sample Box add-on</span>
+                  <span>+${sampleBoxFee.toFixed(2)}</span>
                 </div>
               )}
               <div className="flex justify-between text-sm">

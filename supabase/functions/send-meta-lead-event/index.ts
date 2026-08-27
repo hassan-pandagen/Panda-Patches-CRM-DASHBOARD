@@ -15,7 +15,10 @@
 //   - action_source: business_messaging | website | system_generated
 //   - event_id: "crm_<order_id>_<event_name>_<stage_slug>" for dedup
 
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+// Deno-native JSR import, NOT esm.sh — the esm.sh build once bundled Node `ws`, crashing
+// square-payment-webhook on cold boot for ~2 days (see memory: square-webhook-esmsh-ws-crash).
+// jsr uses the runtime's built-in APIs and carries none of that risk.
+import { createClient } from "jsr:@supabase/supabase-js@2";
 import { z } from "https://deno.land/x/zod@v3.22.4/mod.ts";
 
 const META_GRAPH_VERSION = "v25.0";
@@ -199,20 +202,23 @@ Deno.serve(async (req: Request) => {
             : undefined,
           user_data: userData,
           custom_data: {
-            currency: "USD",
-            // Lead: no value yet; InitiateCheckout: quote/order amount as intent signal
-            value: event_name === "InitiateCheckout"
-              ? Number(order.order_amount || 0)
-              : 0,
             content_name: order.design_name || order.patches_type || "Custom Patches",
             content_type: "product",
             content_ids: [String(order.order_number || `pp_${order.id}`)],
             num_items: order.patches_quantity || 1,
-            // CRM stage context for Meta's Conversion Leads reporting
-            predicted_ltv: event_name === "InitiateCheckout"
-              ? Number(order.order_amount || 0)
-              : undefined,
             ad_id: order.attribution?.ad_id ?? undefined,
+            // value/currency/predicted_ltv ONLY when there's a real positive figure. Every Lead
+            // (and any InitiateCheckout with a null/zero order_amount) used to send `value: 0`,
+            // which Meta counts as a genuine zero-value event rather than "no value" — the same
+            // malformed-zero bug already fixed on the website's own Lead/InitiateCheckout CAPI
+            // calls. Omitting the fields entirely (not sending 0) is the correct fix on both sides.
+            ...(event_name === "InitiateCheckout" && Number(order.order_amount) > 0
+              ? {
+                  value: Number(order.order_amount),
+                  currency: "USD",
+                  predicted_ltv: Number(order.order_amount),
+                }
+              : {}),
           },
         },
       ],

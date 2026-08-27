@@ -45,6 +45,7 @@ const bodySchema = z.object({
   purchase_order:   z.string().optional().nullable(),
   organization:     z.string().optional().nullable(),
   instructions:     z.string().optional().nullable(),
+  sample_box_fee:   z.number().optional().nullable(),
   order_amount:     z.number().positive(),
   charge_amount:    z.number().positive(),
   payment_type:     z.enum(["full", "deposit"]),
@@ -85,6 +86,7 @@ Deno.serve(async (req: Request) => {
       body.patches_type,
       body.design_size ? `(${body.design_size})` : null,
       body.design_name ? `— ${body.design_name}` : null,
+      body.sample_box_fee ? `+ Sample Box ($${body.sample_box_fee})` : null,
     ].filter(Boolean).join(" ");
 
     const paymentLabel = body.payment_type === "deposit"
