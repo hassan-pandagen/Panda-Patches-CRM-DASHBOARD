@@ -1,5 +1,9 @@
 # Claude Code Task — Customer accounts (customer-centric CRM): editable customer profile + linked orders
 
+> **Superseded.** This plan investigated `orders.user_id` + `system_auto_claim` as the order↔customer link. That's no longer live — `orders.user_id` exists in the schema but nothing in the app or edge functions reads or writes it anymore. The customer-centric model this doc wanted got built, but on **normalized email** as the join key (via the `customers` table + `customer_profiles` for portal identity), not `user_id`.
+>
+> **Why the pivot:** `user_id` only exists once a portal account does, and a portal account only gets created when an order comes in (or an agent invites one) — so at the moment an order is created, there's often no `user_id` to link yet, especially for guest/no-account customers (this doc's own numbers show 262 of 333 customers had *never logged in*). Email, by contrast, is always present the instant an order or quote is created, regardless of whether a portal account exists — so it works as the join key across every order-creation path (CRM UI, Payment Form, website checkout, quote conversion) without waiting on auth state. This doc's own design already leaned this way (§ "Auto-merge existing data by email" below) — the final build just carried that all the way through instead of keying off `user_id`.
+
 ## What we're building (plain English)
 Today the CRM is **order-centric**: each order stores its own copy of the customer's name, email, phone, and shipping address, and you edit those fields on the order. The same real person who ordered three times appears as three unrelated blobs of data.
 

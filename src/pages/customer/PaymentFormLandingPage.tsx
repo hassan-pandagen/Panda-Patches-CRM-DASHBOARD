@@ -62,20 +62,36 @@ const PaymentFormLandingPage: React.FC = () => {
     }
   }, [token]);
 
-  const { data: tokenData, isLoading, error } = useQuery({
+  const { data: tokenData, isLoading, error, refetch, isRefetching } = useQuery({
     queryKey: ['payment-token', token],
     queryFn: async () => {
-      // Use direct fetch with anon key — no session needed, works on public page
-      const res = await fetch(
-        `${SUPABASE_URL}/rest/v1/payment_form_tokens?token=eq.${token}&select=*&limit=1`,
-        {
-          headers: {
-            'apikey': SUPABASE_ANON_KEY,
-            'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
-            'Content-Type': 'application/json',
-          },
-        }
-      );
+      // Use direct fetch with anon key — no session needed, works on public page.
+      // A hard timeout so this can never spin forever — the common real-world cause is the
+      // link being opened inside WhatsApp/Instagram's in-app browser, which can freeze a
+      // pending fetch indefinitely with no error, or a browser extension silently stalling
+      // the cross-origin request. Neither case ever rejects on its own, so the guard has to
+      // come from here.
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 12_000);
+      let res: Response;
+      try {
+        res = await fetch(
+          `${SUPABASE_URL}/rest/v1/payment_form_tokens?token=eq.${token}&select=*&limit=1`,
+          {
+            headers: {
+              'apikey': SUPABASE_ANON_KEY,
+              'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+              'Content-Type': 'application/json',
+            },
+            signal: controller.signal,
+          }
+        );
+      } catch (err: any) {
+        if (err?.name === 'AbortError') throw new Error('TIMEOUT');
+        throw err;
+      } finally {
+        clearTimeout(timeoutId);
+      }
       if (!res.ok) throw new Error('Failed to load payment form');
       const rows = await res.json();
       if (!rows || rows.length === 0) throw new Error('Payment link not found');
@@ -86,8 +102,19 @@ const PaymentFormLandingPage: React.FC = () => {
     retry: 1,
   });
 
+  const isTimeout = (error as Error | null)?.message === 'TIMEOUT';
+
   if (isLoading) return <LoadingScreen />;
-  if (error || !tokenData) return <ErrorScreen message="This payment link is invalid or has expired." />;
+  if (isTimeout) {
+    return (
+      <ErrorScreen
+        message="This is taking longer than expected. If you opened this link inside WhatsApp, Instagram, or another app, try opening it in your regular browser (Chrome/Safari) instead — those in-app browsers sometimes get stuck."
+        onRetry={() => refetch()}
+        isRetrying={isRefetching}
+      />
+    );
+  }
+  if (error || !tokenData) return <ErrorScreen message="This payment link is invalid or has expired." onRetry={() => refetch()} isRetrying={isRefetching} />;
   if (tokenData.used_at) return <AlreadyPaidScreen orderNumber={tokenData.order_number} />;
   if (new Date(tokenData.expires_at) < new Date()) return <ErrorScreen message="This payment link has expired. Please contact your sales agent for a new one." />;
 
@@ -447,12 +474,21 @@ const LoadingScreen = () => (
   </div>
 );
 
-const ErrorScreen: React.FC<{ message: string }> = ({ message }) => (
+const ErrorScreen: React.FC<{ message: string; onRetry?: () => void; isRetrying?: boolean }> = ({ message, onRetry, isRetrying }) => (
   <div className="min-h-screen bg-[#0B1120] flex items-center justify-center p-4">
     <div className="text-center max-w-sm">
       <AlertCircle className="w-12 h-12 text-red-400 mx-auto mb-4" />
       <h2 className="text-lg font-semibold text-white mb-2">Link Unavailable</h2>
       <p className="text-sm text-slate-400">{message}</p>
+      {onRetry && (
+        <button
+          onClick={onRetry}
+          disabled={isRetrying}
+          className="mt-4 px-5 py-2.5 bg-brand-orange hover:bg-orange-500 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg text-sm font-semibold transition-colors"
+        >
+          {isRetrying ? 'Retrying…' : 'Try Again'}
+        </button>
+      )}
       <p className="text-xs text-slate-600 mt-4">Need help? Contact us at hello@pandapatches.com</p>
     </div>
   </div>

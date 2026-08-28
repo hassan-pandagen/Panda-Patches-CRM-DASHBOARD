@@ -139,7 +139,13 @@ Deno.serve(async (req: Request) => {
 
     // ── Create the Square payment link ────────────────────────────────────────
     const amountCents = Math.round(body.amount * 100);
-    const idempotencyKey = `ppl_${body.mode}_${body.id}_${amountCents}_${body.label}`;
+    // Unique per request, not deterministic on mode/id/amount/label: a deterministic key meant
+    // a second click to regenerate the same amount (e.g. after the agent lost the first link,
+    // or wants a fresh one) collided with Square's own idempotency store and came back as a hard
+    // 500 (IDEMPOTENCY_KEY_REUSED) instead of a new link. Nothing is charged until the customer
+    // pays, and square-payment-webhook has its own payment-id idempotency layer, so there's no
+    // duplicate-charge risk in letting the agent generate as many links as they want.
+    const idempotencyKey = `ppl_${body.mode}_${body.id}_${amountCents}_${body.label}_${crypto.randomUUID()}`;
     // These links are sent to CUSTOMERS (who may not have a portal session), and in quote mode
     // the quote is deleted on payment — so land them on the public login page rather than a
     // portal-authed order/quote route that would 404 or bounce to auth.
