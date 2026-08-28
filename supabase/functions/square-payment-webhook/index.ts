@@ -407,12 +407,15 @@ Deno.serve(async (req: Request) => {
       }
     };
 
-    // Internal "new order" notification for Flows A/A2/C — these create a brand-new order
-    // directly (never via createOrder()'s CRM-UI path, which already sends this), and previously
-    // had NO internal-email code path at all, only an in-app activity_notification for ADMIN-role
-    // users. Mirrors the Flow B release-path email below (same template, same recipients, same
-    // PVC suppression via getInternalEmails). Never throws — a failure here must not affect the
-    // webhook's own response or the payment/order already recorded.
+    // Internal "new order" notification for Flow C (quote-paid-by-link) ONLY. Flows A/A2 (Payment
+    // Form / website checkout) are already covered by the super-handler DB webhook (fires on every
+    // orders INSERT/UPDATE, gated on production_notified_at + a completeness check) for orders
+    // whose sales_agent='web_checkout' or attribution.source='square_payment_form'. Calling this
+    // for Flow A/A2 too produced a genuine duplicate internal email per order (e.g. PP-11361) —
+    // confirmed and fixed 2026-08-28. Quote-paid orders don't match super-handler's checks (their
+    // sales_agent/attribution are quote-specific), so this is the only place they get notified.
+    // Never throws — a failure here must not affect the webhook's own response or the payment/
+    // order already recorded.
     const sendInternalNewOrderEmail = async (order: {
       orderNumber: string; customerName: string | null; designName: string | null;
       patchesQuantity: number | null; patchesType: string | null; designBacking: string | null;
@@ -809,14 +812,11 @@ Deno.serve(async (req: Request) => {
             isNewOrderCreation: false,
           }, payment.id);
 
-          await sendInternalNewOrderEmail({
-            orderNumber: newOrder.order_number, customerName: od.customer_name,
-            designName: null, patchesQuantity: od.quantity,
-            patchesType: od.product_name, designBacking: od.backing,
-            designSize: od.design_size ?? null, borderType: null, instructions: od.instructions ?? null,
-            shippingAddress: od.shipping_address ?? null, salesAgent: 'WEB_CHECKOUT',
-            isUrgent: false, rushDate: null, createdAt: new Date().toISOString(),
-          });
+          // No internal "new order" email here — the super-handler DB webhook (fires on every
+          // orders INSERT/UPDATE) already sends INTERNAL_NEW_ORDER for sales_agent='web_checkout'
+          // orders, gated on production_notified_at + a completeness check. Calling
+          // sendInternalNewOrderEmail here too produced a genuine duplicate (2 internal emails per
+          // order, e.g. PP-11361) — confirmed 2026-08-28.
 
           try {
             const { data: admins } = await admin.from('user_profiles').select('id').eq('role', 'ADMIN');
@@ -960,17 +960,12 @@ Deno.serve(async (req: Request) => {
         isNewOrderCreation: true,
       }, payment.id);
 
-      await sendInternalNewOrderEmail({
-        orderNumber: newOrder.order_number, customerName: tokenRow.customer_name,
-        designName: tokenRow.design_name, patchesQuantity: tokenRow.patches_quantity,
-        patchesType: tokenRow.patches_type, designBacking: tokenRow.design_backing,
-        designSize: tokenRow.design_size, borderType: tokenRow.border_type,
-        instructions: orderInstructions, shippingAddress: pfAddress,
-        salesAgent: tokenRow.created_by,
-        isUrgent: tokenRow.is_urgent || false,
-        rushDate: tokenRow.is_urgent && tokenRow.rush_date ? tokenRow.rush_date : null,
-        createdAt: new Date().toISOString(),
-      });
+      // No internal "new order" email here — the super-handler DB webhook (fires on every
+      // orders INSERT/UPDATE) already sends INTERNAL_NEW_ORDER for orders whose attribution
+      // carries source='square_payment_form' (always true here, see the attribution block
+      // above), gated on production_notified_at + a completeness check. Calling
+      // sendInternalNewOrderEmail here too produced a genuine duplicate (2 internal emails per
+      // order) — confirmed 2026-08-28.
 
       // Notify admins in-app
       try {
