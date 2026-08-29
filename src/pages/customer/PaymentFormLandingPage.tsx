@@ -49,6 +49,35 @@ function captureAttribution(token: string) {
 
 declare global { interface Window { fbq?: (...args: any[]) => void; } }
 
+// ── Deadline guard ────────────────────────────────────────────────────────────
+// Runs a network call under a hard deadline that covers BOTH phases of a fetch: the response
+// headers AND the body read. The previous guard wrapped only fetch() itself and cleared its
+// timer as soon as the headers arrived, so a response whose body then stalled left the
+// following res.json() awaiting forever — the request looked complete at the network layer
+// while the page sat on its spinner with no rejection to catch, no retry, and no way out.
+// Holding the signal through the body read makes that stall abort like any other.
+//
+// The wall-clock race is the backstop for in-app browsers (WhatsApp/Instagram) that can
+// freeze a request without honouring abort() at all.
+async function withDeadline<T>(ms: number, run: (signal: AbortSignal) => Promise<T>): Promise<T> {
+  const controller = new AbortController();
+  const abortTimer = setTimeout(() => controller.abort(), ms);
+  let hardTimer: ReturnType<typeof setTimeout> | undefined;
+  const hardStop = new Promise<never>((_, reject) => {
+    hardTimer = setTimeout(() => reject(new Error('TIMEOUT')), ms + 2_000);
+  });
+  hardStop.catch(() => { /* losing the race must not surface as an unhandled rejection */ });
+  try {
+    return await Promise.race([run(controller.signal), hardStop]);
+  } catch (err: any) {
+    if (err?.name === 'AbortError' || err?.message === 'TIMEOUT') throw new Error('TIMEOUT');
+    throw err;
+  } finally {
+    clearTimeout(abortTimer);
+    clearTimeout(hardTimer);
+  }
+}
+
 // ── Main Component ─────────────────────────────────────────────────────────────
 const PaymentFormLandingPage: React.FC = () => {
   const { token } = useParams<{ token: string }>();
@@ -64,18 +93,13 @@ const PaymentFormLandingPage: React.FC = () => {
 
   const { data: tokenData, isLoading, error, refetch, isRefetching } = useQuery({
     queryKey: ['payment-token', token],
-    queryFn: async () => {
-      // Use direct fetch with anon key — no session needed, works on public page.
-      // A hard timeout so this can never spin forever — the common real-world cause is the
-      // link being opened inside WhatsApp/Instagram's in-app browser, which can freeze a
-      // pending fetch indefinitely with no error, or a browser extension silently stalling
-      // the cross-origin request. Neither case ever rejects on its own, so the guard has to
-      // come from here.
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 12_000);
-      let res: Response;
-      try {
-        res = await fetch(
+    // Direct fetch with the anon key — no session exists on this public page. The whole
+    // read runs under one deadline so neither a stalled request nor a stalled response body
+    // can leave the customer on an endless spinner; retry: 1 then gets a second attempt,
+    // which is usually all a transient stall needs.
+    queryFn: () =>
+      withDeadline(12_000, async (signal) => {
+        const res = await fetch(
           `${SUPABASE_URL}/rest/v1/payment_form_tokens?token=eq.${token}&select=*&limit=1`,
           {
             headers: {
@@ -83,20 +107,14 @@ const PaymentFormLandingPage: React.FC = () => {
               'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
               'Content-Type': 'application/json',
             },
-            signal: controller.signal,
+            signal,
           }
         );
-      } catch (err: any) {
-        if (err?.name === 'AbortError') throw new Error('TIMEOUT');
-        throw err;
-      } finally {
-        clearTimeout(timeoutId);
-      }
-      if (!res.ok) throw new Error('Failed to load payment form');
-      const rows = await res.json();
-      if (!rows || rows.length === 0) throw new Error('Payment link not found');
-      return rows[0];
-    },
+        if (!res.ok) throw new Error('Failed to load payment form');
+        const rows = await res.json();
+        if (!rows || rows.length === 0) throw new Error('Payment link not found');
+        return rows[0];
+      }),
     enabled: !!token,
     staleTime: 60_000,
     retry: 1,
@@ -190,44 +208,55 @@ const PaymentForm: React.FC<{ tokenData: any }> = ({ tokenData: tokenDataRaw }) 
       if (Object.keys(e).length > 0) { setErrors(e); throw new Error('Please fix the errors above'); }
       setErrors({});
 
-      const res = await fetch(
-        `${SUPABASE_URL}/functions/v1/create-square-checkout`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'apikey': SUPABASE_ANON_KEY,
-            'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
-          },
-          body: JSON.stringify({
-            token:            tokenData.token,
-            customer_name:    form.customer_name.trim(),
-            customer_email:   form.customer_email.trim(),
-            customer_phone:   form.customer_phone.trim() || null,
-            shipping_address: form.shipping_address.trim() || null,
-            design_name:      form.design_name.trim() || null,
-            patches_type:     form.patches_type,
-            patches_quantity: parseInt(form.patches_quantity) || 1,
-            design_size:      form.design_size.trim() || null,
-            design_backing:   form.design_backing || null,
-            border_type:      form.border_type || null,
-            sample_box:       form.sample_box,
-            country:          form.country || null,
-            purchase_order:   form.purchase_order.trim() || null,
-            organization:     form.organization.trim() || null,
-            instructions:     form.instructions.trim() || null,
-            order_amount:     orderAmount,
-            charge_amount:    chargeAmount,
-            sample_box_fee:   sampleBoxFee,
-            payment_type:     isDeposit ? 'deposit' : 'full',
-            deposit_pct:      null,
-          }),
+      // Same deadline guard as the token load. Without it a stalled response body would
+      // pin the button on "Redirecting to Square…" forever, on the one action that matters
+      // most — the customer has no way to tell a hung request from a slow one.
+      return await withDeadline(20_000, async (signal) => {
+        const res = await fetch(
+          `${SUPABASE_URL}/functions/v1/create-square-checkout`,
+          {
+            method: 'POST',
+            signal,
+            headers: {
+              'Content-Type': 'application/json',
+              'apikey': SUPABASE_ANON_KEY,
+              'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+            },
+            body: JSON.stringify({
+              token:            tokenData.token,
+              customer_name:    form.customer_name.trim(),
+              customer_email:   form.customer_email.trim(),
+              customer_phone:   form.customer_phone.trim() || null,
+              shipping_address: form.shipping_address.trim() || null,
+              design_name:      form.design_name.trim() || null,
+              patches_type:     form.patches_type,
+              patches_quantity: parseInt(form.patches_quantity) || 1,
+              design_size:      form.design_size.trim() || null,
+              design_backing:   form.design_backing || null,
+              border_type:      form.border_type || null,
+              sample_box:       form.sample_box,
+              country:          form.country || null,
+              purchase_order:   form.purchase_order.trim() || null,
+              organization:     form.organization.trim() || null,
+              instructions:     form.instructions.trim() || null,
+              order_amount:     orderAmount,
+              charge_amount:    chargeAmount,
+              sample_box_fee:   sampleBoxFee,
+              payment_type:     isDeposit ? 'deposit' : 'full',
+              deposit_pct:      null,
+            }),
+          }
+        );
+        const data = await res.json();
+        if (!res.ok) throw new Error(data?.error || 'Failed to create checkout');
+        if (!data?.checkout_url) throw new Error('No checkout URL returned');
+        return data.checkout_url as string;
+      }).catch((err: any) => {
+        if (err?.message === 'TIMEOUT') {
+          throw new Error('That took too long. Please check your connection and try again.');
         }
-      );
-      const data = await res.json();
-      if (!res.ok) throw new Error(data?.error || 'Failed to create checkout');
-      if (!data?.checkout_url) throw new Error('No checkout URL returned');
-      return data.checkout_url as string;
+        throw err;
+      });
     },
     onSuccess: (url) => {
       window.location.href = url;
@@ -468,11 +497,21 @@ const Field: React.FC<{ label: string; error?: string; children: React.ReactNode
   </div>
 );
 
-const LoadingScreen = () => (
-  <div className="min-h-screen bg-[#0B1120] flex items-center justify-center">
-    <div className="w-10 h-10 border-4 border-brand-orange border-t-transparent rounded-full animate-spin" />
-  </div>
-);
+const LoadingScreen = () => {
+  // A bare spinner gives no sign that anything is still happening, so a slow-but-working load
+  // looks exactly like a hung one. Say something once it stops feeling instant.
+  const [slow, setSlow] = useState(false);
+  useEffect(() => {
+    const t = setTimeout(() => setSlow(true), 5_000);
+    return () => clearTimeout(t);
+  }, []);
+  return (
+    <div className="min-h-screen bg-[#0B1120] flex flex-col items-center justify-center gap-4 p-4">
+      <div className="w-10 h-10 border-4 border-brand-orange border-t-transparent rounded-full animate-spin" />
+      {slow && <p className="text-xs text-slate-500">Loading your order details…</p>}
+    </div>
+  );
+};
 
 const ErrorScreen: React.FC<{ message: string; onRetry?: () => void; isRetrying?: boolean }> = ({ message, onRetry, isRetrying }) => (
   <div className="min-h-screen bg-[#0B1120] flex items-center justify-center p-4">
