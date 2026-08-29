@@ -698,10 +698,18 @@ export const createOrder = async (orderData: any, userEmail: string) => {
           }).catch(() => {});
         }
 
-        return triggerStatusEmail(mappedOrder, OrderStatus.NEW_ORDER, {
+        await triggerStatusEmail(mappedOrder, OrderStatus.NEW_ORDER, {
           portal_action_url: portalActionUrl || 'https://pandapatches.com/login',
           is_new_account: isNewAccount,
         });
+
+        // Stamp the same guard columns the webhook/super-handler use, so a later details edit
+        // that happens to land on status NEW_ORDER (see updateOrderDetails) can tell this order
+        // was already notified and won't resend CUSTOMER_NEW_ORDER + INTERNAL_NEW_ORDER on top.
+        const now = new Date().toISOString();
+        await supabase.from('orders')
+          .update({ customer_confirmation_sent_at: now, production_notified_at: now })
+          .eq('id', mappedOrder.id);
       })().catch(err => {
         logger.error("[Email Service] Email trigger failed (background)", err);
       });
@@ -798,7 +806,22 @@ export const updateOrderDetails = async (
 
   console.log(`🔍 Status: ${oldOrder.status} → ${newOrder.status} | Changed: ${statusChanged}`);
 
-  if (statusChanged) {
+  // NEW_ORDER is the "brand new order" notice (CUSTOMER_NEW_ORDER + INTERNAL_NEW_ORDER), meant to
+  // fire exactly once, at real creation. Checkout / payment-form orders already get their "new
+  // order" notice from square-payment-webhook (customer, combined with payment confirmation +
+  // invoice) and super-handler (internal) — both stamp customer_confirmation_sent_at /
+  // production_notified_at when they send. A routine details save that happens to land on
+  // newOrder.status === NEW_ORDER (e.g. an agent filling in mockup/design fields on a
+  // website-checkout order) must not resend those on top — confirmed duplicate for PP-11369
+  // (2026-08-29): saving the order re-fired both emails minutes after the webhook + super-handler
+  // had already sent them. Read straight off the raw DB row (`data`) — these columns aren't
+  // mapped onto the frontend Order type.
+  const alreadyNotifiedAsNewOrder = newOrder.status === OrderStatus.NEW_ORDER
+    && !!(data.customer_confirmation_sent_at || data.production_notified_at);
+
+  if (statusChanged && alreadyNotifiedAsNewOrder) {
+    console.log(`⏭️ Skipping duplicate NEW_ORDER email for ${newOrder.orderNumber} — already notified`);
+  } else if (statusChanged) {
     console.log(`📧 Triggering email for status: ${newOrder.status}`);
     triggerStatusEmail(newOrder, newOrder.status).catch(err => {
       console.error("❌ Email failed:", err);

@@ -252,7 +252,7 @@ const getEmailSubject = (templateId: string, data: any): string => {
     'INTERNAL_REMAKE': `[URGENT] Remake Required - ${orderNumber}${data.remake_reason ? ` — ${data.remake_reason}` : ''}`,
 
     // Payment templates
-    'CUSTOMER_PAYMENT_CONFIRMATION': `Payment Received - ${orderNumber}`,
+    'CUSTOMER_PAYMENT_CONFIRMATION': `Order Confirmed & Payment Received - ${orderNumber}`,
     'INTERNAL_PAYMENT_NOTIFICATION': `[INTERNAL] Payment Received - ${orderNumber}`,
 
     // Customer portal invite templates
@@ -321,7 +321,7 @@ const getTemplateMessage = (templateId: string, data?: any): string => {
     'INTERNAL_REMAKE': internalRemakeMessages[remakeReason] || 'URGENT REMAKE REQUIRED: The customer was not satisfied with the patches we produced. This order needs to be remade immediately. Please contact the sales agent to get full details about what the customer wants changed. Review all specifications carefully and ask questions if anything is unclear. This is our second chance to get it right - quality check everything before shipping.',
 
     // Payment templates
-    'CUSTOMER_PAYMENT_CONFIRMATION': `We have received your payment — thank you! Your order is confirmed.${data?.invoice_attached ? ' Your invoice is attached to this email for your records.' : ''} Here's what happens next: our design team will send your mockup within 24 hours for approval, and once you approve it your order moves straight into production. Track every step below.`,
+    'CUSTOMER_PAYMENT_CONFIRMATION': `Thank you for your order! We've received your payment and everything is confirmed.${data?.invoice_attached ? ' Your invoice is attached to this email for your records.' : ''} Here's what happens next: our design team will send your mockup within 24 hours for approval, and once you approve it your order moves straight into production. Log in to your portal any time to track every step.`,
     'INTERNAL_PAYMENT_NOTIFICATION': 'A payment has been recorded for this order. Please review the payment details below and update records accordingly.',
 
     // Customer portal invite templates
