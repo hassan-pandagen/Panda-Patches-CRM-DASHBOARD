@@ -19,11 +19,21 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey);
  * @param queryClient The TanStack Query client instance.
  */
 export const initializeSupabaseClient = (queryClient: QueryClient) => {
-  supabase.auth.onAuthStateChange((event) => {
+  // Guarded the same way as the listener in AuthContext: only a session that actually existed
+  // may trigger the wipe. Supabase can emit SIGNED_OUT with no preceding sign-in — on the public
+  // /pay/:token form, or when a stale stored session fails to refresh at boot — and clearing then
+  // drops in-flight queries whose observers are never notified again.
+  let hadSession = false;
+  supabase.auth.onAuthStateChange((event, session) => {
+    if (session) {
+      hadSession = true;
+      return;
+    }
     // When the user signs out, clear the entire query cache to prevent
     // showing stale data for the next user who signs in.
     // USER_DELETED isn't in the current AuthChangeEvent union but can still arrive; treat it like sign-out.
-    if (event === 'SIGNED_OUT' || (event as string) === 'USER_DELETED') {
+    if (hadSession && (event === 'SIGNED_OUT' || (event as string) === 'USER_DELETED')) {
+      hadSession = false;
       queryClient.clear();
     }
   });

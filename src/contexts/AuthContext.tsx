@@ -49,13 +49,23 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     initSession();
 
+    // Only a real signed-in → signed-out transition may wipe the cache. onAuthStateChange also
+    // fires INITIAL_SESSION with a null session on every load of a page nobody is signed in to —
+    // the public /pay/:token form — and clearing there removes queries that are still in flight.
+    // A removed query never notifies its observer, so the component that requested it sits on its
+    // loading state forever: the endless spinner on the payment page, with the request itself
+    // having succeeded. Nothing needs protecting on a page that never had a session.
+    let hadSession = false;
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, newSession) => {
       if (mounted) {
         setSession(newSession);
         setUser(newSession?.user ?? null);
         setAuthLoading(false);
-        if (!newSession) {
-          queryClient.clear(); 
+        if (newSession) {
+          hadSession = true;
+        } else if (hadSession) {
+          hadSession = false;
+          queryClient.clear();
         }
       }
     });
