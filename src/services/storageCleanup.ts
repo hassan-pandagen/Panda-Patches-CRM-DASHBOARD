@@ -1,6 +1,7 @@
 // src/services/storageCleanup.ts - Storage Cleanup & Orphan Detection
 import { supabase } from './supabaseClient';
 import { logger } from './logger';
+import { fetchAllPaged } from '../utils/fetchAllPaged';
 
 const BUCKETS = ['order-attachments', 'production-files', 'quote-mockups'] as const;
 
@@ -54,10 +55,14 @@ function extractFilePath(url: string, bucket: string): string | null {
 async function getAllReferencedUrls(): Promise<Set<string>> {
   const urls = new Set<string>();
 
-  // Get all file URLs from orders
-  const { data: orders } = await supabase
-    .from('orders')
-    .select(ORDER_FILE_COLUMNS.join(','));
+  // Page through EVERY order. PostgREST silently caps a plain .select() at 1000 rows, and
+  // there are 1,156 orders / 9,445 quotes — so the un-paged version saw only ~38% of live
+  // file references and reported the other 62% as ORPHANED, offering live customer artwork
+  // for permanent deletion. Same bug class as the Quotes-page truncation; fetchAllPaged
+  // exists precisely for this.
+  const orders = await fetchAllPaged<any>((from, to) =>
+    supabase.from('orders').select(ORDER_FILE_COLUMNS.join(',')).order('id').range(from, to)
+  );
 
   if (orders) {
     for (const order of orders) {
@@ -70,10 +75,10 @@ async function getAllReferencedUrls(): Promise<Set<string>> {
     }
   }
 
-  // Get all file URLs from quotes
-  const { data: quotes } = await supabase
-    .from('quotes')
-    .select(QUOTE_FILE_COLUMNS.join(','));
+  // Same for quotes — 9,445 rows, so the un-paged version saw barely 10% of them.
+  const quotes = await fetchAllPaged<any>((from, to) =>
+    supabase.from('quotes').select(QUOTE_FILE_COLUMNS.join(',')).order('id').range(from, to)
+  );
 
   if (quotes) {
     for (const quote of quotes) {
@@ -90,41 +95,79 @@ async function getAllReferencedUrls(): Promise<Set<string>> {
 }
 
 /**
+ * Order identifiers that appear as PATH SEGMENTS in storage, e.g.
+ * production-files/orders/1000/file.png  →  segment "1000".
+ *
+ * Not every file is referenced by a URL column. production-files is stored by path
+ * convention (OrderForm uploads to a per-order folder; OrderPage renders the folder via
+ * bucketName="production-files") and is NEVER written into orders.production_file_urls —
+ * of 390 order folders in that bucket, 389 match live orders while only 15 orders have
+ * production_file_urls at all, and those 15 point at a different bucket.
+ *
+ * A URL-only orphan check therefore classifies every one of those live files as orphaned.
+ * This makes the check convention-aware so they are correctly treated as in use.
+ */
+async function getPathReferencedIds(): Promise<Set<string>> {
+  const ids = new Set<string>();
+  const rows = await fetchAllPaged<any>((from, to) =>
+    supabase.from('orders').select('id,order_number').order('id').range(from, to)
+  );
+  for (const r of rows || []) {
+    if (r?.id != null) ids.add(String(r.id));
+    if (r?.order_number) ids.add(String(r.order_number));
+  }
+  return ids;
+}
+
+/**
  * List all files in a storage bucket
  */
+const STORAGE_PAGE = 1000;
+const MAX_FOLDER_DEPTH = 6;
+
 async function listBucketFiles(bucket: string): Promise<{ path: string; size: number; createdAt: string }[]> {
   const files: { path: string; size: number; createdAt: string }[] = [];
+  let truncated = false;
 
-  // List root-level files and folders
-  const { data, error } = await supabase.storage.from(bucket).list('', { limit: 1000 });
-  if (error) {
-    logger.error(`Failed to list bucket ${bucket}`, error);
-    return files;
-  }
-
-  for (const item of data || []) {
-    if (item.id) {
-      // It's a file
-      files.push({
-        path: item.name,
-        size: (item.metadata as any)?.size || 0,
-        createdAt: item.created_at || '',
-      });
-    } else {
-      // It's a folder — list contents
-      const { data: folderData } = await supabase.storage.from(bucket).list(item.name, { limit: 1000 });
-      for (const subItem of folderData || []) {
-        if (subItem.id) {
-          files.push({
-            path: `${item.name}/${subItem.name}`,
-            size: (subItem.metadata as any)?.size || 0,
-            createdAt: subItem.created_at || '',
-          });
+  // storage .list() caps at `limit` per call and returns ONE directory level only.
+  // The previous version passed limit:1000 once at the root and recursed a single level,
+  // so on order-attachments (12,362 objects) it saw the first 1000 and treated the rest as
+  // absent, and it missed production-files entirely — those objects are all two levels deep
+  // (orders/<id>/file). Both fixed: page by offset until a short page, recurse to depth.
+  async function walk(prefix: string, depth: number): Promise<void> {
+    if (depth > MAX_FOLDER_DEPTH) {
+      truncated = true;
+      logger.warn(`[Storage Cleanup] depth limit hit under ${bucket}/${prefix}`);
+      return;
+    }
+    for (let offset = 0; ; offset += STORAGE_PAGE) {
+      const { data, error } = await supabase.storage
+        .from(bucket)
+        .list(prefix, { limit: STORAGE_PAGE, offset });
+      if (error) {
+        truncated = true;
+        logger.error(`Failed to list ${bucket}/${prefix} at offset ${offset}`, error);
+        return;
+      }
+      const page = data || [];
+      for (const item of page) {
+        const path = prefix ? `${prefix}/${item.name}` : item.name;
+        if (item.id) {
+          files.push({ path, size: (item.metadata as any)?.size || 0, createdAt: item.created_at || '' });
+        } else {
+          await walk(path, depth + 1);
         }
       }
+      if (page.length < STORAGE_PAGE) break;
     }
   }
 
+  await walk('', 0);
+  if (truncated) {
+    // An incomplete listing is exactly how a live file gets mislabelled as orphaned.
+    // Fail loudly rather than return a partial set.
+    throw new Error(`Storage listing for "${bucket}" was incomplete — aborting scan rather than reporting a partial result.`);
+  }
   return files;
 }
 
@@ -135,6 +178,7 @@ export async function scanOrphanedFiles(): Promise<CleanupReport> {
   logger.info('[Storage Cleanup] Starting orphan scan...');
 
   const referencedUrls = await getAllReferencedUrls();
+  const pathReferencedIds = await getPathReferencedIds();
   const report: CleanupReport = {
     totalFilesScanned: 0,
     referencedFiles: 0,
@@ -153,10 +197,16 @@ export async function scanOrphanedFiles(): Promise<CleanupReport> {
       const { data } = supabase.storage.from(bucket).getPublicUrl(file.path);
       const publicUrl = data?.publicUrl || '';
 
-      // Check if any referenced URL matches this file
-      const isReferenced = Array.from(referencedUrls).some(url =>
+      // A file counts as in use if EITHER a URL column points at it, OR its path carries
+      // an order identifier as a segment (the production-files convention above).
+      // Without the second test, 526 live production files read as orphaned.
+      const byUrl = Array.from(referencedUrls).some(url =>
         url === publicUrl || url.includes(file.path)
       );
+      const byPathConvention = file.path
+        .split('/')
+        .some(segment => pathReferencedIds.has(segment));
+      const isReferenced = byUrl || byPathConvention;
 
       if (isReferenced) {
         report.referencedFiles++;
@@ -191,15 +241,29 @@ export async function deleteOrphanedFiles(files: OrphanedFile[]): Promise<{ dele
     byBucket.get(file.bucket)!.push(file.path);
   }
 
+  // remove() returns { data: [], error: null } when nothing matched — an RLS block or a
+  // stale path looks EXACTLY like success. The previous version checked only `error` and
+  // counted every requested path as deleted, which is why the UI reported success while
+  // every file was still in storage. Count what actually came back.
+  const DELETE_CHUNK = 100;
+  const sizeByPath = new Map(files.map(f => [`${f.bucket}//${f.path}`, f.size || 0]));
+
   for (const [bucket, paths] of byBucket) {
-    // Supabase allows batch delete
-    const { error } = await supabase.storage.from(bucket).remove(paths);
-    if (error) {
-      logger.error(`[Storage Cleanup] Failed to delete ${paths.length} files from ${bucket}`, error);
-      failed += paths.length;
-    } else {
-      deleted += paths.length;
-      freedBytes += files.filter(f => f.bucket === bucket).reduce((s, f) => s + (f.size || 0), 0);
+    for (let i = 0; i < paths.length; i += DELETE_CHUNK) {
+      const slice = paths.slice(i, i + DELETE_CHUNK);
+      const { data, error } = await supabase.storage.from(bucket).remove(slice);
+      if (error) {
+        logger.error(`[Storage Cleanup] Delete failed for ${slice.length} files in ${bucket}`, error);
+        failed += slice.length;
+        continue;
+      }
+      const removedPaths = new Set<string>((data || []).map((o: any) => o?.name).filter(Boolean));
+      deleted += removedPaths.size;
+      failed += slice.length - removedPaths.size;
+      if (removedPaths.size < slice.length) {
+        logger.error(`[Storage Cleanup] ${slice.length - removedPaths.size}/${slice.length} files in ${bucket} returned no error but were NOT deleted (RLS or stale path)`);
+      }
+      for (const name of removedPaths) freedBytes += sizeByPath.get(`${bucket}//${name}`) || 0;
     }
   }
 

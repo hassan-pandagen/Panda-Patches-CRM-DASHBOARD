@@ -206,7 +206,7 @@ Reviews           review-invite-cron
 
 ⚠️ Only 4 of 25 (`square-payment-webhook`, `create-square-checkout`, `create-square-payment-link`,
 `send-meta-lead-event`) use the Deno-native `jsr:@supabase/supabase-js@2` import. The rest still use
-`esm.sh` — the exact import path that caused a ~2-day outage (§7.4). See §9.1.
+`esm.sh` — the exact import path that caused a ~2-day outage (§7.5). See §9.1.
 
 ## Vercel Serverless (`/api`)
 - **`sentry-proxy.ts`** — tunnels Sentry events through a first-party domain (bypasses ad blockers),
@@ -380,7 +380,7 @@ for cases the DB webhook already covered.
 | `review-invite-cron` | Daily, 15:00 UTC | Personal review-invite + single reminder |
 | `loyalty-email-cron` | Daily, 16:00 UTC | All loyalty tier/expiry/nudge emails |
 | Nightly loyalty reconciliation | Daily, 07:00 UTC | Recomputes every active customer's tier from scratch as a backstop to the real-time trigger |
-| Stale attendance auto-close | — | Force-closes clock-in sessions left open past max shift |
+| ~~Stale attendance auto-close~~ | — | ⚠️ **No such cron job exists.** Verified against `cron.job` 2026-08-31: only 4 jobs are scheduled (review-invite, recompute_all_loyalty, loyalty-email-cron, a one-off web_vitals truncate). `FUTURE_UPGRADE_auto_clockout_cron.sql` was never applied, so the client-side call from [ClockInOutPage.tsx:200](src/pages/ClockInOutPage.tsx#L200) is the **only** mechanism today. |
 
 ## 4.5 Idempotency is layered, not a single point
 
@@ -451,7 +451,7 @@ RPC. A general order edit must NEVER write them.
 **Why:** the webhook does NOT bump `orders.updated_at` when recording a payment, so
 `updateOrderDetails`'s optimistic lock (keyed on `updated_at`) can't detect a payment that landed
 while an edit form was open. The form loads a stale `amount_paid` and clobbers it on save — this
-silently lost PP-11151's $160 balance (§7.6).
+silently lost PP-11151's $160 balance (§7.7).
 
 **How it's enforced:**
 - `updateOrderDetails` (`src/services/orderService.ts`) strips
@@ -727,7 +727,78 @@ at server startup). Until then, fall back to the SQL editor + `supabase function
 Newest first. **The highest-value field in each entry is "Wrong turns"** — the plausible-but-incorrect
 theory that burned time, recorded so nobody pays for it twice. Template at §10.
 
-## 7.1 · 2026-08-31 — `anon` could apply payments and enumerate every payment link
+## 7.1 · 2026-08-31 — Storage Cleanup offered live customer artwork for permanent deletion
+
+**Severity:** Critical (near-miss). The delete button was one click from irreversible loss of live
+customer files. Nothing was actually lost — saved only by a *second* bug that made deletes silently
+no-op.
+
+**Symptom**
+Settings → Storage Cleanup reported "1004 files scanned, 731 orphaned". Deleting them appeared to
+succeed, then the same kind of files "showed again" on rescan.
+
+**Root cause — four separate defects in `src/services/storageCleanup.ts`**
+
+1. **Reference list truncated at 1000 rows.** `getAllReferencedUrls()` called
+   `supabase.from('orders').select(…)` and the same for quotes with **no pagination**. PostgREST
+   silently caps at 1000. There are **1,156 orders and 9,445 quotes**, so the scanner saw 3,746 of
+   9,868 live file references — **62% invisible, every one of them reported as "orphaned"** and
+   offered for permanent deletion. Same bug class as §7.13; `fetchAllPaged` already existed with
+   5 tests and this service simply didn't use it.
+2. **Path-convention references not modelled at all.** `production-files` stores objects as
+   `orders/<id>/…` and OrderPage renders them by bucket+folder — they are **never** written to
+   `orders.production_file_urls` (only 15 orders have that column set, and those point at a
+   different bucket). 389 of the 390 order folders match **live** orders. A URL-only check marked
+   **all 526 as orphaned**.
+3. **Listing truncated and non-recursive.** `list('', { limit: 1000 })` once at the root, recursing
+   a single level. `order-attachments` holds 12,365 objects, so each scan saw a different 1,000 —
+   which is why files appeared to "come back". And `production-files` objects sit two levels deep,
+   so the bucket reported **0 files** while holding 526.
+4. **Deletes failed silently.** `remove()` returns `{ data: [], error: null }` when nothing
+   matches. The code checked only `error` and counted every requested path as deleted, so the UI
+   reported "Deleted 731 files" while all 731 were still in storage (verified: all 7 files visible
+   in the user's screenshot were still present afterwards).
+
+**The lucky part:** defect 4 neutralised defects 1–3. Had the delete worked, the first click would
+have destroyed live customer artwork.
+
+**Wrong turns**
+- Initially suspected the storage RLS policies changed earlier that day (§7.2). Ruled out by
+  evidence, not assumption: the admin account is in `user_profiles`, passes the staff predicate,
+  `authenticated` holds DELETE on `storage.objects`, and the DELETE policy is permissive — plus
+  the scan itself proved SELECT worked. All four defects predate that work.
+- **My own fix nearly made it worse.** Fixing the listing (defect 3) made the 526 production files
+  *visible* — and therefore deletable — before the convention-awareness fix (defect 2) landed.
+  Making a broken safety check see *more* data is not an improvement.
+
+**Fix**
+Paginate the listing by offset and recurse to depth (throwing rather than returning a partial set —
+an incomplete listing is exactly how a live file gets mislabelled); route orders and quotes through
+`fetchAllPaged`; add `getPathReferencedIds()` so path-convention references count as in-use;
+chunk deletes at 100 and count `data.length` rather than assuming success; surface failures in the
+toast instead of always reporting success.
+
+**Verified** — recomputed server-side with no caps:
+
+| Bucket | Objects | In use (URL) | In use (path) | Truly orphaned |
+|---|---|---|---|---|
+| order-attachments | 12,365 | 9,432 | 393 | 2,540 |
+| production-files | 526 | 0 | 509 | 17 |
+| quote-mockups | 4 | 4 | 0 | 0 |
+
+Against the broken scanner's "731 of 1004". `tsc` clean, 104/104 tests pass.
+
+**Lessons**
+- **A destructive feature must prove a file is unused, not fail to prove it is used.** Absence of
+  evidence was treated as evidence of absence, three separate ways.
+- Not every file reference is a URL in a column. Path conventions are references too.
+- `remove()` succeeding is not the same as `remove()` removing. Check the returned rows.
+- Making a broken check see more data makes it more dangerous, not less — fix correctness before
+  coverage.
+
+---
+
+## 7.2 · 2026-08-31 — `anon` could apply payments and enumerate every payment link
 
 **Severity:** Critical. Not a breach — no evidence of exploitation — but three exposures reachable
 by anyone who reads the anon key out of the public frontend bundle.
@@ -752,7 +823,7 @@ opened for an unrelated reason.
 
 **Why the existing lockdown didn't hold — two independent defects**
 
-- `add_apply_order_payment_rpc.sql` was **never applied** (the same migration behind §7.3). When
+- `add_apply_order_payment_rpc.sql` was **never applied** (the same migration behind §7.4). When
   the function was rebuilt by `restore_apply_order_payment_and_fix_payment_status`, the function
   came back and its REVOKE did not.
 - **A second, independent failure mode affects other functions.** Reading `pg_proc.proacl`
@@ -837,7 +908,7 @@ where n.nspname='public' and p.prosecdef and p.prokind='f'
 
 ---
 
-## 7.2 · 2026-08-30 — Payment page stuck on an infinite spinner
+## 7.3 · 2026-08-30 — Payment page stuck on an infinite spinner
 
 **Severity:** High — customers could not pay. Silent: no error, no Sentry alert, no console error.
 
@@ -903,7 +974,7 @@ Re-run after restoring: 10/10, max 609ms. `tsc` clean, 104/104 tests pass.
   just the network.
 - Deploying a fix is not verifying it. Re-check the live page and confirm the symptom is gone.
 
-## 7.3 · 2026-08-19 — `apply_order_payment` was missing from the database entirely
+## 7.4 · 2026-08-19 — `apply_order_payment` was missing from the database entirely
 
 **Severity:** Critical (latent) — every balance payment would have silently failed to record.
 
@@ -930,7 +1001,7 @@ Backfilled 23 → 901 orders correctly `'paid'`.
 **Lesson:** a migration file existing in the repo is not evidence it was applied. When an RPC is
 referenced by a deployed edge function, verify the function exists in the live database.
 
-## 7.4 · 2026-08-08 — `square-payment-webhook` 500 on every call (~2-day outage)
+## 7.5 · 2026-08-08 — `square-payment-webhook` 500 on every call (~2-day outage)
 
 **Severity:** Critical — Square payment→order creation silently broken for ~2 days.
 
@@ -969,7 +1040,7 @@ RLS/WITH-CHECK cause could not be isolated remotely. Fixed by routing through
 `public.admin_soft_delete_order(p_order_id bigint)` — SECURITY DEFINER owned by `postgres` (bypasses
 orders RLS), enforces `is_admin()` in-function, writes ORDER_DELETED history + sets `deleted_at`.
 
-## 7.5 · 2026-08-19 — `send-email` died with "Memory limit exceeded" on orders with artwork
+## 7.6 · 2026-08-19 — `send-email` died with "Memory limit exceeded" on orders with artwork
 
 **Severity:** High — every email on orders **with** customer artwork failed (e.g. PP-11296: 0 sent /
 4 failed). Emails on orders with no files sent fine.
@@ -990,7 +1061,7 @@ are rejected from their `Content-Length` before the body is read.
 `source = 'function_logs'` with `log_attributes['function_id'] = 'd56e5883-6602-4942-b484-1d066aa37e5a'`
 (send-email) and look for `level = 'error'`.
 
-## 7.6 · 2026-07-30 — PP-11151's $160 balance silently clobbered by an order edit
+## 7.7 · 2026-07-30 — PP-11151's $160 balance silently clobbered by an order edit
 
 **Severity:** High — real money silently lost from the record.
 
@@ -1015,7 +1086,7 @@ re-diagnose a bug whose fix is sitting unpushed — check what's actually live f
 payment (+1100 then −1000) showed inflated ($1,100 instead of net $100). Changed the filter to
 `=== 0` so negatives net out. Fixes retroactively for all agents (live computation).
 
-## 7.7 · 2026-08-19 — Lead source silently wiped on every order edit
+## 7.8 · 2026-08-19 — Lead source silently wiped on every order edit
 
 **Severity:** High — destroyed marketing attribution, repeatedly, invisibly.
 
@@ -1025,7 +1096,7 @@ furqanali blanked it. This is what kept reverting attribution backfills.
 **Lesson:** a `<select>` whose value isn't in its options renders blank and writes blank on save.
 **Any enum a backend resolver can emit must exist in the corresponding frontend option list.**
 
-## 7.8 · 2026-08-19 — Payment-form shipping address silently dropped
+## 7.9 · 2026-08-19 — Payment-form shipping address silently dropped
 
 **Cause:** the customer pay page collected a shipping address and `create-square-checkout` accepted it
 in its zod schema, but there was **no `payment_form_tokens.shipping_address` column** and it wasn't in
@@ -1039,7 +1110,7 @@ field that prefills the customer page.
 webhook — keep them in sync.** The state must validate against a real US state list or street
 suffixes like "St" get read as states.
 
-## 7.9 · 2026-08-20 — Blank navy screen after deploy (iOS first)
+## 7.10 · 2026-08-20 — Blank navy screen after deploy (iOS first)
 
 **Cause + fix:** see §6.3 in full — legacy `routes` in `vercel.json` silently disabling modern
 `headers`, causing `index.html` to be cached and point at content-hashed chunks that no longer
@@ -1048,7 +1119,7 @@ existed. `ChunkErrorBoundary` **cannot** catch this because no JS runs at all.
 **Lesson:** an error boundary can only catch failures that happen *after* the app mounts. A caching
 bug that prevents mounting is invisible to every in-app safety net.
 
-## 7.10 · 2026-07-19 — Google Ads "Quote Converted" feed silently uploaded nothing for 4 days
+## 7.11 · 2026-07-19 — Google Ads "Quote Converted" feed silently uploaded nothing for 4 days
 
 **Cause:** `google_ads_data_manager_export_crm` had been left as a **static table** by migration
 `test_crm_export_as_real_table` (a Data-Manager-setup test never converted back) — frozen at
@@ -1062,14 +1133,14 @@ Transaction ID (`order_number`).
 **Lesson:** a test artifact that shadows a production object with the same name fails **silently and
 indefinitely**. Anything created "temporarily as a real table" needs a revert task attached.
 
-## 7.11 · 2026-08-03 — `customer_flags` upsert threw 42P10
+## 7.12 · 2026-08-03 — `customer_flags` upsert threw 42P10
 
 **Cause:** `customer_flags` had no unique index on `customer_email` (only its PK), so
 `setPremiumStatus`'s upsert (`onConflict customer_email`) threw 42P10. Pre-existing latent bug, not
 upgrade-related. **Fix:** added `customer_flags_customer_email_key` (migration
 `add_customer_flags_unique_email.sql`).
 
-## 7.12 · 2026-08-28 — Older quotes invisible on the Quotes page
+## 7.13 · 2026-08-28 — Older quotes invisible on the Quotes page
 
 **Cause:** a single oversized `.limit()` — **PostgREST silently caps responses at 1000 rows regardless
 of the number requested**, so anything past the cap vanished with no error.
@@ -1077,7 +1148,7 @@ of the number requested**, so anything past the cap vanished with no error.
 **Fix:** page through in batches (`fetchAllPaged`, 5 tests). **Lesson:** never rely on a large
 `.limit()` against PostgREST; the truncation is silent.
 
-## 7.13 · 2026-08-28 — Two other same-day fixes
+## 7.14 · 2026-08-28 — Two other same-day fixes
 
 - **Duplicate `INTERNAL_NEW_ORDER`** (PP-11361 got two internal emails) — a redundant send inside the
   webhook for cases the database webhook already covered. Now three mutually-exclusive paths (§4.3).
@@ -1267,7 +1338,7 @@ connecting **directly to Supabase Postgres**. Export objects in `public`:
 - `google_ads_data_manager_export` (view) → "Direct Purchase"
 - `google_ads_data_manager_export_leads` (view) → "Quote Submitted (CRM)"
 - `google_ads_data_manager_export_crm` (view) → "Quote Converted to Order (CRM)"; thin passthrough of
-  `..._crm_src` (which holds the live query) — see §7.10
+  `..._crm_src` (which holds the live query) — see §7.11
 - `google_ads_data_manager_export_customers` (view) → Customer Match feed: transacted customers +
   leads from `quotes` last 540 days, deduped by email (~4,200 rows), **excludes anyone in
   `customer_privacy_optouts`**, phones via `normalize_phone_e164()` (conservative: NULL over wrong)
@@ -1294,7 +1365,7 @@ compute what they *would* send and log a `SKIPPED` row instead of calling Google
 ## 9.1 🚨 Five edge functions still on the fragile `esm.sh` import
 `google-ads-conversions`, `super-handler`, `meta-admin`, `send-meta-message`, `store-attribution` all
 still use `esm.sh/@supabase/supabase-js@2.49.10` and can hit the same cold-boot crash that caused the
-2-day outage (§7.4). **Migrate to `jsr:` if any start 500ing** — and opportunistically whenever one is
+2-day outage (§7.5). **Migrate to `jsr:` if any start 500ing** — and opportunistically whenever one is
 touched. Most likely to surface **after a cold start** (a Postgres upgrade, a long idle period).
 
 ## 9.1b 🚨 Every function REVOKE in this repo omits `PUBLIC` — and is therefore ineffective
@@ -1322,16 +1393,16 @@ GRANT  EXECUTE ON FUNCTION public.f(...) TO service_role;         -- and/or auth
 
 The `GRANT` is **mandatory**, not optional: `service_role` bypasses row-level security, **not**
 privileges. Revoking PUBLIC without regranting breaks every server-side caller — the Square webhook
-included. See §7.1; corrected in `security_lockdown_part1_anon_executable_rpcs.sql`.
+included. See §7.2; corrected in `security_lockdown_part1_anon_executable_rpcs.sql`.
 
 **Also: run the advisor from the raw export, not the dashboard view.** The dashboard filters by issue
-type, and §7.1 was invisible behind 148 lower-priority `search_path` rows. Export → JSON.
+type, and §7.2 was invisible behind 148 lower-priority `search_path` rows. Export → JSON.
 
 ## 9.2 Undeployed / unapplied work
 - `add_loyalty_admin_override.sql` — built, **not applied**.
 - Ship-By reminder feature (`add_ship_by_reminder_date.sql`, `orders.ship_by_date`, OrderForm
   checkbox-reveals-date, ShipByPill on OrderPage + AllOrdersPage) — typechecks clean, **not deployed**.
-- Anything else marked "typechecks clean, NOT deployed" above. **§7.6's sequel is the cautionary tale:
+- Anything else marked "typechecks clean, NOT deployed" above. **§7.7's sequel is the cautionary tale:
   a correct fix that isn't pushed is not a fix.**
 
 ## 9.3 Data-quality caveats
@@ -1342,8 +1413,9 @@ type, and §7.1 was invisible behind 148 lower-priority `search_path` rows. Expo
 - The live schema has changes not captured in `supabase/migrations/` — **the live schema is the source
   of truth.**
 
-## 9.4 Open security-advisor items (2026-08-31 review — the anon-RPC items are DONE, see §7.1)
+## 9.4 Open security-advisor items (2026-08-31 review — the anon-RPC items are DONE, see §7.2)
 
+- ~~**57 `authenticated_security_definer_function_executable`**~~ — triaged and closed 2026-08-31 (`security_lockdown_part5_authenticated_staff_scoping.sql`). `authenticated` covers 583 portal customers, not just 12 staff; 11 staff-domain functions had no staff gate — worst was `use_gold_rush_upgrade(p_customer_id, …)`, which takes the customer id as a **parameter with no self-check**, so one customer could burn another's Gold perk. Eight dropped to `service_role` (no frontend caller anywhere — the website repo makes **zero** `.rpc()` calls); `auto_close_stale_sessions` kept `authenticated` plus an in-function staff gate. Re-running the triage now returns only `get_payment_form_token` and `get_work_date`, both intentional.
 - **`get_current_user_role()` returns `"AGENT"` to an unauthenticated caller.** RLS is holding
   today — `anon` gets `[]` from `orders`, `customers`, `quotes`, `user_profiles`,
   `order_history`, `monthly_costs` and `conversations` (verified) — so nothing leaks through it
@@ -1418,11 +1490,11 @@ Generalizable rules, not restatements of the fix.
 
 ## 10.2 Ground rules learned the hard way
 
-- **"Typechecks clean" ≠ deployed ≠ verified.** Three separate states (§7.6, §7.2).
-- **A `200` doesn't mean the app got the data** (§7.2).
-- **A migration file in the repo doesn't mean it was applied** (§7.3).
-- **Error boundaries can't catch failures that prevent mounting** (§7.9).
-- **PostgREST silently caps at 1000 rows** (§7.12).
+- **"Typechecks clean" ≠ deployed ≠ verified.** Three separate states (§7.7, §7.3).
+- **A `200` doesn't mean the app got the data** (§7.3).
+- **A migration file in the repo doesn't mean it was applied** (§7.4).
+- **Error boundaries can't catch failures that prevent mounting** (§7.10).
+- **PostgREST silently caps at 1000 rows** (§7.13).
 - **Silent failures are the expensive ones.** Most entries in §7 threw no error, alerted nothing, and
   were found only because someone noticed a symptom downstream. When adding a code path that can fail,
   ask what makes the failure *visible*.

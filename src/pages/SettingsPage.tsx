@@ -217,7 +217,17 @@ function StorageCleanupSection() {
     setDeleting(true);
     try {
       const result = await deleteOrphanedFiles(filesToDelete);
-      toast.success(`Deleted ${result.deleted} files, freed ${result.freedMB.toFixed(1)} MB`);
+      // Report failures instead of swallowing them. remove() returns no error when RLS
+      // blocks a delete, so "success" used to be printed even when nothing was removed.
+      if (result.failed > 0) {
+        toast.error(
+          result.deleted === 0
+            ? `Deleted nothing — all ${result.failed} files were rejected. Check permissions.`
+            : `Deleted ${result.deleted}, but ${result.failed} failed. Freed ${result.freedMB.toFixed(1)} MB.`
+        );
+      } else {
+        toast.success(`Deleted ${result.deleted} files, freed ${result.freedMB.toFixed(1)} MB`);
+      }
       // Re-scan
       await handleScan();
     } catch (err) {
