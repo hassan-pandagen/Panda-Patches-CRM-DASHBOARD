@@ -260,6 +260,10 @@ const getEmailSubject = (templateId: string, data: any): string => {
     'CUSTOMER_RETURNING_LOGIN': `Track Your New Order - ${orderNumber}`,
     'CUSTOMER_PASSWORD_RESET': `Reset Your Panda Patches Portal Password`,
 
+    // NOTE: the "45 minutes" in the auth templates below (and in CUSTOMER_RETURNING_LOGIN /
+    // CUSTOMER_PASSWORD_RESET above) must match Supabase Auth -> Email OTP expiration, currently
+    // 2700s. These had drifted badly: two said "1 hour", two "60 minutes", one "24 hours" —
+    // while the setting was actually 86400s. If that dashboard value changes, change these five.
     // Website auth templates (pandapatches.com customer portal)
     'WEBSITE_AUTH_SIGNUP_CONFIRM':  'Confirm your Panda Patches account',
     'WEBSITE_AUTH_MAGIC_LINK':      'Your sign-in link for Panda Patches',
@@ -326,20 +330,20 @@ const getTemplateMessage = (templateId: string, data?: any): string => {
 
     // Customer portal invite templates
     'CUSTOMER_WELCOME_INVITE': 'Thank you for your order! We\'ve created a Customer Portal account for you so you can track your order in real time, view your mockups, and see every step of your patch journey. Tap the button below to set your password — takes less than 30 seconds.',
-    'CUSTOMER_RETURNING_LOGIN': 'Thank you for your new order! Your Customer Portal is ready — tap the button below to log in and track this order along with your previous ones. The link expires in 1 hour; after that, just sign in with your email and password.',
-    'CUSTOMER_PASSWORD_RESET': 'A password reset was requested for your Panda Patches Customer Portal. Tap the button below to choose a new password. The link expires in 1 hour. If you didn\'t request this, you can safely ignore this email.',
+    'CUSTOMER_RETURNING_LOGIN': 'Thank you for your new order! Your Customer Portal is ready — tap the button below to log in and track this order along with your previous ones. The link expires in 45 minutes; after that, just sign in with your email and password.',
+    'CUSTOMER_PASSWORD_RESET': 'A password reset was requested for your Panda Patches Customer Portal. Tap the button below to choose a new password. The link expires in 45 minutes. If you didn\'t request this, you can safely ignore this email.',
 
     // Website auth templates (pandapatches.com customer portal)
     'WEBSITE_AUTH_SIGNUP_CONFIRM':
       'Thanks for creating a Panda Patches account! To finish setting up your account, please confirm your email address by clicking the button below. Once confirmed you can track every order in real time, view your mockups, and reorder past designs in one click.',
     'WEBSITE_AUTH_MAGIC_LINK':
-      'Use the button below to sign in to your Panda Patches account. This link signs you in instantly — no password needed. The link is good for the next 60 minutes and can only be used once.',
+      'Use the button below to sign in to your Panda Patches account. This link signs you in instantly — no password needed. The link is good for the next 45 minutes and can only be used once.',
     'WEBSITE_AUTH_PASSWORD_RESET':
-      'We received a request to reset the password for your Panda Patches account. Click the button below to set a new password. The link is good for the next 60 minutes and can only be used once. If you did not request this, you can ignore this email — your password will stay the same.',
+      'We received a request to reset the password for your Panda Patches account. Click the button below to set a new password. The link is good for the next 45 minutes and can only be used once. If you did not request this, you can ignore this email — your password will stay the same.',
     'WEBSITE_AUTH_EMAIL_CHANGE':
       `We received a request to change the email address on your Panda Patches account to ${data?.new_email || 'a new address'}. Confirm the change by clicking the button below. The change does not take effect until you click the link. If you did not request this, you can ignore this email.`,
     'WEBSITE_AUTH_ORDER_ACCOUNT':
-      `Thanks for your order${data?.order_number && data.order_number !== 'N/A' ? ` (${data.order_number})` : ''}! We've set up a Panda Patches account for you so you can track this order in real time, view your mockups, and reorder past designs in one click. Tap the button below to set your password — it takes less than 30 seconds. The link is valid for 24 hours; if it expires, just use “Forgot password” on the site and we'll send you a fresh one.`,
+      `Thanks for your order${data?.order_number && data.order_number !== 'N/A' ? ` (${data.order_number})` : ''}! We've set up a Panda Patches account for you so you can track this order in real time, view your mockups, and reorder past designs in one click. Tap the button below to set your password — it takes less than 30 seconds. The link is valid for 45 minutes; if it expires, just use “Forgot password” on the site and we'll send you a fresh one.`,
 
     // Order message thread templates
     'AGENT_NEW_CUSTOMER_MESSAGE': `${data?.customer_name || 'A customer'} just sent a message on order ${data?.order_number || ''}.\n\nMessage: "${(data?.message_content || '').substring(0, 1000)}"\n\nReply through the order in the CRM to keep the conversation in one place.`,

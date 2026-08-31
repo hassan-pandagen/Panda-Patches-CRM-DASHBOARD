@@ -1458,32 +1458,49 @@ type, and §7.3 was invisible behind 148 lower-priority `search_path` rows. Expo
 ## 9.4 Open security-advisor items (2026-08-31 review — the anon-RPC items are DONE, see §7.3)
 
 - ~~**57 `authenticated_security_definer_function_executable`**~~ — triaged and closed 2026-08-31 (`security_lockdown_part5_authenticated_staff_scoping.sql`). `authenticated` covers 583 portal customers, not just 12 staff; 11 staff-domain functions had no staff gate — worst was `use_gold_rush_upgrade(p_customer_id, …)`, which takes the customer id as a **parameter with no self-check**, so one customer could burn another's Gold perk. Eight dropped to `service_role` (no frontend caller anywhere — the website repo makes **zero** `.rpc()` calls); `auto_close_stale_sessions` kept `authenticated` plus an in-function staff gate. Re-running the triage now returns only `get_payment_form_token` and `get_work_date`, both intentional.
-- **`get_current_user_role()` returns `"AGENT"` to an unauthenticated caller.** RLS is holding
-  today — `anon` gets `[]` from `orders`, `customers`, `quotes`, `user_profiles`,
-  `order_history`, `monthly_costs` and `conversations` (verified) — so nothing leaks through it
-  now. But the first policy or function that trusts it hands agent-level access to the public. It
-  should return NULL for anon. Not changed yet because existing policies may depend on current
-  behaviour; audit callers first.
-- ~~**Four public buckets allow listing**~~ — **FIXED 2026-08-31**
-  (`security_lockdown_part4_storage_bucket_listing.sql`). `customer-artwork`,
-  `order-attachments`, `production-files` and `quote-mockups` each had a `{public}` SELECT
-  policy on `storage.objects`, letting anyone with the anon key enumerate every file. Replaced
-  with `{authenticated}` — **replaced, not dropped**, because
-  `src/services/storageCleanup.ts:99` (Settings → orphaned-file cleanup) lists these buckets as
-  `authenticated`. Verified: anon listing 19 → 0 on all four, while public object-by-URL still
-  returns HTTP 200 with no key (that comes from the bucket's `public` flag, not the policy), so
-  images in transactional emails are unaffected.
-  - Further tightened the same day to **staff only** (`EXISTS (SELECT 1 FROM user_profiles WHERE id = auth.uid())`), because plain `{authenticated}` still covered the 583 customer-portal logins. Safe because nothing customer-facing uses the storage list API — the website repo has 0 `.list(` and 0 `createSignedUrl` calls, only `getPublicUrl`. Verified: staff uid matches 1 `user_profiles` row, customer uid matches 0.
-- **`rls_policy_always_true`** on `web_vitals_log` and `performance_metrics` INSERT (anon +
-  authenticated, `WITH CHECK (true)`) — telemetry spam / table-bloat vector, low severity.
-  ⚠️ These two and the bucket-listing findings come from the **dashboard JSON export only** — the MCP
-  `get_advisors` payload does not include them. Check both sources.
-- **`extension_in_public`** — `pg_trgm` installed in `public`. Cosmetic.
-- **148 × `function_search_path_mutable`** — genuine but lowest priority; the SECURITY DEFINER
-  functions defined in migrations already pin `search_path`. Fix with
-  `SET search_path = public, pg_temp` (naming `pg_temp` **last** is the point — Postgres searches
-  it first otherwise). Not `SET search_path = ''`, which would require fully qualifying every
-  reference inside each body.
+- ~~**`get_current_user_role()` returns `"AGENT"` to anon**~~ — **FIXED 2026-09-01**. Now returns the
+  sentinel `'NONE'`. **Not NULL** — the only consumer gates on
+  `IF get_current_user_role() <> 'ADMIN' THEN RETURN`, and `NULL <> 'ADMIN'` evaluates to NULL, which
+  `IF` treats as FALSE: the guard would be skipped and every staff profile returned to anon. A
+  non-matching sentinel is the safe shape here; `get_user_role()`'s `'USER'` default is correct for
+  the same reason and was deliberately left alone. Verified: anon now gets `"NONE"`, and
+  `get_all_user_profiles_for_admin` still returns `[]` to anon.
+- ~~**`function_search_path_mutable`**~~ — **FIXED 2026-09-01**. 54 functions pinned to
+  `search_path = public, pg_temp`. `pg_temp` goes **last**: Postgres searches the temp schema first
+  unless it is named explicitly, and creating temp objects is the one shadowing route a plain
+  `authenticated` user actually has. Not Supabase's documented `''`, which would require every
+  reference in every body to be schema-qualified and would break them.
+  **31 remain flagged and always will** — they are extension-owned (`pg_trgm` is installed into
+  `public`), so `ALTER FUNCTION` fails with `42501: must be owner of function gtrgm_in`. Expected;
+  do not re-investigate.
+- ~~**`rls_enabled_no_policy` × 4**~~ — **FIXED 2026-09-01**. `square_pending_orders`,
+  `square_processed_payments`, `square_webhook_events` and `ai_generation_blocklist` had RLS enabled
+  with no policies (correct, deny-by-default) but **still carried SELECT/INSERT/UPDATE/DELETE grants
+  to anon and authenticated** — RLS was the only thing standing between the public and
+  `order_data`, which holds customer name, email, phone, shipping address and artwork URLs. Now
+  locked at both layers. `customer_privacy_optouts` and `review_invitations` were already correct.
+- **`extension_in_public` (`pg_trgm`)** — WON'T FIX. Relocating it means dropping and rebuilding
+  every trigram index that depends on it. Cosmetic lint; accepted.
+- **`rls_policy_always_true`** on `web_vitals_log` / `performance_metrics` INSERT — ACCEPTED.
+  Browser telemetry must be able to insert unauthenticated; the real mitigation is retention, not
+  RLS. ⚠️ `web_vitals_log` is at 21,453 rows and its only cleanup is a **one-off** cron (jobid 5)
+  that truncates on 2026-09-20 then unschedules itself — worth making recurring.
+- ~~**`order_notes` / `form_feedback` readable by any authenticated user**~~ — **FIXED 2026-09-01**
+  (`scope_order_notes_and_form_feedback_to_staff.sql`). Both had `SELECT ... USING (true)` for
+  `authenticated`, which is not "staff" — it covers 583 portal logins plus anyone who self-registers.
+  `order_notes` holds internal sales notes, customer-call records, complaints and 1–5★ quality
+  ratings. Now staff-scoped. Found while looking at the Auth dashboard, not from an advisor lint —
+  **the advisor never flagged it**, because a `USING (true)` SELECT policy is only reported for
+  INSERT/UPDATE/DELETE.
+- ⚠️ **Auth dashboard: `Confirm email` is OFF while `Allow new users to sign up` is ON.** Anyone can
+  register with an address they do not own and immediately hold an `authenticated` JWT — 20 users
+  currently have `email_confirmed_at IS NULL`, and 2 exist in neither `user_profiles` nor
+  `customer_profiles`. This is why "authenticated ≠ trusted" keeps mattering (§7.3, §9.4). Turning
+  Confirm email ON is a dashboard change; check first whether the customer-portal invite flow
+  depends on unconfirmed sign-in, since invited users arrive via a link rather than a password.
+- ⚠️ **`auth_otp_long_expiry`** — OTP lifetime is over an hour; Supabase recommends under. Dashboard
+  only (Authentication → Sign In / Providers → Email), not reachable via SQL or MCP.
+
 
 ## 9.4b Smaller open items
 - `customer_privacy_optouts` is checked by the **review-invite cron only** — the loyalty cron does not

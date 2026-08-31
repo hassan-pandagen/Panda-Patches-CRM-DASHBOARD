@@ -5,6 +5,14 @@ import { fetchAllPaged } from '../utils/fetchAllPaged';
 
 const BUCKETS = ['order-attachments', 'production-files', 'quote-mockups'] as const;
 
+// Never offer a recently-uploaded file for deletion, even if nothing references it yet.
+// Uploads land in storage BEFORE the quote/order row that will reference them is saved, so
+// there is a window where an in-flight submission's artwork looks orphaned. Measured: ~20
+// unreferenced files appear per day (abandoned quote forms), so the window is hit often
+// enough to matter. Seven days costs ~6% of the reclaimable space and removes the race
+// entirely — 155 of 2,558 orphans are younger than this.
+const ORPHAN_GRACE_DAYS = 7;
+
 // URL columns that store file references in orders table
 const ORDER_FILE_COLUMNS = [
   'production_file_urls',
@@ -55,47 +63,25 @@ function extractFilePath(url: string, bucket: string): string | null {
 }
 
 /**
- * Get all file URLs currently referenced in the database
+ * Every file URL still referenced anywhere in the database.
+ *
+ * Sourced from ONE server-side RPC rather than assembled client-side. The previous version
+ * queried orders + quotes only, and so never saw URLs held in payment_form_tokens or
+ * square_pending_orders — 6 files were offered for permanent deletion while still referenced,
+ * two of them artwork on an unused, unexpired payment link. A client-side list can silently
+ * miss a table; a server-side one is the single place to add a source.
+ *
+ * Still paged: PostgREST caps set-returning functions at 1000 rows like anything else.
  */
 async function getAllReferencedUrls(): Promise<Set<string>> {
+  const rows = await fetchAllPaged<any>((from, to) =>
+    supabase.rpc('get_referenced_file_urls').range(from, to)
+  );
   const urls = new Set<string>();
-
-  // Page through EVERY order. PostgREST silently caps a plain .select() at 1000 rows, and
-  // there are 1,156 orders / 9,445 quotes — so the un-paged version saw only ~38% of live
-  // file references and reported the other 62% as ORPHANED, offering live customer artwork
-  // for permanent deletion. Same bug class as the Quotes-page truncation; fetchAllPaged
-  // exists precisely for this.
-  const orders = await fetchAllPaged<any>((from, to) =>
-    supabase.from('orders').select(ORDER_FILE_COLUMNS.join(',')).order('id').range(from, to)
-  );
-
-  if (orders) {
-    for (const order of orders) {
-      for (const col of ORDER_FILE_COLUMNS) {
-        const val = (order as any)[col];
-        if (Array.isArray(val)) {
-          val.forEach((u: string) => { if (u) urls.add(u); });
-        }
-      }
-    }
+  for (const r of rows || []) {
+    const u = typeof r === 'string' ? r : r?.url;
+    if (u) urls.add(u);
   }
-
-  // Same for quotes — 9,445 rows, so the un-paged version saw barely 10% of them.
-  const quotes = await fetchAllPaged<any>((from, to) =>
-    supabase.from('quotes').select(QUOTE_FILE_COLUMNS.join(',')).order('id').range(from, to)
-  );
-
-  if (quotes) {
-    for (const quote of quotes) {
-      for (const col of QUOTE_FILE_COLUMNS) {
-        const val = (quote as any)[col];
-        if (Array.isArray(val)) {
-          val.forEach((u: string) => { if (u) urls.add(u); });
-        }
-      }
-    }
-  }
-
   return urls;
 }
 
@@ -186,7 +172,13 @@ export async function scanOrphanedFiles(): Promise<CleanupReport> {
       const byPathConvention = file.path
         .split('/')
         .some(segment => pathReferencedIds.has(segment));
-      const isReferenced = byUrl || byPathConvention;
+
+      // Too new to judge: an upload whose row has not been saved yet is indistinguishable
+      // from an abandoned one. Treat it as in use rather than risk deleting live artwork.
+      const ageMs = file.createdAt ? Date.now() - new Date(file.createdAt).getTime() : Infinity;
+      const tooRecent = ageMs < ORPHAN_GRACE_DAYS * 86400_000;
+
+      const isReferenced = byUrl || byPathConvention || tooRecent;
 
       if (isReferenced) {
         report.referencedFiles++;
