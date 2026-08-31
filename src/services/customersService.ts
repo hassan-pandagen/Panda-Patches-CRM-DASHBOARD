@@ -4,6 +4,7 @@
 // can't represent guest-checkout customers). Keyed by normalized (lower/trim) email.
 // See claude-code-task-customer-accounts.md for the feature spec.
 import { supabase } from './supabaseClient';
+import { fetchAllPaged } from '../utils/fetchAllPaged';
 import { logger } from './logger';
 
 const normEmail = (email: string) => email.trim().toLowerCase();
@@ -215,7 +216,12 @@ export const getCustomerStatsSummary = async (): Promise<CustomerStatsSummary> =
     supabase.from('customers').select('id', { count: 'exact', head: true }).eq('is_active', true),
     supabase.from('customers').select('customer_profile_id').eq('is_active', true).not('customer_profile_id', 'is', null),
     supabase.rpc('get_customer_last_login_times'),
-    supabase.from('orders').select('order_amount'),
+    // Paged: this reduce() sums every row it receives, and a plain .select() stops at
+    // PostgREST's 1000-row cap. Measured on live data: 1,161 orders, so the stat read
+    // $355,332.77 against a true $399,495.53 — understated by $44,162.76, silently.
+    fetchAllPaged<any>((from, to) =>
+      supabase.from('orders').select('order_amount').order('id').range(from, to)
+    ).then((data) => ({ data })),
   ]);
 
   const loginMap = new Map<string, string | null>();

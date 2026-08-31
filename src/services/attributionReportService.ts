@@ -5,6 +5,7 @@
 // is by NORMALIZED email (lower(trim())) — the same normalization the Google Ads export uses.
 import { supabase } from './supabaseClient';
 import { logger } from './logger';
+import { fetchAllPaged } from '../utils/fetchAllPaged';
 
 export interface AttrQuoteRow {
   email: string;                 // normalized (lower/trim)
@@ -28,21 +29,38 @@ export async function fetchAttributionData(
   startISO: string,
   endISO: string,
 ): Promise<{ quotes: AttrQuoteRow[]; orders: AttrOrderRow[] }> {
-  const [{ data: quotes, error: qErr }, { data: orders, error: oErr }] = await Promise.all([
-    supabase
-      .from('quotes')
-      .select('customer_email, attribution, lead_source, instructions, created_at, converted_order_id')
-      .gte('created_at', startISO)
-      .lte('created_at', endISO),
-    supabase
-      .from('orders')
-      .select('customer_email, amount_paid, status, created_at')
-      .gte('created_at', startISO)          // conversions can lag; no end cap
-      .is('deleted_at', null),
-  ]);
-
-  if (qErr) { logger.error('[attributionReport] quotes fetch failed', { error: qErr }); throw qErr; }
-  if (oErr) { logger.error('[attributionReport] orders fetch failed', { error: oErr }); throw oErr; }
+  // MUST be paged. PostgREST silently caps a plain .select() at 1000 rows, and this report
+  // aggregates every row it gets back — so an un-paged fetch does not fail, it just quietly
+  // reports conversion rates and revenue-per-quote computed from a truncated sample. Measured
+  // on live data before this fix: the 90-day default window wanted 7,331 quotes and got 1,000
+  // (86% missing); the orders side wanted 1,154 and got 1,000. Every traffic-group share in
+  // the report was wrong, and biased against whichever groups sort later.
+  //
+  // .order('id') gives fetchAllPaged a stable sort — without a deterministic order, .range()
+  // paging can repeat or skip rows.
+  const [quotes, orders] = await Promise.all([
+    fetchAllPaged<any>((from, to) =>
+      supabase
+        .from('quotes')
+        .select('customer_email, attribution, lead_source, instructions, created_at, converted_order_id')
+        .gte('created_at', startISO)
+        .lte('created_at', endISO)
+        .order('id')
+        .range(from, to)
+    ),
+    fetchAllPaged<any>((from, to) =>
+      supabase
+        .from('orders')
+        .select('customer_email, amount_paid, status, created_at')
+        .gte('created_at', startISO)          // conversions can lag; no end cap
+        .is('deleted_at', null)
+        .order('id')
+        .range(from, to)
+    ),
+  ]).catch((err) => {
+    logger.error('[attributionReport] fetch failed', { error: err });
+    throw err;
+  });
 
   return {
     quotes: (quotes || []).map((q: any) => ({

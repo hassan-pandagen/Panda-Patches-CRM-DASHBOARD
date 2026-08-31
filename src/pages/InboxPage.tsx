@@ -775,10 +775,14 @@ const InboxPage: React.FC = () => {
   const { data: conversations = [], isLoading: convsLoading, refetch: refetchConvs } = useQuery({
     queryKey: ['inbox-conversations'],
     queryFn: async () => {
+      // Explicit cap, not an accidental one. PostgREST would silently stop at 1000 anyway
+      // (3,457 conversations today); saying so makes the truncation intentional and keeps
+      // the 15s refetch cheap. Ordered by recency, so what drops off is the oldest.
       const { data, error } = await supabase
         .from('conversations')
         .select('*')
-        .order('last_message_at', { ascending: false, nullsFirst: false });
+        .order('last_message_at', { ascending: false, nullsFirst: false })
+        .limit(1000);
       if (error) throw error;
       return (data || []) as Conversation[];
     },

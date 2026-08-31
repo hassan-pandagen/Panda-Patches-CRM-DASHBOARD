@@ -5,6 +5,7 @@ import React, { useMemo, useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '../services/supabaseClient';
+import { fetchAllPaged } from '../utils/fetchAllPaged';
 import Spinner from '../components/ui/Spinner';
 import {
   Building2, Search, X, Users, DollarSign, Repeat, Trophy,
@@ -43,12 +44,17 @@ const CompaniesPage: React.FC = () => {
   const { data: orders = [], isLoading } = useQuery({
     queryKey: ['companies-orders'],
     queryFn: async (): Promise<OrderLike[]> => {
-      const { data, error } = await supabase
-        .from('orders')
-        .select('customer_email, customer_name, order_amount, created_at, order_number')
-        .not('customer_email', 'is', null);
-      if (error) throw error;
-      return (data || []) as OrderLike[];
+      // Paged — these rows are aggregated per company below, so the 1000-row cap would
+      // silently understate every company's order count and revenue (1,161 orders today).
+      const data = await fetchAllPaged<OrderLike>((from, to) =>
+        supabase
+          .from('orders')
+          .select('customer_email, customer_name, order_amount, created_at, order_number')
+          .not('customer_email', 'is', null)
+          .order('id')
+          .range(from, to)
+      );
+      return data;
     },
     staleTime: 60_000,
   });
