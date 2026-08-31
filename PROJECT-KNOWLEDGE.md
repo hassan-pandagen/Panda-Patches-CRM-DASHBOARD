@@ -791,8 +791,33 @@ the public page renders — `attribution` (client_ip, UA, click IDs) and `create
 are dropped, so it is strictly narrower than the `select=*` it replaces.
 `...part2_revoke_anon_payment_tokens.sql` closes the table grant, **deliberately separate** because
 applying it before the frontend ships would kill every live payment link.
+`...part3_unguarded_anon_rpcs.sql` then swept the rest: every SECURITY DEFINER function `anon` could
+execute with **no in-function guard at all** — worst were `recompute_all_loyalty()` (full-table
+recompute, repeatable = trivial DB exhaustion), `use_gold_rush_upgrade()` (burns a customer's perk),
+`auto_close_stale_sessions()` (force-closes staff clock-ins) and `get_attendance_stats()` (any
+staff member's timesheet by uuid). Grantees came from real call sites, not assumption.
 
-**Deploy order matters in both directions:** part 1 → deploy frontend → verify → part 2 → re-verify.
+**Deploy order matters in both directions:** part 1 → deploy frontend → verify → part 2 → part 3.
+
+**ALL THREE APPLIED AND VERIFIED 2026-08-31.** Confirmed externally with the public anon key:
+`42501 permission denied` on `apply_order_payment`, `get_funnel_monthly_trend`,
+`recompute_all_loyalty`, `auto_close_stale_sessions`, `use_gold_rush_upgrade`,
+`get_attendance_stats`, and on the `payment_form_tokens` table (was 215 rows);
+`get_payment_form_token` returns its one row with no `attribution`/`created_by`; and the live
+payment page renders the form. Advisor `anon_security_definer_function_executable`: 56 → 40, and the
+40 that remain all carry in-function guards.
+
+**Standing check — re-run after adding any SECURITY DEFINER function.** The only row this should ever
+return is `get_payment_form_token`:
+
+```sql
+select p.proname, pg_get_function_identity_arguments(p.oid)
+from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+where n.nspname='public' and p.prosecdef and p.prokind='f'
+  and has_function_privilege('anon', p.oid, 'EXECUTE')
+  and pg_get_function_result(p.oid) <> 'trigger'
+  and p.prosrc !~* '(is_admin|is_super_admin|has_permission|get_user_role|get_current_user_role|auth.uid|auth.jwt|RAISE EXCEPTION)';
+```
 
 **Lessons**
 - `REVOKE … FROM anon` alone is not reliably a lockdown, and neither is revoking PUBLIC alone —
@@ -1317,7 +1342,7 @@ type, and §7.1 was invisible behind 148 lower-priority `search_path` rows. Expo
 - The live schema has changes not captured in `supabase/migrations/` — **the live schema is the source
   of truth.**
 
-## 9.4 Open security-advisor items (from the 2026-08-31 review, not yet fixed)
+## 9.4 Open security-advisor items (2026-08-31 review — the anon-RPC items are DONE, see §7.1)
 
 - **`get_current_user_role()` returns `"AGENT"` to an unauthenticated caller.** RLS is holding
   today — `anon` gets `[]` from `orders`, `customers`, `quotes`, `user_profiles`,
@@ -1325,12 +1350,20 @@ type, and §7.1 was invisible behind 148 lower-priority `search_path` rows. Expo
   now. But the first policy or function that trusts it hands agent-level access to the public. It
   should return NULL for anon. Not changed yet because existing policies may depend on current
   behaviour; audit callers first.
-- **Four public buckets allow listing:** `customer-artwork`, `order-attachments`,
-  `production-files`, `quote-mockups`. Public *object read by URL* is what transactional emails
-  need; a broad SELECT policy on `storage.objects` additionally lets anyone **enumerate** every
-  customer's artwork. Drop the listing policies, keep public object access.
+- ~~**Four public buckets allow listing**~~ — **FIXED 2026-08-31**
+  (`security_lockdown_part4_storage_bucket_listing.sql`). `customer-artwork`,
+  `order-attachments`, `production-files` and `quote-mockups` each had a `{public}` SELECT
+  policy on `storage.objects`, letting anyone with the anon key enumerate every file. Replaced
+  with `{authenticated}` — **replaced, not dropped**, because
+  `src/services/storageCleanup.ts:99` (Settings → orphaned-file cleanup) lists these buckets as
+  `authenticated`. Verified: anon listing 19 → 0 on all four, while public object-by-URL still
+  returns HTTP 200 with no key (that comes from the bucket's `public` flag, not the policy), so
+  images in transactional emails are unaffected.
+  - Further tightened the same day to **staff only** (`EXISTS (SELECT 1 FROM user_profiles WHERE id = auth.uid())`), because plain `{authenticated}` still covered the 583 customer-portal logins. Safe because nothing customer-facing uses the storage list API — the website repo has 0 `.list(` and 0 `createSignedUrl` calls, only `getPublicUrl`. Verified: staff uid matches 1 `user_profiles` row, customer uid matches 0.
 - **`rls_policy_always_true`** on `web_vitals_log` and `performance_metrics` INSERT (anon +
   authenticated, `WITH CHECK (true)`) — telemetry spam / table-bloat vector, low severity.
+  ⚠️ These two and the bucket-listing findings come from the **dashboard JSON export only** — the MCP
+  `get_advisors` payload does not include them. Check both sources.
 - **`extension_in_public`** — `pg_trgm` installed in `public`. Cosmetic.
 - **148 × `function_search_path_mutable`** — genuine but lowest priority; the SECURITY DEFINER
   functions defined in migrations already pin `search_path`. Fix with
