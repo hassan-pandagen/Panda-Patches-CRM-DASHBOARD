@@ -43,7 +43,12 @@ function extractFilePath(url: string, bucket: string): string | null {
     const marker = `/storage/v1/object/public/${bucket}/`;
     const idx = url.indexOf(marker);
     if (idx === -1) return null;
-    return decodeURIComponent(url.substring(idx + marker.length));
+    // Strip any ?query / #fragment before decoding. Matching is now an exact Set lookup
+    // rather than a substring scan, so a trailing "?t=123" would silently turn a live file
+    // into a false orphan. None exist today (checked: 0 of 9,905 referenced URLs) — this
+    // keeps it that way.
+    const raw = url.substring(idx + marker.length).split('?')[0].split('#')[0];
+    return decodeURIComponent(raw);
   } catch {
     return null;
   }
@@ -122,53 +127,22 @@ async function getPathReferencedIds(): Promise<Set<string>> {
 /**
  * List all files in a storage bucket
  */
-const STORAGE_PAGE = 1000;
-const MAX_FOLDER_DEPTH = 6;
-
+// One RPC read of storage.objects, paged, instead of crawling the storage list API.
+//
+// The list API returns ONE directory level per HTTP call. order-attachments has 1,112
+// second-level folders and production-files another 404, so a correct recursive crawl cost
+// ~1,516 sequential requests — several minutes, during which the Scan button just spins.
+// list_storage_objects() returns the flat list in one query; PostgREST still caps at 1000
+// rows, hence fetchAllPaged.
 async function listBucketFiles(bucket: string): Promise<{ path: string; size: number; createdAt: string }[]> {
-  const files: { path: string; size: number; createdAt: string }[] = [];
-  let truncated = false;
-
-  // storage .list() caps at `limit` per call and returns ONE directory level only.
-  // The previous version passed limit:1000 once at the root and recursed a single level,
-  // so on order-attachments (12,362 objects) it saw the first 1000 and treated the rest as
-  // absent, and it missed production-files entirely — those objects are all two levels deep
-  // (orders/<id>/file). Both fixed: page by offset until a short page, recurse to depth.
-  async function walk(prefix: string, depth: number): Promise<void> {
-    if (depth > MAX_FOLDER_DEPTH) {
-      truncated = true;
-      logger.warn(`[Storage Cleanup] depth limit hit under ${bucket}/${prefix}`);
-      return;
-    }
-    for (let offset = 0; ; offset += STORAGE_PAGE) {
-      const { data, error } = await supabase.storage
-        .from(bucket)
-        .list(prefix, { limit: STORAGE_PAGE, offset });
-      if (error) {
-        truncated = true;
-        logger.error(`Failed to list ${bucket}/${prefix} at offset ${offset}`, error);
-        return;
-      }
-      const page = data || [];
-      for (const item of page) {
-        const path = prefix ? `${prefix}/${item.name}` : item.name;
-        if (item.id) {
-          files.push({ path, size: (item.metadata as any)?.size || 0, createdAt: item.created_at || '' });
-        } else {
-          await walk(path, depth + 1);
-        }
-      }
-      if (page.length < STORAGE_PAGE) break;
-    }
-  }
-
-  await walk('', 0);
-  if (truncated) {
-    // An incomplete listing is exactly how a live file gets mislabelled as orphaned.
-    // Fail loudly rather than return a partial set.
-    throw new Error(`Storage listing for "${bucket}" was incomplete — aborting scan rather than reporting a partial result.`);
-  }
-  return files;
+  const rows = await fetchAllPaged<any>((from, to) =>
+    supabase.rpc('list_storage_objects', { p_bucket: bucket }).range(from, to)
+  );
+  return (rows || []).map((r: any) => ({
+    path: r.path,
+    size: Number(r.size) || 0,
+    createdAt: r.created_at || '',
+  }));
 }
 
 /**
@@ -179,6 +153,18 @@ export async function scanOrphanedFiles(): Promise<CleanupReport> {
 
   const referencedUrls = await getAllReferencedUrls();
   const pathReferencedIds = await getPathReferencedIds();
+
+  // Index the referenced URLs by "<bucket>//<path>" ONCE. The previous check ran
+  //   Array.from(referencedUrls).some(url => url.includes(file.path))
+  // per file — with 12,405 files against 9,868 referenced URLs that is ~122 million
+  // substring comparisons on the main thread, which locks the tab. This is O(1) per file.
+  const referencedPathKeys = new Set<string>();
+  for (const url of referencedUrls) {
+    for (const b of BUCKETS) {
+      const path = extractFilePath(url, b);
+      if (path) { referencedPathKeys.add(`${b}//${path}`); break; }
+    }
+  }
   const report: CleanupReport = {
     totalFilesScanned: 0,
     referencedFiles: 0,
@@ -193,16 +179,10 @@ export async function scanOrphanedFiles(): Promise<CleanupReport> {
     report.totalFilesScanned += files.length;
 
     for (const file of files) {
-      // Build the public URL for this file to check against references
-      const { data } = supabase.storage.from(bucket).getPublicUrl(file.path);
-      const publicUrl = data?.publicUrl || '';
-
       // A file counts as in use if EITHER a URL column points at it, OR its path carries
       // an order identifier as a segment (the production-files convention above).
       // Without the second test, 526 live production files read as orphaned.
-      const byUrl = Array.from(referencedUrls).some(url =>
-        url === publicUrl || url.includes(file.path)
-      );
+      const byUrl = referencedPathKeys.has(`${bucket}//${file.path}`);
       const byPathConvention = file.path
         .split('/')
         .some(segment => pathReferencedIds.has(segment));
