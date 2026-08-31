@@ -93,26 +93,35 @@ const PaymentFormLandingPage: React.FC = () => {
 
   const { data: tokenData, isLoading, error, refetch, isRefetching } = useQuery({
     queryKey: ['payment-token', token],
-    // Direct fetch with the anon key — no session exists on this public page. The whole
-    // read runs under one deadline so neither a stalled request nor a stalled response body
-    // can leave the customer on an endless spinner; retry: 1 then gets a second attempt,
-    // which is usually all a transient stall needs.
+    // Read through the get_payment_form_token RPC rather than selecting the table directly.
+    // Direct anon SELECT on payment_form_tokens let anyone with the anon key — which ships in
+    // this bundle — enumerate all 215 rows with their customers' names, emails, phones and
+    // addresses, no token needed. The RPC returns one row by token and only the columns this
+    // page renders (no attribution/client_ip, no created_by), so the unguessable token is the
+    // capability. See supabase/migrations/lock_down_anon_rpc_and_payment_tokens.sql.
+    //
+    // Still no session here, so it stays a direct fetch with the anon key, and the whole read
+    // still runs under one deadline — neither a stalled request nor a stalled response body can
+    // leave the customer on an endless spinner; retry: 1 gets a second attempt, which is usually
+    // all a transient stall needs.
     queryFn: () =>
       withDeadline(12_000, async (signal) => {
         const res = await fetch(
-          `${SUPABASE_URL}/rest/v1/payment_form_tokens?token=eq.${token}&select=*&limit=1`,
+          `${SUPABASE_URL}/rest/v1/rpc/get_payment_form_token`,
           {
+            method: 'POST',
             headers: {
               'apikey': SUPABASE_ANON_KEY,
               'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
               'Content-Type': 'application/json',
             },
+            body: JSON.stringify({ p_token: token }),
             signal,
           }
         );
         if (!res.ok) throw new Error('Failed to load payment form');
         const rows = await res.json();
-        if (!rows || rows.length === 0) throw new Error('Payment link not found');
+        if (!Array.isArray(rows) || rows.length === 0) throw new Error('Payment link not found');
         return rows[0];
       }),
     enabled: !!token,

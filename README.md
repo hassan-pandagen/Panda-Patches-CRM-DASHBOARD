@@ -23,6 +23,8 @@ This is the **staff-facing CRM and order-management dashboard** for Panda Patche
 
 It's a React + TypeScript single-page app backed by Supabase (PostgreSQL, Auth, Storage, Realtime, and Edge Functions), deployed on Vercel. A large share of the actual "system" isn't UI at all — it's the automation layer: Postgres triggers, Supabase Edge Functions, and cron jobs that fire emails, sync marketing pixels, award loyalty tiers, and keep payment state consistent without anyone clicking a button. This README documents that layer in detail, since it's the part that's easiest to lose track of.
 
+> **📘 Full project knowledge base:** [`PROJECT-KNOWLEDGE.md`](PROJECT-KNOWLEDGE.md) — architecture, data model, every automation, the operating rules that must not be broken, the bug log (with the wrong turns), and the status of every in-flight program. **Read it before changing anything non-trivial.** This README is the overview; that file is the reference.
+
 > **Scope note:** The **customer-facing portal** (customer login, order tracking, file downloads) lives on the marketing website (`www.pandapatches.com`), a separate repo. This repository is the **internal staff CRM** plus the shared serverless backend (Supabase Edge Functions — used by both this CRM and the website) and the public **agent-generated payment links** (`/pay/:token`).
 
 ---
