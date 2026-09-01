@@ -95,6 +95,16 @@ export const PATCH_TYPE_CATEGORY: Record<string, PatchTypeMapping> = {
   'custom 3d embroidered transfers': { category: 'embroidered', modifier: '3D embroidery, heat-transfer backing' },
   'high density transfer':    { category: 'embroidered', modifier: 'high-density embroidery, heat-transfer backing' },
 
+  // ── Appliqué ──
+  // Appliqué motifs sit in the same HTS 5810 family as embroidered patches (embroidery in the
+  // piece / in motifs), so the category is right — but the classification turns on whether the
+  // appliqué is embroidered onto a ground fabric or merely bonded, which changes the heading.
+  // forceConfirm so a person signs off the HTS before it reaches a commercial invoice.
+  'applique transfer':        { category: 'embroidered',
+                                modifier: 'appliqué fabric motif, heat-transfer backing',
+                                forceConfirm: true,
+                                confirmNote: 'Confirm HTS: appliqué embroidered onto ground fabric (5810.92.1000) vs bonded/heat-applied motif — classification differs.' },
+
   // ── Chenille family ──
   'chenille':                 { category: 'chenille' },
   'chenille patches':         { category: 'chenille' },
