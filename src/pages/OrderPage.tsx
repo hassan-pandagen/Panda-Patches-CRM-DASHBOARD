@@ -13,6 +13,7 @@ import { mapDbToOrder, triggerStatusEmail, sendPaymentConfirmationEmail, updateO
 import { getPremiumStatus, setPremiumStatus } from '../services/customerFlagsService';
 import { getCustomerByEmail } from '../services/customersService';
 import { isWebCheckoutAgent, leadSourceDisplay } from '../utils/leadSource';
+import { roleCan, ROLES_CAN_VIEW_CUSTOMER_IDENTITY } from '../utils/roleAccess';
 import FileUploadSection from '../components/orders/FileUpload';
 
 // UI Components
@@ -120,6 +121,8 @@ const OrderPage: React.FC = () => {
     // Check for the correct 'orders_edit_production' key.
     const canViewProduction = isAdmin || permissions?.orders_edit_production === true;
     const isShipping = role === UserRole.SHIPPING; // shipper: sees the order read-only + can change status
+    // Who the customer is — separate from shipping_view, which both Production accounts hold.
+    const canViewCustomerIdentity = roleCan(role, ROLES_CAN_VIEW_CUSTOMER_IDENTITY);
     // Check for the correct 'orders_delete' key.
     const canDelete = isAdmin || permissions?.orders_delete === true;
 
@@ -736,8 +739,13 @@ const OrderPage: React.FC = () => {
                                 </Link>
                             )}
 
-                            {/* ✅ Production Edit toggle for production users — Done Editing forces an immediate save */}
-                            {canViewProduction && !isAdmin && (
+                            {/* Production Edit toggle — Done Editing forces an immediate save.
+                                Was `canViewProduction && !isAdmin`, which locked admins out of the inline
+                                production flow entirely: they could not see production files on this page at
+                                all, only upload them through Edit Order — and that writes to a different
+                                bucket (order-attachments/production-files/<orderNo>) than this one
+                                (production-files/orders/<id>). Admins now get the same flow as production. */}
+                            {canViewProduction && (
                                 <Button
                                     variant={isEditingProduction ? "primary" : "secondary"}
                                     size="md"
@@ -834,12 +842,14 @@ const OrderPage: React.FC = () => {
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                                     <div>
                                         <p className="text-xs font-medium text-slate-400 uppercase mb-1">Customer Name</p>
-                                        <p className="font-medium text-white text-base">{order.customerName}</p>
+                                        <p className="font-medium text-white text-base">
+                                            {canViewCustomerIdentity ? order.customerName : '•••••••• (Hidden)'}
+                                        </p>
                                     </div>
                                     <div>
                                         <p className="text-xs font-medium text-slate-400 uppercase mb-1">Email Address</p>
                                         <p className="font-medium text-white break-all">
-                                            {canViewShipping ? order.customerEmail : '•••••••• (Hidden)'}
+                                            {canViewShipping && canViewCustomerIdentity ? order.customerEmail : '•••••••• (Hidden)'}
                                         </p>
                                     </div>
                                     <div>
@@ -847,7 +857,7 @@ const OrderPage: React.FC = () => {
                                             <Smartphone className="w-3 h-3" /> Phone / Mobile
                                         </p>
                                         <p className="font-medium text-white">
-                                            {canViewShipping ? (order.customerPhone || 'N/A') : '•••••••• (Hidden)'}
+                                            {canViewShipping && canViewCustomerIdentity ? (order.customerPhone || 'N/A') : '•••••••• (Hidden)'}
                                         </p>
                                     </div>
                                     <div>
@@ -855,7 +865,7 @@ const OrderPage: React.FC = () => {
                                             <MapPin className="w-3 h-3" /> Shipping Address
                                         </p>
                                         <p className="font-medium text-white text-sm leading-relaxed">
-                                            {canViewShipping ? (order.shippingAddress || 'No address provided') : '•••••••• (Hidden)'}
+                                            {canViewShipping && canViewCustomerIdentity ? (order.shippingAddress || 'No address provided') : '•••••••• (Hidden)'}
                                         </p>
                                     </div>
                                 </div>
@@ -1023,8 +1033,9 @@ const OrderPage: React.FC = () => {
                                     </div>
                                 )}
 
-                                {/* Production Files - Inline Editing for Production Users */}
-                                {isEditingProduction && !isAdmin && (
+                                {/* Production Files — inline editing. `!isAdmin` removed with the toggle
+                                    above; an admin sees and edits these like anyone else with production access. */}
+                                {isEditingProduction && (
                                     <div className="mt-6 pt-6 border-t border-slate-700/50">
                                         <div className="flex items-center justify-between mb-4">
                                             <p className="text-xs font-medium text-slate-400 uppercase">Production Files</p>
@@ -1100,7 +1111,9 @@ const OrderPage: React.FC = () => {
                                 <div className="flex justify-between items-center"><p className="text-slate-400 text-sm">Status</p><StatusBadge status={order.status as OrderStatus} /></div>
                                 <div className="flex justify-between items-center"><p className="text-slate-400 text-sm">Created Date</p><p className="font-medium text-white">{new Date(order.createdAt).toLocaleDateString()}</p></div>
                                 <div className="flex justify-between items-center"><p className="text-slate-400 text-sm">Sales Agent</p><p className="font-medium text-white">{order.salesAgent}</p></div>
-                                <div className="flex justify-between items-center"><p className="text-slate-400 text-sm">Lead Source</p><p className="font-medium text-white">{isWebCheckoutAgent(order.salesAgent) ? leadSourceDisplay(order) : (order.leadSource || 'N/A')}</p></div>
+                                {canViewCustomerIdentity && (
+                                    <div className="flex justify-between items-center"><p className="text-slate-400 text-sm">Lead Source</p><p className="font-medium text-white">{isWebCheckoutAgent(order.salesAgent) ? leadSourceDisplay(order) : (order.leadSource || 'N/A')}</p></div>
+                                )}
                             </div>
                         </SpotlightCard>
 
@@ -1258,8 +1271,12 @@ const OrderPage: React.FC = () => {
                     </div>
                 )}
 
-                {/* Customer ↔ Agent message thread (visible to customer in their portal) */}
-                {order && user && (
+                {/* Customer ↔ Agent message thread (visible to customer in their portal).
+                    Hidden entirely — not masked — from roles without customer identity. Masking
+                    a conversation is meaningless: the customer's words are the content, and
+                    Task 2.4 is explicit that digitizers never read customer messages directly.
+                    A change request reaches them via the supervisor, not from here. */}
+                {order && user && canViewCustomerIdentity && (
                     <div className="w-full animate-fadeIn lg:col-span-3">
                         <OrderMessageThread
                             orderId={order.id}

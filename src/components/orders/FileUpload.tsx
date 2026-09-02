@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import { supabase } from "../../services/supabaseClient";
 import { logger } from "../../services/logger";
+import { toSignedUrls, isPrivateBucketUrl } from "../../services/storageService";
 
 interface FileUploadSectionProps {
   title: string;
@@ -125,6 +126,19 @@ const FileUploadSection: React.FC<FileUploadSectionProps> = ({
     handleUploadFiles(e.target.files);
   };
 
+  // Stored URLs are `/object/public/...` strings written at upload time. For a private
+  // bucket those no longer resolve, so re-sign for display only — the value kept in the
+  // database is untouched, which is what makes the bucket flip reversible.
+  // Non-private buckets pass straight through, so this is a no-op for order-attachments.
+  const [displayUrls, setDisplayUrls] = React.useState<string[]>(urls);
+  React.useEffect(() => {
+    let cancelled = false;
+    if (!urls.some(isPrivateBucketUrl)) { setDisplayUrls(urls); return; }
+    toSignedUrls(urls).then(signed => { if (!cancelled) setDisplayUrls(signed); });
+    return () => { cancelled = true; };
+  }, [urls]);
+  const displayUrlFor = (url: string, index: number) => displayUrls[index] ?? url;
+
   const removeFile = (indexToRemove: number) => {
     onUrlsChange(urls.filter((_, index) => index !== indexToRemove));
   };
@@ -184,14 +198,14 @@ const FileUploadSection: React.FC<FileUploadSectionProps> = ({
           >
             <div className="flex items-center gap-3 overflow-hidden">
               {isImage(url) ? (
-                <img src={url} alt="Thumbnail" className="w-10 h-10 object-cover rounded" />
+                <img src={displayUrlFor(url, index)} alt="Thumbnail" className="w-10 h-10 object-cover rounded" />
               ) : (
                 <div className="w-10 h-10 bg-slate-700 rounded flex items-center justify-center">
                   <FileText className="w-5 h-5 text-slate-400" />
                 </div>
               )}
               <a
-                href={url}
+                href={displayUrlFor(url, index)}
                 target="_blank"
                 rel="noreferrer"
                 className="text-sm text-blue-400 hover:underline truncate max-w-[200px]"
@@ -204,7 +218,7 @@ const FileUploadSection: React.FC<FileUploadSectionProps> = ({
               {isImage(url) && (
                 <button
                   type="button"
-                  onClick={() => setPreviewUrl(url)}
+                  onClick={() => setPreviewUrl(displayUrlFor(url, index))}
                   className="p-1.5 text-slate-400 hover:text-blue-400 hover:bg-blue-400/10 rounded transition-colors"
                   title="Preview Image"
                 >

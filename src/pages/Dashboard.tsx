@@ -22,6 +22,7 @@ import { supabase } from "../services/supabaseClient";
 import { useDashboardMetrics } from "../hooks/useDashboardMetrics";
 import { mapDbToOrder } from "../services/orderService";
 import { OrderStatus, UserRole } from "../types";
+import { roleCan, ROLES_SEE_ALL_DASHBOARD_DATA } from "../utils/roleAccess";
 import { queryKeys } from "../constants/queryKeys";
 import CardSkeleton from "../components/CardSkeleton";
 import DashboardRecentOrdersTable from "../components/dashboard/DashboardRecentOrdersTable";
@@ -253,7 +254,7 @@ export default function Dashboard() {
 
         // Force filter by email if not Admin — sales agents only see their own rows (RLS is the
         // primary layer; this avoids UI flicker on a slow connection).
-        if (role !== UserRole.ADMIN && user?.email) {
+        if (!roleCan(role, ROLES_SEE_ALL_DASHBOARD_DATA) && user?.email) {
           query = query.eq("sales_agent", user.email);
         }
         return query.order("created_at", { ascending: false }).range(from, to);

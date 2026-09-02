@@ -1,6 +1,7 @@
 // src/services/orderService.ts
 
 import { supabase } from './supabaseClient';
+import { toSignedUrls } from './storageService';
 import { queryClient } from './queryClient';
 import { queryKeys } from '../constants/queryKeys';
 import { Order, OrderStatus } from '../types/index';
@@ -510,9 +511,18 @@ export const triggerStatusEmail = async (order: Order, statusToCheck: string, ex
 const PRODUCTION_COMPLETE_RECIPIENT = 'hello@pandapatches.com';
 
 export const triggerProductionCompleteEmail = async (order: Order, photoUrls: string[]) => {
-  const photos = (photoUrls || [])
-    .filter(Boolean)
-    .map(url => ({ url, file_name: getFileName(url) }));
+  // Completion photos live in `production-files`, which is private (Task 0.2). The email
+  // embeds them as <img>, and an email client cannot authenticate — so they must be signed
+  // before sending, not linked as `/object/public/...`.
+  //
+  // 30 days, not the 15-minute default used in-app: this lands in an inbox and is read
+  // whenever someone gets to it. After that the images stop resolving; the photos remain on
+  // the order in the portal, which is the durable copy. Chosen over attaching them because
+  // attachments share a 6MB budget with the artwork, and a completion packet can be several
+  // photos — see the send-email memory-limit incident.
+  const THIRTY_DAYS = 60 * 60 * 24 * 30;
+  const signed = await toSignedUrls((photoUrls || []).filter(Boolean), THIRTY_DAYS);
+  const photos = signed.map((url, i) => ({ url, file_name: getFileName(photoUrls[i] || url) }));
 
   const emailPayload: any = {
     to: PRODUCTION_COMPLETE_RECIPIENT,

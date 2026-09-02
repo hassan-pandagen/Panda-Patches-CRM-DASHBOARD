@@ -19,6 +19,7 @@ import {
   Wand2,
 } from "lucide-react";
 import { useAuth } from "../../contexts/AuthContext";
+import { roleCan, ROLES_CAN_VIEW_ACTIVITY_AND_INBOX } from "../../utils/roleAccess";
 import { useQueryPrefetch } from "../../hooks/useQueryPrefetch";
 import { BrandLogo } from "../ui/BrandLogo";
 
@@ -137,16 +138,18 @@ const Sidebar: React.FC<SidebarProps> = ({ onNavigate }) => {
       <nav className="grow space-y-2 p-4 overflow-y-auto custom-scrollbar">
         {navItems
           .filter((item) => {
-            const isProduction = role === "PRODUCTION";
-            const isShipping = role === "SHIPPING";
+            // Previously an exclusion list keyed on PRODUCTION/SHIPPING, so a role that
+            // did not exist yet was shown Activity and Inbox, both of which carry customer
+            // identity and conversation content. Allowlist instead; see roleAccess.ts.
+            const canSeeActivityAndInbox = roleCan(role, ROLES_CAN_VIEW_ACTIVITY_AND_INBOX);
             if (item.to === "/") return canViewFinancials;
             if (item.to === "/orders") return true;
             if (item.to === "/reports")
               return canViewFinancials || canViewProduction;
             if (item.to === "/clock-in-out") return true;
             // Activity + Inbox are sales/admin tools — hide from PRODUCTION and SHIPPING
-            if (item.to === "/activity") return !isProduction && !isShipping;
-            if (item.to === "/inbox") return !isProduction && !isShipping;
+            if (item.to === "/activity") return canSeeActivityAndInbox;
+            if (item.to === "/inbox") return canSeeActivityAndInbox;
             return true;
           })
           .map((item) => (

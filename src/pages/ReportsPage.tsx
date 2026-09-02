@@ -8,6 +8,7 @@ import { fetchAllPaged } from "../utils/fetchAllPaged";
 import SpotlightCard from "../components/ui/SpotlightCard";
 import ToggleButtons from "../components/ui/ToggleButtons";
 import { Order, UserRole, OrderStatus } from "../types/index";
+import { roleCan, ROLES_SEE_ALL_REPORT_DATA } from "../utils/roleAccess";
 import Spinner from "../components/ui/Spinner";
 import { LEAD_SOURCE_OPTIONS } from "../constants/index";
 import DateRangeFilter, {
@@ -1810,7 +1811,7 @@ const ReportsPage: React.FC = () => {
           .neq("status", "PENDING_PAYMENT");
 
         // Filter by sales agent for sales agents only (PRODUCTION can see all orders)
-        if (role !== UserRole.ADMIN && role !== UserRole.PRODUCTION && user?.email) {
+        if (!roleCan(role, ROLES_SEE_ALL_REPORT_DATA) && user?.email) {
           query = query.eq("sales_agent", user.email);
         }
 

@@ -10,6 +10,7 @@ import { queryKeys } from '../../constants/queryKeys';
 import { Order } from '../../types';
 import { useToast } from '../../hooks/useToast';
 import { useAuth } from '../../contexts/AuthContext';
+import { roleCan, ROLES_CAN_SEND_CUSTOMER_EMAIL, ROLES_CAN_VIEW_CUSTOMER_IDENTITY } from '../../utils/roleAccess';
 import SpotlightCard from '../ui/SpotlightCard';
 import { CheckCircle, XCircle, RefreshCw, Mail, AlertTriangle, Lightbulb, Send } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
@@ -79,7 +80,16 @@ const EmailLogsSection: React.FC<EmailLogsSectionProps> = ({ order }) => {
   const { success: showSuccess, error: showError } = useToast();
   const { role } = useAuth();
   // Admins + sales agents may send customer emails; production/shipping may not.
-  const canSendEmail = role !== 'PRODUCTION' && role !== 'SHIPPING';
+  // Allowlist, not an exclusion list. The previous form excluded PRODUCTION and SHIPPING by
+  // name, which granted customer-email access to any role that did not exist yet — roleAccess.ts.
+  const canSendEmail = roleCan(role, ROLES_CAN_SEND_CUSTOMER_EMAIL);
+  // The log prints "To: <recipient_email>" on every row, so it leaks the customer's address
+  // to anyone who can open the order — a separate surface from the Customer card, and one the
+  // identity gate there did not reach. Production keeps the operationally useful part (which
+  // template fired, when, and whether it failed); only the address is masked.
+  const canSeeRecipient = roleCan(role, ROLES_CAN_VIEW_CUSTOMER_IDENTITY);
+  const maskRecipient = (email: string | null | undefined) =>
+    canSeeRecipient ? (email || 'N/A') : '•••••••• (Hidden)';
   const [resendingId, setResendingId] = React.useState<number | null>(null);
   const [manualStatus, setManualStatus] = React.useState('');
   const [sendingManual, setSendingManual] = React.useState(false);
@@ -314,7 +324,7 @@ const EmailLogsSection: React.FC<EmailLogsSectionProps> = ({ order }) => {
                       {formatTemplateName(comm.template_id || comm.subject?.replace('FAILED: ', '') || 'Unknown')}
                     </p>
                     <p className="text-xs text-slate-400 mt-0.5 truncate">
-                      To: {comm.recipient_email} · {time}
+                      To: {maskRecipient(comm.recipient_email)} · {time}
                     </p>
                   </div>
                   <button
@@ -373,7 +383,7 @@ const EmailLogsSection: React.FC<EmailLogsSectionProps> = ({ order }) => {
                       <p className="text-xs font-medium text-slate-300 truncate">
                         {formatTemplateName(comm.template_id || '')}
                       </p>
-                      <p className="text-xs text-slate-400 truncate">To: {comm.recipient_email}</p>
+                      <p className="text-xs text-slate-400 truncate">To: {maskRecipient(comm.recipient_email)}</p>
                     </div>
                   </div>
                   <span className="text-xs text-slate-400 flex-shrink-0 ml-3">{time}</span>

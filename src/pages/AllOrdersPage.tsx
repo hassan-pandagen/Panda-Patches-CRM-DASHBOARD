@@ -12,6 +12,7 @@ import ShipByPill from '../components/orders/ShipByPill';
 import SavedFilters from '../components/ui/SavedFilters';
 import { supabase } from '../services/supabaseClient';
 import { Order, OrderStatus, UserRole } from '../types';
+import { roleCan, ROLES_SEE_ALL_ORDER_ROWS } from '../utils/roleAccess';
 import { useAuth } from '../contexts/AuthContext';
 import { getStatusInfo } from '../constants';
 import { mapDbToOrder } from '../services/orderService';
@@ -214,7 +215,7 @@ async function fetchPaginatedOrders(params: {
 
     // Filter by sales agent for sales agents only (AGENT/USER see only their assigned orders)
     // ADMIN and PRODUCTION can see all orders
-    if (userRole !== UserRole.ADMIN && userRole !== UserRole.PRODUCTION && userRole !== UserRole.SHIPPING && userEmail) {
+    if (!roleCan(userRole, ROLES_SEE_ALL_ORDER_ROWS) && userEmail) {
         query = query.eq('sales_agent', userEmail);
     }
 
@@ -361,7 +362,7 @@ async function fetchTabCounts(params: {
             .select('status, is_urgent, created_at, balance_due, sales_agent, production_completed_at');
 
         // AGENT/USER see only their assigned orders; ADMIN/PRODUCTION see all
-        if (userRole !== UserRole.ADMIN && userRole !== UserRole.PRODUCTION && userRole !== UserRole.SHIPPING && userEmail) {
+        if (!roleCan(userRole, ROLES_SEE_ALL_ORDER_ROWS) && userEmail) {
             query = query.eq('sales_agent', userEmail);
         }
         // Production tab counts also exclude completed

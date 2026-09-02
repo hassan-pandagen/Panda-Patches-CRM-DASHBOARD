@@ -15,7 +15,7 @@ import { copyToClipboard } from '../utils/copyToClipboard';
 import {
   Link, Copy, Check, Plus, ExternalLink, Trash2,
   CreditCard, ChevronDown, ChevronUp, MessageCircle, Mail,
-  ImagePlus, Loader2, X, FileText,
+  ImagePlus, Loader2, X, FileText, CopyPlus,
 } from 'lucide-react';
 import { format, parseISO, isPast } from 'date-fns';
 
@@ -214,6 +214,46 @@ const PaymentFormPage: React.FC = () => {
   };
 
   const removeImage = (url: string) => setAttachmentUrls(prev => prev.filter(u => u !== url));
+
+  // Re-generating a link for the same customer meant retyping every field. The token already
+  // holds all of them, so copy it into the form and let the agent adjust what changed.
+  //
+  // Deliberately NOT copied: order_amount / deposit_amount / is_deposit. A duplicate is almost
+  // always a NEW charge, and silently inheriting the old figure is how someone bills the wrong
+  // number — the amount is the one field that must be a conscious decision every time.
+  // Also not copied: rush_date (dates go stale) or the token/used_at/order_number identity.
+  const duplicateToken = (t: any) => {
+    setForm({
+      customer_name:    t.customer_name    || '',
+      customer_email:   t.customer_email   || '',
+      customer_phone:   t.customer_phone   || '',
+      cc_email:         t.cc_email         || '',
+      shipping_address: t.shipping_address || '',
+      patches_type:     t.patches_type     || '',
+      patches_quantity: t.patches_quantity != null ? String(t.patches_quantity) : '',
+      design_name:      t.design_name      || '',
+      design_size:      t.design_size      || '',
+      design_backing:   t.design_backing   || '',
+      border_type:      t.border_type      || '',
+      sample_box:       !!t.sample_box,
+      country:          t.country          || '',
+      purchase_order:   t.purchase_order   || '',
+      organization:     t.organization     || '',
+      instructions:     t.instructions     || '',
+      order_amount:     '',
+      deposit_amount:   '',
+      is_deposit:       false,
+      is_urgent:        !!t.is_urgent,
+      rush_date:        '',
+    });
+    // Reference files carry over — same customer, same artwork, and re-uploading is the
+    // slowest part of the job.
+    setAttachmentUrls(Array.isArray(t.customer_attachment_urls) ? [...t.customer_attachment_urls] : []);
+    setGeneratedToken(null);
+    setShowForm(true);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    showSuccess('Details copied', 'Enter the amount for this new link.');
+  };
 
   const resetForm = () => {
     setForm({
@@ -569,7 +609,7 @@ const PaymentFormPage: React.FC = () => {
             Active Links ({activeTokens.length})
           </h3>
           <div className="space-y-2">
-            {activeTokens.map(t => <TokenRow key={t.id} t={t} onCopy={handleCopy} onWhatsApp={handleWhatsApp} onDelete={id => deleteToken.mutate(id)} copiedToken={copiedToken} />)}
+            {activeTokens.map(t => <TokenRow key={t.id} t={t} onCopy={handleCopy} onWhatsApp={handleWhatsApp} onDelete={id => deleteToken.mutate(id)} onDuplicate={duplicateToken} copiedToken={copiedToken} />)}
           </div>
         </SpotlightCard>
       )}
@@ -582,7 +622,7 @@ const PaymentFormPage: React.FC = () => {
             Paid ({usedTokens.length})
           </h3>
           <div className="space-y-2">
-            {usedTokens.map(t => <TokenRow key={t.id} t={t} onCopy={handleCopy} onWhatsApp={handleWhatsApp} onDelete={id => deleteToken.mutate(id)} copiedToken={copiedToken} />)}
+            {usedTokens.map(t => <TokenRow key={t.id} t={t} onCopy={handleCopy} onWhatsApp={handleWhatsApp} onDelete={id => deleteToken.mutate(id)} onDuplicate={duplicateToken} copiedToken={copiedToken} />)}
           </div>
         </SpotlightCard>
       )}
@@ -604,8 +644,9 @@ const TokenRow: React.FC<{
   onCopy: (token: string) => void;
   onWhatsApp: (token: string, t: Token) => void;
   onDelete: (id: number) => void;
+  onDuplicate: (t: Token) => void;
   copiedToken: string | null;
-}> = ({ t, onCopy, onWhatsApp, onDelete, copiedToken }) => {
+}> = ({ t, onCopy, onWhatsApp, onDelete, onDuplicate, copiedToken }) => {
   const used    = !!t.used_at;
   const expired = !used && isPast(parseISO(t.expires_at));
   const copied  = copiedToken === t.token;
@@ -672,6 +713,14 @@ const TokenRow: React.FC<{
             <ExternalLink className="w-3.5 h-3.5" /> Order
           </a>
         )}
+        <button
+          onClick={() => onDuplicate(t)}
+          title="Start a new link with these details"
+          className="flex items-center gap-1 px-2.5 py-1.5 bg-slate-700 hover:bg-slate-600 text-xs text-white rounded-lg transition-colors"
+        >
+          <CopyPlus className="w-3.5 h-3.5" />
+          Duplicate
+        </button>
         <button onClick={() => onDelete(t.id)} className="p-1.5 text-slate-600 hover:text-red-400 transition-colors">
           <Trash2 className="w-3.5 h-3.5" />
         </button>

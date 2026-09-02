@@ -13,6 +13,14 @@ export enum UserRole {
   SALES_AGENT = 'SALES_AGENT',
   PRODUCTION = 'PRODUCTION',
   SHIPPING = 'SHIPPING',
+  // Added Task 1.1 (digitizer-portal brief). Adding a role means THREE places, together:
+  //   1. this enum
+  //   2. the CHECK constraint on user_profiles.role
+  //   3. the allowlists in src/utils/roleAccess.ts
+  // Miss (3) and the role gets nothing — safe. Miss (2) and it cannot be saved — safe.
+  // The lists in roleAccess.ts are where the actual decision lives.
+  DIGITIZER = 'DIGITIZER',
+  PRODUCTION_SUPERVISOR = 'PRODUCTION_SUPERVISOR',
 }
 
 export enum OrderStatus {

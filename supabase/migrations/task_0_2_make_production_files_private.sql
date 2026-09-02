@@ -1,0 +1,63 @@
+-- ============================================================================
+-- Task 0.2 (digitizer-portal brief rev 5) — make `production-files` private
+-- 2026-09-02
+--
+-- ⚠️  DO NOT APPLY UNTIL THE FRONTEND CHANGE IS LIVE AND VERIFIED.
+--
+-- Ordering, and it only breaks in one direction:
+--   FileUpload stores `getPublicUrl(path)` output in the database, so all ~528
+--   existing rows hold `/object/public/...` strings. The moment this bucket is
+--   private those stop resolving. The frontend change re-signs them at RENDER
+--   time (src/services/storageService.ts → toSignedUrl), leaving the stored
+--   value untouched — which is also what makes this reversible.
+--
+--   Apply this before that ships and the order page's production-file sections
+--   and the production-complete email images break instantly. Same failure the
+--   payment-token lockdown was split into two migrations to avoid.
+--
+-- Correct sequence:
+--   1. Deploy the frontend (storageService + FileUpload + orderService)
+--   2. Open an order with production files → files still listed and openable
+--   3. Apply this file
+--   4. Re-verify: signed-out fetch fails, staff view still works
+--
+-- ── Two corrections to the brief ────────────────────────────────────────────
+-- 1. `production-files` is NOT a new bucket. It already exists, is PUBLIC, and
+--    holds 528 objects. Verified signed-out, no key: an object returned HTTP 200
+--    and 144,005 bytes. The task is a flip, not a creation + migration.
+--
+-- 2. `orders.production_file_urls` is NOT how these files are addressed. Only 20
+--    orders have that column populated, and those rows mix `production-files`
+--    and `order-attachments` URLs. The real addressing is folder convention —
+--    OrderPage renders `production-files` at `orders/<id>` and
+--    `orders/<id>/completion`. Anything gating access must gate the LISTING,
+--    not just a column.
+--
+-- ── Scope note ──────────────────────────────────────────────────────────────
+-- 242 of the 528 objects are completion photos (`orders/<id>/completion/...`),
+-- not machine files. They sit in the same bucket, so they become private too.
+-- That is why triggerProductionCompleteEmail now signs them for 30 days before
+-- embedding — an email client cannot authenticate.
+--
+-- Read access is already staff-only at the policy layer
+-- (`staff_read_production_files`, from security_lockdown_part4). This adds the
+-- second layer: with the bucket private, `/object/public/...` stops working for
+-- everyone, signed-in or not, so the policy is no longer the only thing standing
+-- between an outsider and the stitch files.
+--
+-- The DIGITIZER window rule (Task 1.2) narrows this further; it cannot be
+-- written yet because the role does not exist.
+-- ============================================================================
+
+UPDATE storage.buckets SET public = false WHERE id = 'production-files';
+
+-- ── Verification (run from a shell; the SQL editor is a privileged role) ─────
+--   S="https://uxgzlneefybifvccfhwp.supabase.co/storage/v1"
+--   curl -s -o /dev/null -w "%{http_code}\n" \
+--     "$S/object/public/production-files/orders/1312/1788309183520_11384_B.PNG"
+--   # expect: 400 (was 200 / 144005 bytes)
+--
+--   Then in the portal as staff: open an order with production files — the list
+--   must still render and the files must still open. And mockups/customer
+--   references must be UNAFFECTED; they live in `order-attachments`, which stays
+--   public by Imran's decision.

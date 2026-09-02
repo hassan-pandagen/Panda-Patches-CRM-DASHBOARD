@@ -2,6 +2,7 @@
 import React from 'react';
 import { Navigate, Outlet } from 'react-router-dom';
 import { useAuth } from './contexts/AuthContext';
+import { roleCan, ROLES_CAN_ACCESS_ADMIN_ROUTES } from './utils/roleAccess';
 import { UserRole } from './types';
 
 const AdminRoute: React.FC = () => {
@@ -22,7 +23,7 @@ const AdminRoute: React.FC = () => {
     );
   }
 
-  if (role !== UserRole.ADMIN) {
+  if (!roleCan(role, ROLES_CAN_ACCESS_ADMIN_ROUTES)) {
     return <Navigate to="/" replace />;
   }
 

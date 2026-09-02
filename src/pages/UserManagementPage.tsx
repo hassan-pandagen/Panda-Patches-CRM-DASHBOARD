@@ -6,6 +6,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { createUserWithRole, getAllUsers, deleteUser, updateUserProfile } from '@/services/authService';
 import { logger } from '@/services/logger';
 import { useAuth } from '../contexts/AuthContext';
+import { roleCan, ROLES_CAN_MANAGE_USERS } from '../utils/roleAccess';
 import { copyToClipboard } from '../utils/copyToClipboard';
 import { UserProfile, UserPermissions, UserRole } from '@/types';
 import { Check, X, Plus, Edit, Trash2, Key, AlertCircle, Copy, CheckCircle } from 'lucide-react';
@@ -70,6 +71,23 @@ const PERMISSION_PRESETS = {
   },
   clock_only: {
     ...EMPTY_PERMISSIONS,
+    attendance_clock_only: true,
+  },
+  // Task 1.1. DIGITIZER must never carry orders_view_all, orders_edit_financials,
+  // users_manage, orders_delete or orders_create — their scope comes from
+  // digitizer_assignments plus the window rule, not from a blanket view flag.
+  digitizer: {
+    ...EMPTY_PERMISSIONS,
+    orders_view_own_only: true,
+    orders_edit_production: true,
+    attendance_clock_only: true,
+  },
+  production_supervisor: {
+    ...EMPTY_PERMISSIONS,
+    orders_view_all: true,
+    orders_change_status: true,
+    orders_edit_production: true,
+    shipping_view: true,
     attendance_clock_only: true,
   },
   admin: Object.keys(EMPTY_PERMISSIONS).reduce((acc, key) => {
@@ -349,6 +367,8 @@ const UserManagementPage: React.FC = () => {
     [UserRole.SALES_AGENT]: 'sales',
     [UserRole.PRODUCTION]: 'production',
     [UserRole.SHIPPING]: 'shipping',
+    [UserRole.DIGITIZER]: 'digitizer',
+    [UserRole.PRODUCTION_SUPERVISOR]: 'production_supervisor',
   };
   const handleRoleChange = (newRole: UserRole) => {
     const preset = ROLE_PRESET[newRole];
@@ -369,7 +389,7 @@ const UserManagementPage: React.FC = () => {
   // PERMISSION CHECK
   // ============================================
 
-  if (role !== UserRole.ADMIN && !permissions?.users_manage) {
+  if (!roleCan(role, ROLES_CAN_MANAGE_USERS) && !permissions?.users_manage) {
     return (
       <div className="max-w-4xl mx-auto p-6">
         <div className="bg-red-900/20 border border-red-500/50 rounded-xl p-6 text-center">

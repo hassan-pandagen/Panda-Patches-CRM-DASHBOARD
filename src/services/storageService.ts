@@ -78,3 +78,70 @@ export const deleteFile = async (fileUrl: string): Promise<void> => {
     throw error;
   }
 };
+// ── Private-bucket signing (Task 0.2, digitizer-portal brief) ────────────────
+//
+// `production-files` holds the digitizing/machine files — the stitch files that
+// let anyone reproduce a patch. Imran's decision (2 Sept) is that these are the
+// asset worth protecting; mockups and customer references stay public.
+//
+// The wrinkle: FileUpload stores `getPublicUrl(path)` output in the DB, so every
+// existing row holds a `/object/public/...` string. Those stop resolving the
+// moment the bucket goes private. Rather than rewrite ~528 stored URLs, the
+// stored value is treated as a *path carrier* and re-signed at render time.
+//
+// Ordering matters: ship this, then flip the bucket. Reversed, the order page
+// and the production-complete email break instantly — the same mistake the
+// payment-token migration was split in two to avoid.
+const PRIVATE_BUCKETS = ['production-files'] as const;
+
+/** Pull `{ bucket, path }` out of a Supabase storage URL, public or signed. */
+export const parseStorageUrl = (url: string): { bucket: string; path: string } | null => {
+  try {
+    for (const marker of ['/storage/v1/object/public/', '/storage/v1/object/sign/']) {
+      const i = url.indexOf(marker);
+      if (i === -1) continue;
+      const rest = url.substring(i + marker.length).split('?')[0];
+      const slash = rest.indexOf('/');
+      if (slash === -1) return null;
+      return { bucket: rest.slice(0, slash), path: decodeURIComponent(rest.slice(slash + 1)) };
+    }
+    return null;
+  } catch {
+    return null;
+  }
+};
+
+export const isPrivateBucketUrl = (url: string): boolean => {
+  const parsed = parseStorageUrl(url);
+  return !!parsed && (PRIVATE_BUCKETS as readonly string[]).includes(parsed.bucket);
+};
+
+/**
+ * Returns a short-lived signed URL for a private-bucket file; returns the input
+ * untouched for anything else, so callers can pass mixed lists through blindly.
+ *
+ * `expiresIn` defaults to 15 minutes per the brief. The production-complete
+ * email passes a longer window — an inline <img> in an inbox has to keep
+ * resolving after the reader gets round to opening it, which 15 minutes will not.
+ */
+export const toSignedUrl = async (url: string, expiresIn = 900): Promise<string> => {
+  const parsed = parseStorageUrl(url);
+  if (!parsed || !(PRIVATE_BUCKETS as readonly string[]).includes(parsed.bucket)) return url;
+  try {
+    const { data, error } = await supabase.storage
+      .from(parsed.bucket)
+      .createSignedUrl(parsed.path, expiresIn);
+    if (error || !data?.signedUrl) {
+      logger.error('[Storage] createSignedUrl failed', { path: parsed.path, error });
+      return url; // degrade to the unsigned URL rather than rendering nothing
+    }
+    return data.signedUrl;
+  } catch (err) {
+    logger.error('[Storage] createSignedUrl threw', err);
+    return url;
+  }
+};
+
+/** Batch form — preserves order and never rejects. */
+export const toSignedUrls = async (urls: string[], expiresIn = 900): Promise<string[]> =>
+  Promise.all((urls || []).map(u => toSignedUrl(u, expiresIn)));

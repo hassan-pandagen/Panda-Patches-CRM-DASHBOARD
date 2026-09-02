@@ -3,6 +3,7 @@ import { NavLink } from "react-router-dom";
 import { DashboardIcon, PlusIcon, SettingsIcon } from "../ui/Icons";
 import { useAuth } from "../../contexts/AuthContext";
 import { UserRole } from "../../types";
+import { roleCan, ROLES_CAN_CREATE_ORDERS } from "../../utils/roleAccess";
 
 interface NavItemProps {
   to: string;
@@ -47,7 +48,7 @@ const Navbar: React.FC = () => {
           <NavItem to="/" icon={<DashboardIcon />} label="Dashboard" />
         )}
 
-        {role !== UserRole.PRODUCTION && <NavItem to="/new-order" icon={<PlusIcon />} label="New Order" />}
+        {roleCan(role, ROLES_CAN_CREATE_ORDERS) && <NavItem to="/new-order" icon={<PlusIcon />} label="New Order" />}
 
         {/* Admin-only */}
         {role === "ADMIN" && (
