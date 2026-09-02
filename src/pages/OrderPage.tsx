@@ -742,9 +742,9 @@ const OrderPage: React.FC = () => {
                             {/* Production Edit toggle — Done Editing forces an immediate save.
                                 Was `canViewProduction && !isAdmin`, which locked admins out of the inline
                                 production flow entirely: they could not see production files on this page at
-                                all, only upload them through Edit Order — and that writes to a different
-                                bucket (order-attachments/production-files/<orderNo>) than this one
-                                (production-files/orders/<id>). Admins now get the same flow as production. */}
+                                all, only upload them through Edit Order — which then wrote to a different,
+                                public bucket. Both surfaces now write to production-files/orders/<id>
+                                (brief rev 6, Task 0.2a). Admins get the same flow as production. */}
                             {canViewProduction && (
                                 <Button
                                     variant={isEditingProduction ? "primary" : "secondary"}

@@ -615,6 +615,20 @@ const OrderForm: React.FC<OrderFormProps> = ({
   // *** CRITICAL FIX: The exact bucket name from your Supabase ***
   const BUCKET_NAME = 'order-attachments';
 
+  // Machine/stitch files go to the PRIVATE `production-files` bucket (brief rev 6, Task 0.2a).
+  // They used to land in order-attachments/production-files/<orderNo> — public, and a second,
+  // still-growing home for exactly the asset the bucket flip exists to protect. 135 files
+  // across 21 order folders are already there; migrating those is task (b), separate.
+  //
+  // The path matches the order page's convention (`orders/<id>`) so both surfaces write to one
+  // folder and the Task 1.2 digitizer-window rule can gate a single prefix. On a NEW order
+  // there is no id yet, so those land under `orders/unassigned/` — still private (the bucket
+  // protects them), just not prefix-gateable. Only 9 files have ever been uploaded pre-save.
+  const PRODUCTION_BUCKET = 'production-files';
+  const productionFolderPath = initialData?.id
+    ? `orders/${initialData.id}`
+    : 'orders/unassigned';
+
   // ✅ NEW: Define the status order manually to ensure correctness
   const statusOptions = [
     OrderStatus.NEW_ORDER,
@@ -999,8 +1013,8 @@ const OrderForm: React.FC<OrderFormProps> = ({
           <div className="md:col-span-2">
             <FileUploadSection
               title="Production Files (DST, EMB, PDF)"
-              bucketName={BUCKET_NAME}
-              folderPath={`production-files/${orderNum}`}
+              bucketName={PRODUCTION_BUCKET}
+              folderPath={productionFolderPath}
               urls={watch('productionFileUrls') || []}
               onUrlsChange={(urls) => setValue('productionFileUrls', urls)}
               onUploadStateChange={setIsUploading}
