@@ -23,6 +23,15 @@ import StatusBadge from '../components/ui/StatusBadge';
 import PremiumBadge from '../components/ui/PremiumBadge';
 import MaskedAmount from '../components/ui/MaskedAmount';
 
+// Attachment grids render <img> for images; a PDF there used to fall through to the
+// onError placeholder and then to an image lightbox that could never display it. Same
+// test as src/components/orders/FileUpload.tsx.
+const isImageUrl = (url: string) => /\.(jpg|jpeg|png|gif|webp)(\?|$)/i.test(url);
+const attachmentFileName = (url: string) => {
+  try { return decodeURIComponent(url.split('/').pop() || 'file').split('?')[0]; }
+  catch { return 'file'; }
+};
+
 // Icons (Check already imported below)
 import { Edit, Trash2, ShieldAlert, ArrowLeft, Lock, MapPin, Smartphone, Maximize, Check, XCircle, AlertTriangle, Copy, FileText, Upload, Package, X, Mail, DollarSign, Crown, RotateCcw } from 'lucide-react';
 
@@ -908,6 +917,19 @@ const OrderPage: React.FC = () => {
                                         <p className="text-xs font-medium text-slate-400 uppercase mb-4">Mockups / Proofs</p>
                                         <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
                                             {order.mockupUrls?.map((url, idx) => (
+                                                !isImageUrl(url) ? (
+                                                <a
+                                                    key={`mockup-${idx}`}
+                                                    href={url}
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    title={attachmentFileName(url)}
+                                                    className="relative group flex flex-col items-center justify-center gap-2 h-32 overflow-hidden rounded-lg border border-slate-600 hover:border-brand-orange bg-slate-800/60 transition-all"
+                                                >
+                                                    <FileText className="w-8 h-8 text-slate-400 group-hover:text-brand-orange transition-colors" />
+                                                    <span className="px-2 text-[10px] text-slate-400 truncate max-w-full">{attachmentFileName(url)}</span>
+                                                </a>
+                                                ) : (
                                                 <button
                                                     key={`mockup-${idx}`}
                                                     onClick={() => setPreviewUrl(url)}
@@ -923,6 +945,7 @@ const OrderPage: React.FC = () => {
                                                     />
                                                     <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors" />
                                                 </button>
+                                                )
                                             ))}
                                         </div>
                                     </div>
@@ -966,6 +989,19 @@ const OrderPage: React.FC = () => {
                                         <p className="text-xs font-medium text-slate-400 uppercase mb-4">Customer References</p>
                                         <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
                                             {order.customerAttachmentUrls?.map((url, idx) => (
+                                                !isImageUrl(url) ? (
+                                                <a
+                                                    key={`customer-${idx}`}
+                                                    href={url}
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    title={attachmentFileName(url)}
+                                                    className="relative group flex flex-col items-center justify-center gap-2 h-32 overflow-hidden rounded-lg border border-slate-600 hover:border-brand-orange bg-slate-800/60 transition-all"
+                                                >
+                                                    <FileText className="w-8 h-8 text-slate-400 group-hover:text-brand-orange transition-colors" />
+                                                    <span className="px-2 text-[10px] text-slate-400 truncate max-w-full">{attachmentFileName(url)}</span>
+                                                </a>
+                                                ) : (
                                                 <button
                                                     key={`customer-${idx}`}
                                                     onClick={() => setPreviewUrl(url)}
@@ -981,6 +1017,7 @@ const OrderPage: React.FC = () => {
                                                     />
                                                     <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors" />
                                                 </button>
+                                                )
                                             ))}
                                         </div>
                                     </div>

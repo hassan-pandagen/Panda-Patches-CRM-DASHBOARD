@@ -15,7 +15,7 @@ import { copyToClipboard } from '../utils/copyToClipboard';
 import {
   Link, Copy, Check, Plus, ExternalLink, Trash2,
   CreditCard, ChevronDown, ChevronUp, MessageCircle, Mail,
-  ImagePlus, Loader2, X,
+  ImagePlus, Loader2, X, FileText,
 } from 'lucide-react';
 import { format, parseISO, isPast } from 'date-fns';
 
@@ -194,7 +194,11 @@ const PaymentFormPage: React.FC = () => {
     window.open(`https://wa.me/${phone}?text=${encodeURIComponent(msg)}`, '_blank', 'noopener,noreferrer');
   };
 
-  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Same test FileUpload.tsx uses. Non-images (PDFs) already upload fine — the bucket allows
+  // any MIME type and uploadFile() has no type gate — they just can't render as <img>.
+  const isImage = (url: string) => /\.(jpg|jpeg|png|gif|webp)(\?|$)/i.test(url);
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
     e.target.value = ''; // allow re-selecting the same file
     if (files.length === 0) return;
@@ -203,7 +207,7 @@ const PaymentFormPage: React.FC = () => {
       const urls = await Promise.all(files.map(f => uploadFile(f)));
       setAttachmentUrls(prev => [...prev, ...urls]);
     } catch (err: any) {
-      showError('Image upload failed', err?.message);
+      showError('File upload failed', err?.message);
     } finally {
       setUploading(false);
     }
@@ -444,16 +448,29 @@ const PaymentFormPage: React.FC = () => {
               {/* Customer reference images (optional) — attached to the order's Customer
                   References on payment (NOT Mockups/Proofs, which are internal-only). */}
               <div className="mt-3">
-                <label className="block text-xs text-slate-400 mb-1">Customer Reference Images (optional)</label>
+                <label className="block text-xs text-slate-400 mb-1">Customer Reference Files (optional)</label>
                 <div className="flex flex-wrap items-center gap-3">
                   {attachmentUrls.map(url => (
                     <div key={url} className="relative w-20 h-20 rounded-lg overflow-hidden border border-slate-700 group">
-                      <img src={url} alt="Design reference" className="w-full h-full object-cover" />
+                      {isImage(url) ? (
+                        <img src={url} alt="Design reference" className="w-full h-full object-cover" />
+                      ) : (
+                        <a
+                          href={url}
+                          target="_blank"
+                          rel="noreferrer"
+                          title={decodeURIComponent(url.split('/').pop() || 'file')}
+                          className="w-full h-full flex flex-col items-center justify-center gap-1 bg-slate-800 text-slate-300 hover:text-brand-orange"
+                        >
+                          <FileText className="w-6 h-6" />
+                          <span className="text-[9px] uppercase tracking-wide">PDF</span>
+                        </a>
+                      )}
                       <button
                         type="button"
                         onClick={() => removeImage(url)}
                         className="absolute top-1 right-1 p-0.5 bg-black/70 hover:bg-red-600 rounded text-white opacity-0 group-hover:opacity-100 transition-opacity"
-                        title="Remove image"
+                        title="Remove file"
                       >
                         <X className="w-3 h-3" />
                       </button>
@@ -461,12 +478,12 @@ const PaymentFormPage: React.FC = () => {
                   ))}
                   <label className={`w-20 h-20 flex flex-col items-center justify-center gap-1 rounded-lg border border-dashed border-slate-600 text-slate-400 hover:border-brand-orange hover:text-brand-orange cursor-pointer transition-colors ${uploading ? 'opacity-60 pointer-events-none' : ''}`}>
                     {uploading ? <Loader2 className="w-5 h-5 animate-spin" /> : <ImagePlus className="w-5 h-5" />}
-                    <span className="text-[10px]">{uploading ? 'Uploading…' : 'Add image'}</span>
-                    <input type="file" accept="image/*" multiple onChange={handleImageUpload} className="hidden" disabled={uploading} />
+                    <span className="text-[10px]">{uploading ? 'Uploading…' : 'Add file'}</span>
+                    <input type="file" accept="image/*,.pdf,application/pdf" multiple onChange={handleFileUpload} className="hidden" disabled={uploading} />
                   </label>
                 </div>
                 <p className="text-[10px] text-slate-400 mt-1.5">
-                  Attach the customer's design so production has the reference image when the order is created.
+                  Attach the customer's design — image or PDF — so production has the reference when the order is created.
                 </p>
               </div>
 
