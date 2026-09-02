@@ -2,6 +2,11 @@
 -- Task 0.2 (digitizer-portal brief rev 5) — make `production-files` private
 -- 2026-09-02
 --
+-- ✅ APPLIED 2026-09-02. Bucket now reads public = false.
+--    Verified signed-out: completion photo → 400; order-attachments and quote-mockups → 200.
+--    NOTE: previously-fetched URLs kept returning 200 from Cloudflare (CF-Cache-Status: HIT)
+--    for up to max-age=3600. See PROJECT-KNOWLEDGE.md §9.5 — expected, self-clearing.
+--
 -- ⚠️  DO NOT APPLY UNTIL THE FRONTEND CHANGE IS LIVE AND VERIFIED.
 --
 -- Ordering, and it only breaks in one direction:

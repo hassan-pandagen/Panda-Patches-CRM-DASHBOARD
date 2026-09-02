@@ -1515,6 +1515,36 @@ type, and §7.3 was invisible behind 148 lower-priority `search_path` rows. Expo
 
 ---
 
+## 9.5 🚨 Making a public storage bucket private does NOT purge the CDN
+
+Applied 2026-09-02 (`task_0_2_make_production_files_private`): `storage.buckets.public = false`
+on `production-files`. Origin enforces it immediately — but Supabase Storage serves
+`/object/public/...` through Cloudflare with `Cache-Control: public, max-age=3600`, and the
+flip does **not** invalidate what the edge already holds.
+
+Measured right after the flip, same URL, 10 sequential signed-out fetches:
+
+```
+CF-Cache-Status: BYPASS  → 400   (origin, correct)
+CF-Cache-Status: HIT     → 200, 144,005 bytes   (stale edge copy, still serving the file)
+```
+
+Both outcomes, alternating, from one machine — different edge nodes. An object that had never
+been fetched (a completion photo) returned 400 on every attempt, which is what distinguishes a
+cache artefact from a failed flip.
+
+**Consequences**
+- The exposure window after any bucket flip is **up to 1 hour per edge node**, and it applies to
+  browser caches too. It is bounded and self-clearing; it is not a failed migration.
+- Only objects fetched publicly shortly before the flip are affected. Everything else is private
+  from the moment the `UPDATE` commits.
+- **Do not conclude a flip failed because one URL still returns 200.** Re-check with several
+  requests and read `CF-Cache-Status`, or probe an object nobody has opened.
+- If a future flip ever needs to be immediate, a cache entry is only invalidated by touching the
+  object (upsert/move/delete). Not worth doing for 528 machine files; it mutates production data
+  to buy an hour.
+
+
 # 10. Conventions
 
 ## 10.1 Adding a bug-log entry
