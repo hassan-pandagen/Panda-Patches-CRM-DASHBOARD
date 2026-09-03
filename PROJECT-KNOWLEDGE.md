@@ -379,8 +379,25 @@ for cases the DB webhook already covered.
 |---|---|---|
 | `review-invite-cron` | Daily, 15:00 UTC | Personal review-invite + single reminder |
 | `loyalty-email-cron` | Daily, 16:00 UTC | All loyalty tier/expiry/nudge emails |
+| `colour-match-cron` | **Hourly, :07** | Colour-match chase: 24h customer reminder, 48h agent follow-up. Never writes `matched_yarn` — see §5.8 |
 | Nightly loyalty reconciliation | Daily, 07:00 UTC | Recomputes every active customer's tier from scratch as a backstop to the real-time trigger |
-| ~~Stale attendance auto-close~~ | — | ⚠️ **No such cron job exists.** Verified against `cron.job` 2026-08-31: only 4 jobs are scheduled (review-invite, recompute_all_loyalty, loyalty-email-cron, a one-off web_vitals truncate). `FUTURE_UPGRADE_auto_clockout_cron.sql` was never applied, so the client-side call from [ClockInOutPage.tsx:200](src/pages/ClockInOutPage.tsx#L200) is the **only** mechanism today. |
+| ~~Stale attendance auto-close~~ | — | ⚠️ **No such cron job exists.** Verified against `cron.job` 2026-08-31: only 4 jobs were scheduled then (5 since `colour-match-chase-hourly`, jobid 6, 2026-09-04) (review-invite, recompute_all_loyalty, loyalty-email-cron, a one-off web_vitals truncate). `FUTURE_UPGRADE_auto_clockout_cron.sql` was never applied, so the client-side call from [ClockInOutPage.tsx:200](src/pages/ClockInOutPage.tsx#L200) is the **only** mechanism today. |
+
+### Adding a cron job — the shared secret lives in TWO places
+
+Every scheduled edge function here follows one pattern, and it is easy to half-finish:
+
+1. **Vault** (`vault.create_secret(value, 'name', 'desc')`) — pg_cron reads it from
+   `vault.decrypted_secrets` to build the `x-cron-secret` header.
+2. **Edge Function Secrets** (Supabase dashboard → Edge Functions → Secrets) — the function
+   reads it from `Deno.env` to compare against that header.
+
+They must hold the **same value**. Set only the Vault half and every run is a clean 401.
+Set only the dashboard half and the function throws "not configured". Neither failure is
+loud — the job just quietly does nothing, so check `cron.job_run_details` after wiring one up.
+
+The function itself deploys with `verify_jwt: false`; the shared secret is the auth, not the
+JWT (the cron sends a service-role JWT too, but the secret is what the handler checks).
 
 ## 4.5 Idempotency is layered, not a single point
 
