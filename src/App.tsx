@@ -49,6 +49,11 @@ import HostnameRouter from './HostnameRouter';
 // which now lives on the marketing website).
 const PaymentFormLandingPage = lazy(() => import('@/pages/customer/PaymentFormLandingPage'));
 
+// Public colour confirmation — /colour-match/:token. Chenille letter packages have no
+// mockup cycle, so this page is the approval step. Same capability model as /pay/:token:
+// the unguessable token is the credential, read through a narrow SECURITY DEFINER RPC.
+const ColourMatchPage = lazy(() => import('@/pages/customer/ColourMatchPage'));
+
 // 404
 import NotFoundPage from '@/pages/NotFoundPage';
 
@@ -114,6 +119,9 @@ const App: React.FC = () => {
               now lives on the marketing website; only this payment flow remains here. */}
           <Route path="/pay/:token" element={<ErrorBoundary><ChunkErrorBoundary><PaymentFormLandingPage /></ChunkErrorBoundary></ErrorBoundary>} />
           <Route path="/pay/:token/thank-you" element={<ErrorBoundary><ChunkErrorBoundary><PaymentFormLandingPage /></ChunkErrorBoundary></ErrorBoundary>} />
+
+          {/* Colour confirmation for letter packages — no auth required. */}
+          <Route path="/colour-match/:token" element={<ErrorBoundary><ChunkErrorBoundary><ColourMatchPage /></ChunkErrorBoundary></ErrorBoundary>} />
 
           {/* 404 — outside protected routes so all unknown paths return not-found */}
           <Route path="*" element={<NotFoundPage />} />

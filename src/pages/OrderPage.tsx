@@ -212,7 +212,11 @@ const OrderPage: React.FC = () => {
     // only records the supervisor's choice; if it never runs, production stays blocked, which
     // is the correct failure direction. Nothing here auto-proceeds.
     const [yarnDraft, setYarnDraft] = React.useState('');
-    React.useEffect(() => { setYarnDraft(order?.matchedYarn || ''); }, [order?.id, order?.matchedYarn]);
+    // Seed with the match if there is one, else the customer's own words — for a 'standard'
+    // colour that makes confirming genuinely one click, which is what the brief asks for.
+    React.useEffect(() => {
+        setYarnDraft(order?.matchedYarn || order?.colourProposedYarn || order?.customerColourInput || '');
+    }, [order?.id, order?.matchedYarn, order?.colourProposedYarn, order?.customerColourInput]);
 
     const confirmColourMatchMutation = useMutation({
         mutationFn: async (yarn: string) => {
@@ -238,6 +242,53 @@ const OrderPage: React.FC = () => {
             showSuccess('Colour Match Confirmed', 'Production is no longer blocked on this order.');
         },
         onError: (err: any) => showError('Could not save', err?.message || 'Try again.'),
+    });
+
+    // Propose a closest match and ask the customer. Deliberately two writes, not one:
+    // propose_colour_match records the proposal and mints the link token, then we send.
+    // colour_email_sent_at is stamped ONLY after send-email returns ok, because that stamp
+    // is what starts the 24h/48h chase clock — stamping an email that never left would
+    // start a clock on a customer who was never asked.
+    //
+    // Nothing here touches matched_yarn. The gate stays shut until the customer answers.
+    const proposeColourMatchMutation = useMutation({
+        mutationFn: async (yarn: string) => {
+            const trimmed = yarn.trim();
+            if (!trimmed) throw new Error('Enter your closest match first.');
+
+            const { data: token, error: rpcErr } = await supabase
+                .rpc('propose_colour_match', { p_order_id: order?.id, p_yarn: trimmed });
+            if (rpcErr) throw rpcErr;
+
+            const confirmUrl = `${window.location.origin}/colour-match/${token}`;
+            const { error: mailErr } = await supabase.functions.invoke('send-email', {
+                body: {
+                    to: order?.customerEmail,
+                    template_id: 'CUSTOMER_COLOUR_MATCH_CONFIRM',
+                    dynamic_data: {
+                        order_number: order?.orderNumber,
+                        customer_name: order?.customerName,
+                        design_name: order?.designName,
+                        quantity: order?.patchesQuantity,
+                        customer_colour_input: order?.customerColourInput,
+                        customer_colour_hex: order?.customerColourHex,
+                        colour_proposed_yarn: trimmed,
+                        portal_action_url: confirmUrl,
+                        portal_login_url: confirmUrl,
+                    },
+                },
+            });
+            if (mailErr) throw new Error('Proposal saved, but the email did not send. Try Resend.');
+
+            await supabase.from('orders')
+                .update({ colour_email_sent_at: new Date().toISOString() })
+                .eq('id', order?.id);
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: queryKeys.orders.single(orderNumber) });
+            showSuccess('Sent to customer', 'Production stays blocked until they confirm.');
+        },
+        onError: (err: any) => showError('Could not send', err?.message || 'Try again.'),
     });
 
     // --- PRODUCTION FILE UPDATE MUTATION ---
@@ -811,78 +862,123 @@ const OrderPage: React.FC = () => {
                     </div>
 
                     {/* --- COLOUR MATCH GATE (chenille letter packages) --- */}
-                    {order.colourMatchRequired && (
-                        <div className={`bg-slate-800 border-l-4 rounded-r-xl p-4 shadow-lg ${
-                            String(order.matchedYarn || '').trim() ? 'border-emerald-500' : 'border-fuchsia-500'
-                        }`}>
-                            <div className="flex items-start gap-3">
-                                <div className={`p-2 rounded-lg mt-1 sm:mt-0 ${
-                                    String(order.matchedYarn || '').trim()
-                                        ? 'bg-emerald-500/10 text-emerald-400'
-                                        : 'bg-fuchsia-500/10 text-fuchsia-400'
-                                }`}>
-                                    <Palette className="w-6 h-6" />
-                                </div>
-                                <div className="flex-1 min-w-0">
-                                    <h3 className="font-bold text-white text-lg">
-                                        {String(order.matchedYarn || '').trim()
-                                            ? 'Colour Match Confirmed'
-                                            : 'Colour Match Required — production is blocked'}
-                                    </h3>
-                                    <p className="text-slate-400 text-sm">
-                                        This set has no mockup cycle. The colour match is the only approval step
-                                        before the yarn is cut.
-                                    </p>
+                    {/* Two branches, per the brief. 'standard' is one click and no email —
+                        the colour is one we stock, so there is nothing to ask. 'needs-customer-
+                        confirmation' cannot be closed by staff at all: only the customer's own
+                        answer writes matched_yarn, via respond_to_colour_match. That is why the
+                        supervisor gets a "Send to customer" button here and not a Confirm one. */}
+                    {order.colourMatchRequired && (() => {
+                        const yarn = String(order.matchedYarn || '').trim();
+                        const isDone = !!yarn;
+                        const needsCustomer = order.colourMatchStatus === 'needs-customer-confirmation';
+                        const awaitingCustomer = needsCustomer && !isDone && !!order.colourEmailSentAt
+                            && !order.colourCustomerResponse;
+                        const declined = order.colourCustomerResponse === 'changes_requested';
+                        return (
+                            <div className={`bg-slate-800 border-l-4 rounded-r-xl p-4 shadow-lg ${
+                                isDone ? 'border-emerald-500' : declined ? 'border-red-500' : 'border-fuchsia-500'
+                            }`}>
+                                <div className="flex items-start gap-3">
+                                    <div className={`p-2 rounded-lg mt-1 sm:mt-0 ${
+                                        isDone ? 'bg-emerald-500/10 text-emerald-400'
+                                               : declined ? 'bg-red-500/10 text-red-400'
+                                               : 'bg-fuchsia-500/10 text-fuchsia-400'
+                                    }`}>
+                                        <Palette className="w-6 h-6" />
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                        <h3 className="font-bold text-white text-lg">
+                                            {isDone ? 'Colour Match Confirmed'
+                                                : declined ? 'Customer asked for a different colour'
+                                                : awaitingCustomer ? 'Waiting on the customer'
+                                                : 'Colour Match Required — production is blocked'}
+                                        </h3>
+                                        <p className="text-slate-400 text-sm">
+                                            This set has no mockup cycle. The colour match is the only approval step
+                                            before the yarn is cut.
+                                        </p>
 
-                                    <div className="mt-3 flex flex-wrap items-center gap-3">
-                                        <div className="flex items-center gap-2">
-                                            <span className="text-xs uppercase tracking-wider text-slate-400 font-bold">Customer typed</span>
-                                            {order.customerColourHex && (
-                                                <span
-                                                    className="w-6 h-6 rounded border border-white/20 shrink-0"
-                                                    style={{ backgroundColor: order.customerColourHex }}
-                                                    title={order.customerColourHex}
-                                                />
+                                        <div className="mt-3 flex flex-wrap items-center gap-3">
+                                            <div className="flex items-center gap-2">
+                                                <span className="text-xs uppercase tracking-wider text-slate-400 font-bold">Customer typed</span>
+                                                {order.customerColourHex && (
+                                                    <span
+                                                        className="w-6 h-6 rounded border border-white/20 shrink-0"
+                                                        style={{ backgroundColor: order.customerColourHex }}
+                                                        title={order.customerColourHex}
+                                                    />
+                                                )}
+                                                <span className="font-mono text-base text-white bg-slate-900 px-2 py-1 rounded border border-white/10">
+                                                    {order.customerColourInput || 'no colour recorded'}
+                                                </span>
+                                            </div>
+                                            {needsCustomer && !isDone && (
+                                                <span className="px-2 py-1 rounded text-[11px] font-bold bg-amber-500/15 text-amber-300 border border-amber-500/30">
+                                                    NEEDS CUSTOMER CONFIRMATION
+                                                </span>
                                             )}
-                                            <span className="font-mono text-base text-white bg-slate-900 px-2 py-1 rounded border border-white/10">
-                                                {order.customerColourInput || 'no colour recorded'}
-                                            </span>
+                                            {isDone && (
+                                                <span className="text-sm text-slate-300">
+                                                    Matched: <strong className="text-white">{yarn}</strong>
+                                                    {order.colourCustomerRespondedAt && ' — approved by the customer'}
+                                                </span>
+                                            )}
                                         </div>
-                                        {order.colourMatchStatus === 'needs-customer-confirmation' && (
-                                            <span className="px-2 py-1 rounded text-[11px] font-bold bg-amber-500/15 text-amber-300 border border-amber-500/30">
-                                                NEEDS CUSTOMER CONFIRMATION
-                                            </span>
+
+                                        {awaitingCustomer && (
+                                            <p className="mt-3 text-sm text-slate-400">
+                                                Proposed <strong className="text-white">{order.colourProposedYarn}</strong>,
+                                                sent {new Date(order.colourEmailSentAt!).toLocaleString()}.
+                                                {order.colourReminderSentAt && ' Reminder sent.'}
+                                                {order.colourFollowupFlaggedAt && ' ⚠️ 48h passed — needs a phone call.'}
+                                            </p>
+                                        )}
+
+                                        {!canConfirmColourMatch ? (
+                                            <p className="mt-3 text-sm text-slate-400">
+                                                {isDone ? null : 'A production supervisor handles the colour match on this order.'}
+                                            </p>
+                                        ) : isDone ? null : needsCustomer ? (
+                                            <div className="mt-4 flex flex-col sm:flex-row gap-3">
+                                                <input
+                                                    type="text"
+                                                    value={yarnDraft}
+                                                    onChange={(e) => setYarnDraft(e.target.value)}
+                                                    placeholder="Your closest yarn (e.g. Madeira 1176 Royal)"
+                                                    className="flex-1 bg-slate-900 border border-slate-600 rounded-lg px-3 py-2 text-sm text-white focus:ring-2 focus:ring-fuchsia-500/60 focus:border-fuchsia-500"
+                                                />
+                                                <Button
+                                                    variant="primary"
+                                                    disabled={proposeColourMatchMutation.isPending || !yarnDraft.trim()}
+                                                    onClick={() => proposeColourMatchMutation.mutate(yarnDraft)}
+                                                >
+                                                    {order.colourEmailSentAt ? 'Resend to Customer' : 'Send to Customer'}
+                                                </Button>
+                                            </div>
+                                        ) : (
+                                            /* 'standard' — a colour we stock. One click, no email. */
+                                            <div className="mt-4 flex flex-col sm:flex-row gap-3">
+                                                <input
+                                                    type="text"
+                                                    value={yarnDraft}
+                                                    onChange={(e) => setYarnDraft(e.target.value)}
+                                                    placeholder={`Yarn for "${order.customerColourInput || ''}"`}
+                                                    className="flex-1 bg-slate-900 border border-slate-600 rounded-lg px-3 py-2 text-sm text-white focus:ring-2 focus:ring-fuchsia-500/60 focus:border-fuchsia-500"
+                                                />
+                                                <Button
+                                                    variant="primary"
+                                                    disabled={confirmColourMatchMutation.isPending || !yarnDraft.trim()}
+                                                    onClick={() => confirmColourMatchMutation.mutate(yarnDraft)}
+                                                >
+                                                    Confirm Match
+                                                </Button>
+                                            </div>
                                         )}
                                     </div>
-
-                                    {canConfirmColourMatch ? (
-                                        <div className="mt-4 flex flex-col sm:flex-row gap-3">
-                                            <input
-                                                type="text"
-                                                value={yarnDraft}
-                                                onChange={(e) => setYarnDraft(e.target.value)}
-                                                placeholder="Matched yarn (e.g. Madeira 1176 Royal)"
-                                                className="flex-1 bg-slate-900 border border-slate-600 rounded-lg px-3 py-2 text-sm text-white focus:ring-2 focus:ring-fuchsia-500/60 focus:border-fuchsia-500"
-                                            />
-                                            <Button
-                                                variant="primary"
-                                                disabled={confirmColourMatchMutation.isPending || !yarnDraft.trim() || yarnDraft.trim() === (order.matchedYarn || '').trim()}
-                                                onClick={() => confirmColourMatchMutation.mutate(yarnDraft)}
-                                            >
-                                                {String(order.matchedYarn || '').trim() ? 'Update Yarn' : 'Confirm Match'}
-                                            </Button>
-                                        </div>
-                                    ) : (
-                                        <p className="mt-3 text-sm text-slate-400">
-                                            {String(order.matchedYarn || '').trim()
-                                                ? <>Matched yarn: <strong className="text-white">{order.matchedYarn}</strong></>
-                                                : 'A production supervisor must confirm the yarn before this order can start.'}
-                                        </p>
-                                    )}
                                 </div>
                             </div>
-                        </div>
-                    )}
+                        );
+                    })()}
 
                     {/* --- URGENT APPROVAL BANNER (ADMIN ONLY) --- */}
                     {isAdmin && order.isUrgent && !order.isUrgentApproved && (

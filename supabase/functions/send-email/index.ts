@@ -223,6 +223,12 @@ const getEmailSubject = (templateId: string, data: any): string => {
     'CUSTOMER_NEW_ORDER': `Order Confirmation - ${orderNumber}`,
     'CUSTOMER_MOCKUP_READY': `Your Mockup is Ready! - ${orderNumber}`,
     'CUSTOMER_REVISION_IN_PROGRESS': `Revision in Progress - ${orderNumber}`,
+
+    // Colour-match gate (chenille letter packages). These sets have no mockup, so this
+    // email IS the approval step — the subject has to read as a question, not a notice.
+    'CUSTOMER_COLOUR_MATCH_CONFIRM': `Quick check on your colour - ${orderNumber}`,
+    'CUSTOMER_COLOUR_MATCH_REMINDER': `Still need your colour confirmation - ${orderNumber}`,
+    'INTERNAL_COLOUR_MATCH_FOLLOWUP': `[INTERNAL] Colour match unanswered 48h - ${orderNumber}`,
     'CUSTOMER_PRODUCTION_STARTED': `Production Started - ${orderNumber}`,
     'CUSTOMER_SHIPPED': `Your Order Has Shipped! - ${orderNumber}`,
     'CUSTOMER_DELIVERED': `Order Delivered - ${orderNumber}`,
@@ -306,6 +312,9 @@ const getTemplateMessage = (templateId: string, data?: any): string => {
     // Order flow templates
     'CUSTOMER_NEW_ORDER': 'Thank you for your order! We\'re excited to bring your custom patch design to life. Our team has received your order and will begin working on it shortly.',
     'CUSTOMER_MOCKUP_READY': 'Exciting news! Your custom patch mockup is ready for review. Please take a look at the design and let us know if you\'d like any changes.',
+    'CUSTOMER_COLOUR_MATCH_CONFIRM': 'Your letters are ready to go into production, and we want to get the colour exactly right before we cut any yarn. Please take a quick look at the match below and confirm it, or tell us it is not right. Nothing is made until you do.',
+    'CUSTOMER_COLOUR_MATCH_REMINDER': 'Just a quick nudge on your colour. Your order is waiting on this one confirmation before we can start, and we would rather wait than guess. It only takes a moment.',
+    'INTERNAL_COLOUR_MATCH_FOLLOWUP': 'Internal: this colour-match order has had no customer answer for 48 hours and cannot enter production. Please call or message the customer directly.',
     'CUSTOMER_REVISION_IN_PROGRESS': 'We\'re working on the revisions you requested. Our design team is making the changes to ensure your custom patches are exactly what you envisioned.',
     'CUSTOMER_PRODUCTION_STARTED': 'Great news! Your custom patches have moved into production. Our team is now creating your patches with care and attention to detail.',
     'CUSTOMER_SHIPPED': 'Your order is on its way! Your custom patches have been shipped and should arrive soon. Below you\'ll find your tracking information.',
@@ -1119,7 +1128,37 @@ const buildEmailHTML = (templateId: string, data: any): string => {
   </table>
   ` : ''}
 
-  ${(templateId === 'CUSTOMER_WELCOME_INVITE' || templateId === 'CUSTOMER_RETURNING_LOGIN' || templateId === 'CUSTOMER_PASSWORD_RESET' || templateId === 'CUSTOMER_PAYMENT_LINK' || templateId === 'CUSTOMER_PAYMENT_CONFIRMATION' || templateId === 'CUSTOMER_NEW_ORDER' || templateId === 'WEBSITE_AUTH_SIGNUP_CONFIRM' || templateId === 'WEBSITE_AUTH_MAGIC_LINK' || templateId === 'WEBSITE_AUTH_PASSWORD_RESET' || templateId === 'WEBSITE_AUTH_EMAIL_CHANGE' || templateId === 'WEBSITE_AUTH_ORDER_ACCOUNT') && data.portal_action_url ? `
+  ${(templateId === 'CUSTOMER_COLOUR_MATCH_CONFIRM' || templateId === 'CUSTOMER_COLOUR_MATCH_REMINDER' || templateId === 'INTERNAL_COLOUR_MATCH_FOLLOWUP') && data.customer_colour_input ? `
+  <!-- COLOUR MATCH: what they typed vs what we propose -->
+  <table class="module" role="module" data-type="text" border="0" cellpadding="0" cellspacing="0" width="100%" style="table-layout: fixed;">
+    <tbody>
+      <tr>
+        <td style="padding:0px 20px 20px 20px;" height="100%" valign="top" role="module-content">
+          <table width="100%" cellpadding="0" cellspacing="0" border="0" style="border:1px solid #eee; border-radius:8px;">
+            <tr>
+              <td style="padding:16px; font-family: 'lucida sans unicode', 'lucida grande', sans-serif; font-size:14px; color:#666; border-bottom:1px solid #eee;">
+                You asked for
+                <div style="margin-top:6px; font-size:20px; font-weight:bold; color:#222;">
+                  ${data.customer_colour_hex ? `<span style="display:inline-block; width:18px; height:18px; border-radius:3px; border:1px solid #ccc; background-color:${escapeHtml(data.customer_colour_hex)}; vertical-align:middle; margin-right:8px;"></span>` : ''}${escapeHtml(data.customer_colour_input)}
+                </div>
+              </td>
+            </tr>
+            ${data.colour_proposed_yarn ? `
+            <tr>
+              <td style="padding:16px; font-family: 'lucida sans unicode', 'lucida grande', sans-serif; font-size:14px; color:#666;">
+                Our closest yarn
+                <div style="margin-top:6px; font-size:20px; font-weight:bold; color:#fb6e1d;">${escapeHtml(data.colour_proposed_yarn)}</div>
+              </td>
+            </tr>
+            ` : ''}
+          </table>
+        </td>
+      </tr>
+    </tbody>
+  </table>
+  ` : ''}
+
+  ${(templateId === 'CUSTOMER_WELCOME_INVITE' || templateId === 'CUSTOMER_RETURNING_LOGIN' || templateId === 'CUSTOMER_PASSWORD_RESET' || templateId === 'CUSTOMER_PAYMENT_LINK' || templateId === 'CUSTOMER_PAYMENT_CONFIRMATION' || templateId === 'CUSTOMER_NEW_ORDER' || templateId === 'WEBSITE_AUTH_SIGNUP_CONFIRM' || templateId === 'WEBSITE_AUTH_MAGIC_LINK' || templateId === 'WEBSITE_AUTH_PASSWORD_RESET' || templateId === 'WEBSITE_AUTH_EMAIL_CHANGE' || templateId === 'WEBSITE_AUTH_ORDER_ACCOUNT' || templateId === 'CUSTOMER_COLOUR_MATCH_CONFIRM' || templateId === 'CUSTOMER_COLOUR_MATCH_REMINDER') && data.portal_action_url ? `
   <!-- CUSTOMER PORTAL CTA BUTTON (mobile-optimized) -->
   <table border="0" cellpadding="0" cellspacing="0" class="module" data-type="button" role="module" style="table-layout: fixed;" width="100%">
     <tbody>
@@ -1130,7 +1169,7 @@ const buildEmailHTML = (templateId: string, data: any): string => {
               <tr>
                 <td align="center" bgcolor="#FB6E1D" class="inner-td" style="border-radius:8px; font-size:18px; text-align:center; background-color:#FB6E1D;">
                   <a href="${escapeHtml(data.portal_action_url)}" style="background-color:#FB6E1D; border:1px solid #FB6E1D; border-radius:8px; color:#ffffff; display:block; font-size:18px; font-weight:bold; line-height:1.3; padding:18px 24px; text-align:center; text-decoration:none; font-family: 'lucida sans unicode', 'lucida grande', sans-serif;" target="_blank">
-                    ${templateId === 'CUSTOMER_WELCOME_INVITE' ? 'Set Your Password &rarr;' : templateId === 'CUSTOMER_PASSWORD_RESET' ? 'Reset Password &rarr;' : templateId === 'CUSTOMER_PAYMENT_LINK' ? 'Pay Now &rarr;' : templateId === 'WEBSITE_AUTH_SIGNUP_CONFIRM' ? 'Confirm My Email &rarr;' : templateId === 'WEBSITE_AUTH_MAGIC_LINK' ? 'Sign In To My Account &rarr;' : templateId === 'WEBSITE_AUTH_PASSWORD_RESET' ? 'Reset My Password &rarr;' : templateId === 'WEBSITE_AUTH_EMAIL_CHANGE' ? 'Confirm Email Change &rarr;' : templateId === 'WEBSITE_AUTH_ORDER_ACCOUNT' ? 'Set Your Password &rarr;' : (templateId === 'CUSTOMER_PAYMENT_CONFIRMATION' || templateId === 'CUSTOMER_NEW_ORDER') && data.is_new_account ? 'Set Your Password &amp; Track Order &rarr;' : 'Log In &amp; Track Order &rarr;'}
+                    ${templateId === 'CUSTOMER_WELCOME_INVITE' ? 'Set Your Password &rarr;' : templateId === 'CUSTOMER_PASSWORD_RESET' ? 'Reset Password &rarr;' : templateId === 'CUSTOMER_PAYMENT_LINK' ? 'Pay Now &rarr;' : templateId === 'WEBSITE_AUTH_SIGNUP_CONFIRM' ? 'Confirm My Email &rarr;' : templateId === 'WEBSITE_AUTH_MAGIC_LINK' ? 'Sign In To My Account &rarr;' : templateId === 'WEBSITE_AUTH_PASSWORD_RESET' ? 'Reset My Password &rarr;' : templateId === 'WEBSITE_AUTH_EMAIL_CHANGE' ? 'Confirm Email Change &rarr;' : templateId === 'WEBSITE_AUTH_ORDER_ACCOUNT' ? 'Set Your Password &rarr;' : (templateId === 'CUSTOMER_COLOUR_MATCH_CONFIRM' || templateId === 'CUSTOMER_COLOUR_MATCH_REMINDER') ? 'Confirm My Colour &rarr;' : (templateId === 'CUSTOMER_PAYMENT_CONFIRMATION' || templateId === 'CUSTOMER_NEW_ORDER') && data.is_new_account ? 'Set Your Password &amp; Track Order &rarr;' : 'Log In &amp; Track Order &rarr;'}
                   </a>
                 </td>
               </tr>

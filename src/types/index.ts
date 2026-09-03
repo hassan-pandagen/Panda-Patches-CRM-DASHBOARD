@@ -103,6 +103,13 @@ export interface Order {
   customerColourInput?: string | null;  // verbatim — never normalised
   customerColourHex?: string | null;    // parsed only when the input was a hex
   matchedYarn?: string | null;          // empty blocks IN_PRODUCTION (DB trigger)
+  colourProposedYarn?: string | null;   // supervisor's closest match — NOT the gate
+  colourConfirmToken?: string | null;
+  colourEmailSentAt?: string | null;
+  colourReminderSentAt?: string | null;
+  colourFollowupFlaggedAt?: string | null;
+  colourCustomerResponse?: 'approved' | 'changes_requested' | null;
+  colourCustomerRespondedAt?: string | null;
   // Loyalty program (CL86F1)
   priorityMockup?: boolean;
   loyaltyCodeUsed?: string | null;
