@@ -182,6 +182,12 @@ export const mapDbToOrder = (data: any): Order => {
     designBacking: data.designBacking ?? data.design_backing,
     borderType: data.borderType ?? data.border_type,
     instructions: data.instructions,
+    // Colour match (chenille letter packages). The DB is the gate; these are for display.
+    colourMatchRequired: data.colour_match_required ?? false,
+    colourMatchStatus: data.colour_match_status ?? null,
+    customerColourInput: data.customer_colour_input ?? null,
+    customerColourHex: data.customer_colour_hex ?? null,
+    matchedYarn: data.matched_yarn ?? null,
     priorityMockup: data.priorityMockup ?? data.priority_mockup ?? false,
     loyaltyCodeUsed: data.loyaltyCodeUsed ?? data.loyalty_code_used ?? null,
     loyaltyDiscountPercent: data.loyaltyDiscountPercent ?? data.loyalty_discount_percent ?? null,

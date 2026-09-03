@@ -20,6 +20,7 @@ import {
   ROLES_CAN_ACCESS_ADMIN_ROUTES,
   ROLES_CAN_MANAGE_USERS,
   ROLES_CAN_VIEW_CUSTOMER_IDENTITY,
+  ROLES_CAN_CONFIRM_COLOUR_MATCH,
 } from './roleAccess';
 
 const ALL_LISTS = [
@@ -32,6 +33,7 @@ const ALL_LISTS = [
   ROLES_CAN_ACCESS_ADMIN_ROUTES,
   ROLES_CAN_MANAGE_USERS,
   ROLES_CAN_VIEW_CUSTOMER_IDENTITY,
+  ROLES_CAN_CONFIRM_COLOUR_MATCH,
 ];
 
 describe('roleCan — default deny', () => {
@@ -73,6 +75,24 @@ describe('DIGITIZER is denied everything that reaches a customer', () => {
   it('cannot reach admin routes or user management', () => {
     expect(roleCan(UserRole.DIGITIZER, ROLES_CAN_ACCESS_ADMIN_ROUTES)).toBe(false);
     expect(roleCan(UserRole.DIGITIZER, ROLES_CAN_MANAGE_USERS)).toBe(false);
+  });
+});
+
+describe('colour-match confirmation is supervisor + admin only', () => {
+  // Recording the yarn releases a $150-200 set into production. It is not a
+  // security boundary — the DB trigger is — but the control should only appear
+  // to the people the brief names.
+  it('allows ADMIN and PRODUCTION_SUPERVISOR', () => {
+    expect(roleCan(UserRole.ADMIN, ROLES_CAN_CONFIRM_COLOUR_MATCH)).toBe(true);
+    expect(roleCan(UserRole.PRODUCTION_SUPERVISOR, ROLES_CAN_CONFIRM_COLOUR_MATCH)).toBe(true);
+  });
+
+  it('denies everyone else, including the plain PRODUCTION role and a digitizer', () => {
+    expect(roleCan(UserRole.PRODUCTION, ROLES_CAN_CONFIRM_COLOUR_MATCH)).toBe(false);
+    expect(roleCan(UserRole.DIGITIZER, ROLES_CAN_CONFIRM_COLOUR_MATCH)).toBe(false);
+    expect(roleCan(UserRole.SALES_AGENT, ROLES_CAN_CONFIRM_COLOUR_MATCH)).toBe(false);
+    expect(roleCan(UserRole.SHIPPING, ROLES_CAN_CONFIRM_COLOUR_MATCH)).toBe(false);
+    expect(roleCan(null, ROLES_CAN_CONFIRM_COLOUR_MATCH)).toBe(false);
   });
 });
 

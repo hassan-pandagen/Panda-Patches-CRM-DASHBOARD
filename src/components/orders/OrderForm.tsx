@@ -631,6 +631,7 @@ const OrderForm: React.FC<OrderFormProps> = ({
 
   // ✅ NEW: Define the status order manually to ensure correctness
   const statusOptions = [
+    OrderStatus.COLOUR_MATCH_PENDING,
     OrderStatus.NEW_ORDER,
     OrderStatus.AWAITING_APPROVAL,
     OrderStatus.REVISION_REQUESTED,

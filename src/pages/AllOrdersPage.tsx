@@ -205,7 +205,7 @@ async function fetchPaginatedOrders(params: {
     const from = (page - 1) * ITEMS_PER_PAGE;
     const to = from + ITEMS_PER_PAGE - 1;
 
-    const columns = 'id, order_number, customer_name, customer_email, design_name, patches_type, status, created_at, sales_agent, lead_source, order_amount, amount_paid, is_urgent, production_completed_at, production_completed_by, attribution, attribution_quality, purchase_order';
+    const columns = 'id, order_number, customer_name, customer_email, design_name, patches_type, status, colour_match_required, matched_yarn, customer_colour_input, created_at, sales_agent, lead_source, order_amount, amount_paid, is_urgent, production_completed_at, production_completed_by, attribution, attribution_quality, purchase_order';
 
     // --- IDS drill-down (from dashboard click) ---
     if (ids) {
@@ -826,6 +826,7 @@ const AllOrdersPage: React.FC = () => {
 
                     <div className="w-px h-6 bg-slate-600 mx-2 shrink-0" />
 
+                    <FilterTab active={activeFilter === 'COLOUR_MATCH_PENDING'} label="Colour Match" count={getCount('COLOUR_MATCH_PENDING')} onClick={() => handleFilterChange('COLOUR_MATCH_PENDING')} />
                     <FilterTab active={activeFilter === 'NEW_ORDER'} label="New" count={getCount('NEW_ORDER')} onClick={() => handleFilterChange('NEW_ORDER')} />
                     <FilterTab active={activeFilter === 'AWAITING_CUSTOMER_APPROVAL'} label="Awaiting Approval" count={getCount('AWAITING_CUSTOMER_APPROVAL')} onClick={() => handleFilterChange('AWAITING_CUSTOMER_APPROVAL')} />
                     <FilterTab active={activeFilter === 'IN_PRODUCTION'} label="In Production" count={getCount('IN_PRODUCTION')} onClick={() => handleFilterChange('IN_PRODUCTION')} />
@@ -926,6 +927,14 @@ const AllOrdersPage: React.FC = () => {
                                                         {order.isUrgent && !isOverdue && (
                                                             <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-red-600 text-white shadow-sm">
                                                                 URGENT
+                                                            </span>
+                                                        )}
+                                                        {order.colourMatchRequired && !String(order.matchedYarn || '').trim() && (
+                                                            <span
+                                                                className="px-2 py-0.5 rounded text-[10px] font-bold bg-fuchsia-600 text-white shadow-sm"
+                                                                title={`Customer asked for: ${order.customerColourInput || 'no colour recorded'} — production is blocked until the yarn is set`}
+                                                            >
+                                                                COLOUR MATCH
                                                             </span>
                                                         )}
                                                         <ShipByPill shipByDate={order.shipByDate} status={order.status} />

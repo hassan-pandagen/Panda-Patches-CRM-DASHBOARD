@@ -10,6 +10,7 @@ import {
   ShieldCheck,
   MessageSquare,
   RotateCcw,
+  Palette,
   LucideProps,
 } from 'lucide-react';
 import { OrderStatus } from '../types';
@@ -25,6 +26,11 @@ export const STATUS_INFO_MAP: Record<OrderStatus, StatusInfo> = {
     label: 'Pending Payment',
     icon: Clock,
     color: 'text-amber-400 bg-amber-500/10 border-amber-500/20',
+  },
+  [OrderStatus.COLOUR_MATCH_PENDING]: {
+    label: 'Colour Match',
+    icon: Palette,
+    color: 'text-fuchsia-400 bg-fuchsia-500/10 border-fuchsia-500/20',
   },
   [OrderStatus.NEW_ORDER]: {
     label: 'New Order',

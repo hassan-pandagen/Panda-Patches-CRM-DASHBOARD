@@ -732,6 +732,17 @@ Deno.serve(async (req: Request) => {
           const shipPostal  = (od.ship_postal  ?? od.zip     ?? od.postal_code ?? ship.postal_code ?? ship.zip ?? null) || null;
           const shipCountry = (od.country      ?? od.ship_country ?? ship.country ?? null) || null;
 
+          // Accept either spelling; treat anything but an explicit true as not-armed.
+          const colourMatchRequired =
+            (od.colour_match_required ?? od.color_match_required) === true;
+          // Only the two values the CHECK constraint allows; anything else -> the safer one.
+          const rawColourStatus = String(od.colour_match_status ?? od.color_match_status ?? '').trim();
+          const colourMatchStatus = !colourMatchRequired
+            ? null
+            : rawColourStatus === 'standard'
+              ? 'standard'
+              : 'needs-customer-confirmation';
+
           const pendingOrderAmount = od.order_amount || paidAmount;
           const pendingIsFullyPaid = isFullyPaidAmount(paidAmount, pendingOrderAmount);
 
@@ -771,7 +782,28 @@ Deno.serve(async (req: Request) => {
               lead_source:      resolveLeadSource(attribution),
               attribution,
               is_urgent:        false,
-              status:           'NEW_ORDER',
+              // Colour-match gate (chenille letter packages). The website writes these five
+              // keys into square_pending_orders.order_data; until this migration landed the
+              // insert dropped them silently, which is why orders kept working.
+              //
+              // Both spellings accepted: the payload shape is unverifiable until the first
+              // letter order exists (zero rows in square_pending_orders carry either key
+              // today, since the packages have not launched), and a US-spelled key arriving
+              // unread would disarm the gate on a $150 order. Cheap insurance.
+              //
+              // Never normalise customer_colour_input. "PMS 186 C", "royal blue" and
+              // "#1E3A8A" must reach the supervisor exactly as the customer typed them.
+              colour_match_required: colourMatchRequired,
+              colour_match_status:   colourMatchStatus,
+              customer_colour_input: od.customer_colour_input ?? od.customer_color_input ?? null,
+              customer_colour_hex:   od.customer_colour_hex   ?? od.customer_color_hex   ?? null,
+              matched_yarn:          null,   // the supervisor fills this; empty blocks production
+              // An armed order must never land in the production queue. COLOUR_MATCH_PENDING is
+              // a real CRM status (types/index.ts, statusInfo, the /orders filter rail), not a
+              // string the CRM has never heard of — an order carrying an unknown status drops
+              // out of every view that enumerates statuses, and an invisible $150 order is
+              // worse than one sitting in NEW_ORDER.
+              status:           colourMatchRequired ? 'COLOUR_MATCH_PENDING' : 'NEW_ORDER',
               loyalty_code_used:        loyaltyCode,
               loyalty_discount_percent: loyaltyPercent,
             })

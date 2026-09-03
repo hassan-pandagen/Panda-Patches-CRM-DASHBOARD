@@ -140,6 +140,20 @@ export const ROLES_CAN_VIEW_CUSTOMER_IDENTITY: UserRole[] = [
  * Was: `role !== UserRole.ADMIN` → redirect. Already deny-shaped and therefore
  * safe, but expressed positively so the whole file reads one way.
  */
+/**
+ * Record the matched yarn on a colour-match order (chenille letter packages).
+ * The brief names the supervisor as the one who fills it; ADMIN keeps the
+ * override every other production control gives them.
+ *
+ * Not a security boundary — the real gate is the database trigger
+ * guard_colour_match_before_production, which blocks IN_PRODUCTION for everyone
+ * including service_role. This list only decides who is shown the control.
+ */
+export const ROLES_CAN_CONFIRM_COLOUR_MATCH: UserRole[] = [
+  UserRole.ADMIN,
+  UserRole.PRODUCTION_SUPERVISOR,
+];
+
 export const ROLES_CAN_ACCESS_ADMIN_ROUTES: UserRole[] = [UserRole.ADMIN];
 
 /**

@@ -20,6 +20,7 @@ export const orderSchema = z.object({
   
   // ✅ CRITICAL: Status matches your data (not orderStatus)
   status: z.enum([
+    'COLOUR_MATCH_PENDING',
     'NEW_ORDER',
     'AWAITING_APPROVAL',
     'REVISION_REQUESTED',

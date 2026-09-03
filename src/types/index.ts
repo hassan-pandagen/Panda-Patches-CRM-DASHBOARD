@@ -28,6 +28,11 @@ export enum OrderStatus {
   // and is tracked, but is NOT released to production until Square confirms payment. Excluded
   // from the production queue/board; flipped to NEW_ORDER by the webhook once paid.
   PENDING_PAYMENT = 'PENDING_PAYMENT',
+  // Chenille letter/number packages have no mockup cycle — the colour match IS the approval
+  // step. An armed order waits here until a supervisor records the yarn. The DB trigger
+  // guard_colour_match_before_production blocks IN_PRODUCTION regardless of status, so this
+  // is the visible half of the gate, not the gate itself.
+  COLOUR_MATCH_PENDING = 'COLOUR_MATCH_PENDING',
   NEW_ORDER = 'NEW_ORDER',
   REVISION_REQUESTED = 'REVISION_REQUESTED',
   AWAITING_APPROVAL = 'AWAITING_CUSTOMER_APPROVAL',
@@ -92,6 +97,12 @@ export interface Order {
   designBacking?: string;
   borderType?: string;
   instructions?: string;
+  // --- Colour match (chenille letter packages) ---
+  colourMatchRequired?: boolean;
+  colourMatchStatus?: 'standard' | 'needs-customer-confirmation' | null;
+  customerColourInput?: string | null;  // verbatim — never normalised
+  customerColourHex?: string | null;    // parsed only when the input was a hex
+  matchedYarn?: string | null;          // empty blocks IN_PRODUCTION (DB trigger)
   // Loyalty program (CL86F1)
   priorityMockup?: boolean;
   loyaltyCodeUsed?: string | null;

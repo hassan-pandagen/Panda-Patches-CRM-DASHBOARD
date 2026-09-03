@@ -13,7 +13,7 @@ import { mapDbToOrder, triggerStatusEmail, sendPaymentConfirmationEmail, updateO
 import { getPremiumStatus, setPremiumStatus } from '../services/customerFlagsService';
 import { getCustomerByEmail } from '../services/customersService';
 import { isWebCheckoutAgent, leadSourceDisplay } from '../utils/leadSource';
-import { roleCan, ROLES_CAN_VIEW_CUSTOMER_IDENTITY } from '../utils/roleAccess';
+import { roleCan, ROLES_CAN_VIEW_CUSTOMER_IDENTITY, ROLES_CAN_CONFIRM_COLOUR_MATCH } from '../utils/roleAccess';
 import FileUploadSection from '../components/orders/FileUpload';
 
 // UI Components
@@ -34,7 +34,7 @@ const attachmentFileName = (url: string) => {
 };
 
 // Icons (Check already imported below)
-import { Edit, Trash2, ShieldAlert, ArrowLeft, Lock, MapPin, Smartphone, Maximize, Check, XCircle, AlertTriangle, Copy, FileText, Upload, Package, X, Mail, DollarSign, Crown, RotateCcw } from 'lucide-react';
+import { Edit, Trash2, ShieldAlert, ArrowLeft, Lock, MapPin, Smartphone, Maximize, Check, XCircle, AlertTriangle, Copy, FileText, Upload, Package, X, Mail, DollarSign, Crown, RotateCcw, Palette } from 'lucide-react';
 
 // 1. Import the new component
 import OrderTimeline from '../components/orders/OrderTimeline';
@@ -123,6 +123,7 @@ const OrderPage: React.FC = () => {
     const isShipping = role === UserRole.SHIPPING; // shipper: sees the order read-only + can change status
     // Who the customer is — separate from shipping_view, which both Production accounts hold.
     const canViewCustomerIdentity = roleCan(role, ROLES_CAN_VIEW_CUSTOMER_IDENTITY);
+    const canConfirmColourMatch = roleCan(role, ROLES_CAN_CONFIRM_COLOUR_MATCH);
     // Check for the correct 'orders_delete' key.
     const canDelete = isAdmin || permissions?.orders_delete === true;
 
@@ -205,6 +206,39 @@ const OrderPage: React.FC = () => {
             }
         }
     }, [productionFiles, isEditingProduction, order]);
+
+    // --- COLOUR MATCH (chenille letter packages) ---
+    // The gate itself is the DB trigger guard_colour_match_before_production. This mutation
+    // only records the supervisor's choice; if it never runs, production stays blocked, which
+    // is the correct failure direction. Nothing here auto-proceeds.
+    const [yarnDraft, setYarnDraft] = React.useState('');
+    React.useEffect(() => { setYarnDraft(order?.matchedYarn || ''); }, [order?.id, order?.matchedYarn]);
+
+    const confirmColourMatchMutation = useMutation({
+        mutationFn: async (yarn: string) => {
+            const trimmed = yarn.trim();
+            if (!trimmed) throw new Error('Enter the yarn before confirming.');
+            const { error } = await supabase
+                .from('orders')
+                .update({ matched_yarn: trimmed })
+                .eq('id', order?.id);
+            if (error) throw error;
+            // trigger_log_order_changes already records the raw field change; this adds the
+            // human sentence beside it, carrying the customer's original words for context.
+            await supabase.from('order_history').insert({
+                order_id: order?.id,
+                user_email: user?.email || 'unknown',
+                field_changed: 'matched_yarn',
+                old_value: order?.matchedYarn || 'not set',
+                new_value: trimmed + ' (customer asked for: ' + (order?.customerColourInput || 'no colour recorded') + ')',
+            });
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: queryKeys.orders.single(orderNumber) });
+            showSuccess('Colour Match Confirmed', 'Production is no longer blocked on this order.');
+        },
+        onError: (err: any) => showError('Could not save', err?.message || 'Try again.'),
+    });
 
     // --- PRODUCTION FILE UPDATE MUTATION ---
     const updateProductionFilesMutation = useMutation({
@@ -775,6 +809,80 @@ const OrderPage: React.FC = () => {
 
                         </div>
                     </div>
+
+                    {/* --- COLOUR MATCH GATE (chenille letter packages) --- */}
+                    {order.colourMatchRequired && (
+                        <div className={`bg-slate-800 border-l-4 rounded-r-xl p-4 shadow-lg ${
+                            String(order.matchedYarn || '').trim() ? 'border-emerald-500' : 'border-fuchsia-500'
+                        }`}>
+                            <div className="flex items-start gap-3">
+                                <div className={`p-2 rounded-lg mt-1 sm:mt-0 ${
+                                    String(order.matchedYarn || '').trim()
+                                        ? 'bg-emerald-500/10 text-emerald-400'
+                                        : 'bg-fuchsia-500/10 text-fuchsia-400'
+                                }`}>
+                                    <Palette className="w-6 h-6" />
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                    <h3 className="font-bold text-white text-lg">
+                                        {String(order.matchedYarn || '').trim()
+                                            ? 'Colour Match Confirmed'
+                                            : 'Colour Match Required — production is blocked'}
+                                    </h3>
+                                    <p className="text-slate-400 text-sm">
+                                        This set has no mockup cycle. The colour match is the only approval step
+                                        before the yarn is cut.
+                                    </p>
+
+                                    <div className="mt-3 flex flex-wrap items-center gap-3">
+                                        <div className="flex items-center gap-2">
+                                            <span className="text-xs uppercase tracking-wider text-slate-400 font-bold">Customer typed</span>
+                                            {order.customerColourHex && (
+                                                <span
+                                                    className="w-6 h-6 rounded border border-white/20 shrink-0"
+                                                    style={{ backgroundColor: order.customerColourHex }}
+                                                    title={order.customerColourHex}
+                                                />
+                                            )}
+                                            <span className="font-mono text-base text-white bg-slate-900 px-2 py-1 rounded border border-white/10">
+                                                {order.customerColourInput || 'no colour recorded'}
+                                            </span>
+                                        </div>
+                                        {order.colourMatchStatus === 'needs-customer-confirmation' && (
+                                            <span className="px-2 py-1 rounded text-[11px] font-bold bg-amber-500/15 text-amber-300 border border-amber-500/30">
+                                                NEEDS CUSTOMER CONFIRMATION
+                                            </span>
+                                        )}
+                                    </div>
+
+                                    {canConfirmColourMatch ? (
+                                        <div className="mt-4 flex flex-col sm:flex-row gap-3">
+                                            <input
+                                                type="text"
+                                                value={yarnDraft}
+                                                onChange={(e) => setYarnDraft(e.target.value)}
+                                                placeholder="Matched yarn (e.g. Madeira 1176 Royal)"
+                                                className="flex-1 bg-slate-900 border border-slate-600 rounded-lg px-3 py-2 text-sm text-white focus:ring-2 focus:ring-fuchsia-500/60 focus:border-fuchsia-500"
+                                            />
+                                            <Button
+                                                variant="primary"
+                                                disabled={confirmColourMatchMutation.isPending || !yarnDraft.trim() || yarnDraft.trim() === (order.matchedYarn || '').trim()}
+                                                onClick={() => confirmColourMatchMutation.mutate(yarnDraft)}
+                                            >
+                                                {String(order.matchedYarn || '').trim() ? 'Update Yarn' : 'Confirm Match'}
+                                            </Button>
+                                        </div>
+                                    ) : (
+                                        <p className="mt-3 text-sm text-slate-400">
+                                            {String(order.matchedYarn || '').trim()
+                                                ? <>Matched yarn: <strong className="text-white">{order.matchedYarn}</strong></>
+                                                : 'A production supervisor must confirm the yarn before this order can start.'}
+                                        </p>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+                    )}
 
                     {/* --- URGENT APPROVAL BANNER (ADMIN ONLY) --- */}
                     {isAdmin && order.isUrgent && !order.isUrgentApproved && (
