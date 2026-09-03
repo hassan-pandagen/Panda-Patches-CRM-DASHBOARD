@@ -46,7 +46,18 @@ import ToggleButtons from '../components/ui/ToggleButtons';
 import AttributionQualityBadge, { getAttributionQualityFromOrder } from '../components/AttributionQualityBadge';
 import DateRangeFilter, { DateRange } from '../components/ui/DateRangeFilter';
 
-const AgentDropdown: React.FC<{ agents: string[]; value: string; onChange: (v: string) => void }> = ({ agents, value, onChange }) => {
+// One dropdown implementation, two uses (sales agent, patch type). Options carry an optional
+// sublabel because the agent list shows the full email under the short name; the patch-type
+// list has nothing to put there.
+type FilterOption = { value: string; label: string; sublabel?: string };
+
+const FilterDropdown: React.FC<{
+    options: FilterOption[];
+    value: string;
+    onChange: (v: string) => void;
+    allLabel: string;
+    widthClass?: string;
+}> = ({ options, value, onChange, allLabel, widthClass = 'w-64' }) => {
     const [open, setOpen] = React.useState(false);
     const [pos, setPos] = React.useState({ top: 0, right: 0 });
     const btnRef = React.useRef<HTMLButtonElement>(null);
@@ -71,7 +82,7 @@ const AgentDropdown: React.FC<{ agents: string[]; value: string; onChange: (v: s
         setOpen(o => !o);
     };
 
-    const label = value ? value.split('@')[0] : 'All Sales Agents';
+    const label = options.find(o => o.value === value)?.label || (value || allLabel);
     const isFiltered = !!value;
 
     return (
@@ -104,18 +115,18 @@ const AgentDropdown: React.FC<{ agents: string[]; value: string; onChange: (v: s
                 <div
                     ref={dropdownRef}
                     style={{ position: 'absolute', top: pos.top, right: pos.right }}
-                    className="w-64 bg-slate-900 border border-brand-orange/30 rounded-xl shadow-2xl z-[9999] overflow-hidden"
+                    className={`${widthClass} bg-slate-900 border border-brand-orange/30 rounded-xl shadow-2xl z-[9999] overflow-hidden`}
                 >
                     <div className="max-h-72 overflow-y-auto py-1">
-                        {agents.map(agent => (
+                        {options.map(opt => (
                             <button
-                                key={agent}
+                                key={opt.value}
                                 type="button"
-                                onClick={() => { onChange(agent); setOpen(false); }}
-                                className={`w-full text-left px-4 py-2.5 text-sm transition-colors ${value === agent ? 'text-brand-orange bg-brand-orange/10' : 'text-slate-300 hover:bg-white/5 hover:text-white'}`}
+                                onClick={() => { onChange(opt.value); setOpen(false); }}
+                                className={`w-full text-left px-4 py-2.5 text-sm transition-colors ${value === opt.value ? 'text-brand-orange bg-brand-orange/10' : 'text-slate-300 hover:bg-white/5 hover:text-white'}`}
                             >
-                                {agent.split('@')[0]}
-                                <span className="block text-xs text-slate-400">{agent}</span>
+                                {opt.label}
+                                {opt.sublabel && <span className="block text-xs text-slate-400">{opt.sublabel}</span>}
                             </button>
                         ))}
                     </div>
@@ -182,6 +193,7 @@ async function fetchPaginatedOrders(params: {
     search: string;
     salesAgent?: string;
     leadSource?: string;
+    patchesType?: string;
     date?: string;
     ids?: string;
     userRole?: UserRole | null;
@@ -189,11 +201,11 @@ async function fetchPaginatedOrders(params: {
     dateRangeStart?: string;
     dateRangeEnd?: string;
 }): Promise<{ orders: Order[]; totalCount: number; repeatCustomerCounts: Record<string, number>; premiumEmails: Set<string> }> {
-    const { page, filter, search, salesAgent, leadSource, date, ids, userRole, userEmail, dateRangeStart, dateRangeEnd } = params;
+    const { page, filter, search, salesAgent, leadSource, patchesType, date, ids, userRole, userEmail, dateRangeStart, dateRangeEnd } = params;
     const from = (page - 1) * ITEMS_PER_PAGE;
     const to = from + ITEMS_PER_PAGE - 1;
 
-    const columns = 'id, order_number, customer_name, customer_email, design_name, status, created_at, sales_agent, lead_source, order_amount, amount_paid, is_urgent, production_completed_at, production_completed_by, attribution, attribution_quality, purchase_order';
+    const columns = 'id, order_number, customer_name, customer_email, design_name, patches_type, status, created_at, sales_agent, lead_source, order_amount, amount_paid, is_urgent, production_completed_at, production_completed_by, attribution, attribution_quality, purchase_order';
 
     // --- IDS drill-down (from dashboard click) ---
     if (ids) {
@@ -226,6 +238,7 @@ async function fetchPaginatedOrders(params: {
 
     // Apply drill-down params
     if (salesAgent) query = query.eq('sales_agent', salesAgent);
+    if (patchesType) query = query.eq('patches_type', patchesType);
     if (leadSource) {
         // "Unknown" = orders with no lead_source recorded (NULL or empty string)
         if (leadSource === 'Unknown') {
@@ -345,12 +358,13 @@ interface TabCounts {
 async function fetchTabCounts(params: {
     salesAgent?: string;
     leadSource?: string;
+    patchesType?: string;
     dateRangeStart?: string;
     dateRangeEnd?: string;
     userRole?: UserRole | null;
     userEmail?: string | null;
 } = {}): Promise<TabCounts> {
-    const { salesAgent, leadSource, dateRangeStart, dateRangeEnd, userRole, userEmail } = params;
+    const { salesAgent, leadSource, patchesType, dateRangeStart, dateRangeEnd, userRole, userEmail } = params;
 
     // Single query: fetch only status, is_urgent, created_at, order_amount, amount_paid, sales_agent
     // This is lightweight — no large text fields
@@ -370,6 +384,7 @@ async function fetchTabCounts(params: {
             query = query.is('production_completed_at', null);
         }
         if (salesAgent) query = query.eq('sales_agent', salesAgent);
+        if (patchesType) query = query.eq('patches_type', patchesType);
         if (leadSource) {
             if (leadSource === 'Unknown') {
                 query = query.or('lead_source.is.null,lead_source.eq.');
@@ -534,6 +549,7 @@ const AllOrdersPage: React.FC = () => {
     // --- URL PARAMS FOR DRILL-DOWN ---
     const salesAgentParam = searchParams.get('salesAgent') || undefined;
     const leadSourceParam = searchParams.get('leadSource') || undefined;
+    const patchTypeParam = searchParams.get('patchType') || undefined;
     const dateParam = searchParams.get('date') || undefined;
     const idsParam = searchParams.get('ids') || undefined;
     const searchParam = searchParams.get('search') || undefined;
@@ -555,6 +571,7 @@ const AllOrdersPage: React.FC = () => {
     const countsFilterParams = {
         salesAgent: salesAgentParam,
         leadSource: leadSourceParam,
+        patchesType: patchTypeParam,
         dateRangeStart: activeDateRange.startDate,
         dateRangeEnd: activeDateRange.endDate,
     };
@@ -592,6 +609,36 @@ const AllOrdersPage: React.FC = () => {
     });
 
     // ============================================
+    // QUERY 1c: Distinct patch types for the type filter
+    // ============================================
+    // Built from what is actually stored, not from PATCH_TYPE_CANON: the table holds
+    // un-normalized strays ("PVC Patches", "Woven Patches", "Heat Transfer") and one type
+    // ("Chenille+Embroidery", 7 orders) that isn't in the canon list at all. Offering a
+    // canonical option that matches zero rows is worse than offering the real value.
+    //
+    // fetchAllPaged, not a bare select: PostgREST caps at 1000 rows and there are more
+    // orders than that, so a plain query would silently drop the rarer types entirely —
+    // the §7.1 truncation bug class.
+    const { data: patchTypes } = useQuery({
+        queryKey: ['patchTypes'],
+        queryFn: async () => {
+            const rows = await fetchAllPaged<any>((from, to) =>
+                supabase.from('orders').select('patches_type').not('patches_type', 'is', null).range(from, to)
+            );
+            const seen = new Set<string>();
+            for (const r of rows || []) {
+                const v = String(r?.patches_type ?? '').trim();
+                if (v) seen.add(v);
+            }
+            return Array.from(seen).sort((a, b) => a.localeCompare(b));
+        },
+        staleTime: 1000 * 60 * 30,
+        gcTime: 1000 * 60 * 60,
+        refetchOnMount: false,
+        refetchOnWindowFocus: false,
+    });
+
+    // ============================================
     // QUERY 2: Paginated orders (the actual page data)
     // ============================================
     const queryParams = {
@@ -600,6 +647,7 @@ const AllOrdersPage: React.FC = () => {
         search: debouncedSearch,
         salesAgent: salesAgentParam,
         leadSource: leadSourceParam,
+        patchesType: patchTypeParam,
         date: dateParam,
         ids: idsParam,
         userRole: role,
@@ -634,7 +682,7 @@ const AllOrdersPage: React.FC = () => {
 
     const clearDrillDown = () => {
         // Only clear drill-down params, preserve date range & filter tab
-        updateParams({ salesAgent: null, leadSource: null, date: null, ids: null, search: null, page: null });
+        updateParams({ salesAgent: null, leadSource: null, patchType: null, date: null, ids: null, search: null, page: null });
         setSearchQuery('');
     };
 
@@ -708,12 +756,13 @@ const AllOrdersPage: React.FC = () => {
             <SpotlightCard className="p-4 space-y-4">
 
                 {/* Active Filters Banner */}
-                {(salesAgentParam || leadSourceParam || dateParam) && (
+                {(salesAgentParam || leadSourceParam || patchTypeParam || dateParam) && (
                     <div className="flex items-center justify-between bg-brand-orange/10 border border-brand-orange/20 px-4 py-2 rounded-xl">
                         <div className="flex items-center gap-2 text-sm text-brand-orange">
                             <span className="font-bold">Active Filter:</span>
                             {salesAgentParam && <span>Agent: {salesAgentParam.split('@')[0]}</span>}
                             {leadSourceParam && <span>Source: {leadSourceParam}</span>}
+                            {patchTypeParam && <span>Type: {patchTypeParam}</span>}
                             {dateParam && <span>Date: {new Date(dateParam).toLocaleDateString()}</span>}
                         </div>
                         <button onClick={clearDrillDown} className="text-slate-400 hover:text-white focus-ring rounded" aria-label="Clear filters">
@@ -746,10 +795,22 @@ const AllOrdersPage: React.FC = () => {
                         )}
                     </div>
 
+                    {/* Patch Type Filter — every role. Not sales or payment data, and the
+                        production floor is the team most likely to want "show me all Chenille". */}
+                    {patchTypes && patchTypes.length > 0 && (
+                        <FilterDropdown
+                            allLabel="All Patch Types"
+                            options={patchTypes.map(t => ({ value: t, label: t }))}
+                            value={patchTypeParam || ''}
+                            onChange={(val) => updateParams({ patchType: val || null, page: null })}
+                        />
+                    )}
+
                     {/* Sales Agent Filter — admin only */}
                     {role === UserRole.ADMIN && salesAgents && salesAgents.length > 0 && (
-                        <AgentDropdown
-                            agents={salesAgents}
+                        <FilterDropdown
+                            allLabel="All Sales Agents"
+                            options={salesAgents.map(a => ({ value: a, label: a.split('@')[0], sublabel: a }))}
                             value={salesAgentParam || ''}
                             onChange={(val) => updateParams({ salesAgent: val || null, page: null })}
                         />
@@ -793,7 +854,7 @@ const AllOrdersPage: React.FC = () => {
                                     : "There are no orders in this category yet."
                             }
                             action={
-                                (salesAgentParam || leadSourceParam || dateParam || searchQuery || activeFilter !== 'ALL') ? (
+                                (salesAgentParam || leadSourceParam || patchTypeParam || dateParam || searchQuery || activeFilter !== 'ALL') ? (
                                     <button onClick={clearDrillDown} className="text-brand-orange text-sm font-medium hover:text-orange-400 transition-colors underline underline-offset-4">
                                         Clear all filters & search
                                     </button>
