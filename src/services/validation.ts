@@ -23,6 +23,7 @@ export const orderSchema = z.object({
     'COLOUR_MATCH_PENDING',
     'NEW_ORDER',
     'AWAITING_APPROVAL',
+    'AWAITING_SAMPLE',
     'REVISION_REQUESTED',
     'APPROVED',
     'IN_PRODUCTION',

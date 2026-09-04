@@ -36,6 +36,10 @@ export enum OrderStatus {
   NEW_ORDER = 'NEW_ORDER',
   REVISION_REQUESTED = 'REVISION_REQUESTED',
   AWAITING_APPROVAL = 'AWAITING_CUSTOMER_APPROVAL',
+  // Waiting on the customer to receive and sign off a physical sample. Sits beside
+  // AWAITING_CUSTOMER_APPROVAL because both are "the ball is with the customer" —
+  // the difference is a sample in the post rather than a mockup on screen.
+  AWAITING_SAMPLE = 'AWAITING_SAMPLE',
   APPROVED = 'APPROVED',
   IN_PRODUCTION = 'IN_PRODUCTION',
   QUALITY_ASSURANCE = 'QUALITY_ASSURANCE',

@@ -634,6 +634,7 @@ const OrderForm: React.FC<OrderFormProps> = ({
     OrderStatus.COLOUR_MATCH_PENDING,
     OrderStatus.NEW_ORDER,
     OrderStatus.AWAITING_APPROVAL,
+    OrderStatus.AWAITING_SAMPLE,
     OrderStatus.REVISION_REQUESTED,
     OrderStatus.APPROVED,
     OrderStatus.IN_PRODUCTION,

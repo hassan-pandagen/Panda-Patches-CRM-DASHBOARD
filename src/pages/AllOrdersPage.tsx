@@ -6,6 +6,7 @@ import { useQuery, keepPreviousData } from '@tanstack/react-query';
 import { useSearchParams, Link, useNavigate } from 'react-router-dom';
 import { localMidnightISO, localNextDayISO } from '../utils/dateFilters';
 import { fetchAllPaged } from '../utils/fetchAllPaged';
+import { pageWindow } from '../utils/pageWindow';
 import BulkActionBar from '../components/orders/BulkActionBar';
 import QuickViewDrawer from '../components/orders/QuickViewDrawer';
 import ShipByPill from '../components/orders/ShipByPill';
@@ -543,6 +544,8 @@ const AllOrdersPage: React.FC = () => {
         updateParams({ dateView: 'custom', startDate: fmt(start), endDate: fmt(end), page: null });
     }, [activeDateRange.startDate, updateParams]);
 
+    const [jumpToPage, setJumpToPage] = useState('');
+
     // Debounce search by 300ms to avoid hammering the DB on every keystroke
     const debouncedSearch = useDebouncedValue(searchQuery, 300);
 
@@ -829,6 +832,7 @@ const AllOrdersPage: React.FC = () => {
                     <FilterTab active={activeFilter === 'COLOUR_MATCH_PENDING'} label="Colour Match" count={getCount('COLOUR_MATCH_PENDING')} onClick={() => handleFilterChange('COLOUR_MATCH_PENDING')} />
                     <FilterTab active={activeFilter === 'NEW_ORDER'} label="New" count={getCount('NEW_ORDER')} onClick={() => handleFilterChange('NEW_ORDER')} />
                     <FilterTab active={activeFilter === 'AWAITING_CUSTOMER_APPROVAL'} label="Awaiting Approval" count={getCount('AWAITING_CUSTOMER_APPROVAL')} onClick={() => handleFilterChange('AWAITING_CUSTOMER_APPROVAL')} />
+                    <FilterTab active={activeFilter === 'AWAITING_SAMPLE'} label="Awaiting Sample" count={getCount('AWAITING_SAMPLE')} onClick={() => handleFilterChange('AWAITING_SAMPLE')} />
                     <FilterTab active={activeFilter === 'IN_PRODUCTION'} label="In Production" count={getCount('IN_PRODUCTION')} onClick={() => handleFilterChange('IN_PRODUCTION')} />
                     <FilterTab active={activeFilter === 'REVISION_REQUESTED'} label="Revision" count={getCount('REVISION_REQUESTED')} onClick={() => handleFilterChange('REVISION_REQUESTED')} />
 
@@ -1059,30 +1063,84 @@ const AllOrdersPage: React.FC = () => {
             </div>
 
             {/* --- PAGINATION --- */}
+            {/* Numbered, not just Previous/Next: reaching page 15 used to cost fourteen
+                clicks and fourteen round trips. pageWindow() decides which numbers to show. */}
             {totalPages > 1 && (
-                <div className="flex justify-center items-center gap-4 pt-6">
-                    <Button
-                        variant="secondary"
-                        disabled={currentPage === 1}
-                        onClick={() => setCurrentPage(Math.max(currentPage - 1, 1))}
-                        className="bg-slate-800 border border-slate-600 text-white hover:bg-slate-700 disabled:opacity-50"
-                    >
-                        <ChevronLeft className="w-4 h-4 mr-1" /> Previous
-                    </Button>
+                <div className="flex flex-col items-center gap-3 pt-6">
+                    <div className="flex justify-center items-center gap-1.5 flex-wrap">
+                        <Button
+                            variant="secondary"
+                            disabled={currentPage === 1}
+                            onClick={() => setCurrentPage(Math.max(currentPage - 1, 1))}
+                            className="bg-slate-800 border border-slate-600 text-white hover:bg-slate-700 disabled:opacity-50"
+                        >
+                            <ChevronLeft className="w-4 h-4 mr-1" /> Previous
+                        </Button>
 
-                    <span className="text-slate-300 font-medium text-sm">
-                        Page <span className="text-white font-bold">{currentPage}</span> of {totalPages}
-                        <span className="text-slate-400 ml-2">({totalCount} orders)</span>
-                    </span>
+                        {pageWindow(currentPage, totalPages).map((tok, i) =>
+                            tok === 'gap' ? (
+                                <span key={`gap-${i}`} className="px-1.5 text-slate-500 select-none">…</span>
+                            ) : (
+                                <button
+                                    key={tok}
+                                    type="button"
+                                    aria-label={`Page ${tok}`}
+                                    aria-current={tok === currentPage ? 'page' : undefined}
+                                    onClick={() => setCurrentPage(tok)}
+                                    className={`min-w-[38px] h-[38px] px-2 rounded-lg text-sm font-medium transition-colors border ${
+                                        tok === currentPage
+                                            ? 'bg-brand-orange border-brand-orange text-white shadow-lg shadow-brand-orange/20'
+                                            : 'bg-slate-800 border-slate-600 text-slate-200 hover:bg-slate-700 hover:text-white'
+                                    }`}
+                                >
+                                    {tok}
+                                </button>
+                            )
+                        )}
 
-                    <Button
-                        variant="secondary"
-                        disabled={currentPage === totalPages}
-                        onClick={() => setCurrentPage(Math.min(currentPage + 1, totalPages))}
-                        className="bg-slate-800 border border-slate-600 text-white hover:bg-slate-700 disabled:opacity-50"
-                    >
-                        Next <ChevronRight className="w-4 h-4 ml-1" />
-                    </Button>
+                        <Button
+                            variant="secondary"
+                            disabled={currentPage === totalPages}
+                            onClick={() => setCurrentPage(Math.min(currentPage + 1, totalPages))}
+                            className="bg-slate-800 border border-slate-600 text-white hover:bg-slate-700 disabled:opacity-50"
+                        >
+                            Next <ChevronRight className="w-4 h-4 ml-1" />
+                        </Button>
+                    </div>
+
+                    <div className="flex items-center gap-3 text-sm">
+                        <span className="text-slate-400">
+                            Page <span className="text-white font-bold">{currentPage}</span> of {totalPages}
+                            <span className="ml-2">({totalCount} orders)</span>
+                        </span>
+                        {/* Past ~8 pages even a windowed pager can't show the one you want,
+                            so type it. Submits on Enter; ignores anything out of range. */}
+                        {totalPages > 8 && (
+                            <form
+                                onSubmit={(e) => {
+                                    e.preventDefault();
+                                    const n = parseInt(jumpToPage, 10);
+                                    if (Number.isFinite(n) && n >= 1 && n <= totalPages) {
+                                        setCurrentPage(n);
+                                        setJumpToPage('');
+                                    }
+                                }}
+                                className="flex items-center gap-2"
+                            >
+                                <label htmlFor="jump-page" className="text-slate-400">Go to</label>
+                                <input
+                                    id="jump-page"
+                                    type="number"
+                                    min={1}
+                                    max={totalPages}
+                                    value={jumpToPage}
+                                    onChange={(e) => setJumpToPage(e.target.value)}
+                                    placeholder={String(currentPage)}
+                                    className="w-20 bg-slate-800 border border-slate-600 rounded-lg px-2 py-1.5 text-white text-sm focus:ring-2 focus:ring-brand-orange/60 focus:border-brand-orange"
+                                />
+                            </form>
+                        )}
+                    </div>
                 </div>
             )}
             {/* Quick View Drawer */}

@@ -11,6 +11,7 @@ import {
   MessageSquare,
   RotateCcw,
   Palette,
+  Package,
   LucideProps,
 } from 'lucide-react';
 import { OrderStatus } from '../types';
@@ -41,6 +42,11 @@ export const STATUS_INFO_MAP: Record<OrderStatus, StatusInfo> = {
     label: 'Awaiting Approval',
     icon: AlertCircle,
     color: 'text-orange-400 bg-orange-500/10 border-orange-500/20',
+  },
+  [OrderStatus.AWAITING_SAMPLE]: {
+    label: 'Awaiting Sample',
+    icon: Package,
+    color: 'text-sky-400 bg-sky-500/10 border-sky-500/20',
   },
   [OrderStatus.REVISION_REQUESTED]: {
     label: 'Revision Requested',
