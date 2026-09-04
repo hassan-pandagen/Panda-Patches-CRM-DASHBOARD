@@ -137,6 +137,10 @@ function resolveLeadSource(attribution: any): string {
 // Mirrors PATCHES_TYPE_OPTIONS (constants/options.ts) and the form's backingOptions.
 // Unknown values pass through unchanged so we never drop data.
 const PATCH_TYPE_CANON = [
+  // Letter packages (2026-09). product_name is now EXACTLY one of these two on every order —
+  // it used to carry the size/colour/glitter too ("... — 3\" royal blue + gold glitter"), which
+  // made it unique per order and would have produced a different patches_type every time.
+  'Chenille Alphabet Package (A–Z)', 'Chenille Numbers Package (0–9)',
   'Embroidered', 'PVC', 'Woven', 'Chenille', 'Leather', '3D Embroidery Puff', '3D Embroidery Transfer',
   'Chenille Transfer', 'Sequin Patch', 'Sublimation Patch', 'Sublimation+Embroidery', 'DTF Transfer',
   'Silicone Transfer', 'High Density Transfer', 'TPU+Chenille', 'TPU+Embroidery', 'TPU+Sublimation',
@@ -732,11 +736,13 @@ Deno.serve(async (req: Request) => {
           const shipPostal  = (od.ship_postal  ?? od.zip     ?? od.postal_code ?? ship.postal_code ?? ship.zip ?? null) || null;
           const shipCountry = (od.country      ?? od.ship_country ?? ship.country ?? null) || null;
 
-          // Accept either spelling; treat anything but an explicit true as not-armed.
-          const colourMatchRequired =
-            (od.colour_match_required ?? od.color_match_required) === true;
+          // Keys confirmed by the website dev 2026-09-04: British spelling, all five, no
+          // US-spelled variants exist. The defensive `color_*` fallback is gone.
+          const colourMatchRequired = od.colour_match_required === true;
           // Only the two values the CHECK constraint allows; anything else -> the safer one.
-          const rawColourStatus = String(od.colour_match_status ?? od.color_match_status ?? '').trim();
+          // 'standard' comes from a fixed 20-colour list on the website (STANDARD_YARN_COLUMNS);
+          // a hex or a Pantone code never takes that path, so those always ask the customer.
+          const rawColourStatus = String(od.colour_match_status ?? '').trim();
           const colourMatchStatus = !colourMatchRequired
             ? null
             : rawColourStatus === 'standard'
@@ -795,8 +801,8 @@ Deno.serve(async (req: Request) => {
               // "#1E3A8A" must reach the supervisor exactly as the customer typed them.
               colour_match_required: colourMatchRequired,
               colour_match_status:   colourMatchStatus,
-              customer_colour_input: od.customer_colour_input ?? od.customer_color_input ?? null,
-              customer_colour_hex:   od.customer_colour_hex   ?? od.customer_color_hex   ?? null,
+              customer_colour_input: od.customer_colour_input ?? null,
+              customer_colour_hex:   od.customer_colour_hex   ?? null,
               matched_yarn:          null,   // the supervisor fills this; empty blocks production
               // An armed order must never land in the production queue. COLOUR_MATCH_PENDING is
               // a real CRM status (types/index.ts, statusInfo, the /orders filter rail), not a

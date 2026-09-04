@@ -31,6 +31,16 @@ function getCorsHeaders(req: Request) {
   };
 }
 
+// Same rule as src/utils/colourSwatch.ts - kept inline because edge functions can't import
+// from src/. The website may or may not include the leading '#', and `background-color: 1e3a8a`
+// is silently invalid CSS, so a missing '#' would render an unpainted box in the email.
+// Returns null for anything that isn't a hex, so a colour NAME never becomes a swatch.
+function toCssHex(value: unknown): string | null {
+  const raw = String(value ?? '').trim();
+  const m = /^#?([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(raw);
+  return m ? `#${m[1].toLowerCase()}` : null;
+}
+
 function escapeHtml(str: string): string {
   if (!str) return '';
   return String(str)
@@ -1139,7 +1149,7 @@ const buildEmailHTML = (templateId: string, data: any): string => {
               <td style="padding:16px; font-family: 'lucida sans unicode', 'lucida grande', sans-serif; font-size:14px; color:#666; border-bottom:1px solid #eee;">
                 You asked for
                 <div style="margin-top:6px; font-size:20px; font-weight:bold; color:#222;">
-                  ${data.customer_colour_hex ? `<span style="display:inline-block; width:18px; height:18px; border-radius:3px; border:1px solid #ccc; background-color:${escapeHtml(data.customer_colour_hex)}; vertical-align:middle; margin-right:8px;"></span>` : ''}${escapeHtml(data.customer_colour_input)}
+                  ${toCssHex(data.customer_colour_hex) ? `<span style="display:inline-block; width:18px; height:18px; border-radius:3px; border:1px solid #ccc; background-color:${toCssHex(data.customer_colour_hex)}; vertical-align:middle; margin-right:8px;"></span>` : ''}${escapeHtml(data.customer_colour_input)}
                 </div>
               </td>
             </tr>

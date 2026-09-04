@@ -1,5 +1,8 @@
 export const COURIER_OPTIONS: string[] = ['FedEx', 'DHL', 'UPS', 'Other'];
 export const PATCHES_TYPE_OPTIONS: string[] = [
+  // Letter packages — must be listed, or the order form's <select> renders blank for them
+  // and an edit-and-save would wipe patches_type. See the note at the top of patchVocab.ts.
+  'Chenille Alphabet Package (A–Z)', 'Chenille Numbers Package (0–9)',
   'Embroidered', 'PVC', 'Woven', 'Chenille', 'Chenille+Embroidery', 'Leather',
   '3D Embroidery Puff', '3D Embroidery Transfer', 'Chenille Transfer', 'Applique Transfer',
   'Sequin Patch', 'Sublimation Patch', 'Sublimation+Embroidery', 'DTF Transfer',

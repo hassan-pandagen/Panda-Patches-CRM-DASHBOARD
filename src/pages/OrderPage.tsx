@@ -14,6 +14,7 @@ import { getPremiumStatus, setPremiumStatus } from '../services/customerFlagsSer
 import { getCustomerByEmail } from '../services/customersService';
 import { isWebCheckoutAgent, leadSourceDisplay } from '../utils/leadSource';
 import { roleCan, ROLES_CAN_VIEW_CUSTOMER_IDENTITY, ROLES_CAN_CONFIRM_COLOUR_MATCH } from '../utils/roleAccess';
+import { toCssHex } from '../utils/colourSwatch';
 import FileUploadSection from '../components/orders/FileUpload';
 
 // UI Components
@@ -901,11 +902,11 @@ const OrderPage: React.FC = () => {
                                         <div className="mt-3 flex flex-wrap items-center gap-3">
                                             <div className="flex items-center gap-2">
                                                 <span className="text-xs uppercase tracking-wider text-slate-400 font-bold">Customer typed</span>
-                                                {order.customerColourHex && (
+                                                {toCssHex(order.customerColourHex) && (
                                                     <span
                                                         className="w-6 h-6 rounded border border-white/20 shrink-0"
-                                                        style={{ backgroundColor: order.customerColourHex }}
-                                                        title={order.customerColourHex}
+                                                        style={{ backgroundColor: toCssHex(order.customerColourHex)! }}
+                                                        title={order.customerColourHex || ''}
                                                     />
                                                 )}
                                                 <span className="font-mono text-base text-white bg-slate-900 px-2 py-1 rounded border border-white/10">

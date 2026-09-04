@@ -17,6 +17,11 @@
 // exact logic because they can't import from src/. Keep in sync.
 
 export const PATCH_TYPE_CANON = [
+  // Letter packages (2026-09). The website sends product_name as EXACTLY one of these two on
+  // every order; size, colour and glitter live in design_size / customer_colour_input /
+  // website_addons instead. Listed here so normalizePatchType folds any spelling variant
+  // (hyphen for the en-dash, different case) back onto the one canonical string.
+  'Chenille Alphabet Package (A–Z)', 'Chenille Numbers Package (0–9)',
   'Embroidered', 'PVC', 'Woven', 'Chenille', 'Leather', '3D Embroidery Puff', '3D Embroidery Transfer',
   'Chenille Transfer', 'Applique Transfer', 'Sequin Patch', 'Sublimation Patch', 'Sublimation+Embroidery', 'DTF Transfer',
   'Silicone Transfer', 'High Density Transfer', 'TPU+Chenille', 'TPU+Embroidery', 'TPU+Sublimation',

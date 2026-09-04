@@ -106,6 +106,11 @@ export const PATCH_TYPE_CATEGORY: Record<string, PatchTypeMapping> = {
                                 confirmNote: 'Confirm HTS: appliqué embroidered onto ground fabric (5810.92.1000) vs bonded/heat-applied motif — classification differs.' },
 
   // ── Chenille family ──
+  // The two letter packages are chenille letters/numerals — same HTS family as any other
+  // chenille patch. Keyed on the exact canonical product_name, lowercased, because the
+  // resolver looks up `patchesType.trim().toLowerCase()` with no punctuation stripping.
+  'chenille alphabet package (a–z)': { category: 'chenille', modifier: 'chenille letter set, A-Z' },
+  'chenille numbers package (0–9)':  { category: 'chenille', modifier: 'chenille numeral set, 0-9' },
   'chenille':                 { category: 'chenille' },
   'chenille patches':         { category: 'chenille' },
   'chenille transfer':        { category: 'chenille', modifier: 'heat-transfer backing' },

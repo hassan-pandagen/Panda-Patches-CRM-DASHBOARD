@@ -41,3 +41,6 @@ src/assets/db_schema.sql
 # graphify generated output (keep local)
 graphify-out/
 .graphifyignore
+
+# Customer exports — PII, never commit
+exports/

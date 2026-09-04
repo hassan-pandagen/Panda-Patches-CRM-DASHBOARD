@@ -20,6 +20,7 @@ import React from 'react';
 import { useParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Check, X, Loader, AlertCircle } from 'lucide-react';
+import { toCssHex } from '../../utils/colourSwatch';
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
@@ -163,10 +164,10 @@ const ColourMatchPage: React.FC = () => {
         <div className="p-4">
           <div className="text-xs uppercase tracking-wider text-slate-400 font-bold">You asked for</div>
           <div className="mt-2 flex items-center gap-2">
-            {data.customer_colour_hex && (
+            {toCssHex(data.customer_colour_hex) && (
               <span
                 className="w-7 h-7 rounded border border-white/20 shrink-0"
-                style={{ backgroundColor: data.customer_colour_hex }}
+                style={{ backgroundColor: toCssHex(data.customer_colour_hex)! }}
               />
             )}
             <span className="text-lg font-bold text-white break-words">
