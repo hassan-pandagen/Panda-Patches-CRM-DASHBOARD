@@ -10,7 +10,7 @@
 //   4. fallback to "Direct"
 
 export type LeadSource =
-  | 'Facebook Ad' | 'Google Ad' | 'Bing Ad' | 'TikTok Ad'
+  | 'Facebook Ad' | 'Instagram Ad' | 'Google Ad' | 'Bing Ad' | 'TikTok Ad'
   | 'Facebook' | 'Instagram' | 'Google' | 'Bing' | 'DuckDuckGo' | 'Brave' | 'TikTok' | 'YouTube'
   | 'LinkedIn' | 'Twitter' | 'Reddit' | 'Snapchat' | 'WhatsApp'
   | 'ChatGPT' | 'Perplexity' | 'Claude' | 'Gemini' | 'Copilot' | 'Meta AI' | 'DeepSeek' | 'Grok' | 'Google AI Overview'
@@ -345,6 +345,7 @@ export function leadSourceDisplay(
 export function getSourceBadgeClasses(source: LeadSource): string {
   const map: Record<LeadSource, string> = {
     'Facebook Ad':  'bg-blue-500/15 text-blue-300 border-blue-500/30',
+    'Instagram Ad': 'bg-pink-500/15 text-pink-300 border-pink-500/30',
     'Google Ad':    'bg-red-500/15 text-red-300 border-red-500/30',
     'Bing Ad':      'bg-teal-500/15 text-teal-300 border-teal-500/30',
     'TikTok Ad':    'bg-cyan-500/15 text-cyan-300 border-cyan-500/30',

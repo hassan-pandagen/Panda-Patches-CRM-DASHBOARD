@@ -1,0 +1,41 @@
+-- ============================================================================
+-- Lead-source normalisation — applied 2026-09-04
+--
+-- Found while auditing 20–31 Aug: 83 orders, zero blanks, but 17 carried a
+-- lead_source that isn't in LEAD_SOURCE_OPTIONS. 38 across all time.
+--
+-- Not a data-loss bug — OrderForm already injects an unrecognised value as an
+-- extra <option> (the PP-11232/11245/11303/11321 fix). It was a REPORTING bug:
+-- Google appeared as 4 labels, ChatGPT as 2, Facebook as 3, Direct as 2.
+--
+-- Cause: the WEBSITE copies its own attribution.traffic_source into lead_source
+-- verbatim. A fix in the CRM repo could not catch it, because the CRM is not the
+-- writer — hence a database trigger, same as normalize_checkout_order_status.
+--
+-- Function + trigger are in the two migrations applied via MCP:
+--   normalize_lead_source_function
+--   normalize_lead_source_trigger_on_orders
+-- This file is the record; the live database is the source of truth (§9.3).
+--
+-- Backfill applied:
+--   Direct / Unknown (8) -> Direct            Google (Organic) (7)  -> Google
+--   Google Ads (5)        -> Google Ad        Chatgpt.com (5)       -> ChatGPT
+--   Facebook Ads (id) (4) -> Facebook Ad      Instagram Ads (id)(2) -> Instagram Ad
+--   Checkout (2)          -> Other            WEBSITE (2)           -> Other
+--   Referral: search.brave.com -> Brave       DuckDuckGo (Organic)  -> DuckDuckGo
+--   HERO_FORM_PARTIAL     -> Other, then hand-corrected to Google on PP-11387
+--                            (referrer was google.com; 'Other' would have been
+--                             accurate-but-lazy when the row carried the answer)
+--
+-- 39 order_history rows record every change, so each before-value is recoverable.
+--
+-- ── Two deliberate non-actions ──────────────────────────────────────────────
+-- 1. QUOTES ARE OUT OF SCOPE. quotes.lead_source holds landing-page/form
+--    provenance ("Industry Page: custom-anime-patches", "Bulk Order Form",
+--    "VECTOR_QUOTE_FORM_PARTIAL"), not a traffic source. Normalising it would
+--    destroy what the attribution report reads.
+-- 2. UNRECOGNISED VALUES PASS THROUGH UNCHANGED. "Yahoo (Organic)" is left
+--    alone rather than coerced to 'Other' — losing a real source we haven't
+--    taught the function about is worse than one odd label. Add Yahoo to
+--    LEAD_SOURCE_OPTIONS and to the function together if you want it folded.
+-- ============================================================================

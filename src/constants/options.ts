@@ -39,6 +39,10 @@ export const LEAD_SOURCE_OPTIONS: string[] = [
   // These MUST be selectable here — otherwise an order edit finds no matching <option>, renders a
   // BLANK Lead Source, and silently WIPES the real source on save (this reverted PP-11232/11245).
   'Facebook Ad',
+  // Meta paid placements arrive as "Instagram Ads (<ad id>)" with utm_medium=paid. Folding
+  // those to plain 'Instagram' would lose the paid signal, so the ad placement gets its own
+  // option — consistent with Facebook Ad / Google Ad / Bing Ad / TikTok Ad.
+  'Instagram Ad',
   'Google Ad',
   'Bing Ad',
   'TikTok Ad',
