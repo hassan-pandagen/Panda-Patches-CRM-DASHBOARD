@@ -111,7 +111,7 @@ Deno.serve(async (req: Request) => {
     const roleSet = (roles && roles.length ? roles : role ? [role] : []);
     if (!roleSet.length) {
       return new Response(JSON.stringify({ error: 'At least one role is required.' }), {
-        status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 400, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' },
       });
     }
 
