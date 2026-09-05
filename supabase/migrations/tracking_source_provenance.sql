@@ -1,0 +1,32 @@
+-- ============================================================================
+-- tracking_source / tracking_source_at — applied 2026-09-06.
+--
+-- Added before bulk-filling 365 tracking numbers from the shipping ledger
+-- (exports/SHIPME_1.CSV). Without provenance the fill is irreversible in practice:
+-- nothing would distinguish a ledger-sourced number from one an agent typed.
+--
+--   NULL              entered by an agent in the CRM
+--   'shipping_ledger' filled from the dispatch record, 6 Sept 2026
+--
+-- Undo the whole batch:
+--   UPDATE orders SET shipping_tracking_number = NULL, tracking_source = NULL
+--    WHERE tracking_source = 'shipping_ledger';
+--
+-- ── What the fill did, and the guards it ran under ──────────────────────────
+-- 691 orders had no tracking; the ledger covered 367; 365 were written.
+--   * only where CRM tracking was EMPTY - nothing recorded could be overwritten
+--   * skipped any number already on another order - PP-10880 and PP-11150 hit this
+--     and remain blank, because a duplicate means one customer gets another's link
+--   * checked afterwards for duplicates created WITHIN the batch (the NOT EXISTS
+--     guard compares against pre-statement state, not against sibling rows): none
+--
+-- ── The finding that came out of it ─────────────────────────────────────────
+-- 10 tracking numbers are each attached to TWO different orders, and all 20 of
+-- those rows were entered by agents - none by this fill. Together with the 7
+-- CRM-vs-ledger conflicts showing a one-row shift, the manually-typed CRM values
+-- are the unreliable side, not the ledger. ~27 orders need checking against the
+-- carrier by a person.
+-- ============================================================================
+ALTER TABLE public.orders
+  ADD COLUMN IF NOT EXISTS tracking_source    text,
+  ADD COLUMN IF NOT EXISTS tracking_source_at timestamptz;
