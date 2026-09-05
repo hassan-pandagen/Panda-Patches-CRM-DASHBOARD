@@ -20,6 +20,13 @@ function getCorsHeaders(req: Request) {
 }
 
 // ✅ BACKEND VALIDATION: Zod schemas for input validation
+// ⚠️ These must match the CHECK constraint on user_profiles.roles and the UserRole enum
+// in src/types/index.ts. 'USER' and 'AGENT' are gone — neither was ever in the constraint,
+// so anything sent with them failed at the database anyway. DIGITIZER and
+// PRODUCTION_SUPERVISOR were missing here, which silently made it impossible to create a
+// digitizer account at all: validation rejected the role before the insert was attempted.
+const ROLE_VALUES = ['ADMIN', 'SALES_AGENT', 'PRODUCTION', 'SHIPPING', 'DIGITIZER', 'PRODUCTION_SUPERVISOR'] as const;
+
 const createUserSchema = z.object({
   email: z.string()
     .min(1, "Email is required")
@@ -32,9 +39,11 @@ const createUserSchema = z.object({
     .regex(/[A-Z]/, "Password must contain at least one uppercase letter")
     .regex(/[0-9]/, "Password must contain at least one number"),
 
-  role: z.enum(['USER', 'ADMIN', 'PRODUCTION', 'SALES_AGENT', 'SHIPPING', 'AGENT'], {
-    errorMap: () => ({ message: "Role must be USER, ADMIN, PRODUCTION, SALES_AGENT, SHIPPING, or AGENT" })
-  }),
+  // An account can hold SEVERAL roles (CEO decision 6 Sept: Zahid is DIGITIZER +
+  // PRODUCTION_SUPERVISOR). `roles` is authoritative; `role` is still accepted from older
+  // callers and treated as a one-element set. At least one is required.
+  role:  z.enum(ROLE_VALUES).optional(),
+  roles: z.array(z.enum(ROLE_VALUES)).min(1, "Pick at least one role").optional(),
 
   fullName: z.string()
     .min(1, "Full name is required")
@@ -98,7 +107,13 @@ Deno.serve(async (req: Request) => {
     const body = await req.json();
     const validatedData = createUserSchema.parse(body);
 
-    const { email, password, role, fullName, access } = validatedData;
+    const { email, password, role, roles, fullName, access } = validatedData;
+    const roleSet = (roles && roles.length ? roles : role ? [role] : []);
+    if (!roleSet.length) {
+      return new Response(JSON.stringify({ error: 'At least one role is required.' }), {
+        status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
 
     // 2. Create User with Auto-Confirm
     const { data: { user }, error: createError } = await supabaseAdmin.auth.admin.createUser({
@@ -115,7 +130,8 @@ Deno.serve(async (req: Request) => {
     const { error: profileError } = await supabaseAdmin
       .from('user_profiles')
       .update({
-        role: role,
+        // Write `roles`; the DB trigger derives `role` as the highest-privilege member.
+        roles: roleSet,
         permissions: access
       })
       .eq('id', user.id);

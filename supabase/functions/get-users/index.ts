@@ -60,7 +60,7 @@ Deno.serve(async (req: Request) => {
     // 4. Fetch Profiles (only needed columns, not heavy data)
     const { data: profiles, error } = await supabaseAdmin
       .from('user_profiles')
-      .select('id, email, full_name, role, permissions')
+      .select('id, email, full_name, role, roles, is_active, permissions')
       .order('full_name', { ascending: true });
 
     if (error) throw error;

@@ -191,3 +191,35 @@ export const roleCan = (
   const allow = allowed as string[];
   return held.some(r => !!r && allow.includes(r as string));
 };
+
+/**
+ * Highest-privilege role in a set — mirrors the SQL primary_role() that keeps
+ * user_profiles.role in sync. Kept in step with it deliberately: the 34 call sites that
+ * still compare `role` directly must see the same answer the database derived.
+ *
+ * DIGITIZER is last on purpose. Someone who is a digitizer AND something else must never
+ * present as a digitizer to code that special-cases production or the blind-vendor view.
+ */
+const ROLE_PRECEDENCE: UserRole[] = [
+  UserRole.ADMIN,
+  UserRole.PRODUCTION_SUPERVISOR,
+  UserRole.SALES_AGENT,
+  UserRole.SHIPPING,
+  UserRole.PRODUCTION,
+  UserRole.DIGITIZER,
+];
+
+export const primaryRole = (roles: readonly (UserRole | string)[] | null | undefined): UserRole | null => {
+  if (!roles || roles.length === 0) return null;
+  for (const r of ROLE_PRECEDENCE) if (roles.includes(r)) return r;
+  return null;   // only unknown values -> nothing, which is default-deny
+};
+
+/**
+ * Roles that must not be combined with DIGITIZER without the admin being warned.
+ * Multi-role is a UNION, so any second role hands an outside freelancer capabilities the
+ * blind-vendor model says they must never have. This does not block the combination —
+ * Zahid legitimately holds it — it only makes the UI say so out loud.
+ */
+export const isRiskyRoleCombination = (roles: readonly (UserRole | string)[]): boolean =>
+  roles.includes(UserRole.DIGITIZER) && roles.length > 1;

@@ -48,14 +48,17 @@ export const updateMyPassword = async (newPassword: string) => {
 
 export const createUserWithRole = async (
   email: string,
-  role: UserRole,
+  roles: UserRole | UserRole[],
   access: Record<string, boolean | undefined>,
   fullName: string,
   password: string
 ): Promise<{ user?: User; temporaryPassword?: string; error?: string }> => {
   try {
+    // An account can hold several roles. Send the set; the edge function writes `roles`
+    // and the DB trigger derives the primary `role` from it.
+    const roleSet = Array.isArray(roles) ? roles : [roles];
     const { data, error: invokeError } = await supabase.functions.invoke('create-user', {
-      body: { email, role, fullName, access, password },
+      body: { email, roles: roleSet, fullName, access, password },
     });
 
     if (invokeError) throw new Error(invokeError.message);

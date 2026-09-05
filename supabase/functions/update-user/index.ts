@@ -20,6 +20,13 @@ function getCorsHeaders(req: Request) {
 
 // ✅ BACKEND VALIDATION: Zod schema for update user
 // All fields except user_id are optional to support partial updates (e.g., password-only reset)
+// ⚠️ These must match the CHECK constraint on user_profiles.roles and the UserRole enum
+// in src/types/index.ts. 'USER' and 'AGENT' are gone — neither was ever in the constraint,
+// so anything sent with them failed at the database anyway. DIGITIZER and
+// PRODUCTION_SUPERVISOR were missing here, which silently made it impossible to create a
+// digitizer account at all: validation rejected the role before the insert was attempted.
+const ROLE_VALUES = ['ADMIN', 'SALES_AGENT', 'PRODUCTION', 'SHIPPING', 'DIGITIZER', 'PRODUCTION_SUPERVISOR'] as const;
+
 const updateUserSchema = z.object({
   user_id: z.string()
     .uuid("Invalid user ID format"),
@@ -39,9 +46,11 @@ const updateUserSchema = z.object({
     .max(100, "Full name too long")
     .optional(),
 
-  role: z.enum(['USER', 'ADMIN', 'PRODUCTION', 'SALES_AGENT', 'SHIPPING', 'AGENT'], {
-    errorMap: () => ({ message: "Role must be USER, ADMIN, PRODUCTION, SALES_AGENT, or SHIPPING" })
-  }).optional(),
+  role:  z.enum(ROLE_VALUES).optional(),
+  roles: z.array(z.enum(ROLE_VALUES)).min(1, "An account must keep at least one role").optional(),
+  // Switching an account off, rather than deleting it. Freelancers come and go; their
+  // assignment history and uploaded files must survive them leaving.
+  is_active: z.boolean().optional(),
 
   permissions: z.record(
     z.enum([
@@ -99,13 +108,13 @@ Deno.serve(async (req: Request) => {
     const body = await req.json();
     const validatedData = updateUserSchema.parse(body);
 
-    const { user_id, email, password, full_name, role, permissions } = validatedData;
+    const { user_id, email, password, full_name, role, roles, permissions, is_active } = validatedData;
 
     // 1. Update Auth - only include fields that are provided
     const authAttributes: any = {};
 
     // Only update metadata if any metadata fields are provided
-    if (full_name || role || permissions) {
+    if (full_name || role || roles || permissions) {
       authAttributes.user_metadata = {};
       if (full_name) authAttributes.user_metadata.full_name = full_name;
       if (role) authAttributes.user_metadata.role = role;
@@ -127,7 +136,11 @@ Deno.serve(async (req: Request) => {
     // 2. Update Database Profile - only if profile fields are provided
     const profileUpdate: any = {};
     if (full_name) profileUpdate.full_name = full_name;
-    if (role) profileUpdate.role = role;
+    // Prefer the set. Writing `role` alone still works — the DB trigger widens it to a
+    // one-element `roles` — so an older caller cannot silently strip someone's extra roles.
+    if (roles && roles.length) profileUpdate.roles = roles;
+    else if (role) profileUpdate.role = role;
+    if (typeof is_active === 'boolean') profileUpdate.is_active = is_active;
     if (permissions) profileUpdate.permissions = permissions;
     if (email) profileUpdate.email = email;
 

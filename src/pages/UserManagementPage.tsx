@@ -6,10 +6,11 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { createUserWithRole, getAllUsers, deleteUser, updateUserProfile } from '@/services/authService';
 import { logger } from '@/services/logger';
 import { useAuth } from '../contexts/AuthContext';
-import { roleCan, ROLES_CAN_MANAGE_USERS } from '../utils/roleAccess';
+import { roleCan, ROLES_CAN_MANAGE_USERS, primaryRole } from '../utils/roleAccess';
+import RolePicker from '../components/users/RolePicker';
 import { copyToClipboard } from '../utils/copyToClipboard';
 import { UserProfile, UserPermissions, UserRole } from '@/types';
-import { Check, X, Plus, Edit, Trash2, Key, AlertCircle, Copy, CheckCircle } from 'lucide-react';
+import { Check, X, Plus, Edit, Trash2, Key, AlertCircle, Copy, CheckCircle, Power } from 'lucide-react';
 import Spinner from '@/components/ui/Spinner';
 import ConfirmationModal from '@/components/ui/ConfirmationModal';
 import Button from '@/components/ui/Button';
@@ -39,13 +40,22 @@ interface UserFormData {
   email: string;
   name: string;
   password: string;
-  role: UserRole;
+  roles: UserRole[];
   permissions: UserPermissions;
 }
 
 // ============================================
 // PERMISSION PRESETS
 // ============================================
+
+const ROLE_DISPLAY: Record<string, string> = {
+  ADMIN: 'Admin',
+  PRODUCTION_SUPERVISOR: 'Supervisor',
+  SALES_AGENT: 'Sales Agent',
+  SHIPPING: 'Shipping',
+  PRODUCTION: 'Production',
+  DIGITIZER: 'Digitizer',
+};
 
 const PERMISSION_PRESETS = {
   sales: {
@@ -154,7 +164,7 @@ const UserManagementPage: React.FC = () => {
     email: '',
     name: '',
     password: '',
-    role: UserRole.SALES_AGENT,
+    roles: [UserRole.SALES_AGENT],
     permissions: PERMISSION_PRESETS.sales,
   });
 
@@ -191,7 +201,7 @@ const UserManagementPage: React.FC = () => {
       
       return createUserWithRole(
         formData.email,
-        formData.role,
+        formData.roles,
         formData.permissions,
         formData.name,
         formData.password
@@ -255,7 +265,7 @@ const UserManagementPage: React.FC = () => {
       email: '',
       name: '',
       password: '',
-      role: UserRole.SALES_AGENT,
+      roles: [UserRole.SALES_AGENT],
       permissions: PERMISSION_PRESETS.sales,
     });
     setValidationErrors({});
@@ -268,6 +278,20 @@ const UserManagementPage: React.FC = () => {
     resetForm();
   };
 
+  // Switching an account OFF rather than deleting it. A freelancer who leaves must keep
+  // their assignment history and uploaded production files — deleting the account would
+  // cascade those away. is_active=false is enforced in two independent places: this UI
+  // reads an empty role set, and get_current_user_role() returns NONE so RLS denies too.
+  const toggleActiveMutation = useMutation({
+    mutationFn: (user: UserProfile) =>
+      updateUserProfile(user.id, { is_active: user.is_active === false }),
+    onSuccess: (_d, user) => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.users.all() });
+      success(user.is_active === false ? 'Account reactivated' : 'Account deactivated');
+    },
+    onError: (err: any) => showError('Could not update account', err?.message || 'Try again.'),
+  });
+
   const openCreateModal = () => {
     resetForm();
     setModalMode('create');
@@ -279,7 +303,7 @@ const UserManagementPage: React.FC = () => {
       email: user.email,
       name: user.full_name || '',
       password: '',
-      role: user.role as UserRole,
+      roles: (user.roles?.length ? user.roles : [user.role]) as UserRole[],
       permissions: user.permissions || EMPTY_PERMISSIONS,
     });
     setModalMode('edit');
@@ -302,7 +326,7 @@ const UserManagementPage: React.FC = () => {
       email: user.email,
       name: user.full_name || '',
       password: '',
-      role: user.role as UserRole,
+      roles: (user.roles?.length ? user.roles : [user.role]) as UserRole[],
       permissions: user.permissions || EMPTY_PERMISSIONS,
     });
     setModalMode('viewPermissions');
@@ -324,7 +348,7 @@ const UserManagementPage: React.FC = () => {
       id: selectedUser.id,
       updates: {
         full_name: formData.name,
-        role: formData.role,
+        roles: formData.roles,
         permissions: formData.permissions,
       },
     });
@@ -370,11 +394,15 @@ const UserManagementPage: React.FC = () => {
     [UserRole.DIGITIZER]: 'digitizer',
     [UserRole.PRODUCTION_SUPERVISOR]: 'production_supervisor',
   };
-  const handleRoleChange = (newRole: UserRole) => {
-    const preset = ROLE_PRESET[newRole];
+  // Permissions follow the PRIMARY (highest-privilege) role in the set, which is also what
+  // the database derives into user_profiles.role. Presets are a starting point — the admin
+  // can still tick individual boxes afterwards, and doing so does not change the roles.
+  const handleRolesChange = (newRoles: UserRole[]) => {
+    const primary = primaryRole(newRoles);
+    const preset = primary ? ROLE_PRESET[primary] : undefined;
     setFormData(prev => ({
       ...prev,
-      role: newRole,
+      roles: newRoles,
       permissions: preset ? PERMISSION_PRESETS[preset] : prev.permissions,
     }));
   };
@@ -459,6 +487,7 @@ const UserManagementPage: React.FC = () => {
                     <th className="px-6 py-4 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">Email</th>
                     <th className="px-6 py-4 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">Name</th>
                     <th className="px-6 py-4 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">Role</th>
+                    <th className="px-6 py-4 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">Status</th>
                     <th className="px-6 py-4 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">Permissions</th>
                     <th className="px-6 py-4 text-right text-xs font-semibold text-slate-400 uppercase tracking-wider">Actions</th>
                   </tr>
@@ -469,11 +498,30 @@ const UserManagementPage: React.FC = () => {
                       <td className="px-6 py-4 text-sm text-slate-200 font-medium">{user.email}</td>
                       <td className="px-6 py-4 text-sm text-slate-300">{user.full_name || '-'}</td>
                       <td className="px-6 py-4 text-sm">
-                        <span className={`px-3 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                          user.role === 'ADMIN' ? 'bg-brand-orange/20 text-brand-orange' :
-                          user.role === 'PRODUCTION' ? 'bg-blue-500/20 text-blue-400' :
-                          'bg-brand-green/20 text-brand-green'
-                        }`}>{user.role === 'SALES_AGENT' ? 'Sales Agent' : user.role === 'PRODUCTION' ? 'Production' : user.role === 'SHIPPING' ? 'Shipping' : user.role}</span>
+                        {/* Every role, not just the primary — otherwise Zahid reads as a
+                            supervisor and the digitizer half of his access is invisible here. */}
+                        <div className="flex flex-wrap gap-1.5">
+                          {((user.roles?.length ? user.roles : [user.role]) as string[]).map(r => (
+                            <span key={r} className={`px-2.5 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${
+                              r === 'ADMIN' ? 'bg-brand-orange/20 text-brand-orange' :
+                              r === 'PRODUCTION' ? 'bg-blue-500/20 text-blue-400' :
+                              r === 'DIGITIZER' ? 'bg-purple-500/20 text-purple-300' :
+                              r === 'PRODUCTION_SUPERVISOR' ? 'bg-cyan-500/20 text-cyan-300' :
+                              'bg-brand-green/20 text-brand-green'
+                            }`}>{ROLE_DISPLAY[r] ?? r}</span>
+                          ))}
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 text-sm">
+                        {user.is_active === false ? (
+                          <span className="px-2.5 py-1 inline-flex text-xs font-semibold rounded-full bg-slate-600/40 text-slate-300 border border-slate-500/40">
+                            Deactivated
+                          </span>
+                        ) : (
+                          <span className="px-2.5 py-1 inline-flex text-xs font-semibold rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
+                            Active
+                          </span>
+                        )}
                       </td>
                       <td className="px-6 py-4 text-sm">
                         <div className="flex flex-wrap gap-2">
@@ -491,6 +539,18 @@ const UserManagementPage: React.FC = () => {
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-right">
                         <div className="flex items-center justify-end gap-2">
+                          <button
+                            onClick={() => toggleActiveMutation.mutate(user)}
+                            disabled={toggleActiveMutation.isPending}
+                            className={`p-2.5 hover:bg-slate-700 rounded-lg transition-colors ${
+                              user.is_active === false ? 'text-emerald-400' : 'text-slate-400 hover:text-amber-400'
+                            }`}
+                            title={user.is_active === false
+                              ? 'Reactivate this account'
+                              : 'Deactivate — blocks access without deleting their history'}
+                          >
+                            <Power className="w-4 h-4" />
+                          </button>
                           <button onClick={() => openEditModal(user)} className="p-2.5 hover:bg-slate-700 rounded-lg transition-colors text-slate-400 hover:text-brand-orange" title="Edit User">
                             <Edit className="w-4 h-4" />
                           </button>
@@ -616,20 +676,7 @@ const UserManagementPage: React.FC = () => {
                 </p>
               </div>
 
-              {/* Role */}
-              <div>
-                <label className="block text-sm font-medium text-slate-300 mb-2">Role</label>
-                <select
-                  value={formData.role}
-                  onChange={(e) => handleRoleChange(e.target.value as UserRole)}
-                  className="w-full px-4 py-2 bg-slate-800 border border-white/10 rounded-lg text-white focus:outline-none focus:border-brand-orange transition-colors"
-                >
-                  <option value={UserRole.SALES_AGENT}>Sales Agent</option>
-                  <option value={UserRole.PRODUCTION}>Production</option>
-                  <option value={UserRole.SHIPPING}>Shipping</option>
-                  <option value={UserRole.ADMIN}>Admin</option>
-                </select>
-              </div>
+              <RolePicker value={formData.roles} onChange={handleRolesChange} />
 
               {/* Permissions Presets */}
               <div>
@@ -740,20 +787,7 @@ const UserManagementPage: React.FC = () => {
                 />
               </div>
 
-              {/* Role */}
-              <div>
-                <label className="block text-sm font-medium text-slate-300 mb-2">Role</label>
-                <select
-                  value={formData.role}
-                  onChange={(e) => handleRoleChange(e.target.value as UserRole)}
-                  className="w-full px-4 py-2 bg-slate-800 border border-white/10 rounded-lg text-white focus:outline-none focus:border-brand-orange transition-colors"
-                >
-                  <option value={UserRole.SALES_AGENT}>Sales Agent</option>
-                  <option value={UserRole.PRODUCTION}>Production</option>
-                  <option value={UserRole.SHIPPING}>Shipping</option>
-                  <option value={UserRole.ADMIN}>Admin</option>
-                </select>
-              </div>
+              <RolePicker value={formData.roles} onChange={handleRolesChange} />
 
               {/* Permissions Grid */}
               <div>
