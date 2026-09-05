@@ -17,9 +17,10 @@ import {
   CreditCard,
   Building2,
   Wand2,
+  PenTool,
 } from "lucide-react";
 import { useAuth } from "../../contexts/AuthContext";
-import { roleCan, ROLES_CAN_VIEW_ACTIVITY_AND_INBOX } from "../../utils/roleAccess";
+import { roleCan, ROLES_CAN_VIEW_ACTIVITY_AND_INBOX, ROLES_CAN_USE_DIGITIZER_PORTAL, isDigitizerOnly } from "../../utils/roleAccess";
 import { useQueryPrefetch } from "../../hooks/useQueryPrefetch";
 import { BrandLogo } from "../ui/BrandLogo";
 
@@ -82,7 +83,7 @@ interface SidebarProps {
 }
 
 const Sidebar: React.FC<SidebarProps> = ({ onNavigate }) => {
-  const { role, signOut, permissions } = useAuth();
+  const { role, roles, signOut, permissions } = useAuth();
 
   const isAdmin = role === "ADMIN";
   const canViewFinancials = isAdmin || permissions?.reports_view_financials;
@@ -94,6 +95,12 @@ const Sidebar: React.FC<SidebarProps> = ({ onNavigate }) => {
       label: "Dashboard",
       icon: <LayoutDashboard className="w-5 h-5" />,
       prefetchType: "dashboard" as const,
+    },
+    {
+      to: "/my-queue",
+      label: "My Queue",
+      icon: <PenTool className="w-5 h-5" />,
+      prefetchType: "none" as const,
     },
     {
       to: "/orders",
@@ -142,6 +149,12 @@ const Sidebar: React.FC<SidebarProps> = ({ onNavigate }) => {
             // did not exist yet was shown Activity and Inbox, both of which carry customer
             // identity and conversation content. Allowlist instead; see roleAccess.ts.
             const canSeeActivityAndInbox = roleCan(role, ROLES_CAN_VIEW_ACTIVITY_AND_INBOX);
+            // A freelance digitizer's whole world is their queue. Every other page would
+            // render empty for them anyway — the database gives them no path to orders or
+            // quotes — so showing the links is just doors onto nothing.
+            const digitizerOnly = isDigitizerOnly(roles);
+            if (item.to === "/my-queue") return roleCan(roles, ROLES_CAN_USE_DIGITIZER_PORTAL);
+            if (digitizerOnly) return item.to === "/clock-in-out";
             if (item.to === "/") return canViewFinancials;
             if (item.to === "/orders") return true;
             if (item.to === "/reports")

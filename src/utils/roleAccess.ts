@@ -154,6 +154,22 @@ export const ROLES_CAN_CONFIRM_COLOUR_MATCH: UserRole[] = [
   UserRole.PRODUCTION_SUPERVISOR,
 ];
 
+/**
+ * Dispatch digitizing work (Task 1.4). Mirrors the server-side check inside
+ * assign_digitizer() — the RPC refuses anyone else, so this list only decides who is
+ * shown the panel. DIGITIZER is absent on purpose: they receive work, never hand it out.
+ */
+export const ROLES_CAN_ASSIGN_DIGITIZER: UserRole[] = [
+  UserRole.ADMIN,
+  UserRole.PRODUCTION_SUPERVISOR,
+];
+
+/** See the digitizer queue/route at all. Admins keep it for support and testing. */
+export const ROLES_CAN_USE_DIGITIZER_PORTAL: UserRole[] = [
+  UserRole.ADMIN,
+  UserRole.DIGITIZER,
+];
+
 export const ROLES_CAN_ACCESS_ADMIN_ROUTES: UserRole[] = [UserRole.ADMIN];
 
 /**
@@ -223,3 +239,14 @@ export const primaryRole = (roles: readonly (UserRole | string)[] | null | undef
  */
 export const isRiskyRoleCombination = (roles: readonly (UserRole | string)[]): boolean =>
   roles.includes(UserRole.DIGITIZER) && roles.length > 1;
+
+/**
+ * Holds DIGITIZER and nothing else — an outside freelancer rather than staff covering
+ * two jobs. Mirrors is_digitizer_only() in SQL, which narrows their storage access.
+ *
+ * Used to HIDE staff navigation from them. Not a security boundary: the database gives a
+ * digitizer no path to orders or quotes at all, so the pages would be empty anyway. This
+ * just avoids showing an outside contractor a set of doors that all open onto nothing.
+ */
+export const isDigitizerOnly = (roles: readonly (UserRole | string)[] | null | undefined): boolean =>
+  !!roles && roles.length === 1 && roles[0] === UserRole.DIGITIZER;

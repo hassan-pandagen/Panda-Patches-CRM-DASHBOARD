@@ -53,6 +53,7 @@ const PaymentFormLandingPage = lazy(() => import('@/pages/customer/PaymentFormLa
 // mockup cycle, so this page is the approval step. Same capability model as /pay/:token:
 // the unguessable token is the credential, read through a narrow SECURITY DEFINER RPC.
 const ColourMatchPage = lazy(() => import('@/pages/customer/ColourMatchPage'));
+const DigitizerQueuePage = lazy(() => import('@/pages/DigitizerQueuePage'));
 
 // 404
 import NotFoundPage from '@/pages/NotFoundPage';
@@ -81,6 +82,10 @@ const App: React.FC = () => {
               
               {/* Lazy Loaded */}
               <Route path="/orders" element={<AllOrdersPage />} />
+              {/* Digitizer portal (Task 1.5) — its own route with its own query, never the
+                  order page with fields hidden. Gated again server-side: a digitizer has no
+                  RLS path to orders/quotes at all. */}
+              <Route path="/my-queue" element={<DigitizerQueuePage />} />
               <Route path="/new-order" element={<NewOrderPage />} />
               <Route path="/order/:orderNumber" element={<OrderPage />} />
               <Route path="/order/:orderNumber/edit" element={<EditOrderPage />} />

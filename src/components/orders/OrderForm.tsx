@@ -917,11 +917,21 @@ const OrderForm: React.FC<OrderFormProps> = ({
         </div>
         <div className="mt-10">
           <label className="block text-sm font-medium text-slate-300">Special Instructions</label>
+          {/* This is the ONE customer-facing free-text field an outside digitizer can read.
+              Everything else about the customer is withheld structurally (get_digitizer_item
+              never selects those columns), but nothing can tell a spec note from a name typed
+              into a spec note — so the guard has to be the person typing. Hence the hint here,
+              at the moment it would be broken, rather than only in a policy nobody re-reads. */}
+          <p className="text-xs text-slate-400 mt-1 mb-1.5">
+            Patch details only — freelance digitizers can read this field. No customer names,
+            emails, phone numbers or company names.
+          </p>
           <Textarea
             {...register('instructions')}
             error={errors.instructions?.message}
             maxLength={500} // Optional limit
             className="w-full mt-1"
+            placeholder="e.g. 3&quot; letters, gold thread, merrowed border"
           />
         </div>
         <div className="mt-8">
