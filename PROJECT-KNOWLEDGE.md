@@ -1464,6 +1464,22 @@ type, and §7.3 was invisible behind 148 lower-priority `search_path` rows. Expo
 - Anything else marked "typechecks clean, NOT deployed" above. **§7.8's sequel is the cautionary tale:
   a correct fix that isn't pushed is not a fix.**
 
+## 9.2b Task 0.2(b) — WON'T DO, by decision (2026-09-06)
+
+135 machine files (21 MB, 21 order folders, newest 2026-09-02) remain in
+`order-attachments/production-files/<orderNo>`. That bucket is **public**, so those
+stitch files are fetchable by anyone with the URL. `production-files` itself is private
+and the order form has pointed at it since 0.2(a), so this set is closed and cannot grow.
+
+**Owner decided on 6 Sept not to migrate them.** Recorded here so the next person to find
+publicly-readable stitch files knows it is a decision, not an oversight, and does not
+"fix" it without asking.
+
+Reversing the decision is one pass: copy each object into `production-files` under
+`orders/<id>/`, rewrite the stored URL, delete the original. The reason it was not done
+by default is that those URLs sit in old customer emails and order rows, so a careless
+move breaks links that still resolve today.
+
 ## 9.3 Data-quality caveats
 - `updated_at` is **not** a reliable staleness signal (982 rows bumped by a backfill) — use `created_at`.
 - `orders.delivered_at` is batch-entered for historical orders; `delivered_at_estimated=true` marks
