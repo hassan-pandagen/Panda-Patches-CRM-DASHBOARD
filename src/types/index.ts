@@ -34,6 +34,9 @@ export enum OrderStatus {
   // is the visible half of the gate, not the gate itself.
   COLOUR_MATCH_PENDING = 'COLOUR_MATCH_PENDING',
   NEW_ORDER = 'NEW_ORDER',
+  // Task 1.3 — assigned to a digitizer and being worked on. Entering this state is what
+  // OPENS the digitizer's window on the item; leaving it is what closes it.
+  DIGITIZING = 'DIGITIZING',
   REVISION_REQUESTED = 'REVISION_REQUESTED',
   AWAITING_APPROVAL = 'AWAITING_CUSTOMER_APPROVAL',
   // Waiting on the customer to receive and sign off a physical sample. Sits beside

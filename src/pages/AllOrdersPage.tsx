@@ -831,6 +831,7 @@ const AllOrdersPage: React.FC = () => {
 
                     <FilterTab active={activeFilter === 'COLOUR_MATCH_PENDING'} label="Colour Match" count={getCount('COLOUR_MATCH_PENDING')} onClick={() => handleFilterChange('COLOUR_MATCH_PENDING')} />
                     <FilterTab active={activeFilter === 'NEW_ORDER'} label="New" count={getCount('NEW_ORDER')} onClick={() => handleFilterChange('NEW_ORDER')} />
+                    <FilterTab active={activeFilter === 'DIGITIZING'} label="Digitizing" count={getCount('DIGITIZING')} onClick={() => handleFilterChange('DIGITIZING')} />
                     <FilterTab active={activeFilter === 'AWAITING_CUSTOMER_APPROVAL'} label="Awaiting Approval" count={getCount('AWAITING_CUSTOMER_APPROVAL')} onClick={() => handleFilterChange('AWAITING_CUSTOMER_APPROVAL')} />
                     <FilterTab active={activeFilter === 'AWAITING_SAMPLE'} label="Awaiting Sample" count={getCount('AWAITING_SAMPLE')} onClick={() => handleFilterChange('AWAITING_SAMPLE')} />
                     <FilterTab active={activeFilter === 'IN_PRODUCTION'} label="In Production" count={getCount('IN_PRODUCTION')} onClick={() => handleFilterChange('IN_PRODUCTION')} />

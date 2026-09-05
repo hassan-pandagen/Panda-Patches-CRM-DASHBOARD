@@ -633,6 +633,7 @@ const OrderForm: React.FC<OrderFormProps> = ({
   const statusOptions = [
     OrderStatus.COLOUR_MATCH_PENDING,
     OrderStatus.NEW_ORDER,
+    OrderStatus.DIGITIZING,
     OrderStatus.AWAITING_APPROVAL,
     OrderStatus.AWAITING_SAMPLE,
     OrderStatus.REVISION_REQUESTED,

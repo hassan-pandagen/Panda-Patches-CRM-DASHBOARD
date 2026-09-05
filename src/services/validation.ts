@@ -22,6 +22,7 @@ export const orderSchema = z.object({
   status: z.enum([
     'COLOUR_MATCH_PENDING',
     'NEW_ORDER',
+    'DIGITIZING',
     'AWAITING_APPROVAL',
     'AWAITING_SAMPLE',
     'REVISION_REQUESTED',
