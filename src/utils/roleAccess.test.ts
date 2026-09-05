@@ -177,3 +177,46 @@ describe('behaviour preserved for the four existing roles', () => {
     expect(roleCan(UserRole.SALES_AGENT, ROLES_SEE_ALL_REPORT_DATA)).toBe(false);
   });
 });
+
+describe('multi-role accounts (CEO decision 6 Sept)', () => {
+  // Zahid holds both. The union must grant supervisor capabilities without the
+  // DIGITIZER membership dragging anything down — union grants, never restricts.
+  const ZAHID = [UserRole.DIGITIZER, UserRole.PRODUCTION_SUPERVISOR];
+
+  it('grants a capability held by any one of the roles', () => {
+    expect(roleCan(ZAHID, ROLES_CAN_SEND_CUSTOMER_EMAIL)).toBe(true);      // via supervisor
+    expect(roleCan(ZAHID, ROLES_CAN_VIEW_CUSTOMER_IDENTITY)).toBe(true);   // via supervisor
+    expect(roleCan(ZAHID, ROLES_CAN_CONFIRM_COLOUR_MATCH)).toBe(true);     // via supervisor
+  });
+
+  it('still denies what NEITHER role grants', () => {
+    expect(roleCan(ZAHID, ROLES_CAN_MANAGE_USERS)).toBe(false);
+    expect(roleCan(ZAHID, ROLES_CAN_ACCESS_ADMIN_ROUTES)).toBe(false);
+    expect(roleCan(ZAHID, ROLES_CAN_CREATE_ORDERS)).toBe(false);
+  });
+
+  it('a digitizer-only account is unchanged by the array form', () => {
+    expect(roleCan([UserRole.DIGITIZER], ROLES_CAN_SEND_CUSTOMER_EMAIL)).toBe(false);
+    expect(roleCan([UserRole.DIGITIZER], ROLES_CAN_VIEW_CUSTOMER_IDENTITY)).toBe(false);
+    expect(roleCan([UserRole.DIGITIZER], ROLES_SEE_ALL_ORDER_ROWS)).toBe(false);
+  });
+
+  it('is default-deny for an empty set, which is what a deactivated account holds', () => {
+    for (const list of ALL_LISTS) {
+      expect(roleCan([], list)).toBe(false);
+      expect(roleCan(null, list)).toBe(false);
+      expect(roleCan(undefined, list)).toBe(false);
+    }
+  });
+
+  it('ignores junk sitting alongside a real role, and junk alone grants nothing', () => {
+    expect(roleCan(['WIZARD', UserRole.ADMIN] as any, ROLES_CAN_MANAGE_USERS)).toBe(true);
+    expect(roleCan(['WIZARD', 'INTERN'] as any, ROLES_CAN_MANAGE_USERS)).toBe(false);
+    expect(roleCan([''] as any, ROLES_SEE_ALL_ORDER_ROWS)).toBe(false);
+  });
+
+  it('the single-role form still behaves exactly as before', () => {
+    expect(roleCan(UserRole.ADMIN, ROLES_CAN_MANAGE_USERS)).toBe(true);
+    expect(roleCan(UserRole.PRODUCTION, ROLES_CAN_MANAGE_USERS)).toBe(false);
+  });
+});

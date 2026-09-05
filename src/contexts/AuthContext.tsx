@@ -10,6 +10,8 @@ interface AuthContextType {
   user: User | null;
   session: Session | null;
   role: UserRole | null;
+  roles: UserRole[];
+  isActive: boolean;
   permissions: UserPermissions | null;
   isLoading: boolean;
   error: Error | null;
@@ -116,7 +118,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     await supabase.auth.refreshSession();
   };
 
-  const role = profile?.role ?? null;
+  // `role` stays the PRIMARY role (highest privilege held) so the 34 existing
+  // `role === UserRole.ADMIN` comparisons keep working unchanged. `roles` is the
+  // authoritative set that capability checks read — see roleAccess.ts.
+  //
+  // A deactivated account holds nothing: no primary role, no set. Every allowlist is
+  // default-deny, so switching is_active off revokes the UI without a deploy. The
+  // server enforces the same thing independently via get_current_user_role().
+  const isActive = profile?.is_active !== false;
+  const role = (isActive ? profile?.role : null) ?? null;
+  const roles: UserRole[] = isActive
+    ? ((profile?.roles as UserRole[] | undefined) ?? (profile?.role ? [profile.role as UserRole] : []))
+    : [];
   const permissions = profile?.permissions ?? null;
   
   const isLoading = authLoading || (!!user && isProfileLoading);
@@ -127,6 +140,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     user,
     session,
     role,
+    roles,
+    isActive,
     permissions,
     isLoading,
     error,

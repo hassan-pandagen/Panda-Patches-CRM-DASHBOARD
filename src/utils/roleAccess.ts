@@ -169,10 +169,25 @@ export const ROLES_CAN_MANAGE_USERS: UserRole[] = [UserRole.ADMIN];
  * free-text column underneath — so an unrecognised or null value must land on
  * `false` rather than throwing or coercing. That is the whole point of the file.
  */
+/**
+ * Does the caller hold ANY of the allowed roles?
+ *
+ * Accepts a single role or the full set, because an account can now hold several
+ * (CEO decision 6 Sept: Zahid is DIGITIZER + PRODUCTION_SUPERVISOR). Multi-role is a
+ * UNION of capabilities — it can only ever grant, never restrict.
+ *
+ * ⚠️ That union is the hazard worth naming: a DIGITIZER handed a second role silently
+ * loses the blind-vendor protection Guardrail 1 rests on. Nothing here can detect that;
+ * the account screen has to make DIGITIZER + anything a deliberate, warned choice.
+ *
+ * Still default-deny: no roles, an empty set, or an unknown role all return false.
+ */
 export const roleCan = (
-  role: UserRole | string | null | undefined,
+  role: UserRole | string | null | undefined | readonly (UserRole | string)[],
   allowed: UserRole[],
 ): boolean => {
   if (!role) return false;
-  return (allowed as string[]).includes(role as string);
+  const held = Array.isArray(role) ? role : [role];
+  const allow = allowed as string[];
+  return held.some(r => !!r && allow.includes(r as string));
 };

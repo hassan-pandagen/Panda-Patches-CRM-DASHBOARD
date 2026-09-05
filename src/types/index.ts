@@ -192,7 +192,12 @@ export interface UserProfile {
   id: string;
   email: string;
   full_name: string;
+  /** DERIVED — the highest-privilege member of `roles`. Never write this; write `roles`. */
   role: UserRole;
+  /** Authoritative role set. Capability checks read this (union of what each role grants). */
+  roles: UserRole[];
+  /** false = switched off. Server-side guards deny too, via get_current_user_role(). */
+  is_active: boolean;
   permissions: UserPermissions;
 }
 
