@@ -131,24 +131,52 @@ Deno.serve(async (req: Request) => {
       .lte('invite_sent_at', reminderCeil);
     if (remErr) throw remErr;
 
-    // Pull the matching orders for name/number personalization.
+    // Pull the matching orders for personalization AND to RE-CHECK the order.
+    //
+    // The invite is gated on status DELIVERED/FEEDBACK, but the reminder used to read
+    // review_invitations alone and never look at the order again — so an order that went
+    // wrong AFTER the invite still got "did the patches come out right?" six days later.
+    // That fired: PP-11197 was flipped to REMAKE on 24 Aug and reminded on 27 Aug.
+    //
+    // Asking a customer for a public review while remaking their botched order is the
+    // worst possible moment to ask, so the reminder now re-reads status and stands down.
     const reminderOrderIds = (dueReminders ?? []).map((r: any) => r.order_id);
     const ordersById: Record<number, any> = {};
     if (reminderOrderIds.length) {
       const { data: ords } = await db
         .from('orders')
-        .select('id, customer_name, order_number')
+        .select('id, customer_name, order_number, status')
         .in('id', reminderOrderIds);
       for (const o of ords ?? []) ordersById[o.id] = o;
     }
 
+    // Anything that is no longer a happy delivery. REMAKE and REVISION_REQUESTED mean the
+    // customer complained; REFUNDED/CANCELLED mean there is no order to review.
+    const SUPPRESS_REMINDER_STATUSES = new Set([
+      'REMAKE', 'REVISION_REQUESTED', 'REFUNDED', 'CANCELLED', 'COLOUR_MATCH_PENDING',
+    ]);
+
     let remindersSent = 0;
+    let remindersSuppressed = 0;
     for (const r of dueReminders ?? []) {
       if (!r.customer_email || isOptedOut(r.customer_email)) {
         // Opted out since the invite — close it out without sending.
         await db.from('review_invitations')
           .update({ reminder_sent_at: new Date().toISOString(), status: 'reminded' })
           .eq('id', r.id).is('reminder_sent_at', null);
+        continue;
+      }
+
+      // Order went wrong since the invite? Close the row out WITHOUT sending, so it stops
+      // being reconsidered every day. Deliberately not left open for a later retry: by the
+      // time a remake completes, a reminder about the original delivery is meaningless.
+      const order = ordersById[r.order_id];
+      if (order && SUPPRESS_REMINDER_STATUSES.has(String(order.status))) {
+        await db.from('review_invitations')
+          .update({ reminder_sent_at: new Date().toISOString(), status: 'reminded' })
+          .eq('id', r.id).is('reminder_sent_at', null);
+        remindersSuppressed++;
+        console.log(`[review-invite-cron] reminder suppressed for ${order.order_number} (status ${order.status})`);
         continue;
       }
 
@@ -178,7 +206,7 @@ Deno.serve(async (req: Request) => {
       });
     }
 
-    const summary = { invitesSent, remindersSent, ranAt: new Date().toISOString() };
+    const summary = { invitesSent, remindersSent, remindersSuppressed, ranAt: new Date().toISOString() };
     console.log('[review-invite-cron]', JSON.stringify(summary));
     return new Response(JSON.stringify({ ok: true, ...summary }), {
       status: 200, headers: { 'Content-Type': 'application/json' },
