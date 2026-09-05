@@ -142,12 +142,23 @@ Deno.serve(async (req: Request) => {
     // worst possible moment to ask, so the reminder now re-reads status and stands down.
     const reminderOrderIds = (dueReminders ?? []).map((r: any) => r.order_id);
     const ordersById: Record<number, any> = {};
+    const blockedByDispute = new Set<number>();
     if (reminderOrderIds.length) {
       const { data: ords } = await db
         .from('orders')
         .select('id, customer_name, order_number, status')
         .in('id', reminderOrderIds);
       for (const o of ords ?? []) ordersById[o.id] = o;
+
+      // A disputed order is an unhappy customer mid-argument (open) or one who won the
+      // argument (lost). Either way, asking them for a public review is the worst possible
+      // moment. Status alone cannot see this — a dispute leaves the order DELIVERED.
+      const { data: disputed } = await db
+        .from('order_disputes')
+        .select('order_id')
+        .in('order_id', reminderOrderIds)
+        .in('status', ['open', 'lost']);
+      for (const d of disputed ?? []) blockedByDispute.add(d.order_id);
     }
 
     // Anything that is no longer a happy delivery. REMAKE and REVISION_REQUESTED mean the
@@ -171,12 +182,13 @@ Deno.serve(async (req: Request) => {
       // being reconsidered every day. Deliberately not left open for a later retry: by the
       // time a remake completes, a reminder about the original delivery is meaningless.
       const order = ordersById[r.order_id];
-      if (order && SUPPRESS_REMINDER_STATUSES.has(String(order.status))) {
+      if ((order && SUPPRESS_REMINDER_STATUSES.has(String(order.status)))
+          || blockedByDispute.has(r.order_id)) {
         await db.from('review_invitations')
           .update({ reminder_sent_at: new Date().toISOString(), status: 'reminded' })
           .eq('id', r.id).is('reminder_sent_at', null);
         remindersSuppressed++;
-        console.log(`[review-invite-cron] reminder suppressed for ${order.order_number} (status ${order.status})`);
+        console.log(`[review-invite-cron] reminder suppressed for ${order?.order_number ?? r.order_id} (status ${order?.status}, disputed=${blockedByDispute.has(r.order_id)})`);
         continue;
       }
 

@@ -1,0 +1,35 @@
+-- ============================================================================
+-- CEO decisions, 6 Sept — rush block, rush-fee refunds, disputes, colour aliases.
+-- Applied via MCP as: rush_block_and_fee_refund, order_disputes, rush_block_fix_cutoff.
+-- The live database is the source of truth (§9.3); this file is the record.
+--
+-- 1. RUSH PRODUCTION BLOCK. Rush = (is_urgent OR rush_date IS NOT NULL) cannot reach
+--    IN_PRODUCTION without rush_confirmed_date. Only for orders created after the field
+--    shipped — applying it to the 118 historical rush orders would freeze every one of
+--    them out over a field that did not exist when they were taken.
+--
+--    ⚠️ The cutoff is an explicit UTC INSTANT, not a local date. The first version used
+--    DATE '2026-09-06' (the authoring machine's date) while the database clock was on
+--    2026-09-05 23:12 UTC, so every rush order created in that gap slipped past unblocked.
+--    A test caught it before anything shipped through. Never write a date literal from the
+--    local calendar into a guard the database evaluates.
+--
+--    "Rush" is the UNION on purpose: 27 orders are is_urgent with no rush_date, 57 carry
+--    a rush_date without is_urgent. is_urgent_approved is unusable — 101 orders against
+--    is_urgent's 59, so it is not even a subset.
+--
+-- 2. rush_fee_refunded / rush_fee_refund_amount. The historical on-time figure uses the
+--    CEO's rule (a rush order with status REFUNDED counts as a rush refund) because
+--    nothing finer exists. These columns make a PARTIAL rush-fee refund distinguishable
+--    from a whole-order refund from now on.
+--
+-- 3. order_disputes. Its own table: one order can be disputed more than once, and a
+--    dispute's lifecycle is independent of the order's status. Suppresses review asks
+--    while open or lost — status alone cannot see this, since a dispute leaves the order
+--    sitting at DELIVERED.
+--
+-- 4. thread_colour_aliases. Starts EMPTY and is never seeded. "Never auto-map a typed
+--    name to a code the floor hasn't confirmed" — an unconfirmed guess here would skip
+--    the customer confirmation on a $150 set, the exact failure the colour gate exists to
+--    prevent. confirmed_by records who stood behind each mapping.
+-- ============================================================================
