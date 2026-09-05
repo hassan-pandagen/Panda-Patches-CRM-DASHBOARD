@@ -1,0 +1,23 @@
+-- ============================================================================
+-- Delivery-date provenance + the publishable-turnaround rule. Applied 2026-09-06.
+--
+-- WHY: delivered_at_estimated is a boolean and there are THREE states, not two.
+-- It marks bulk-close guesses and says nothing about the 156 rows backfilled from
+-- email timestamps by add_review_program.sql — those read as observed deliveries
+-- and are not. delivery_source carries the distinction the boolean cannot.
+--
+--   carrier_manual  a human read it off the carrier's page      PUBLISHABLE
+--   status_change   stamped when an agent set DELIVERED         publishable
+--   bulk_estimate   bulk-close guess                            not publishable
+--   email_backfill  derived from a CUSTOMER_DELIVERED email     not publishable
+--
+-- delivered_at_estimated is left in place and untouched — the website reads it for
+-- public aggregates, and changing that is the owner's call, not a silent migration.
+--
+-- rush_turnaround_by_type(min_sample) holds BOTH publication rules in one place:
+-- only verified sources count, and a type needs n >= 5 before a median is published.
+-- The alternative is that rule living in whichever query someone writes next.
+--
+-- As of 6 Sept only Embroidered qualifies (n=13, median 12 business days). The rest
+-- sit at n=1..3 and stay unpublished until the CEO's carrier verification fills them.
+-- ============================================================================
