@@ -749,6 +749,21 @@ const OrderPage: React.FC = () => {
                                                 🚢 Ship by: {new Date(order.rushDate + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                                             </span>
                                         )}
+                                        {/* The date WE promised. Production is blocked until it is set, so the
+                                            missing state has to be visible HERE — otherwise the first anyone
+                                            knows is a rejected status change with no obvious cause. */}
+                                        {order.rushConfirmedDate ? (
+                                            <span className="text-sm px-3 py-1 rounded-full border font-bold bg-emerald-500/20 border-emerald-500 text-emerald-300">
+                                                ✅ Confirmed: {new Date(order.rushConfirmedDate + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                                            </span>
+                                        ) : (
+                                            <span
+                                                className="text-sm px-3 py-1 rounded-full border font-bold bg-amber-500/20 border-amber-500 text-amber-300"
+                                                title="Set this in Edit Order. Production is blocked until it is filled."
+                                            >
+                                                ⚠️ No confirmed date — blocks production
+                                            </span>
+                                        )}
                                     </div>
                                 )}
                                 <ShipByPill shipByDate={order.shipByDate} status={order.status} className="ml-1 align-middle" />

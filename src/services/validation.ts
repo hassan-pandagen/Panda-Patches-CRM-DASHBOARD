@@ -69,6 +69,7 @@ export const orderSchema = z.object({
   
   // ✅ Array Fields
   mockupUrls: z.array(z.string()).optional(),
+  rushConfirmedDate: z.string().optional().nullable(),
   productionFileUrls: z.array(z.string()).optional(),
   shippingAttachmentUrls: z.array(z.string()).optional(),
   customerAttachmentUrls: z.array(z.string()).optional(),

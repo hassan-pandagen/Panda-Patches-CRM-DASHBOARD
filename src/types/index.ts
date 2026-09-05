@@ -123,7 +123,11 @@ export interface Order {
   loyaltyDiscountPercent?: number | null;
   isUrgent: boolean;
   isUrgentApproved?: boolean;
-  rushDate?: string; // Required ship-by date when order is marked urgent
+  rushDate?: string; // What the CUSTOMER asked for at order time
+  // What WE committed to in the confirmation email. Required before a rush order can
+  // enter production (DB trigger guard_rush_confirmed_before_production), and the
+  // other half of the on-time rate: delivered_at::date <= rushConfirmedDate.
+  rushConfirmedDate?: string | null;
   shipByDate?: string | null; // Soft ship-by reminder date (independent of urgent)
   sampleBox?: boolean; // Customer also wants a sample box alongside their patches
 

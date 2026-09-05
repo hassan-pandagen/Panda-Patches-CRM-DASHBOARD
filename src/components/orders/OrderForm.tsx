@@ -92,6 +92,7 @@ export interface SaveData {
   status: string;
   isUrgent: boolean;
   rushDate?: string;
+  rushConfirmedDate?: string | null;
   // Soft ship-by reminder date — independent of isUrgent; drives a pill, not the urgent workflow.
   shipByDate?: string | null;
   sampleBox?: boolean;
@@ -269,6 +270,7 @@ const OrderForm: React.FC<OrderFormProps> = ({
     isUrgent: initialData?.isUrgent || false,
     sampleBox: initialData?.sampleBox || false,
     rushDate: initialData?.rushDate || '',
+    rushConfirmedDate: initialData?.rushConfirmedDate || '',
     shipByDate: initialData?.shipByDate || '',
     mockupUrls: initialData?.mockupUrls || [],
     productionFileUrls: initialData?.productionFileUrls || [],
@@ -1235,6 +1237,23 @@ const OrderForm: React.FC<OrderFormProps> = ({
                   className="block w-full bg-slate-800 border-red-500/50 rounded-md text-white focus:ring-red-500 focus:border-red-500 text-sm px-3 py-2"
                 />
                 {errors.rushDate && <p className="text-red-400 text-xs mt-1">{errors.rushDate.message}</p>}
+
+                {/* The date WE promised, which is not always the date they asked for.
+                    A database trigger blocks this order from reaching In Production until
+                    it is filled — so leaving it empty stops the job, it does not just
+                    leave a metric blank. It is also the only thing the on-time rate can
+                    be measured against; rush_date is the customer's request, not our word. */}
+                <label className="block text-xs font-semibold text-emerald-400 mt-3 mb-1.5 uppercase tracking-wide">
+                  ✅ Confirmed Ship-By Date <span className="text-slate-400 normal-case font-normal">— the date you promised in the confirmation email</span>
+                </label>
+                <input
+                  type="date"
+                  {...register('rushConfirmedDate')}
+                  className="block w-full bg-slate-800 border-emerald-500/50 rounded-md text-white focus:ring-emerald-500 focus:border-emerald-500 text-sm px-3 py-2"
+                />
+                <p className="text-[11px] text-slate-400 mt-1.5">
+                  Required before this order can move to In Production.
+                </p>
               </div>
             )}
           </div>

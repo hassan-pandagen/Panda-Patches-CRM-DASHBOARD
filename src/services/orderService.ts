@@ -211,6 +211,7 @@ export const mapDbToOrder = (data: any): Order => {
     isUrgentApproved: data.isUrgentApproved ?? data.is_urgent_approved,
     sampleBox: data.sampleBox ?? data.sample_box ?? false,
     rushDate: data.rushDate ?? data.rush_date ?? undefined,
+    rushConfirmedDate: data.rushConfirmedDate ?? data.rush_confirmed_date ?? null,
     shipByDate: data.shipByDate ?? data.ship_by_date ?? null,
     productionCompletedAt: data.productionCompletedAt ?? data.production_completed_at ?? null,
     productionCompletedBy: data.productionCompletedBy ?? data.production_completed_by ?? null,
