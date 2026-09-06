@@ -1,0 +1,22 @@
+-- ============================================================================
+-- Review click tracking + resolve_thread_code, applied 2026-09-07.
+-- Applied via MCP as: review_click_tracking, resolve_thread_code,
+-- resolve_thread_code_tighten. Live database is the source of truth (§9.3).
+--
+-- 1. /r/:token. The invite linked to a bare Trustpilot URL, so 127 invites against
+--    +11 reviews were two unrelated numbers. record_review_click() is anon-executable
+--    by necessity (the reader is in their email client, no session) but returns nothing
+--    and can only increment a counter — a guessed token buys a phantom click, no data.
+--    Existing invites were backfilled with tokens so reminders on old invites track too.
+--    First click stamps first_clicked_at; repeats increment click_count without moving it.
+--
+-- 2. resolve_thread_code(). Colour gate option (b): a picked stock code pre-fills the
+--    supervisor's confirm box so releasing is ONE CLICK, but the order still stops at
+--    COLOUR_MATCH_PENDING. Never auto-proceed.
+--
+--    ⚠️ The first version stripped every non-digit and matched the remainder, so
+--    'PMS 10014' resolved to stock code 10014 and would have taken the one-click path
+--    on a Pantone reference that merely contains those digits. The input must now BE a
+--    code. Everything ambiguous takes the ask-the-customer path, which is the safe
+--    direction and the entire reason the gate exists.
+-- ============================================================================

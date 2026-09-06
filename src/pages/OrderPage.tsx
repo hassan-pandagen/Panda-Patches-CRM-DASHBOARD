@@ -15,6 +15,7 @@ import { getCustomerByEmail } from '../services/customersService';
 import { isWebCheckoutAgent, leadSourceDisplay } from '../utils/leadSource';
 import { roleCan, ROLES_CAN_VIEW_CUSTOMER_IDENTITY, ROLES_CAN_CONFIRM_COLOUR_MATCH } from '../utils/roleAccess';
 import AssignDigitizerSection from '../components/orders/AssignDigitizerSection';
+import DisputesSection from '../components/orders/DisputesSection';
 import { resolveThreadColour } from '../services/digitizerService';
 import { toCssHex } from '../utils/colourSwatch';
 import FileUploadSection from '../components/orders/FileUpload';
@@ -1374,6 +1375,8 @@ const OrderPage: React.FC = () => {
                                 )}
                             </div>
                         </SpotlightCard>
+
+                        <DisputesSection orderId={order.id} />
 
                         <AssignDigitizerSection
                             orderId={order.id}
