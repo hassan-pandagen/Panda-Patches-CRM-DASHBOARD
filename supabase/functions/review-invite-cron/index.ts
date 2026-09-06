@@ -23,6 +23,11 @@ const REMINDER_AFTER_DAYS = 5;   // one reminder, 5 days after the invite
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
+// Where the review link points. /r/:token records the click, then forwards to Trustpilot.
+// Without it the invite links straight to a bare URL and the program's conversion is
+// unmeasurable — 127 invites against +11 reviews being two unrelated numbers.
+const PORTAL_URL = Deno.env.get('PORTAL_BASE_URL') ?? 'https://portal.pandapatches.com';
+
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') return new Response('ok');
 
@@ -99,16 +104,17 @@ Deno.serve(async (req: Request) => {
       // duplicate/concurrent run can't double-ask. Only then do we send. A rare send
       // failure means this customer is silently skipped — acceptable for a review ask,
       // and far better than risking a second ask (compliance).
-      const { error: insErr } = await db.from('review_invitations').insert({
+      const { data: claimedRow, error: insErr } = await db.from('review_invitations').insert({
         order_id: o.id,
         customer_email: o.customer_email,
         status: 'invited',
-      });
+      }).select('click_token').single();
       if (insErr) continue; // someone else claimed it (unique violation) — skip
 
       const ok = await sendEmail(o.customer_email, 'CUSTOMER_REVIEW_INVITE', {
         customer_name: o.customer_name || '',
         order_number: o.order_number || '',
+        review_url: `${PORTAL_URL}/r/${claimedRow?.click_token}`,
       });
       invitesSent += ok ? 1 : 0;
 
@@ -125,7 +131,7 @@ Deno.serve(async (req: Request) => {
     // ── 2) REMINDERS (one, ever) ────────────────────────────────────────────
     const { data: dueReminders, error: remErr } = await db
       .from('review_invitations')
-      .select('id, order_id, customer_email')
+      .select('id, order_id, customer_email, click_token')
       .is('reminder_sent_at', null)
       .eq('status', 'invited')
       .lte('invite_sent_at', reminderCeil);
@@ -205,6 +211,7 @@ Deno.serve(async (req: Request) => {
       const ok = await sendEmail(r.customer_email, 'CUSTOMER_REVIEW_REMINDER', {
         customer_name: o.customer_name || '',
         order_number: o.order_number || '',
+        review_url: r.click_token ? `${PORTAL_URL}/r/${r.click_token}` : undefined,
       });
       remindersSent += ok ? 1 : 0;
 

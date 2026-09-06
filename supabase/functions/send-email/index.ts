@@ -111,12 +111,16 @@ const isPlainReviewTemplate = (templateId: string): boolean =>
 // never as a satisfaction-based fork that routes unhappy customers away from the review.
 const buildReviewText = (templateId: string, data: any): string => {
   const firstName = getFirstName(data);
+  // The cron passes a /r/:token link that records the click then forwards to Trustpilot.
+  // Falls back to the bare URL if it is ever called without one, so a missing token
+  // costs us the measurement rather than the review.
+  const reviewUrl = data?.review_url || TRUSTPILOT_REVIEW_URL;
   if (templateId === 'CUSTOMER_REVIEW_REMINDER') {
     return [
       `Hi ${firstName},`,
       ``,
       `Just following up once on your recent Panda Patches order — whether the patches turned out great or not quite right, a short review on Trustpilot genuinely helps other people find us:`,
-      TRUSTPILOT_REVIEW_URL,
+      reviewUrl,
       ``,
       `This is the only reminder I'll send. Either way, just reply to this email if there's anything we can do for you.`,
       ``,
@@ -129,7 +133,7 @@ const buildReviewText = (templateId: string, data: any): string => {
     `Your Panda Patches order arrived a few days ago, and I wanted to check in personally — did the patches come out the way you hoped?`,
     ``,
     `If you have a minute, a short review on Trustpilot would mean a lot to our small team:`,
-    TRUSTPILOT_REVIEW_URL,
+    reviewUrl,
     ``,
     `Either way, just reply to this email if there's anything at all we can do for you.`,
     ``,

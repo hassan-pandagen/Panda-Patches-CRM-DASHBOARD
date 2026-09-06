@@ -55,6 +55,10 @@ const PaymentFormLandingPage = lazy(() => import('@/pages/customer/PaymentFormLa
 const ColourMatchPage = lazy(() => import('@/pages/customer/ColourMatchPage'));
 const DigitizerQueuePage = lazy(() => import('@/pages/DigitizerQueuePage'));
 
+// /r/:token — review-invite click tracking, then forward to Trustpilot. Public: the
+// customer is in their email client with no session.
+const ReviewRedirectPage = lazy(() => import('@/pages/customer/ReviewRedirectPage'));
+
 // 404
 import NotFoundPage from '@/pages/NotFoundPage';
 
@@ -127,6 +131,9 @@ const App: React.FC = () => {
 
           {/* Colour confirmation for letter packages — no auth required. */}
           <Route path="/colour-match/:token" element={<ErrorBoundary><ChunkErrorBoundary><ColourMatchPage /></ChunkErrorBoundary></ErrorBoundary>} />
+
+          {/* Review-invite redirect — records the click, then forwards. */}
+          <Route path="/r/:token" element={<ErrorBoundary><ChunkErrorBoundary><ReviewRedirectPage /></ChunkErrorBoundary></ErrorBoundary>} />
 
           {/* 404 — outside protected routes so all unknown paths return not-found */}
           <Route path="*" element={<NotFoundPage />} />
