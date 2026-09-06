@@ -15,6 +15,7 @@ import { getCustomerByEmail } from '../services/customersService';
 import { isWebCheckoutAgent, leadSourceDisplay } from '../utils/leadSource';
 import { roleCan, ROLES_CAN_VIEW_CUSTOMER_IDENTITY, ROLES_CAN_CONFIRM_COLOUR_MATCH } from '../utils/roleAccess';
 import AssignDigitizerSection from '../components/orders/AssignDigitizerSection';
+import { resolveThreadColour } from '../services/digitizerService';
 import { toCssHex } from '../utils/colourSwatch';
 import FileUploadSection from '../components/orders/FileUpload';
 
@@ -219,6 +220,17 @@ const OrderPage: React.FC = () => {
     React.useEffect(() => {
         setYarnDraft(order?.matchedYarn || order?.colourProposedYarn || order?.customerColourInput || '');
     }, [order?.id, order?.matchedYarn, order?.colourProposedYarn, order?.customerColourInput]);
+
+    // Did the customer PICK a stock code, or type something free-form? Option (b):
+    // a picked code still stops at COLOUR_MATCH_PENDING, but the supervisor's box arrives
+    // pre-filled with it so releasing is one click. The picker makes the click trivial;
+    // it never removes it.
+    const { data: pickedColour } = useQuery({
+        queryKey: ['thread-colour', order?.customerColourInput],
+        queryFn: () => resolveThreadColour(order?.customerColourInput),
+        enabled: !!order?.colourMatchRequired && !!order?.customerColourInput,
+        staleTime: 1000 * 60 * 60,
+    });
 
     const confirmColourMatchMutation = useMutation({
         mutationFn: async (yarn: string) => {
@@ -974,7 +986,31 @@ const OrderPage: React.FC = () => {
                                             </div>
                                         ) : (
                                             /* 'standard' — a colour we stock. One click, no email. */
-                                            <div className="mt-4 flex flex-col sm:flex-row gap-3">
+                                            <div className="mt-4 space-y-3">
+                                                {pickedColour && (
+                                                    <div className="flex items-center gap-3 p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/30">
+                                                        {pickedColour.hex_approx && (
+                                                            <span
+                                                                className="w-8 h-8 rounded border border-white/25 shrink-0"
+                                                                style={{ backgroundColor: pickedColour.hex_approx }}
+                                                                title={`${pickedColour.hex_approx} (approximate — a picking aid, not the spec)`}
+                                                            />
+                                                        )}
+                                                        <div className="min-w-0">
+                                                            <p className="text-sm text-white">
+                                                                Customer picked stock code{' '}
+                                                                <strong className="font-mono">{pickedColour.code}</strong>
+                                                                {pickedColour.name ? ` — ${pickedColour.name}` : ''}
+                                                            </p>
+                                                            <p className="text-xs text-slate-400 mt-0.5">
+                                                                {pickedColour.matched_via === 'code'
+                                                                    ? 'Chosen from our chart, so there is nothing to interpret — just confirm the shelf has it.'
+                                                                    : 'Matched by a floor-confirmed alias.'}
+                                                            </p>
+                                                        </div>
+                                                    </div>
+                                                )}
+                                                <div className="flex flex-col sm:flex-row gap-3">
                                                 <input
                                                     type="text"
                                                     value={yarnDraft}
@@ -987,8 +1023,9 @@ const OrderPage: React.FC = () => {
                                                     disabled={confirmColourMatchMutation.isPending || !yarnDraft.trim()}
                                                     onClick={() => confirmColourMatchMutation.mutate(yarnDraft)}
                                                 >
-                                                    Confirm Match
+                                                    {pickedColour ? `Confirm ${pickedColour.code}` : 'Confirm Match'}
                                                 </Button>
+                                                </div>
                                             </div>
                                         )}
                                     </div>

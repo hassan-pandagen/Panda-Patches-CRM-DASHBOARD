@@ -102,3 +102,26 @@ export const getLiveAssignment = async (args: { orderId?: number; quoteId?: numb
   if (error) throw error;
   return data?.[0] ?? null;
 };
+
+export interface ResolvedThreadColour {
+  code: string;
+  name: string | null;
+  hex_approx: string | null;
+  matched_via: 'code' | 'floor-confirmed alias';
+}
+
+/**
+ * Does the customer's typed colour resolve to a stock thread code?
+ *
+ * EXACT matches only — a code, or a name the floor has explicitly confirmed as an alias.
+ * No fuzzy matching by design: a wrong match here skips the customer confirmation on a
+ * $150 set, which is the failure the colour gate exists to prevent. "PMS 10014",
+ * "10014 blue" and "royal blue" all resolve to nothing and take the ask-the-customer path.
+ */
+export const resolveThreadColour = async (input: string | null | undefined):
+  Promise<ResolvedThreadColour | null> => {
+  if (!input || !input.trim()) return null;
+  const { data, error } = await supabase.rpc('resolve_thread_code', { p_input: input });
+  if (error) return null;              // degrade to "ask the customer", never to "assume"
+  return ((data ?? []) as ResolvedThreadColour[])[0] ?? null;
+};
