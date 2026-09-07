@@ -302,10 +302,15 @@ async function fetchPaginatedOrders(params: {
     //
     // NULLS LAST both ways on purpose: an order with no amount yet is not "the smallest",
     // it is unknown, and burying it under real values would be misleading either direction.
+    // order_amount_sort is order_amount with 0 folded to NULL (generated column). There
+    // are no NULL amounts in this table, but 11 orders carry ZERO — six zeroed by a refund,
+    // five simply never priced — and none is a genuine free sale. Sorting on the raw column
+    // would open "low to high" with those eleven, i.e. the least informative rows in the
+    // table taking the top slot. NULLS LAST both ways keeps unknowns out of both ends.
     if (sort === 'amount_desc') {
-      query = query.order('order_amount', { ascending: false, nullsFirst: false });
+      query = query.order('order_amount_sort', { ascending: false, nullsFirst: false });
     } else if (sort === 'amount_asc') {
-      query = query.order('order_amount', { ascending: true, nullsFirst: false });
+      query = query.order('order_amount_sort', { ascending: true, nullsFirst: false });
     } else if (sort === 'oldest') {
       query = query.order('created_at', { ascending: true });
     }
