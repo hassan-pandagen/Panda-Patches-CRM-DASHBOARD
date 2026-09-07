@@ -265,16 +265,16 @@ async function fetchPaginatedOrders(params: {
         query = query
             .lt('created_at', tenDaysAgo.toISOString())
             .not('status', 'in', `(${CLOSED_STATUSES.join(',')})`);
-        // Sort oldest first for overdue
-        query = query.order('created_at', { ascending: true });
+        // Oldest first for overdue — unless the user asked for a specific sort below.
+        if (!sort) query = query.order('created_at', { ascending: true });
     } else if (filter === 'PAYMENT_PENDING') {
         // Payment pending: balance_due > 0, exclude cancelled/refunded. balance_due is a
         // generated column (greatest(order_amount - amount_paid, 0)) so this filters and
         // paginates server-side like every other tab — no unbounded fetch-then-filter.
         query = query
             .not('status', 'in', '(CANCELLED,REFUNDED)')
-            .gt('balance_due', 0.01)
-            .order('created_at', { ascending: false });
+            .gt('balance_due', 0.01);
+        if (!sort) query = query.order('created_at', { ascending: false });
     } else if (filter === 'URGENT') {
         // Urgent = is_urgent AND not closed AND not overdue (>10 days)
         const tenDaysAgo = new Date();
@@ -282,19 +282,18 @@ async function fetchPaginatedOrders(params: {
         query = query
             .eq('is_urgent', true)
             .not('status', 'in', `(${CLOSED_STATUSES.join(',')})`)
-            .gte('created_at', tenDaysAgo.toISOString())
-            .order('created_at', { ascending: false });
+            .gte('created_at', tenDaysAgo.toISOString());
+        if (!sort) query = query.order('created_at', { ascending: false });
     } else if (filter === 'UNASSIGNED') {
         // Unassigned = sales_agent is NULL (not assigned to anyone yet)
-        query = query
-            .is('sales_agent', null)
-            .order('created_at', { ascending: false });
+        query = query.is('sales_agent', null);
+        if (!sort) query = query.order('created_at', { ascending: false });
     } else if (filter !== 'ALL') {
         // Direct status filter (NEW_ORDER, IN_PRODUCTION, etc.)
         query = query.eq('status', filter);
-        query = query.order('created_at', { ascending: false });
+        if (!sort) query = query.order('created_at', { ascending: false });
     } else {
-        query = query.order('created_at', { ascending: false });
+        if (!sort) query = query.order('created_at', { ascending: false });
     }
 
     // A chosen sort overrides whatever the filter branch defaulted to. Left alone, each
@@ -308,9 +307,11 @@ async function fetchPaginatedOrders(params: {
     // would open "low to high" with those eleven, i.e. the least informative rows in the
     // table taking the top slot. NULLS LAST both ways keeps unknowns out of both ends.
     if (sort === 'amount_desc') {
-      query = query.order('order_amount_sort', { ascending: false, nullsFirst: false });
+      query = query.order('order_amount_sort', { ascending: false, nullsFirst: false })
+                   .order('created_at', { ascending: false });   // tiebreak only
     } else if (sort === 'amount_asc') {
-      query = query.order('order_amount_sort', { ascending: true, nullsFirst: false });
+      query = query.order('order_amount_sort', { ascending: true, nullsFirst: false })
+                   .order('created_at', { ascending: false });
     } else if (sort === 'oldest') {
       query = query.order('created_at', { ascending: true });
     }
