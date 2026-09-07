@@ -206,7 +206,7 @@ async function fetchPaginatedOrders(params: {
     const from = (page - 1) * ITEMS_PER_PAGE;
     const to = from + ITEMS_PER_PAGE - 1;
 
-    const columns = 'id, order_number, customer_name, customer_email, design_name, patches_type, status, colour_match_required, matched_yarn, customer_colour_input, created_at, sales_agent, lead_source, order_amount, amount_paid, is_urgent, production_completed_at, production_completed_by, attribution, attribution_quality, purchase_order';
+    const columns = 'id, order_number, customer_name, customer_email, design_name, patches_type, status, colour_match_required, matched_yarn, customer_colour_input, rush_date, is_urgent_approved, created_at, sales_agent, lead_source, order_amount, amount_paid, is_urgent, production_completed_at, production_completed_by, attribution, attribution_quality, purchase_order';
 
     // --- IDS drill-down (from dashboard click) ---
     if (ids) {
@@ -932,6 +932,17 @@ const AllOrdersPage: React.FC = () => {
                                                         {order.isUrgent && !isOverdue && (
                                                             <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-red-600 text-white shadow-sm">
                                                                 URGENT
+                                                            </span>
+                                                        )}
+                                                        {/* A deadline the customer asked for, without us having accepted it
+                                                            as a paid rush. Invisible until now, which is the whole reason
+                                                            staff were guessing rush from the order value. */}
+                                                        {!order.isUrgent && order.rushDate && (
+                                                            <span
+                                                                className="px-2 py-0.5 rounded text-[10px] font-bold bg-orange-500/20 text-orange-300 border border-orange-500/40"
+                                                                title={`Customer asked for this by ${order.rushDate}`}
+                                                            >
+                                                                NEEDS BY {new Date(order.rushDate + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
                                                             </span>
                                                         )}
                                                         {order.colourMatchRequired && !String(order.matchedYarn || '').trim() && (

@@ -33,3 +33,22 @@
 --    the customer confirmation on a $150 set, the exact failure the colour gate exists to
 --    prevent. confirmed_by records who stood behind each mapping.
 -- ============================================================================
+
+-- ── AMENDED 2026-09-07 (rush_guard_scope_to_accepted_rush) ──────────────────
+-- The block is now scoped to is_urgent ALONE, not (is_urgent OR rush_date).
+--
+-- The website began writing the customer's requested deadline to orders.rush_date on
+-- QUOTE LEADS — homepage, product and bulk forms, not just the rush landing page — so
+-- rush_date volume goes from roughly zero to routine. Under the old scope every one of
+-- those leads would have been frozen out of production until someone entered a confirmed
+-- ship-by date, stalling ordinary orders over an unpriced preference.
+--
+-- The promise the block protects is the PAID one: "exact date confirmed by email within
+-- 2-6 hours, rush fee refunded if we miss it". That attaches to is_urgent, which carries
+-- an approval step and a fee. A customer typing a date into a homepage form has not
+-- bought it.
+--
+-- ⚠️ COUNTING IS UNCHANGED and must stay (is_urgent OR rush_date IS NOT NULL) — that is
+-- the definition behind "118 rush orders, 114 delivered, 4 refunded". Two questions:
+--     what counts as rush          -> either signal
+--     what must not ship un-promised -> the accepted ones only

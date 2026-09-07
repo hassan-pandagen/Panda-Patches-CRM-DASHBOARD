@@ -749,17 +749,24 @@ const OrderPage: React.FC = () => {
                                     </button>
                                 )}
 
-                                {order.isUrgent && (
+                                {/* Shows when the order is urgent OR simply carries a customer deadline.
+                                    It used to be gated on isUrgent alone, so 57 orders with a requested
+                                    date displayed nothing at all — which is why staff were inferring rush
+                                    from the quote amount. Website quote leads now set rush_date without
+                                    is_urgent, so that blind spot was about to become the common case. */}
+                                {(order.isUrgent || order.rushDate) && (
                                     <div className="flex items-center gap-2 flex-wrap">
-                                        <span className={`text-sm px-3 py-1 rounded-full border font-bold ${order.isUrgentApproved
-                                            ? 'bg-red-600/20 border-red-500 text-red-400'
-                                            : 'bg-yellow-500/20 border-yellow-500 text-yellow-400 animate-pulse'
-                                            }`}>
-                                            {order.isUrgentApproved ? 'URGENT' : 'URGENT (APPROVAL NEEDED)'}
-                                        </span>
+                                        {order.isUrgent && (
+                                            <span className={`text-sm px-3 py-1 rounded-full border font-bold ${order.isUrgentApproved
+                                                ? 'bg-red-600/20 border-red-500 text-red-400'
+                                                : 'bg-yellow-500/20 border-yellow-500 text-yellow-400 animate-pulse'
+                                                }`}>
+                                                {order.isUrgentApproved ? 'URGENT' : 'URGENT (APPROVAL NEEDED)'}
+                                            </span>
+                                        )}
                                         {order.rushDate && (
                                             <span className="text-sm px-3 py-1 rounded-full border font-bold bg-orange-500/20 border-orange-500 text-orange-400">
-                                                🚢 Ship by: {new Date(order.rushDate + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                                                🚢 {order.isUrgent ? 'Ship by' : 'Customer needs by'}: {new Date(order.rushDate + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                                             </span>
                                         )}
                                         {/* The date WE promised. Production is blocked until it is set, so the
@@ -769,14 +776,14 @@ const OrderPage: React.FC = () => {
                                             <span className="text-sm px-3 py-1 rounded-full border font-bold bg-emerald-500/20 border-emerald-500 text-emerald-300">
                                                 ✅ Confirmed: {new Date(order.rushConfirmedDate + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                                             </span>
-                                        ) : (
+                                        ) : order.isUrgent ? (
                                             <span
                                                 className="text-sm px-3 py-1 rounded-full border font-bold bg-amber-500/20 border-amber-500 text-amber-300"
                                                 title="Set this in Edit Order. Production is blocked until it is filled."
                                             >
                                                 ⚠️ No confirmed date — blocks production
                                             </span>
-                                        )}
+                                        ) : null}
                                     </div>
                                 )}
                                 <ShipByPill shipByDate={order.shipByDate} status={order.status} className="ml-1 align-middle" />
