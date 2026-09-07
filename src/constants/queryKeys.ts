@@ -11,7 +11,7 @@ export const queryKeys = {
     lists: () => [...queryKeys.orders.all(), 'list'] as const,
     list: (filters: string) => [...queryKeys.orders.lists(), { filters }] as const,
     // Server-side paginated list (AllOrdersPage)
-    paginated: (params: { page: number; filter: string; search: string; salesAgent?: string; leadSource?: string; patchesType?: string; date?: string; ids?: string }) =>
+    paginated: (params: { page: number; filter: string; search: string; salesAgent?: string; leadSource?: string; patchesType?: string; sort?: string; date?: string; ids?: string }) =>
       [...queryKeys.orders.all(), 'paginated', params] as const,
     // Lightweight counts for tab badges (filtered by the same params as the paginated list)
     counts: (params?: { salesAgent?: string; leadSource?: string; patchesType?: string; dateRangeStart?: string; dateRangeEnd?: string }) =>
