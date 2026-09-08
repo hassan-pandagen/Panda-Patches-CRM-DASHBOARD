@@ -19,6 +19,33 @@ const ALLOWED_ORIGINS = [
 // it to match the site's public profile instead, change to /review/pandapatches.com.
 const TRUSTPILOT_REVIEW_URL = 'https://www.trustpilot.com/evaluate/pandapatches.com';
 
+// Production Supervisor, added 8 Sept. Copied on internal workflow mail so the production
+// side sees the same order events the managers do without needing a CRM session open.
+//
+// Applied HERE rather than in each caller on purpose: five separate senders assemble their
+// own cc string (orderService.ts, super-handler, square-payment-webhook in two places, and
+// colour-match-cron), and any address added by hand to five lists eventually gets missed on
+// the sixth. This is the one funnel every one of them passes through, so it also covers
+// internal templates that don't exist yet.
+const PRODUCTION_SUPERVISOR_CC = 'pandaproduction.office@gmail.com';
+
+// Financial mail is excluded by standing rule — production never sees amounts, deposits or
+// balances. INTERNAL_PAYMENT_NOTIFICATION renders Total / Amount Paid / Remaining Balance
+// plus the customer's email address, so it is the one internal template he stays off.
+const NO_PRODUCTION_CC_TEMPLATES = new Set([
+  'INTERNAL_PAYMENT_NOTIFICATION',
+]);
+
+// Note the prefix test rather than templateId.includes('INTERNAL'): QUALITY_ASSURANCE is
+// subject-tagged "[INTERNAL] QA Check" but is actually addressed to the CUSTOMER
+// (orderService.ts sends it to order.customerEmail), and a substring match would have put a
+// gmail address in the CC header of a customer-facing email. PRODUCTION_TEAM_REVISION is the
+// reverse case — genuinely internal, named before the INTERNAL_ prefix convention existed.
+function ccProductionSupervisor(templateId: string): boolean {
+  if (NO_PRODUCTION_CC_TEMPLATES.has(templateId)) return false;
+  return templateId.startsWith('INTERNAL') || templateId === 'PRODUCTION_TEAM_REVISION';
+}
+
 function isAllowedOrigin(origin: string): boolean {
   return ALLOWED_ORIGINS.includes(origin) || origin.startsWith('http://localhost:');
 }
@@ -1504,6 +1531,11 @@ serve(async (req) => {
 
     // ✅ ALWAYS add hello@pandapatches.com to CC for record-keeping
     const ccAddresses = ['hello@pandapatches.com'];
+
+    // Production Supervisor on every internal workflow email (see ccProductionSupervisor).
+    if (ccProductionSupervisor(template_id)) {
+      ccAddresses.push(PRODUCTION_SUPERVISOR_CC);
+    }
 
     // Add any additional CC emails from the request
     if (cc) {
