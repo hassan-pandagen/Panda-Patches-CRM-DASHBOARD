@@ -140,7 +140,7 @@ const PATCH_TYPE_CANON = [
   // Letter packages (2026-09). product_name is now EXACTLY one of these two on every order —
   // it used to carry the size/colour/glitter too ("... — 3\" royal blue + gold glitter"), which
   // made it unique per order and would have produced a different patches_type every time.
-  'Chenille Alphabet Package (A–Z)', 'Chenille Numbers Package (0–9)',
+  'Chenille Alphabet Package (A–Z)', 'Chenille Numbers Package (1–10)',
   'Embroidered', 'PVC', 'Woven', 'Chenille', 'Leather', '3D Embroidery Puff', '3D Embroidery Transfer',
   'Chenille Transfer', 'Sequin Patch', 'Sublimation Patch', 'Sublimation+Embroidery', 'DTF Transfer',
   'Silicone Transfer', 'High Density Transfer', 'TPU+Chenille', 'TPU+Embroidery', 'TPU+Sublimation',

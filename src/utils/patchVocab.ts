@@ -21,7 +21,7 @@ export const PATCH_TYPE_CANON = [
   // every order; size, colour and glitter live in design_size / customer_colour_input /
   // website_addons instead. Listed here so normalizePatchType folds any spelling variant
   // (hyphen for the en-dash, different case) back onto the one canonical string.
-  'Chenille Alphabet Package (A–Z)', 'Chenille Numbers Package (0–9)',
+  'Chenille Alphabet Package (A–Z)', 'Chenille Numbers Package (1–10)',
   'Embroidered', 'PVC', 'Woven', 'Chenille', 'Leather', '3D Embroidery Puff', '3D Embroidery Transfer',
   'Chenille Transfer', 'Applique Transfer', 'Sequin Patch', 'Sublimation Patch', 'Sublimation+Embroidery', 'DTF Transfer',
   'Silicone Transfer', 'High Density Transfer', 'TPU+Chenille', 'TPU+Embroidery', 'TPU+Sublimation',

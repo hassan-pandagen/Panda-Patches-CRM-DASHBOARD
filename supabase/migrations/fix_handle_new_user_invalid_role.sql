@@ -1,0 +1,25 @@
+-- ============================================================================
+-- Staff account creation was broken. Applied 2026-09-08.
+--
+-- handle_new_user() fires on auth.users INSERT and wrote role = 'USER' for every
+-- non-hello@ account. 'USER' is not in user_profiles_role_check — it was never one of
+-- the six real roles — so the profile insert raised, aborting auth.admin.createUser and
+-- making create-user return 400. Every "Create User" attempt failed with
+-- "Edge Function returned a non-2xx status code".
+--
+-- I added that CHECK during the role work and never exercised account creation
+-- afterwards. The constraint is right; this trigger was what was left behind. It blocked
+-- the five accounts the digitizer rollout was waiting on.
+--
+-- Two changes:
+--   1. A VALID role. 'PRODUCTION' is the least-privileged non-DIGITIZER role. DIGITIZER
+--      is deliberately avoided: it carries blind-vendor semantics that must be granted
+--      on purpose, never as a fallback.
+--   2. NO PERMISSIONS. The old default handed a brand-new account orders_create,
+--      orders_change_status and shipping_view before anyone chose anything. The role here
+--      is transient — create-user overwrites it in the next statement — so what matters
+--      is what the account can do if that second step never lands. Now: nothing.
+--
+-- Verified by inserting into auth.users and letting the trigger fire: profile created,
+-- role valid, zero permissions granted, and the create-user overwrite still works.
+-- ============================================================================

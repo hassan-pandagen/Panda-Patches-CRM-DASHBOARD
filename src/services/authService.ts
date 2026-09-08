@@ -61,7 +61,21 @@ export const createUserWithRole = async (
       body: { email, roles: roleSet, fullName, access, password },
     });
 
-    if (invokeError) throw new Error(invokeError.message);
+    if (invokeError) {
+      // supabase.functions.invoke turns any non-2xx into "Edge Function returned a
+      // non-2xx status code" and drops the body — which is what made a broken
+      // handle_new_user trigger look like an unexplained failure for three attempts.
+      // Read the real reason out of the response, the same way updateUserProfile does.
+      let message = invokeError.message;
+      try {
+        const body = await (invokeError as any)?.context?.json?.();
+        if (body?.error) message = body.error;
+        else if (Array.isArray(body?.details) && body.details[0]?.message) {
+          message = body.details.map((d: any) => d.message).join('. ');
+        }
+      } catch { /* keep the generic message */ }
+      throw new Error(message);
+    }
     if (data?.error) throw new Error(data.error);
 
     logger.info(`[Auth Service] User created: ${email}`);
