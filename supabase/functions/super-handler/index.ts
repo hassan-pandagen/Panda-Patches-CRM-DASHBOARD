@@ -179,6 +179,9 @@ serve(async (req) => {
       design_name: record.design_name || '',
       quantity: record.patches_quantity || '',
       patch_type: patchType,
+      // Mixed order ("10 leather + 10 woven"). Without this the floor reads one type off this
+      // email and makes half the job. patches_type stays the primary and still drives routing.
+      additional_patch_types: Array.isArray(record.additional_patch_types) ? record.additional_patch_types : [],
       backing: record.design_backing || '',
       size: record.design_size || '',
       border_type: record.border_type || '',

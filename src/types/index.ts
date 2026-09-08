@@ -101,6 +101,10 @@ export interface Order {
   patchesQuantity?: number;
   designSize?: string;
   patchesType?: string;
+  // Extra types on a multi-type order ("10 leather + 10 woven"). patchesType stays the
+  // PRIMARY type and is what every routing, gating and reporting path reads — these are
+  // additive only. Per-type quantities live in `instructions`, by CEO decision 9 Sept.
+  additionalPatchTypes?: string[];
   designBacking?: string;
   borderType?: string;
   instructions?: string;

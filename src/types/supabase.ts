@@ -184,6 +184,7 @@ export interface Database {
           design_size: string | null
           design_backing: string | null
           patches_type: string | null
+          additional_patch_types: string[] | null
           patches_quantity: number
           revision_notes: string | null
           customer_attachment_urls: string[] | null
@@ -225,6 +226,7 @@ export interface Database {
           design_size?: string | null
           design_backing?: string | null
           patches_type?: string | null
+          additional_patch_types?: string[] | null
           patches_quantity?: number
           revision_notes?: string | null
           customer_attachment_urls?: string[] | null
@@ -266,6 +268,7 @@ export interface Database {
           design_size?: string | null
           design_backing?: string | null
           patches_type?: string | null
+          additional_patch_types?: string[] | null
           patches_quantity?: number
           revision_notes?: string | null
           customer_attachment_urls?: string[] | null

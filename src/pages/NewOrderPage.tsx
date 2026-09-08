@@ -6,6 +6,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { createOrder } from '../services/orderService';
 import { Order, OrderStatus } from '../types/index';
 import { queryKeys } from '../constants/queryKeys';
+import { toAdditionalPatchTypesPayload } from '../utils/patchTypes';
 import OrderForm, { SaveData } from '../components/orders/OrderForm';
 import GeneratePaymentLinkModal from '../components/orders/GeneratePaymentLinkModal';
 import { useWarnIfUnsaved } from "../hooks";
@@ -157,6 +158,9 @@ const NewOrderPage: React.FC = () => {
         designName: String(formData.designName || ''),
         patchesQuantity: Number(formData.patchesQuantity) || 0,
         patchesType: String(formData.patchesType || ''),
+        // NULL, not [], for an ordinary single-type order — the DB CHECK treats NULL as
+        // "not a multi-type order" and it keeps new rows identical to every existing one.
+        additionalPatchTypes: toAdditionalPatchTypesPayload(formData.additionalPatchTypes, formData.patchesType),
         designSize: String(formData.designSize || ''),
         designBacking: String(formData.designBacking || ''),
         borderType: String(formData.borderType || ''),

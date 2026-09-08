@@ -207,7 +207,7 @@ async function fetchPaginatedOrders(params: {
     const from = (page - 1) * ITEMS_PER_PAGE;
     const to = from + ITEMS_PER_PAGE - 1;
 
-    const columns = 'id, order_number, customer_name, customer_email, design_name, patches_type, status, colour_match_required, matched_yarn, customer_colour_input, rush_date, is_urgent_approved, created_at, sales_agent, lead_source, order_amount, amount_paid, is_urgent, production_completed_at, production_completed_by, attribution, attribution_quality, purchase_order';
+    const columns = 'id, order_number, customer_name, customer_email, design_name, patches_type, additional_patch_types, status, colour_match_required, matched_yarn, customer_colour_input, rush_date, is_urgent_approved, created_at, sales_agent, lead_source, order_amount, amount_paid, is_urgent, production_completed_at, production_completed_by, attribution, attribution_quality, purchase_order';
 
     // --- IDS drill-down (from dashboard click) ---
     if (ids) {
@@ -240,7 +240,7 @@ async function fetchPaginatedOrders(params: {
 
     // Apply drill-down params
     if (salesAgent) query = query.eq('sales_agent', salesAgent);
-    if (patchesType) query = query.eq('patches_type', patchesType);
+    if (patchesType) query = query.contains('all_patch_types', [patchesType]);
     if (leadSource) {
         // "Unknown" = orders with no lead_source recorded (NULL or empty string)
         if (leadSource === 'Unknown') {
@@ -405,7 +405,7 @@ async function fetchTabCounts(params: {
             query = query.is('production_completed_at', null);
         }
         if (salesAgent) query = query.eq('sales_agent', salesAgent);
-        if (patchesType) query = query.eq('patches_type', patchesType);
+        if (patchesType) query = query.contains('all_patch_types', [patchesType]);
         if (leadSource) {
             if (leadSource === 'Unknown') {
                 query = query.or('lead_source.is.null,lead_source.eq.');
@@ -646,13 +646,18 @@ const AllOrdersPage: React.FC = () => {
     const { data: patchTypes } = useQuery({
         queryKey: ['patchTypes'],
         queryFn: async () => {
+            // all_patch_types, not patches_type: a type used only as the SECOND type on a
+            // mixed order would otherwise never appear in this list, so the one order carrying
+            // it would be unfilterable.
             const rows = await fetchAllPaged<any>((from, to) =>
-                supabase.from('orders').select('patches_type').not('patches_type', 'is', null).range(from, to)
+                supabase.from('orders').select('all_patch_types').range(from, to)
             );
             const seen = new Set<string>();
             for (const r of rows || []) {
-                const v = String(r?.patches_type ?? '').trim();
-                if (v) seen.add(v);
+                for (const t of (r?.all_patch_types ?? [])) {
+                    const v = String(t ?? '').trim();
+                    if (v) seen.add(v);
+                }
             }
             return Array.from(seen).sort((a, b) => a.localeCompare(b));
         },
@@ -1014,6 +1019,14 @@ const AllOrdersPage: React.FC = () => {
                                                         <span className="font-mono font-medium text-slate-200">{order.orderNumber}</span>
                                                         <span className="w-1 h-1 rounded-full bg-slate-500" />
                                                         <span className="text-slate-400">{order.patchesType || 'Custom Patch'}</span>
+                                                        {!!order.additionalPatchTypes?.length && (
+                                                            <span
+                                                                className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-brand-orange/15 text-brand-orange border border-brand-orange/40"
+                                                                title={`Mixed order: ${[order.patchesType, ...order.additionalPatchTypes].filter(Boolean).join(' + ')}`}
+                                                            >
+                                                                +{order.additionalPatchTypes.length} TYPE{order.additionalPatchTypes.length > 1 ? 'S' : ''}
+                                                            </span>
+                                                        )}
                                                         {order.designName && (
                                                             <>
                                                                 <span className="w-1 h-1 rounded-full bg-slate-500" />

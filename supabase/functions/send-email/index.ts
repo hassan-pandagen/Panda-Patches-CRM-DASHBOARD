@@ -1109,6 +1109,21 @@ const buildEmailHTML = (templateId: string, data: any): string => {
                               </div>
                               <div style="font-family: inherit; text-align: center"><br></div>
                             ` : ''}
+                            ${Array.isArray(data.additional_patch_types) && data.additional_patch_types.length ? `
+                              <!-- Mixed order. This has to be loud: production works from this email,
+                                   and reading only "Patch Type: Leather" on a leather+woven order
+                                   means making half the job. The per-type quantities are in Special
+                                   Instructions; the Quantity above is the order total. -->
+                              <div style="font-family: inherit; text-align: center; background-color:#fff3e6; border:1px solid #fb6e1d; border-radius:6px; padding:10px; margin-bottom:14px;">
+                                <span style="font-family: 'lucida sans unicode', 'lucida grande', sans-serif; font-size: 15px; color:#8a3f00; font-weight:bold;">⚠️ MIXED ORDER — ${escapeHtml(String(data.additional_patch_types.length + 1))} PATCH TYPES</span>
+                                <div style="font-family: inherit; margin-top:6px;">
+                                  <span style="font-family: 'lucida sans unicode', 'lucida grande', sans-serif; font-size: 17px; color:#000;">${data.additional_patch_types.map((t: any) => escapeHtml(String(t))).join(' + ')}</span>
+                                </div>
+                                <div style="font-family: inherit; margin-top:6px;">
+                                  <span style="font-family: 'lucida sans unicode', 'lucida grande', sans-serif; font-size: 13px; color:#8a3f00;">See Special Instructions for how many of each.</span>
+                                </div>
+                              </div>
+                            ` : ''}
                             ${data.design_backing || data.backing ? `
                               <div style="font-family: inherit; text-align: center">
                                 <span style="font-family: 'lucida sans unicode', 'lucida grande', sans-serif; font-size: 18px;">Backing: ${escapeHtml(data.design_backing || data.backing)}</span>

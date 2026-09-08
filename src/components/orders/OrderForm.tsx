@@ -12,6 +12,7 @@ import FileUploadSection from './FileUpload';
 import Textarea from '../ui/Textarea'; 
 import { LEAD_SOURCE_OPTIONS, PATCHES_TYPE_OPTIONS, COUNTRY_OPTIONS, DESIGN_BACKING_OPTIONS } from '../../constants/index';
 import { parseUsAddress } from '../../utils/parseUsAddress';
+import { normalizeExtraPatchTypes, toAdditionalPatchTypesPayload } from '../../utils/patchTypes';
 import { supabase } from '../../services/supabaseClient';
 import { logger } from '../../services/logger';
 import { getPremiumStatus, setPremiumStatus } from '../../services/customerFlagsService';
@@ -78,6 +79,7 @@ export interface SaveData {
   designName?: string;
   patchesQuantity: number;
   patchesType?: string;
+  additionalPatchTypes?: string[] | null;
   designSize?: string;
   designBacking?: string;
   borderType?: string;
@@ -166,6 +168,7 @@ const transformOrderToFormData = (order: Order | null | undefined): SaveData => 
       designName: '',
       patchesQuantity: 0,
       patchesType: '',
+      additionalPatchTypes: [],
       designSize: '',
       designBacking: '',
       instructions: '',
@@ -221,6 +224,7 @@ const transformOrderToFormData = (order: Order | null | undefined): SaveData => 
     loyaltyDiscountPercent: order.loyaltyDiscountPercent ?? null,
     
     // Ensure arrays are arrays
+    additionalPatchTypes: Array.isArray(order.additionalPatchTypes) ? order.additionalPatchTypes : [],
     mockupUrls: Array.isArray(order.mockupUrls) ? order.mockupUrls : [],
     productionFileUrls: Array.isArray(order.productionFileUrls) ? order.productionFileUrls : [],
     shippingAttachmentUrls: Array.isArray(order.shippingAttachmentUrls) ? order.shippingAttachmentUrls : [],
@@ -488,7 +492,23 @@ const OrderForm: React.FC<OrderFormProps> = ({
       // The `data` object from the form contains all fields. We must ensure that only the fields
       // that exist in the 'orders' table are sent to the onSave function.
       // The `changes` array is no longer needed as the DB trigger handles history.
-      const saveData = { ...data };
+      // Send the same filtered list the agent was looking at, and NULL rather than [] for a
+      // single-type order so the ordinary row stays exactly as it is today.
+      const saveData: SaveData = { ...data };
+
+      // Only write the column when it actually changed. updateOrderDetails logs an
+      // order_history row for every key it is handed whose stringified value differs, and the
+      // mapper hands back [] for a NULL column while the payload for a single-type order is
+      // null — so passing it unconditionally would stamp a meaningless
+      // "additionalPatchTypes: '' -> 'N/A'" entry onto the history of every ordinary order,
+      // every time anyone saved it.
+      const nextExtras = toAdditionalPatchTypesPayload(data.additionalPatchTypes, data.patchesType);
+      const prevExtras = toAdditionalPatchTypesPayload(initialData?.additionalPatchTypes, initialData?.patchesType);
+      if (JSON.stringify(nextExtras) === JSON.stringify(prevExtras)) {
+        delete saveData.additionalPatchTypes;
+      } else {
+        saveData.additionalPatchTypes = nextExtras;
+      }
       await onSave({ current: saveData, isNew: isNewOrder, changes: [] });
 
       // Persist the Premium flag only after a successful save, and only when there's
@@ -574,6 +594,30 @@ const OrderForm: React.FC<OrderFormProps> = ({
   const shippingCarriers = ["FedEx", "DHL", "UPS", "USPS", "Other"];
   const backingOptions = DESIGN_BACKING_OPTIONS;
   const watchedPatchType = watch('patchesType');
+
+  // Multi-type orders ("10 leather + 10 woven"). One order, one amount, one payment link —
+  // patchesType stays the PRIMARY type and keeps driving routing, the colour-match gate,
+  // customs and reporting; these are recorded alongside it. The per-type quantities go in
+  // Special Instructions, by CEO decision 9 Sept.
+  //
+  // Filtered against the primary on READ as well as on write: an agent can change the
+  // primary type to one already in this list, and the DB rejects that combination outright
+  // (orders_additional_patch_types_valid). Filtering here means the form silently agrees
+  // with the constraint instead of failing the save with a constraint error.
+  const rawExtraTypes = watch('additionalPatchTypes');
+  const extraPatchTypes = useMemo(
+    () => normalizeExtraPatchTypes(rawExtraTypes, watchedPatchType),
+    [rawExtraTypes, watchedPatchType]
+  );
+
+  const addExtraPatchType = (value: string) => {
+    if (!value || value === watchedPatchType || extraPatchTypes.includes(value)) return;
+    setValue('additionalPatchTypes', [...extraPatchTypes, value], { shouldDirty: true });
+  };
+
+  const removeExtraPatchType = (value: string) => {
+    setValue('additionalPatchTypes', extraPatchTypes.filter(t => t !== value), { shouldDirty: true });
+  };
   const watchedOrderChannel = watch('orderChannel');
 
   // True when the order arrived on a real paid-ad click, so its Lead Source is verified tracking
@@ -904,6 +948,43 @@ const OrderForm: React.FC<OrderFormProps> = ({
               <option value="" disabled hidden>Select...</option>
               {patchTypes.map(t => <option key={t} value={t}>{t}</option>)}
             </select>
+
+            {/* Extra types for a mixed order. Hidden behind a one-line control so the ordinary
+                single-type order — 96% of them — looks exactly as it did before. */}
+            {extraPatchTypes.length > 0 && (
+              <div className="flex flex-wrap gap-1.5 mt-2">
+                {extraPatchTypes.map(t => (
+                  <span key={t} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-brand-orange/15 text-brand-orange border border-brand-orange/40">
+                    {t}
+                    <button
+                      type="button"
+                      onClick={() => removeExtraPatchType(t)}
+                      aria-label={`Remove ${t}`}
+                      className="text-brand-orange/70 hover:text-white leading-none text-sm"
+                    >
+                      &times;
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
+            <select
+              value=""
+              onChange={e => { addExtraPatchType(e.target.value); e.target.value = ''; }}
+              aria-label="Add another patch type"
+              className="mt-2 block w-full bg-slate-800/60 border-slate-700 rounded-md text-xs text-slate-300 focus:ring-brand-orange focus:border-brand-orange"
+            >
+              <option value="">+ Add another patch type</option>
+              {patchTypes
+                .filter(t => t !== watchedPatchType && !extraPatchTypes.includes(t))
+                .map(t => <option key={t} value={t}>{t}</option>)}
+            </select>
+            {extraPatchTypes.length > 0 && (
+              <p className="text-xs text-amber-300/90 mt-1.5">
+                Put how many of each type in Special Instructions — the quantity box above is the
+                order total.
+              </p>
+            )}
           </div>
           <div>
             <label className="block text-sm font-medium text-slate-300">Size</label>

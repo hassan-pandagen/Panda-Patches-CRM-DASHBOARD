@@ -177,6 +177,9 @@ export const mapDbToOrder = (data: any): Order => {
 
     designName: data.designName ?? data.design_name,
     patchesType: data.patchesType ?? data.patches_type,
+    // Always an array so callers can use .length without a null check. The DB stores NULL
+    // for the ordinary single-type order, which is the overwhelming majority of rows.
+    additionalPatchTypes: data.additionalPatchTypes ?? data.additional_patch_types ?? [],
     patchesQuantity: patchesQuantity,
     designSize: data.designSize ?? data.design_size,
     designBacking: data.designBacking ?? data.design_backing,
@@ -298,6 +301,7 @@ export const prepareEmailData = (order: Order, triggerStatus: string) => {
     design_name: order.designName,
     quantity: order.patchesQuantity,
     patch_type: order.patchesType,
+    additional_patch_types: order.additionalPatchTypes ?? [],
     backing: order.designBacking,
     size: order.designSize,
     border_type: order.borderType || "",

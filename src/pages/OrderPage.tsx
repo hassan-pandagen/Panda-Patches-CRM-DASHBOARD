@@ -1152,6 +1152,18 @@ const OrderPage: React.FC = () => {
                                         <div className="flex items-center gap-2">
                                             <span className="w-2 h-2 rounded-full bg-brand-orange"></span>
                                             <p className="font-medium text-white">{order.patchesType || 'Custom'}</p>
+                                            {/* A mixed order ("10 leather + 10 woven"). The quantity
+                                                shown is the order total; the per-type split is in
+                                                Special Instructions. */}
+                                            {!!order.additionalPatchTypes?.length && (
+                                                <div className="flex flex-wrap gap-1 mt-1.5">
+                                                    {order.additionalPatchTypes.map(t => (
+                                                        <span key={t} className="px-2 py-0.5 rounded-full text-[11px] font-medium bg-brand-orange/15 text-brand-orange border border-brand-orange/40">
+                                                            + {t}
+                                                        </span>
+                                                    ))}
+                                                </div>
+                                            )}
                                         </div>
                                     </div>
                                     <div>

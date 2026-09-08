@@ -1041,7 +1041,7 @@ Deno.serve(async (req: Request) => {
     const isOrderNumber = referenceId.startsWith('PP-');
     const { data: order, error: orderErr } = await admin
       .from('orders')
-      .select('id, order_number, amount_paid, order_amount, attribution, status, payment_status, customer_email, customer_name, customer_confirmation_sent_at, patches_type, patches_quantity, design_name, design_size, design_backing, border_type, instructions, shipping_address, is_urgent, rush_date, sales_agent, created_at, production_notified_at')
+      .select('id, order_number, amount_paid, order_amount, attribution, status, payment_status, customer_email, customer_name, customer_confirmation_sent_at, patches_type, additional_patch_types, patches_quantity, design_name, design_size, design_backing, border_type, instructions, shipping_address, is_urgent, rush_date, sales_agent, created_at, production_notified_at')
       .eq(isOrderNumber ? 'order_number' : 'id', isOrderNumber ? referenceId : parseInt(referenceId, 10))
       .single();
 
@@ -1126,6 +1126,7 @@ Deno.serve(async (req: Request) => {
                 design_name: order.design_name || '',
                 quantity: order.patches_quantity || '',
                 patch_type: order.patches_type || '',
+                additional_patch_types: Array.isArray(order.additional_patch_types) ? order.additional_patch_types : [],
                 backing: order.design_backing || '',
                 size: order.design_size || '',
                 border_type: order.border_type || '',
