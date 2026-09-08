@@ -51,7 +51,7 @@ const createUserSchema = z.object({
 
   access: z.record(
     z.enum([
-      'users_manage',
+'users_manage',
       'orders_create',
       'orders_view_all',
       'orders_view_own_only',
@@ -105,6 +105,11 @@ Deno.serve(async (req: Request) => {
 
     // 1. Parse and validate request body
     const body = await req.json();
+    // Logged BEFORE validation so a rejected payload is still attributable. Three failures
+    // on 8 Sept could not be diagnosed at all because this function recorded nothing and
+    // the client discarded the response body — the reason existed and nobody could read it.
+    // Never log the password.
+    console.log(`[create-user] caller=${caller.email} target=${body?.email} roles=${JSON.stringify(body?.roles ?? body?.role)}`);
     const validatedData = createUserSchema.parse(body);
 
     const { email, password, role, roles, fullName, access } = validatedData;
@@ -123,7 +128,10 @@ Deno.serve(async (req: Request) => {
       user_metadata: { full_name: fullName }
     });
 
-    if (createError) throw createError;
+    if (createError) {
+      console.error(`[create-user] auth.admin.createUser failed for ${email}: ${createError.message}`);
+      throw createError;
+    }
     if (!user) throw new Error("User creation failed");
 
     // 3. Update Profile Permissions
@@ -136,7 +144,14 @@ Deno.serve(async (req: Request) => {
       })
       .eq('id', user.id);
 
-    if (profileError) throw profileError;
+    if (profileError) {
+      // The auth user now EXISTS but has no roles/permissions. Say so loudly — a silent
+      // failure here leaves a half-made account that looks absent in the UI but blocks
+      // the email from being reused.
+      console.error(`[create-user] profile update failed for ${email} (auth user ${user.id} was created): ${profileError.message}`);
+      throw profileError;
+    }
+    console.log(`[create-user] created ${email} with roles ${roleSet.join(',')}`);
 
     return new Response(
       JSON.stringify({ user }),
@@ -150,9 +165,10 @@ Deno.serve(async (req: Request) => {
         field: err.path.join('.'),
         message: err.message
       }));
+      console.error('[create-user] validation failed:', JSON.stringify(validationErrors));
       return new Response(
         JSON.stringify({
-          error: 'Validation failed',
+          error: 'Validation failed: ' + validationErrors.map((d: any) => d.message).join('. '),
           details: validationErrors
         }),
         { headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' }, status: 400 }
@@ -160,6 +176,7 @@ Deno.serve(async (req: Request) => {
     }
 
     // Handle other errors
+    console.error('[create-user] failed:', error?.message || String(error));
     return new Response(
       JSON.stringify({ error: error.message }),
       { headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' }, status: 400 }
