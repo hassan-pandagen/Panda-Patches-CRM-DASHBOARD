@@ -97,7 +97,20 @@ Deno.serve(async (req: Request) => {
     const amountCents = Math.round(body.charge_amount * 100);
 
     // Square Checkout API
-    const idempotencyKey = `pf_${body.token}_${body.payment_type}`;
+    // Unique per request. The key used to be `pf_<token>_<payment_type>`, which is stable for a
+    // given pay link — but almost everything else in this request is NOT: the customer can tick
+    // "Include a Sample Box (+$20)", the agent can change the Order Total, and the quantity /
+    // type / size / design name all feed the Square line-item name. Square stores the request
+    // body against the key, so the SECOND attempt with any of those changed came back as
+    // IDEMPOTENCY_KEY_REUSED — surfaced to the customer, on the payment page, as "This
+    // idempotency key has already been used to create a Payment Link", with no way past it.
+    // They simply could not pay. Seen on an $830 order, 8 Sept.
+    //
+    // Safe to randomise, for the same reasons already documented in create-square-payment-link:
+    // nothing is charged until the customer completes checkout on Square's own page,
+    // square-payment-webhook dedups at the payment.id level (square_processed_payments), and the
+    // token's own used_at guard stops a link being spent twice. Extra links cost nothing.
+    const idempotencyKey = `pf_${body.token}_${body.payment_type}_${crypto.randomUUID()}`;
     const redirectUrl    = `https://login.pandapatches.com/pay/${body.token}/thank-you`;
 
     const checkoutBody = {
@@ -152,8 +165,13 @@ Deno.serve(async (req: Request) => {
     const squareJson = await squareRes.json();
 
     if (!squareRes.ok || squareJson.errors) {
+      // Log Square's own wording in full — that is what makes the next one diagnosable.
       console.error("[create-square-checkout] Square error:", JSON.stringify(squareJson.errors));
-      throw new Error(squareJson.errors?.[0]?.detail || "Square checkout creation failed");
+      // But do NOT hand it to the customer. This message renders on the payment page of a real
+      // person about to spend hundreds of dollars, and Square's text is written for developers
+      // ("This idempotency key has already been used to create a Payment Link") — it reads as
+      // something broken and unsafe, and tells them nothing they can act on.
+      throw new Error("We couldn't start the secure checkout. Please try again — if it keeps happening, reply to your sales agent and we'll send you a fresh payment link.");
     }
 
     const checkoutUrl = squareJson.payment_link?.url;
