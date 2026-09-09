@@ -95,8 +95,31 @@ const EmailLogsSection: React.FC<EmailLogsSectionProps> = ({ order }) => {
   const [sendingManual, setSendingManual] = React.useState(false);
   const [sendingStatus, setSendingStatus] = React.useState<string | null>(null);
 
+  // The order row, not the log, is the truth about whether the customer already has their
+  // confirmation. square-payment-webhook stamps customer_confirmation_sent_at when it emails,
+  // and for a long time it wrote no log row at all — 307 orders had a confirmation sent and an
+  // empty Email Log. An agent reading that log concluded "never sent" and used the manual send
+  // below, giving the customer a second confirmation (PP-11470, 9 Sept: emailed 15:23, re-sent
+  // 15:25). The webhook now logs, but this stays as the actual guard: a missing log row must
+  // never be enough on its own to re-email a paying customer.
+  const alreadyConfirmed = !!order.customerConfirmationSentAt;
+  const confirmSentOn = order.customerConfirmationSentAt
+    ? new Date(order.customerConfirmationSentAt).toLocaleString()
+    : null;
+
   const handleManualSend = async () => {
     if (!manualStatus) return;
+    if (manualStatus === 'NEW_ORDER' && alreadyConfirmed) {
+      const ok = window.confirm(
+        `${order.customerName || 'This customer'} was already sent an order confirmation on ${confirmSentOn}.
+
+` +
+        `Sending again means a SECOND confirmation email for the same order. Only do this if they told you they never received it.
+
+Send anyway?`
+      );
+      if (!ok) return;
+    }
     setSendingManual(true);
     try {
       await triggerStatusEmail(order, manualStatus);

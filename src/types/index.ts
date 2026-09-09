@@ -101,6 +101,11 @@ export interface Order {
   patchesQuantity?: number;
   designSize?: string;
   patchesType?: string;
+  // Stamped by whichever path actually emailed the customer their confirmation — the CRM,
+  // square-payment-webhook, or super-handler. The Email Log is NOT a reliable substitute:
+  // server-sent mail went unlogged for a long time (307 orders), which is what let an agent
+  // send PP-11470 a second confirmation two minutes after the first.
+  customerConfirmationSentAt?: string | null;
   // Extra types on a multi-type order ("10 leather + 10 woven"). patchesType stays the
   // PRIMARY type and is what every routing, gating and reporting path reads — these are
   // additive only. Per-type quantities live in `instructions`, by CEO decision 9 Sept.

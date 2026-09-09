@@ -221,6 +221,22 @@ serve(async (req) => {
       return new Response(JSON.stringify({ success: false, error: emailResult }), { status: 500 });
     }
 
+    // Mirror it into the order's Email Log, for the same reason the customer email is logged:
+    // an empty log reads as "nothing was ever sent" to the agent looking at the order.
+    // Best-effort — never fail the webhook over a log row.
+    try {
+      await admin.from('order_communications').insert({
+        order_id: record.id,
+        recipient_email: primaryRecipient,
+        subject: 'Auto-Trigger: NEW_ORDER',
+        body: 'Template Sent: INTERNAL_NEW_ORDER (sent by super-handler)',
+        template_id: 'INTERNAL_NEW_ORDER',
+        visibility: 'internal',
+      });
+    } catch (logErr) {
+      console.error(`[super-handler] comms log failed for ${orderNumber}:`, logErr);
+    }
+
     console.log(`✅ [Checkout Webhook] Production email sent (claimed) for order ${orderNumber}`);
 
     return new Response(

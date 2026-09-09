@@ -405,6 +405,32 @@ Deno.serve(async (req: Request) => {
             ...(attachments.length > 0 ? { attachments } : {}),
           }),
         });
+        // Record it in the order's Email Log. Without this the log is EMPTY for an order the
+        // customer has already been emailed and invoiced — and the Email Log sits directly above
+        // a "New Order Confirmation" manual-send button, so an agent reading "nothing sent"
+        // does the obvious thing and sends a second confirmation. That is exactly what happened
+        // to PP-11470 on 9 Sept: webhook emailed at 15:23, agent re-sent at 15:25.
+        // 307 orders were in this state (confirmation stamped, zero log rows) when this was found.
+        // Best-effort: never let logging break a payment that already succeeded.
+        try {
+          const logged = [];
+          if (confirmationDue) logged.push({
+            order_id: order.id, recipient_email: order.customerEmail,
+            subject: 'Auto-Trigger: PAYMENT_CONFIRMATION',
+            body: 'Template Sent: CUSTOMER_PAYMENT_CONFIRMATION (sent by square-payment-webhook)',
+            template_id: 'CUSTOMER_PAYMENT_CONFIRMATION', visibility: 'internal',
+          });
+          if (invoiceDue) logged.push({
+            order_id: order.id, recipient_email: order.customerEmail,
+            subject: `Auto-Trigger: PAID_INVOICE (${invoiceNumber})`,
+            body: `Template Sent: CUSTOMER_PAYMENT_CONFIRMATION with ${invoiceNumber}.pdf attached`,
+            template_id: 'CUSTOMER_PAYMENT_CONFIRMATION', visibility: 'internal',
+          });
+          if (logged.length) await admin.from('order_communications').insert(logged);
+        } catch (logErr) {
+          console.error(`[square-payment-webhook] comms log failed for ${order.orderNumber}:`, logErr);
+        }
+
         console.log(`[square-payment-webhook] customer email sent for ${order.orderNumber} (confirmation=${confirmationDue}, invoice=${invoiceDue}, newAccount=${isNewAccount})`);
       } catch (err) {
         console.error(`[square-payment-webhook] customer email failed for ${order.orderNumber}:`, err);

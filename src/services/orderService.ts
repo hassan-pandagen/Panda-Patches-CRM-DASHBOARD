@@ -206,6 +206,7 @@ export const mapDbToOrder = (data: any): Order => {
     profit,
     amountRemaining: orderAmount - amountPaid,
     paidInvoiceSentAt: data.paidInvoiceSentAt ?? data.paid_invoice_sent_at ?? null,
+    customerConfirmationSentAt: data.customerConfirmationSentAt ?? data.customer_confirmation_sent_at ?? null,
 
     status,
     reasonCategory: data.reasonCategory ?? data.reason_category,
