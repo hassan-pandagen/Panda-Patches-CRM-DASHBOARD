@@ -14,7 +14,18 @@
 // (AFTER INSERT on orders → invite-customer) owns that. This handler only sends the internal email.
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.10";
+// Deno-native JSR import, NOT esm.sh. The esm.sh build bundles Node `ws`, which needs
+// `node:url` — absent in the edge runtime — so the function dies on COLD BOOT before a
+// single line of handler code runs, returning 500 with no console output of its own:
+//   module "node:url" not found
+//   TypeError: Cannot destructure property 'URL' of 'p(...)' as it is null
+// This is the same failure that took square-payment-webhook down for ~2 days on
+// 2026-08-08 (see memory: square-webhook-esmsh-ws-crash). It is latent: the deployed
+// bundle keeps working until the function is redeployed and esm.sh re-resolves. Two
+// unrelated redeploys on 8-9 Sept did exactly that, and every checkout order from 9 Sept
+// stopped getting its internal production email — 12 orders, silently.
+// Do NOT revert to esm.sh.
+import { createClient } from "jsr:@supabase/supabase-js@2";
 
 // ✅ Production team emails (same as orderService.ts)
 const PRODUCTION_MANAGER_EMAILS = [

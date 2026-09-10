@@ -24,7 +24,13 @@
 // deleted) so the reasoning + the match-key logic (gclid / hashed email+phone) stay visible
 // and reusable for the Data Manager Sheets writer.
 
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.10';
+// Deno-native JSR import, NOT esm.sh. The esm.sh build bundles Node `ws`, which needs
+// `node:url` — absent in the edge runtime — so the function dies on COLD BOOT before any
+// handler code runs, returning 500 with no console output of its own. Latent: the live
+// bundle keeps working until the function is next redeployed and esm.sh re-resolves.
+// Cost so far: square-payment-webhook down ~2 days (2026-08-08), and super-handler
+// silently dead from 9 Sept after two unrelated redeploys. Do NOT revert to esm.sh.
+import { createClient } from "jsr:@supabase/supabase-js@2";
 
 async function sha256(s: string): Promise<string> {
   const data = new TextEncoder().encode(s);

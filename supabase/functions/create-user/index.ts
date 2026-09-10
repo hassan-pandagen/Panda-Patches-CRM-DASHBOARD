@@ -1,5 +1,11 @@
 // supabase/functions/create-user/index.ts
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+// Deno-native JSR import, NOT esm.sh. The esm.sh build bundles Node `ws`, which needs
+// `node:url` — absent in the edge runtime — so the function dies on COLD BOOT before any
+// handler code runs, returning 500 with no console output of its own. Latent: the live
+// bundle keeps working until the function is next redeployed and esm.sh re-resolves.
+// Cost so far: square-payment-webhook down ~2 days (2026-08-08), and super-handler
+// silently dead from 9 Sept after two unrelated redeploys. Do NOT revert to esm.sh.
+import { createClient } from "jsr:@supabase/supabase-js@2";
 import { z } from "https://deno.land/x/zod@v3.22.4/mod.ts";
 
 const ALLOWED_ORIGINS = [

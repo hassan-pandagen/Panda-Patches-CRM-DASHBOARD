@@ -13,7 +13,13 @@
 //   - E5 additionally capped to once per quarter (loyalty_nudge_sent_at).
 // Awards run first so a same-day award "wins" and defers E4/E5 naturally.
 
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+// Deno-native JSR import, NOT esm.sh. The esm.sh build bundles Node `ws`, which needs
+// `node:url` — absent in the edge runtime — so the function dies on COLD BOOT before any
+// handler code runs, returning 500 with no console output of its own. Latent: the live
+// bundle keeps working until the function is next redeployed and esm.sh re-resolves.
+// Cost so far: square-payment-webhook down ~2 days (2026-08-08), and super-handler
+// silently dead from 9 Sept after two unrelated redeploys. Do NOT revert to esm.sh.
+import { createClient } from "jsr:@supabase/supabase-js@2";
 
 const DAY = 24 * 60 * 60 * 1000;
 const THRESHOLDS = { bronze: 1000, silver: 5000, gold: 10000 };

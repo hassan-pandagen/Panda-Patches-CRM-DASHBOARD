@@ -4,8 +4,12 @@
   "compilerOptions": {
     "lib": ["deno.ns", "esnext"]
   },
-  // This tells Deno where to find the Supabase module
+  // Where Deno finds the Supabase module. JSR, never esm.sh — the esm.sh build bundles Node
+  // `ws`, which needs `node:url`, which the edge runtime does not have. A function built that
+  // way dies on cold boot with a 500 and no log line of its own. Nothing imports this bare
+  // specifier today (every function names the jsr: URL directly), but leaving esm.sh here
+  // would hand the crash to whoever uses the map next.
   "imports": {
-    "@supabase/supabase-js": "https://esm.sh/@supabase/supabase-js@2"
+    "@supabase/supabase-js": "jsr:@supabase/supabase-js@2"
   }
 }
