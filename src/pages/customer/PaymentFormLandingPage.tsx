@@ -205,6 +205,12 @@ const PaymentForm: React.FC<{ tokenData: any }> = ({ tokenData: tokenDataRaw }) 
     if (!form.customer_email.trim()) e.customer_email = 'Email is required';
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.customer_email)) e.customer_email = 'Valid email required';
     if (!form.patches_type)          e.patches_type   = 'Patch type is required';
+    // Backing was the one manufacturing spec this page did not require, and orders arrived
+    // without it — 3 of 137 from this form. A blank backing does not fail loudly: it makes
+    // super-handler hold the production email indefinitely, so the order is paid for and
+    // nobody on the floor is ever told about it (PP-11473). If the agent pre-filled it the
+    // select is disabled and this already holds.
+    if (!form.design_backing.trim())  e.design_backing = 'Backing is required';
     if (!form.patches_quantity || parseInt(form.patches_quantity) <= 0) e.patches_quantity = 'Quantity required';
     if (!form.order_amount || baseOrderAmount <= 0) e.order_amount = 'Order amount required';
     if (chargeAmount <= 0)           e.order_amount   = 'Amount must be greater than 0';
@@ -353,7 +359,7 @@ const PaymentForm: React.FC<{ tokenData: any }> = ({ tokenData: tokenDataRaw }) 
                 placeholder='3" x 3"' disabled={!!tokenData.design_size}
                 className={inputCls(!!tokenData.design_size)} />
             </Field>
-            <Field label="Backing">
+            <Field label="Backing *" error={errors.design_backing}>
               <select value={form.design_backing} onChange={e => set('design_backing')(e.target.value)}
                 disabled={!!tokenData.design_backing}
                 className={inputCls(!!tokenData.design_backing)}>

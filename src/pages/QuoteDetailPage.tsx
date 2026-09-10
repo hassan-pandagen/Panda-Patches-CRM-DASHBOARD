@@ -5,7 +5,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { getQuoteByNumber, updateQuote, convertQuoteToOrder, deleteQuote, sendQuoteEmail, markQuoteAsSent } from '../services/quoteService';
 import { queryKeys } from '../constants/queryKeys';
-import { PATCHES_TYPE_OPTIONS } from '../constants/index';
+import { PATCHES_TYPE_OPTIONS, DESIGN_BACKING_OPTIONS } from '../constants/index';
 import Button from '../components/ui/Button';
 import Skeleton from '../components/ui/Skeleton';
 import SpotlightCard from '../components/ui/SpotlightCard';
@@ -284,11 +284,12 @@ const QuoteDetailPage: React.FC = () => {
                   <div className="col-span-2">
                     <label className={labelClass}>Backing</label>
                     <select className={selectClass} style={selectStyle} value={editForm.designBacking} onChange={e => setEditForm(p => ({ ...p, designBacking: e.target.value }))}>
-                      <option value="">Select backing...</option>
-                      <option value="iron">Iron On</option>
-                      <option value="sew">Sew On</option>
-                      <option value="velcro">Velcro</option>
-                      <option value="adhesive">Adhesive</option>
+                      {/* Was a hand-written list writing SHORT CODES ("iron", "sew", "velcro"),
+                          which are not backing values at all — editing a quote here silently
+                          replaced a good backing with "iron". Now the canonical list, same as
+                          the order form. Placeholder is disabled+hidden so it cannot be picked. */}
+                      <option value="" disabled hidden>Select backing...</option>
+                      {DESIGN_BACKING_OPTIONS.map(b => <option key={b} value={b}>{b}</option>)}
                     </select>
                   </div>
                   <div className="col-span-2">

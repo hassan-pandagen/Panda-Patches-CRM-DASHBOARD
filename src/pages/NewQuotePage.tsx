@@ -6,7 +6,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { createQuote } from '../services/quoteService';
 import { Quote } from '../types/index';
 import { queryKeys } from '../constants/queryKeys';
-import { PATCHES_TYPE_OPTIONS } from '../constants/index';
+import { PATCHES_TYPE_OPTIONS, DESIGN_BACKING_OPTIONS } from '../constants/index';
 import Button from '../components/ui/Button';
 import SpotlightCard from '../components/ui/SpotlightCard';
 import UnsavedChangesModal from "../components/ui/UnsavedChangesModal";
@@ -335,11 +335,14 @@ const NewQuotePage: React.FC = () => {
                     paddingRight: '2.5rem'
                   }}
                 >
-                  <option value="">Select backing...</option>
-                  <option value="Iron On">Iron On</option>
-                  <option value="Sew On">Sew On</option>
-                  <option value="Velcro">Velcro</option>
-                  <option value="Adhesive">Adhesive</option>
+                  {/* Driven by DESIGN_BACKING_OPTIONS, not a hand-written list. The hardcoded
+                      one here wrote "Iron On" / "Velcro" — neither is a canonical value, so a
+                      quote saved from this form arrived with a backing the ORDER form's select
+                      could not display, and it was missing Magnetic and Button-Loop entirely.
+                      `disabled hidden` on the placeholder so "Select backing..." cannot be
+                      chosen and saved as an empty backing. */}
+                  <option value="" disabled hidden>Select backing...</option>
+                  {DESIGN_BACKING_OPTIONS.map(b => <option key={b} value={b}>{b}</option>)}
                 </select>
               </div>
             </div>

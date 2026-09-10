@@ -162,7 +162,7 @@ const PATCH_TYPE_ALIAS: Record<string, string> = {
 // The SIX canonical backings (website + database). MUST match BACKING_CANON in
 // src/utils/patchVocab.ts + DESIGN_BACKING_OPTIONS in src/constants/options.ts. Aliases map every
 // legacy/short/website form (incl. old stored "Iron on"/"Sew on"/"Velcro"/"Sticker") to these.
-const BACKING_CANON = ['Iron-On', 'Sew-On', 'Velcro (Hook & Loop)', 'Adhesive (Peel & Stick)', 'Magnetic', 'Button-Loop'];
+const BACKING_CANON = ['Iron-On', 'Sew-On', 'Velcro (Hook & Loop)', 'Adhesive (Peel & Stick)', 'Magnetic', 'Button-Loop', 'Butterfly Clutch', 'Safety Pin'];
 const BACKING_ALIAS: Record<string, string> = {
   iron: 'Iron-On', ironon: 'Iron-On', justheatpress: 'Iron-On', heatpress: 'Iron-On',
   sew: 'Sew-On', sewon: 'Sew-On',
@@ -171,6 +171,9 @@ const BACKING_ALIAS: Record<string, string> = {
   peelstick: 'Adhesive (Peel & Stick)', peelandstick: 'Adhesive (Peel & Stick)',
   magnet: 'Magnetic',
   button: 'Button-Loop', buttonloop: 'Button-Loop',
+  butterfly: 'Butterfly Clutch', butterflyclutch: 'Butterfly Clutch', clutch: 'Butterfly Clutch',
+  butterflyclasp: 'Butterfly Clutch',
+  safetypin: 'Safety Pin', pin: 'Safety Pin', pinback: 'Safety Pin', pinbacking: 'Safety Pin',
 };
 
 const normKey = (s: unknown) => String(s ?? '').toLowerCase().replace(/[^a-z0-9]+/g, '');

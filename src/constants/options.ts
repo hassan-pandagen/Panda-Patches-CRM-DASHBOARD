@@ -15,11 +15,14 @@ export const PATCHES_TYPE_OPTIONS: string[] = [
   'Custom Lapel Pins', 'Custom PVC Shoe Charms',
   'Sample Box', 'Customize Sample Box'
 ];
-// Canonical backing values — the SIX backings used on the website + database (single source of
-// truth). Keep in sync with BACKING_CANON in src/utils/patchVocab.ts AND the webhook's
-// resolveBacking. Shared by the order form, agent payment form, customer payment page, and inbox.
+// Canonical backing values — single source of truth for the CRM. Keep in sync with
+// BACKING_CANON in src/utils/patchVocab.ts AND the inline copy in the webhook
+// (supabase/functions/square-payment-webhook). Shared by the order form, both quote forms, the
+// agent payment form, the customer payment page, and the inbox.
+//
+// Butterfly Clutch and Safety Pin added 10 Sept 2026.
 export const DESIGN_BACKING_OPTIONS: string[] = [
-  'Iron-On', 'Sew-On', 'Velcro (Hook & Loop)', 'Adhesive (Peel & Stick)', 'Magnetic', 'Button-Loop',
+  'Iron-On', 'Sew-On', 'Velcro (Hook & Loop)', 'Adhesive (Peel & Stick)', 'Magnetic', 'Button-Loop', 'Butterfly Clutch', 'Safety Pin',
 ];
 // Shipping countries we sell into. Extend this list AND the CHECK constraint in
 // supabase/migrations/add_country_to_orders.sql when a new country is added.
