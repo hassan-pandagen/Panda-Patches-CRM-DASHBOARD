@@ -15,15 +15,42 @@ import SpotlightCard from '../ui/SpotlightCard';
 import { CheckCircle, XCircle, RefreshCw, Mail, AlertTriangle, Lightbulb, Send } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 
-const MANUAL_SEND_OPTIONS = [
-  { label: 'New Order Confirmation',   status: 'NEW_ORDER' },
-  { label: 'Mockup Ready',             status: 'AWAITING_APPROVAL' },
-  { label: 'Revision In Progress',     status: 'REVISION_REQUESTED' },
-  { label: 'Production Started',       status: 'IN_PRODUCTION' },
-  { label: 'Shipped',                  status: 'SHIPPED' },
-  { label: 'Delivered',                status: 'DELIVERED' },
-  { label: 'Remake',                   status: 'REMAKE' },
+// Most statuses fire a PAIR — one email to the customer, one to production. Until now this
+// menu could only send both at once, so when the production half went missing on its own
+// (super-handler crashed on 9 Sept and 12 orders never reached the floor) an agent had to
+// choose between re-emailing the customer or leaving production in the dark.
+//
+// `only` picks one side. Values are encoded "<STATUS>::<only>" so the <select> stays a plain
+// string control.
+type ManualSendOption = { label: string; status: string; only?: 'internal' | 'customer' };
+
+const MANUAL_SEND_CUSTOMER: ManualSendOption[] = [
+  { label: 'New Order Confirmation',   status: 'NEW_ORDER',           only: 'customer' },
+  { label: 'Mockup Ready',             status: 'AWAITING_APPROVAL',   only: 'customer' },
+  { label: 'Revision In Progress',     status: 'REVISION_REQUESTED',  only: 'customer' },
+  { label: 'Production Started',       status: 'IN_PRODUCTION',       only: 'customer' },
+  { label: 'Shipped',                  status: 'SHIPPED',             only: 'customer' },
+  { label: 'Delivered',                status: 'DELIVERED',           only: 'customer' },
+  { label: 'Remake',                   status: 'REMAKE',              only: 'customer' },
 ];
+
+// Only the four statuses that actually have a production-side template. AWAITING_APPROVAL,
+// SHIPPED, DELIVERED and QA deliberately have none — listing them here would just report
+// "no template configured" back to the agent.
+const MANUAL_SEND_INTERNAL: ManualSendOption[] = [
+  { label: 'New Order → Production',      status: 'NEW_ORDER',          only: 'internal' },
+  { label: 'Revision → Production',       status: 'REVISION_REQUESTED', only: 'internal' },
+  { label: 'Start Production → Production', status: 'IN_PRODUCTION',    only: 'internal' },
+  { label: 'Remake → Production',         status: 'REMAKE',             only: 'internal' },
+];
+
+const MANUAL_SEND_OPTIONS: ManualSendOption[] = [...MANUAL_SEND_CUSTOMER, ...MANUAL_SEND_INTERNAL];
+
+const optionValue = (o: ManualSendOption) => `${o.status}::${o.only ?? 'both'}`;
+const parseOptionValue = (v: string): { status: string; only?: 'internal' | 'customer' } => {
+  const [status, only] = v.split('::');
+  return { status, only: only === 'both' ? undefined : (only as 'internal' | 'customer') };
+};
 
 // Backstop map: progress statuses that owe the customer an email, → the template_id that
 // gets logged to order_communications when it sends. If the order reached one of these
@@ -109,7 +136,10 @@ const EmailLogsSection: React.FC<EmailLogsSectionProps> = ({ order }) => {
 
   const handleManualSend = async () => {
     if (!manualStatus) return;
-    if (manualStatus === 'NEW_ORDER' && alreadyConfirmed) {
+    const { status: pickedStatus, only } = parseOptionValue(manualStatus);
+    // Only guard the CUSTOMER confirmation. Re-sending the production copy is harmless and is
+    // exactly what this menu is for.
+    if (pickedStatus === 'NEW_ORDER' && only !== 'internal' && alreadyConfirmed) {
       const ok = window.confirm(
         `${order.customerName || 'This customer'} was already sent an order confirmation on ${confirmSentOn}.
 
@@ -122,8 +152,11 @@ Send anyway?`
     }
     setSendingManual(true);
     try {
-      await triggerStatusEmail(order, manualStatus);
-      showSuccess('Email sent!', `${MANUAL_SEND_OPTIONS.find(o => o.status === manualStatus)?.label} email sent successfully.`);
+      await triggerStatusEmail(order, pickedStatus, undefined, { only });
+      const label = MANUAL_SEND_OPTIONS.find(o => optionValue(o) === manualStatus)?.label ?? 'Email';
+      showSuccess('Email sent!', only === 'internal'
+        ? `${label} sent to the production team.`
+        : `${label} email sent to the customer.`);
       queryClient.invalidateQueries({ queryKey: queryKeys.communications.byOrderId(order.id) });
       setManualStatus('');
     } catch (err: any) {
@@ -242,9 +275,16 @@ Send anyway?`
               className="flex-1 bg-slate-800 border border-slate-600 text-white text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-brand-orange"
             >
               <option value="">Select email to send…</option>
-              {MANUAL_SEND_OPTIONS.map(o => (
-                <option key={o.status} value={o.status}>{o.label}</option>
-              ))}
+              <optgroup label="To customer">
+                {MANUAL_SEND_CUSTOMER.map(o => (
+                  <option key={optionValue(o)} value={optionValue(o)}>{o.label}</option>
+                ))}
+              </optgroup>
+              <optgroup label="To production (internal)">
+                {MANUAL_SEND_INTERNAL.map(o => (
+                  <option key={optionValue(o)} value={optionValue(o)}>{o.label}</option>
+                ))}
+              </optgroup>
             </select>
             <button
               onClick={handleManualSend}
@@ -274,9 +314,16 @@ Send anyway?`
               className="bg-slate-800 border border-slate-600 text-white text-xs rounded-lg px-2 py-1.5 focus:outline-none focus:border-brand-orange"
             >
               <option value="">Resend / send email…</option>
-              {MANUAL_SEND_OPTIONS.map(o => (
-                <option key={o.status} value={o.status}>{o.label}</option>
-              ))}
+              <optgroup label="To customer">
+                {MANUAL_SEND_CUSTOMER.map(o => (
+                  <option key={optionValue(o)} value={optionValue(o)}>{o.label}</option>
+                ))}
+              </optgroup>
+              <optgroup label="To production (internal)">
+                {MANUAL_SEND_INTERNAL.map(o => (
+                  <option key={optionValue(o)} value={optionValue(o)}>{o.label}</option>
+                ))}
+              </optgroup>
             </select>
             <button
               onClick={handleManualSend}

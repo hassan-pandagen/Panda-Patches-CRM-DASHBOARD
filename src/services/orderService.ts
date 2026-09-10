@@ -340,7 +340,17 @@ export const prepareEmailData = (order: Order, triggerStatus: string) => {
   };
 };
 
-export const triggerStatusEmail = async (order: Order, statusToCheck: string, extraCustomerData?: Record<string, unknown>) => {
+export const triggerStatusEmail = async (
+  order: Order,
+  statusToCheck: string,
+  extraCustomerData?: Record<string, unknown>,
+  // Send only one side of the pair. Most statuses fire a customer email AND a production one;
+  // when super-handler died on 9 Sept the internal half went missing on 12 orders while the
+  // customer half went out fine, and there was no way to send just the missing half — an agent
+  // either re-emailed the customer too, or production never heard about the order.
+  // 'internal' = production only, 'customer' = customer only, omitted = both, as before.
+  options?: { only?: 'internal' | 'customer' },
+) => {
   console.log(`📧 [Email Service] triggerStatusEmail called with status: ${statusToCheck}, customer: ${order.customerEmail}`);
 
   if (!order.customerEmail || !isValidEmail(order.customerEmail)) {
@@ -431,6 +441,17 @@ export const triggerStatusEmail = async (order: Order, statusToCheck: string, ex
         });
       }
       break;
+  }
+
+  // Narrow to one side if asked. Filtering on the isInternal flag each request already
+  // carries, NOT on the template name: INTERNAL_QUALITY_ASSURANCE is addressed to the
+  // CUSTOMER despite its name, so a name-based filter would mail a customer from the
+  // "send to production" menu item.
+  if (options?.only) {
+    const wantInternal = options.only === 'internal';
+    for (let i = requests.length - 1; i >= 0; i--) {
+      if (requests[i].isInternal !== wantInternal) requests.splice(i, 1);
+    }
   }
 
   if (requests.length === 0) {
