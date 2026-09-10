@@ -9,8 +9,8 @@
 // floor may say the quantity went from 10 to 50; it may never say the total went from $200 to
 // $250. That is a standing constraint across the whole CRM, not a preference.
 
-/** Spec changes that mean the FLOOR needs telling. All money-free by construction. */
-export const PRODUCTION_SPEC_FIELDS = [
+/** Every non-money field that describes what is being made. */
+export const SPEC_FIELDS = [
   'patchesQuantity',
   'patchesType',
   'additionalPatchTypes',
@@ -20,8 +20,22 @@ export const PRODUCTION_SPEC_FIELDS = [
   'instructions',
 ] as const;
 
+/**
+ * What actually WAKES the floor. Deliberately just two (CEO, 10 Sept): "production just needs
+ * to know if any backing or quantity has changed".
+ *
+ * Narrow on purpose. Production emails are only useful if they mean something — an alert for a
+ * reworded instruction or a border tweak trains people to ignore the ones that say the run size
+ * doubled. Quantity and backing are the two that change what physically gets made and how much
+ * of it.
+ *
+ * This is the TRIGGER, not the contents: when one of these fires, the email still lists every
+ * other non-money change alongside it, because by then the floor is reading anyway.
+ */
+export const PRODUCTION_NOTIFY_FIELDS = ['patchesQuantity', 'designBacking'] as const;
+
 /** Everything the CUSTOMER should be told about — the specs, plus what they're paying. */
-export const CUSTOMER_VISIBLE_FIELDS = [...PRODUCTION_SPEC_FIELDS, 'orderAmount'] as const;
+export const CUSTOMER_VISIBLE_FIELDS = [...SPEC_FIELDS, 'orderAmount'] as const;
 
 /** Fields that carry money and must never reach a production-facing email. */
 export const MONEY_FIELDS = ['orderAmount', 'amountPaid', 'amountRemaining', 'productionCost',
@@ -43,8 +57,9 @@ export type SpecChange = { field: string; label: string; from: string; to: strin
 export const isCustomerVisibleField = (field: string): boolean =>
   (CUSTOMER_VISIBLE_FIELDS as readonly string[]).includes(field);
 
+/** True when a change is one the floor is woken for — quantity or backing. */
 export const affectsProduction = (changes: readonly SpecChange[]): boolean =>
-  changes.some(c => (PRODUCTION_SPEC_FIELDS as readonly string[]).includes(c.field));
+  changes.some(c => (PRODUCTION_NOTIFY_FIELDS as readonly string[]).includes(c.field));
 
 /**
  * Strip anything the floor must not see. Filters on a money DENY-list rather than a spec

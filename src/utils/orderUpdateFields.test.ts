@@ -11,7 +11,8 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'fs';
 import { resolve } from 'path';
 import {
-  PRODUCTION_SPEC_FIELDS,
+  SPEC_FIELDS,
+  PRODUCTION_NOTIFY_FIELDS,
   CUSTOMER_VISIBLE_FIELDS,
   MONEY_FIELDS,
   productionSafeChanges,
@@ -26,12 +27,34 @@ const change = (field: string, from = 'a', to = 'b'): SpecChange => ({
 });
 
 describe('order-updated field rules', () => {
-  it('no production field is a money field', () => {
-    // The load-bearing assertion. If someone adds a cost or balance to the production list,
-    // this fails before it can ever be emailed to the floor.
-    for (const field of PRODUCTION_SPEC_FIELDS) {
+  it('no spec field is a money field', () => {
+    // The load-bearing assertion. If someone adds a cost or balance to the spec list, this
+    // fails before it can ever be emailed to the floor.
+    for (const field of SPEC_FIELDS) {
       expect(MONEY_FIELDS as readonly string[], `"${field}" is money`).not.toContain(field);
     }
+  });
+
+  it('wakes production for quantity and backing only', () => {
+    // CEO, 10 Sept. Narrow on purpose: an alert for a reworded instruction trains people to
+    // ignore the one that says the run size doubled.
+    expect(PRODUCTION_NOTIFY_FIELDS).toEqual(['patchesQuantity', 'designBacking']);
+    expect(affectsProduction([change('patchesQuantity', '10', '50')])).toBe(true);
+    expect(affectsProduction([change('designBacking', 'Iron-On', 'Pin Back')])).toBe(true);
+    for (const quiet of ['patchesType', 'designSize', 'borderType', 'instructions', 'additionalPatchTypes']) {
+      expect(affectsProduction([change(quiet)]), `${quiet} should not wake production`).toBe(false);
+    }
+  });
+
+  it('still lists the quieter changes once production IS woken', () => {
+    // The narrow rule is the trigger, not the contents — by then the floor is reading anyway.
+    const changes = [
+      change('patchesQuantity', '10', '50'),
+      change('designSize', '3"', '4"'),
+      change('orderAmount', '$200.00', '$250.00'),
+    ];
+    expect(affectsProduction(changes)).toBe(true);
+    expect(productionSafeChanges(changes).map(c => c.field)).toEqual(['patchesQuantity', 'designSize']);
   });
 
   it('strips every money field from the production copy', () => {
@@ -56,10 +79,6 @@ describe('order-updated field rules', () => {
     expect(productionSafeChanges(priceOnly)).toEqual([]);
   });
 
-  it('a spec change does reach production', () => {
-    expect(affectsProduction([change('patchesQuantity', '10', '50')])).toBe(true);
-    expect(affectsProduction([change('designSize', '3"', '4"')])).toBe(true);
-  });
 
   it('ignores fields nobody needs telling about', () => {
     // Editing an internal cost or a tracking number is not an amendment to the order.
