@@ -32,6 +32,9 @@ const MANUAL_SEND_CUSTOMER: ManualSendOption[] = [
   { label: 'Shipped',                  status: 'SHIPPED',             only: 'customer' },
   { label: 'Delivered',                status: 'DELIVERED',           only: 'customer' },
   { label: 'Remake',                   status: 'REMAKE',              only: 'customer' },
+  // Sends automatically when an agent amends a confirmed order; here so it can be re-sent.
+  // Without a diff to hand it, the email shows the order's CURRENT details and no change table.
+  { label: 'Order Updated',            status: 'ORDER_UPDATED',       only: 'customer' },
 ];
 
 // Only the four statuses that actually have a production-side template. AWAITING_APPROVAL,
@@ -42,6 +45,7 @@ const MANUAL_SEND_INTERNAL: ManualSendOption[] = [
   { label: 'Revision → Production',       status: 'REVISION_REQUESTED', only: 'internal' },
   { label: 'Start Production → Production', status: 'IN_PRODUCTION',    only: 'internal' },
   { label: 'Remake → Production',         status: 'REMAKE',             only: 'internal' },
+  { label: 'Order Updated → Production',  status: 'ORDER_UPDATED',      only: 'internal' },
 ];
 
 const MANUAL_SEND_OPTIONS: ManualSendOption[] = [...MANUAL_SEND_CUSTOMER, ...MANUAL_SEND_INTERNAL];

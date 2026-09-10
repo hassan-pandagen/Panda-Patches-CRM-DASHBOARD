@@ -6,6 +6,10 @@ import { queryClient } from './queryClient';
 import { queryKeys } from '../constants/queryKeys';
 import { Order, OrderStatus } from '../types/index';
 import { logger } from './logger';
+import {
+  FIELD_LABELS, SpecChange,
+  affectsProduction, isCustomerVisibleField, productionSafeChanges,
+} from '../utils/orderUpdateFields';
 import { performanceMonitor } from './performanceMonitor';
 import { validateData, orderSchema } from './validation';
 import { normalizePatchType, normalizeBacking } from '../utils/patchVocab';
@@ -83,7 +87,20 @@ const SENDGRID_TEMPLATES = {
   // --- REMAKE ---
   CUSTOMER_REMAKE: 'CUSTOMER_REMAKE',
   INTERNAL_REMAKE: 'INTERNAL_REMAKE',
+
+  // --- ORDER AMENDED AFTER IT WAS ALREADY CONFIRMED ---
+  // "They pay $200, then say take another $50 and add 10 patches." Nothing used to be sent for
+  // that: updateOrderDetails only emails on a STATUS change, and a second payment finds both
+  // send-guards already stamped and exits silently. 106 orders in 90 days had quantity, type,
+  // size or backing changed AFTER production had been emailed — PP-11320 went 10 -> 50 and the
+  // floor's only email still said 10.
+  CUSTOMER_ORDER_UPDATED: 'CUSTOMER_ORDER_UPDATED',
+  INTERNAL_ORDER_UPDATED: 'INTERNAL_ORDER_UPDATED',
 };
+
+// Which edits matter, and what the floor is allowed to see, live in orderUpdateFields —
+// separated out so the "production never sees money" rule has a test rather than sitting
+// unexaminable inside a switch statement.
 
 const PRODUCTION_MANAGER_EMAILS = [
   'lilcustomerzdesign@gmail.com',
@@ -349,7 +366,13 @@ export const triggerStatusEmail = async (
   // customer half went out fine, and there was no way to send just the missing half — an agent
   // either re-emailed the customer too, or production never heard about the order.
   // 'internal' = production only, 'customer' = customer only, omitted = both, as before.
-  options?: { only?: 'internal' | 'customer' },
+  options?: {
+    only?: 'internal' | 'customer';
+    // The old -> new list for an ORDER_UPDATED send. Passed explicitly rather than folded into
+    // extraCustomerData because the two copies must NOT carry the same list: the production one
+    // has to be money-free.
+    specChanges?: SpecChange[];
+  },
 ) => {
   console.log(`📧 [Email Service] triggerStatusEmail called with status: ${statusToCheck}, customer: ${order.customerEmail}`);
 
@@ -360,7 +383,12 @@ export const triggerStatusEmail = async (
   }
 
   const emailData = { ...prepareEmailData(order, statusToCheck), ...extraCustomerData };
-  const requests: { to: string; template_id: string; isInternal: boolean; cc?: string }[] = [];
+  const requests: {
+    to: string; template_id: string; isInternal: boolean; cc?: string;
+    // Extra fields for THIS request only. Exists so the production copy of an update can carry a
+    // different (money-free) change list from the customer's.
+    data?: Record<string, unknown>;
+  }[] = [];
 
   console.log(`📧 [Email Service] Triggering emails for status: ${statusToCheck}`);
   logger.info(`[Email Service] Triggering emails for status: ${statusToCheck}`);
@@ -441,6 +469,45 @@ export const triggerStatusEmail = async (
         });
       }
       break;
+    case 'ORDER_UPDATED':
+      // The customer copy exists so they can see we heard them and acted — CEO decision,
+      // 10 Sept. The production copy exists so the floor stops building the old spec.
+      // Deliberately NOT sent to the sales agent: they are the one who made the change.
+      const allChanges = options?.specChanges ?? [];
+      // The floor never sees money. Filtering here rather than at the call site so no future
+      // caller can hand production an amount by passing the wrong list.
+      const productionChanges = productionSafeChanges(allChanges);
+
+      if (SENDGRID_TEMPLATES.CUSTOMER_ORDER_UPDATED) {
+        requests.push({
+          to: order.customerEmail,
+          template_id: SENDGRID_TEMPLATES.CUSTOMER_ORDER_UPDATED,
+          isInternal: false,
+          cc: [customerCC, 'hello@pandapatches.com'].filter(Boolean).join(','),
+          data: {
+            spec_changes: allChanges,
+            amount_paid: order.amountPaid != null ? `$${Number(order.amountPaid).toFixed(2)}` : null,
+            total_amount: order.orderAmount != null ? `$${Number(order.orderAmount).toFixed(2)}` : null,
+            amount_remaining: (order.orderAmount != null && order.amountPaid != null)
+              ? `$${Math.max(0, Number(order.orderAmount) - Number(order.amountPaid)).toFixed(2)}`
+              : null,
+            is_paid_in_full: order.orderAmount != null && order.amountPaid != null
+              ? Number(order.amountPaid) >= Number(order.orderAmount) - 0.01
+              : false,
+          },
+        });
+      }
+      if (SENDGRID_TEMPLATES.INTERNAL_ORDER_UPDATED && internalEmails.length > 0) {
+        const ccEmails = internalEmails.slice(1).join(',');
+        requests.push({
+          to: internalEmails[0],
+          template_id: SENDGRID_TEMPLATES.INTERNAL_ORDER_UPDATED,
+          isInternal: true,
+          cc: [DESIGN_TEAM_CC, ccEmails, 'hello@pandapatches.com'].filter(Boolean).join(','),
+          data: { spec_changes: productionChanges },
+        });
+      }
+      break;
   }
 
   // Narrow to one side if asked. Filtering on the isInternal flag each request already
@@ -469,9 +536,12 @@ export const triggerStatusEmail = async (
       const emailPayload: any = {
         to: req.to,
         template_id: req.template_id,
-        dynamic_data: req.isInternal
-          ? { ...emailData, order_link: `https://portal.pandapatches.com/order/${order.orderNumber}` }
-          : emailData
+        dynamic_data: {
+          ...(req.isInternal
+            ? { ...emailData, order_link: `https://portal.pandapatches.com/order/${order.orderNumber}` }
+            : emailData),
+          ...(req.data ?? {}),
+        }
       };
 
       // ✅ Add CC for all emails (both customer and internal)
@@ -887,6 +957,39 @@ export const updateOrderDetails = async (
     ) {
       fireLeadEvent(newOrder.id, 'InitiateCheckout');
     }
+  }
+
+  // ── Order amended after it was already confirmed ────────────────────────────────────────
+  // The "pay $200, then take $50 more and add 10 patches" case. Nothing was sent for it: the
+  // block above only emails on a STATUS change, and a second payment finds both send-guards
+  // already stamped and exits silently. 106 orders in 90 days had a spec changed AFTER
+  // production had been emailed — PP-11320 went 10 -> 50 and the floor's copy still said 10.
+  //
+  // Only fires once the order has actually been announced. Editing a brand-new order nobody has
+  // been told about yet is just filling it in, not amending it, and must stay silent.
+  const alreadyAnnounced = !!(data.production_notified_at || data.customer_confirmation_sent_at);
+  const specChanges: SpecChange[] = alreadyAnnounced
+    ? historyRecords
+        .filter(r => isCustomerVisibleField(r.field_changed))
+        .map(r => ({
+          field: r.field_changed,
+          label: FIELD_LABELS[r.field_changed] || r.field_changed,
+          from: r.old_value,
+          to: r.new_value,
+        }))
+    : [];
+
+  if (specChanges.length > 0) {
+    const productionAffected = affectsProduction(specChanges);
+    console.log(`📧 Order ${newOrder.orderNumber} amended — ${specChanges.map(c => c.label).join(', ')}`);
+    triggerStatusEmail(newOrder, 'ORDER_UPDATED', undefined, {
+      specChanges,
+      // A price-only change is the customer's business, not the floor's: nothing about what
+      // gets made has moved, and production must never be sent an amount anyway.
+      only: productionAffected ? undefined : 'customer',
+    }).catch(err => {
+      logger.error('[Email Service] ORDER_UPDATED email failed (background):', err);
+    });
   }
 
   await queryClient.invalidateQueries({ queryKey: queryKeys.orders.reports() });

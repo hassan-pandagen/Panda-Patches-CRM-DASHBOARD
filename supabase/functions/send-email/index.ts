@@ -293,6 +293,10 @@ const getEmailSubject = (templateId: string, data: any): string => {
     'PRODUCTION_TEAM_REVISION': `[INTERNAL] Revision Requested - ${orderNumber}`,
     'QUALITY_ASSURANCE': `[INTERNAL] QA Check - ${orderNumber}`,
     'INTERNAL_PRODUCTION_COMPLETE': `[INTERNAL] Production Complete - ${orderNumber}`,
+    // Order amended after it was already announced. The internal subject says CHANGED loudly:
+    // the floor may already be building the previous spec.
+    'INTERNAL_ORDER_UPDATED': `[INTERNAL] ORDER CHANGED - ${orderNumber}`,
+    'CUSTOMER_ORDER_UPDATED': `Your order has been updated - ${orderNumber}`,
 
     // Remake templates
     'CUSTOMER_REMAKE': customerRemakeSubjects[data.remake_reason] || `We're Making It Right - ${orderNumber}${data.remake_reason ? ` (${data.remake_reason})` : ''}`,
@@ -369,6 +373,8 @@ const getTemplateMessage = (templateId: string, data?: any): string => {
     'PRODUCTION_TEAM_REVISION': 'Production Team: Customer has requested revisions. Please review the feedback and update the mockup.',
     'QUALITY_ASSURANCE': 'Quality Assurance: Order ready for final QA check before shipping.',
     'INTERNAL_PRODUCTION_COMPLETE': 'Production Team: This order has been marked production complete. The completion packet photos are below for your records.',
+    'INTERNAL_ORDER_UPDATED': 'Production Team: this order has CHANGED since the details you were sent. The changes are listed below — please check them against anything already in progress before continuing.',
+    'CUSTOMER_ORDER_UPDATED': 'We've updated your order as agreed — here's a summary of what changed so you have it in writing. Everything else about your order stays the same, and we'll keep you posted as it moves along.',
 
     // Remake templates (dynamic based on reason, with fallback)
     'CUSTOMER_REMAKE': customerRemakeMessages[remakeReason] || 'We sincerely apologize for the inconvenience with your order. Our production team did not meet the quality standards you deserved. This is entirely our fault, and we take full responsibility. We are remaking your custom patches at absolutely no extra cost to you. Your satisfaction is our top priority, and we will make this right.',
@@ -497,6 +503,9 @@ const shouldShowFullDetails = (templateId: string): boolean => {
     'CUSTOMER_REFUND_ISSUED',
     'CUSTOMER_PAYMENT_CONFIRMATION', // the attached invoice PDF has the full order details when paid in full
     'INTERNAL_PAYMENT_NOTIFICATION',
+    // NOT listed: the two ORDER_UPDATED templates. They show the change table AND the full
+    // current spec — production needs to see what the order is now, not only what moved, and
+    // the customer gets the corrected details in writing.
     'CUSTOMER_WELCOME_INVITE',
     'CUSTOMER_RETURNING_LOGIN',
     'CUSTOMER_PASSWORD_RESET',
@@ -956,7 +965,35 @@ const buildEmailHTML = (templateId: string, data: any): string => {
   </table>
   ` : ''}
 
-  ${(templateId === 'CUSTOMER_PAYMENT_CONFIRMATION' || templateId === 'INTERNAL_PAYMENT_NOTIFICATION') && data.amount_paid ? `
+  ${(templateId === 'CUSTOMER_ORDER_UPDATED' || templateId === 'INTERNAL_ORDER_UPDATED') && Array.isArray(data.spec_changes) && data.spec_changes.length ? `
+  <!-- WHAT CHANGED -->
+  <table class="module" role="module" data-type="text" border="0" cellpadding="0" cellspacing="0" width="100%" style="table-layout: fixed;">
+    <tbody>
+      <tr>
+        <td style="padding:20px; line-height:24px; background-color:${templateId === 'INTERNAL_ORDER_UPDATED' ? '#fff0f0' : '#fff8e1'}; border-left:5px solid ${templateId === 'INTERNAL_ORDER_UPDATED' ? '#e53e3e' : '#fb6e1d'}; border-radius:8px;" valign="top" role="module-content">
+          <div style="font-family: 'lucida sans unicode', 'lucida grande', sans-serif; font-size:20px; font-weight:bold; color:${templateId === 'INTERNAL_ORDER_UPDATED' ? '#c53030' : '#8a3f00'}; margin-bottom:14px;">
+            ${templateId === 'INTERNAL_ORDER_UPDATED' ? '⚠️ ORDER CHANGED — CHECK BEFORE BUILDING' : '✏️ What changed'}
+          </div>
+          <table border="0" cellpadding="0" cellspacing="0" width="100%" style="background:#ffffff; border-radius:8px; border:1px solid #e0e0e0;">
+            ${data.spec_changes.map((c: any) => `
+            <tr>
+              <td style="padding:12px 16px; border-bottom:1px solid #f0f0f0; font-family: 'lucida sans unicode', 'lucida grande', sans-serif; font-size:14px; color:#555; width:35%;">${escapeHtml(String(c?.label ?? ''))}</td>
+              <td style="padding:12px 16px; border-bottom:1px solid #f0f0f0; font-family: 'lucida sans unicode', 'lucida grande', sans-serif; font-size:15px; color:#999; text-decoration:line-through;">${escapeHtml(String(c?.from ?? ''))}</td>
+              <td style="padding:12px 16px; border-bottom:1px solid #f0f0f0; font-family: 'lucida sans unicode', 'lucida grande', sans-serif; font-size:16px; color:#000; font-weight:bold;">&rarr; ${escapeHtml(String(c?.to ?? ''))}</td>
+            </tr>`).join('')}
+          </table>
+        </td>
+      </tr>
+    </tbody>
+  </table>
+
+  <!-- SPACER AFTER CHANGES -->
+  <table class="module" role="module" data-type="spacer" border="0" cellpadding="0" cellspacing="0" width="100%" style="table-layout: fixed;">
+    <tbody><tr><td style="padding:0px 0px 20px 0px;" role="module-content" bgcolor=""></td></tr></tbody>
+  </table>
+  ` : ''}
+
+  ${(templateId === 'CUSTOMER_PAYMENT_CONFIRMATION' || templateId === 'INTERNAL_PAYMENT_NOTIFICATION' || templateId === 'CUSTOMER_ORDER_UPDATED') && data.amount_paid ? `
   <!-- PAYMENT SUMMARY BOX -->
   <table class="module" role="module" data-type="text" border="0" cellpadding="0" cellspacing="0" width="100%" style="table-layout: fixed;">
     <tbody>
