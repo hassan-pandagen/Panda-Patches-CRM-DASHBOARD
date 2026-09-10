@@ -20,9 +20,9 @@ export const PATCHES_TYPE_OPTIONS: string[] = [
 // (supabase/functions/square-payment-webhook). Shared by the order form, both quote forms, the
 // agent payment form, the customer payment page, and the inbox.
 //
-// Butterfly Clutch and Safety Pin added 10 Sept 2026.
+// Eight backings. Butterfly Clutch and Pin Back added 10 Sept 2026.
 export const DESIGN_BACKING_OPTIONS: string[] = [
-  'Iron-On', 'Sew-On', 'Velcro (Hook & Loop)', 'Adhesive (Peel & Stick)', 'Magnetic', 'Button-Loop', 'Butterfly Clutch', 'Safety Pin',
+  'Iron-On', 'Sew-On', 'Velcro (Hook & Loop)', 'Adhesive (Peel & Stick)', 'Magnetic', 'Button-Loop', 'Butterfly Clutch', 'Pin Back',
 ];
 // Shipping countries we sell into. Extend this list AND the CHECK constraint in
 // supabase/migrations/add_country_to_orders.sql when a new country is added.
